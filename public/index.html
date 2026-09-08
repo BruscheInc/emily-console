@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1017" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<title>Emily Console</title>
+<style>
+  :root{--bg:#0b1017;--panel:#121a26;--panel2:#0e1620;--line:#213042;--ink:#e8f1ff;--muted:#8ba0bb;--accent:#5b8cff;--in:#39d98a;--out:#49b6ff;--warn:#ffb454;--bad:#ff6b6b;--mono:ui-monospace,Menlo,Consolas,monospace}
+  *{box-sizing:border-box}html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  button,input,textarea,select{font:inherit}
+  header{flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0d151f,#0b1017)}
+  .logo{font-weight:800}.logo b{color:var(--accent)}
+  header .sp{flex:1}
+  header a,header button.link{color:var(--muted);font-size:12px;background:none;border:none;cursor:pointer}
+  .toolbar{flex:none;display:flex;gap:8px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap;background:var(--panel2)}
+  .tab{background:none;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer}
+  .tab.on{background:rgba(91,140,255,.16);border-color:var(--accent);color:#bcd3ff}
+  .tab .n{opacity:.8;font-weight:800;margin-left:5px}
+  select,.search{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 10px;font-size:13px}
+  .search{flex:1;min-width:120px}
+  .btn{background:var(--accent);color:#04122e;border:none;border-radius:9px;padding:8px 14px;font-weight:700;cursor:pointer}
+  .btn.sec{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+  .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+  .btn:disabled{opacity:.5}
+  main{flex:1;display:flex;min-height:0}
+  .list{width:390px;flex:none;border-right:1px solid var(--line);overflow-y:auto;background:var(--panel2)}
+  .row{display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);padding:12px 14px;cursor:pointer;color:var(--ink)}
+  .row:hover{background:rgba(91,140,255,.06)} .row.on{background:rgba(91,140,255,.12)}
+  .row .r1{display:flex;align-items:center;gap:8px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+  .dot.off{background:transparent}
+  .cust{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .r1 .time{margin-left:auto;color:var(--muted);font-size:11px;white-space:nowrap}
+  .subj{font-size:13.5px;margin:3px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .exc{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chips{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .chip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted)}
+  .chip.brand{background:rgba(73,182,255,.14);color:#9dd3ff}
+  .chip.sent{background:rgba(57,217,138,.16);color:#7fe9b6}.chip.drafted{background:rgba(255,180,84,.16);color:#ffd39a}.chip.skip{background:rgba(255,107,107,.14);color:#ffb3b3}
+  .thread{flex:1;display:flex;flex-direction:column;min-width:0}
+  .thead{flex:none;padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .thead .who{font-weight:800}.thead .sub{color:var(--muted);font-size:12px}
+  .thead .sp{flex:1}
+  .pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .pill.open{background:rgba(255,180,84,.16);color:var(--warn)}.pill.closed{background:rgba(139,160,187,.16);color:var(--muted)}
+  .msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--bg)}
+  .msg{max-width:76%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}
+  .msg .meta{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600}
+  .msg.cust{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .msg.agent{align-self:flex-end;background:rgba(73,120,220,.22);border:1px solid rgba(91,140,255,.4);border-bottom-right-radius:4px}
+  .msg.note{align-self:center;max-width:90%;background:rgba(255,180,84,.1);border:1px dashed rgba(255,180,84,.5);color:#ffe0b8;font-size:13px}
+  .composer{flex:none;border-top:1px solid var(--line);padding:10px 12px;background:var(--panel2)}
+  .composer textarea{width:100%;min-height:64px;max-height:180px;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px;font-size:14px;resize:vertical}
+  .crow{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .modetog{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .modetog button{background:var(--panel);color:var(--muted);border:none;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
+  .modetog button.on{background:rgba(91,140,255,.2);color:#bcd3ff}
+  .empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:30px}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#08351f;color:#c9ffe4;border:1px solid #1c8a54;padding:11px 16px;border-radius:12px;font-size:14px;z-index:60;opacity:0;transition:.25s;pointer-events:none;max-width:92vw;text-align:center}.toast.show{opacity:1}.toast.bad{background:#3a1414;color:#ffd4d4;border-color:#8a1c1c}
+  .keyprompt{margin:16vh auto;max-width:400px;padding:0 22px;text-align:center}.keyprompt input{width:100%;margin:12px 0;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:14px;font-size:16px}
+  .back{display:none}
+  @media(max-width:820px){
+    .list{width:100%} .thread{display:none;position:fixed;inset:0;top:0;background:var(--bg);z-index:40}
+    body.viewing .list{display:none} body.viewing .thread{display:flex} .back{display:inline-block}
+  }
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="keygate" class="keyprompt hidden">
+  <h2>📨 Emily Console</h2>
+  <p style="color:#8ba0bb" id="gateMsg">Enter your access key.</p>
+  <input id="keyInput" type="password" placeholder="access key" onkeydown="if(event.key==='Enter')saveKey()" />
+  <button class="btn" style="width:100%" onclick="saveKey()">Open</button>
+</div>
+
+<div id="app" class="hidden" style="display:flex;flex-direction:column;height:100%">
+<header>
+  <div class="logo">📨 <b>Emily Console</b></div>
+  <div class="sp"></div>
+  <button class="link" onclick="loadList(true)">↻ Refresh</button>
+  <a href="#" onclick="signOut();return false">sign out</a>
+</header>
+<div class="toolbar">
+  <button class="tab on" data-tab="pending" onclick="setTab('pending')">Pending <span class="n" id="n-pending"></span></button>
+  <button class="tab" data-tab="responded" onclick="setTab('responded')">Responded <span class="n" id="n-responded"></span></button>
+  <button class="tab" data-tab="closed" onclick="setTab('closed')">Closed <span class="n" id="n-closed"></span></button>
+  <button class="tab" data-tab="all" onclick="setTab('all')">All <span class="n" id="n-all"></span></button>
+  <select id="brand" onchange="loadList()">
+    <option value="">All brands</option>
+    <option>Larkspur Baby</option><option>Larkspur Baby Outlet</option><option>Bumbunny Baby</option>
+  </select>
+  <input class="search" id="q" placeholder="Search name, subject…" oninput="debouncedList()">
+</div>
+<main>
+  <div class="list" id="list"><div class="empty">Loading…</div></div>
+  <div class="thread" id="thread"><div class="empty">Select a conversation to read the full thread.</div></div>
+</main>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+const KEY=(function(){try{const u=new URLSearchParams(location.search).get("key");if(u){localStorage.setItem("ec_key",u);return u;}return localStorage.getItem("ec_key")||"";}catch(e){return"";}})();
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m,bad){const t=$("toast");t.textContent=m;t.className="toast show"+(bad?" bad":"");clearTimeout(t._t);t._t=setTimeout(()=>t.className="toast",2600);}
+function saveKey(){const v=$("keyInput").value.trim();if(!v)return;try{localStorage.setItem("ec_key",v);}catch(e){}location.href=location.pathname+"?key="+encodeURIComponent(v);}
+function signOut(){try{localStorage.removeItem("ec_key");}catch(e){}location.href=location.pathname;}
+async function api(p,opts){opts=opts||{};const u=p+(p.includes("?")?"&":"?")+"key="+encodeURIComponent(KEY);const r=await fetch(u,opts);if(r.status===401){toast("Unauthorized",true);throw new Error("401");}return r.json();}
+let TAB="pending", CUR=null, tickets=[];
+function fmt(ts){try{const d=new Date(ts),now=new Date();const sameDay=d.toDateString()===now.toDateString();return sameDay?d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):d.toLocaleDateString([],{month:"short",day:"numeric"});}catch(e){return"";}}
+
+if(!KEY){ $("keygate").classList.remove("hidden"); }
+else {(async()=>{
+  let role=null; try{ role=await (await fetch("/api/role?key="+encodeURIComponent(KEY))).json(); }catch(e){}
+  if(role&&role.ok){ $("app").classList.remove("hidden"); if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} loadCounts(); loadList(); setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList();}},30000); }
+  else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="That key isn't recognized."; try{localStorage.removeItem("ec_key");}catch(e){} }
+})();}
+
+function setTab(t){TAB=t;document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));loadList();}
+let _dt=null; function debouncedList(){clearTimeout(_dt);_dt=setTimeout(loadList,300);}
+async function loadCounts(){try{const c=await api("/api/counts");for(const k of ["pending","responded","closed","all"])$("n-"+k).textContent=c[k]!=null?c[k]:"";}catch(e){}}
+async function loadList(force){
+  const el=$("list"); if(force)el.innerHTML='<div class="empty">Loading…</div>';
+  try{
+    const d=await api(`/api/tickets?tab=${TAB}&brand=${encodeURIComponent($("brand").value)}&q=${encodeURIComponent($("q").value.trim())}`);
+    tickets=d.tickets||[];
+    if(!tickets.length){el.innerHTML='<div class="empty">No '+TAB+' tickets.</div>';return;}
+    el.innerHTML=tickets.map(t=>`<button class="row ${CUR===t.id?"on":""}" onclick="openTicket(${t.id})">
+      <div class="r1"><span class="dot ${t.unread?"":"off"}"></span><span class="cust">${esc(t.customer.name)}</span><span class="time">${fmt(t.last)}</span></div>
+      <div class="subj">${esc(t.subject)}</div>
+      <div class="exc">${esc(t.excerpt).slice(0,120)}</div>
+      <div class="chips"><span class="chip brand">${esc(t.brand)}</span>${t.emily?`<span class="chip ${t.emily}">Emily: ${t.emily}</span>`:""}${t.messages_count>1?`<span class="chip">${t.messages_count} msgs</span>`:""}</div>
+    </button>`).join("");
+  }catch(e){el.innerHTML='<div class="empty">Couldn\'t load tickets.</div>';}
+}
+let MODE="reply";
+async function openTicket(id){
+  CUR=id; document.body.classList.add("viewing"); document.querySelectorAll(".row").forEach(r=>r.classList.remove("on"));
+  const th=$("thread"); th.innerHTML='<div class="empty">Loading conversation…</div>';
+  loadList();
+  try{
+    const d=await api("/api/ticket/"+id);
+    const msgs=(d.messages||[]).map(m=>{
+      if(m.internal) return `<div class="msg note"><div class="meta">📝 internal note · ${esc(m.sender)} · ${fmt(m.at)}</div>${esc(m.text)}</div>`;
+      const side=m.from_agent?"agent":"cust";
+      return `<div class="msg ${side}"><div class="meta">${esc(m.sender)} · ${fmt(m.at)}</div>${esc(m.text)}${(m.attachments||[]).map(a=>`<div style="margin-top:6px"><a href="${esc(a.url)}" target="_blank" style="color:#9dd3ff">📎 ${esc(a.name||"attachment")}</a></div>`).join("")}</div>`;
+    }).join("");
+    th.innerHTML=`
+      <div class="thead">
+        <button class="btn sec back" onclick="closeThread()">←</button>
+        <div><div class="who">${esc(d.customer.name)}</div><div class="sub">${esc(d.customer.email||"")} · ${esc(d.brand)}</div></div>
+        <div class="sp"></div>
+        <span class="pill ${d.status==="closed"?"closed":"open"}">${esc(d.status)}</span>
+        ${d.emily?`<span class="chip ${d.emily}">Emily: ${d.emily}</span>`:""}
+        <button class="btn ghost" onclick="askEmily(${id})">Ask Emily</button>
+        <button class="btn sec" onclick="setStatus(${id},'${d.status==="closed"?"open":"closed"}')">${d.status==="closed"?"Reopen":"Close"}</button>
+      </div>
+      <div class="msgs" id="msgs">${msgs||'<div class="empty">No messages.</div>'}</div>
+      <div class="composer">
+        <div class="modetog"><button id="m-reply" class="on" onclick="setMode('reply')">Reply to customer</button><button id="m-note" onclick="setMode('note')">Internal note</button></div>
+        <textarea id="composer" placeholder="Write a reply to ${esc(d.customer.name)}…"></textarea>
+        <div class="crow"><div class="sub" style="color:var(--muted);font-size:12px" id="sendhint">Sends an email to ${esc(d.customer.email||"the customer")} from ${esc(d.brand)}.</div><div class="sp" style="flex:1"></div>
+        <button class="btn" id="sendBtn" onclick="send(${id})">Send reply</button></div>
+      </div>`;
+    MODE="reply"; const mb=$("msgs"); if(mb)mb.scrollTop=mb.scrollHeight;
+  }catch(e){ th.innerHTML='<div class="empty">Couldn\'t load this ticket.</div>'; }
+}
+function closeThread(){document.body.classList.remove("viewing");CUR=null;loadList();}
+function setMode(m){MODE=m;$("m-reply").classList.toggle("on",m==="reply");$("m-note").classList.toggle("on",m==="note");
+  $("sendBtn").textContent=m==="reply"?"Send reply":"Add note";$("composer").placeholder=m==="reply"?"Write a reply…":"Internal note (not sent to customer)…";
+  $("sendhint").style.visibility=m==="reply"?"visible":"hidden";}
+async function send(id){
+  const text=$("composer").value.trim(); if(!text){toast("Write something first",true);return;}
+  const b=$("sendBtn"); b.disabled=true; const was=b.textContent; b.textContent="Sending…";
+  try{
+    const ep=MODE==="reply"?"/api/reply":"/api/note";
+    const r=await api(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,text})});
+    if(r.error){toast(r.error,true);} else {toast(MODE==="reply"?"Reply sent ✓":"Note added ✓");$("composer").value="";openTicket(id);loadCounts();}
+  }catch(e){toast("Failed",true);} b.disabled=false; b.textContent=was;
+}
+async function setStatus(id,status){try{const r=await api("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,status})});if(r.error){toast(r.error,true);return;}toast(status==="closed"?"Closed":"Reopened");openTicket(id);loadCounts();}catch(e){toast("Failed",true);}}
+async function askEmily(id){try{const r=await api("/api/ask-emily",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id})});if(r.error){toast(r.error,true);return;}toast("Asked Emily to draft this in Slack");}catch(e){toast("Failed",true);}}
+</script>
+</body>
+</html>
