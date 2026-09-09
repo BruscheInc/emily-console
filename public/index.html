@@ -89,6 +89,7 @@
   <button class="tab on" data-tab="pending" onclick="setTab('pending')">Pending <span class="n" id="n-pending"></span></button>
   <button class="tab" data-tab="responded" onclick="setTab('responded')">Responded <span class="n" id="n-responded"></span></button>
   <button class="tab" data-tab="closed" onclick="setTab('closed')">Closed <span class="n" id="n-closed"></span></button>
+  <button class="tab" data-tab="collabs" onclick="setTab('collabs')">🤝 Collabs <span class="n" id="n-collabs"></span></button>
   <button class="tab" data-tab="all" onclick="setTab('all')">All <span class="n" id="n-all"></span></button>
   <select id="brand" onchange="loadList()">
     <option value="">All brands</option>
@@ -123,7 +124,7 @@ else {(async()=>{
 
 function setTab(t){TAB=t;document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));loadList();}
 let _dt=null; function debouncedList(){clearTimeout(_dt);_dt=setTimeout(loadList,300);}
-async function loadCounts(){try{const c=await api("/api/counts");for(const k of ["pending","responded","closed","all"])$("n-"+k).textContent=c[k]!=null?c[k]:"";}catch(e){}}
+async function loadCounts(){try{const c=await api("/api/counts");for(const k of ["pending","responded","closed","collabs","all"])$("n-"+k).textContent=c[k]!=null?c[k]:"";}catch(e){}}
 async function loadList(force){
   const el=$("list"); if(force)el.innerHTML='<div class="empty">Loading…</div>';
   try{
