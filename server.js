@@ -57,6 +57,21 @@ function slackPost(text) { if (!SLACK_TOKEN || !CS_CHANNEL) return Promise.resol
 
 /* ---------------- helpers ---------------- */
 const EMILY_TAGS = { "emily-sent": "sent", "emily-drafted": "drafted", "emily-skip": "skip" };
+// A ticket is customer service unless Emily tagged it non-CS (emily-skip / not-cs) or Gorgias flagged spam.
+// (emily-skip-manual is NOT excluded — those are real CS tickets Emily drafted but held from auto-send.)
+const NON_CS_TAGS = new Set(["emily-skip", "not-cs"]);
+function isCS(t) {
+  if (t.spam) return false;
+  for (const tag of (t.tags || [])) if (NON_CS_TAGS.has(tag.name)) return false;
+  return true;
+}
+// Collaboration / partnership requests — their own inbox. Matched by subject/snippet keywords, and
+// surfaced even if Emily tagged them non-CS (they're not sales pitches). Obvious spam is still excluded.
+const COLLAB_RE = /\b(collab|collaborat|partnership|partner with|brand ambassador|ambassador|influencer|ugc|content creator|creator program|sponsor|affiliate|gifting|brand deal|pr package|work with your brand)\b/i;
+function isCollab(t) {
+  if (t.spam) return false;
+  return COLLAB_RE.test(`${t.subject || ""} ${t.excerpt || ""}`);
+}
 function brandOf(t) { const i = (t.integrations || [])[0] || {}; return { brand: i.name || "—", address: i.address || null }; }
 function emilyStatusOf(t) { for (const tag of (t.tags || [])) { const m = EMILY_TAGS[tag.name]; if (m) return m; } return null; }
 function repliedLast(t) { // true if our side sent the most recent message
@@ -98,9 +113,13 @@ app.get("/api/tickets", async (req, res) => {
     const tab = req.query.tab || "pending", brand = req.query.brand || "", q = (req.query.q || "").toLowerCase();
     const cursor = req.query.cursor || "";
     const j = await gorgias("GET", `/tickets?order_by=updated_datetime:desc&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
-    let rows = (j.data || []).map(shape);
-    rows = rows.filter((r) => !r.spam);                                   // hide spam
-    if (tab !== "all") rows = rows.filter((r) => r.category === tab);
+    let rows;
+    if (tab === "collabs") {
+      rows = (j.data || []).filter(isCollab).map(shape);                  // collaboration/partnership inbox
+    } else {
+      rows = (j.data || []).filter((t) => isCS(t) && !isCollab(t)).map(shape); // CS only, collabs excluded
+      if (tab !== "all") rows = rows.filter((r) => r.category === tab);
+    }
     if (brand) rows = rows.filter((r) => r.brand === brand);
     if (q) rows = rows.filter((r) => (r.subject + " " + r.excerpt + " " + r.customer.name + " " + (r.customer.email || "")).toLowerCase().includes(q));
     res.json({ tickets: rows, next_cursor: j.meta && j.meta.next_cursor });
@@ -111,8 +130,9 @@ app.get("/api/counts", async (req, res) => {
   if (!guard(req, res)) return;
   try {
     const j = await gorgias("GET", `/tickets?order_by=updated_datetime:desc&limit=100`);
-    const rows = (j.data || []).map(shape).filter((r) => !r.spam);
-    const c = { pending: 0, responded: 0, closed: 0, all: rows.length };
+    const data = j.data || [];
+    const rows = data.filter((t) => isCS(t) && !isCollab(t)).map(shape);
+    const c = { pending: 0, responded: 0, closed: 0, all: rows.length, collabs: data.filter(isCollab).length };
     for (const r of rows) c[r.category] = (c[r.category] || 0) + 1;
     res.json(c);
   } catch (e) { res.status(500).json({ error: e.message }); }
