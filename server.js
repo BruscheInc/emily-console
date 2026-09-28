@@ -132,7 +132,7 @@ app.get("/api/ticket/:id", async (req, res) => {
     const messages = m.rows.map((x) => ({
       id: x.id, from_agent: x.from_agent, internal: x.internal, channel: x.channel,
       sender: x.sender_name || (x.from_agent ? "Agent" : "Customer"), sender_email: x.sender_email,
-      text: x.body_text || "", at: x.at,
+      ...(() => { const q = core.stripQuoted(x.body_text); return { text: q.text, quoted: q.quoted }; })(), at: x.at,
       attachments: (x.attachments || []).map((a, i) => ({ name: a.name, content_type: a.content_type, size: a.size, url: attachmentUrl("", x.id, i) })),
       emily_draft: x.internal && /emily'?s suggested reply|review\s*&?(?:amp;)?\s*send/i.test(x.body_text || ""),
     }));

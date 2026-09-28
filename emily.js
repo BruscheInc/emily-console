@@ -639,7 +639,7 @@ async function runTool(name, input) {
     }
     if (name === "helpdesk_ticket_conversation") {
       const d = await db(`SELECT from_agent, internal, sender_email, body_text, at FROM hd_messages WHERE ticket_id=$1 ORDER BY at ASC`, [String(input.ticket_id)]);
-      return d.rows.map((m) => ({ from: m.sender_email, from_agent: m.from_agent, internal: m.internal, at: m.at, text: (m.body_text || "").slice(0, 2500) }));
+      return d.rows.map((m) => ({ from: m.sender_email, from_agent: m.from_agent, internal: m.internal, at: m.at, text: core.stripQuoted(m.body_text).text.slice(0, 2500) }));
     }
     return { error: `unknown tool ${name}` };
   } catch (e) { return { error: e.message }; }
@@ -760,9 +760,9 @@ async function draftForTicket(t, force, guidance) {
   const images = await imagesFor(msgs);
   const convo = pub.map((m) => {
     const n = (m.attachments || []).length;
-    return `${m.from_agent ? "[AGENT]" : "[CUSTOMER]"}${n ? ` [${n} attachment(s)]` : ""} ${(m.body_text || "").slice(0, 4000)}`;
+    return `${m.from_agent ? "[AGENT]" : "[CUSTOMER]"}${n ? ` [${n} attachment(s)]` : ""} ${core.stripQuoted(m.body_text).text.slice(0, 4000)}`;
   }).join("\n---\n");
-  const lastMsg = lastCustomer ? String(lastCustomer.body_text || "") : "";
+  const lastMsg = lastCustomer ? core.stripQuoted(lastCustomer.body_text).text : "";
   const custImages = images.filter((im) => lastCustomer && im.mid === lastCustomer.id);
   const brand = t.brand || core.brandForAddress(t.mailbox) || "?";
   const instruction =

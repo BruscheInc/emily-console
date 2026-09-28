@@ -666,6 +666,31 @@ async function setting(key, dflt) {
   try { const r = await db(`SELECT value FROM emily_settings WHERE key=$1`, [key]); return r.rows[0] ? r.rows[0].value : dflt; } catch (e) { return dflt; }
 }
 
+/* ---- quoted-reply trimming ----
+ * Every mail client appends the earlier conversation under "On <date> <who> wrote:", "-----Original Message-----",
+ * an Outlook "From:/Sent:" header block, or ">"-prefixed lines. The thread already shows those earlier messages
+ * as their own bubbles, so we cut the quoted tail off for display and for Emily's context. The full text stays in
+ * hd_messages untouched; the app offers "Show quoted text" per message.                                        */
+const QUOTE_MARKERS = [
+  /^\s*On\s(?:(?!\n\s*\n)[\s\S]){5,240}?wrote:\s*$/m,                       // Gmail / Apple Mail (may wrap to a 2nd line)
+  /^\s*Le\s(?:(?!\n\s*\n)[\s\S]){5,240}?a écrit\s*:\s*$/m,                  // French clients
+  /^\s*-{2,}\s*(?:Original|Forwarded) Message\s*-{2,}\s*$/mi,
+  /^\s*_{6,}\s*$/m,                                                            // Outlook rule line
+  /^\s*From:\s.+\n(?:\s*.+\n){0,3}?\s*(?:Sent|Date):\s.+$/m,                    // Outlook header block
+  /^\s*(?:Sent from my (?:iPhone|iPad|Galaxy|Samsung|Android)|Get Outlook for (?:iOS|Android))\s*\.?\s*$/mi,
+  /^\s*>/m,                                                                    // first ">"-quoted line
+];
+function stripQuoted(text) {
+  let t = String(text || "").replace(/\r\n?/g, "\n");
+  t = t.replace(/\s*\(mailto:[^)]*\)/g, "");                                     // html→text leftovers like "(mailto:x@y.com)"
+  t = t.replace(/<\s*wrote:\s*([^>\s]+@[^>\s]+)\s*>/g, "<$1> wrote:");            // Apple Mail's scrambled "< wrote: a@b >"
+  let cut = t.length;
+  for (const re of QUOTE_MARKERS) { const m = re.exec(t); if (m && m.index < cut) cut = m.index; }
+  const head = t.slice(0, cut).replace(/\n{3,}/g, "\n\n").trim();
+  if (!head) return { text: t.trim(), quoted: "" };                             // never blank a message that is all quote
+  return { text: head, quoted: t.slice(cut).trim() };
+}
+
 module.exports = {
   policyText, seedPolicy, setting, policyCache,
   db, pool, migrate, syncGet, syncSet,
@@ -675,6 +700,6 @@ module.exports = {
   runImport, importState: () => importRun, saveTicket, stripHtml,
   gmailConfigured, OAUTH_CLIENTS, clientForAddress, clientById, exchangeCode, accessTokenFor, gapi, gmailSend, pollMailbox, pollAll, storeGmailMessage, b64urlEncode, b64urlDecode, formEncode, GMAIL_SCOPES, OAUTH_REDIRECT,
   onInbound, emitInbound,
-  sendReply, sendNewEmail, addNote, addTags, htmlify,
+  sendReply, sendNewEmail, addNote, addTags, htmlify, stripQuoted,
   attachmentToken, attachmentUrl, fetchAttachment,
 };
