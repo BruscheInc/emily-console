@@ -1,540 +1,20 @@
 /**
- * Emily Console — a self-hosted helpdesk for Brusche Inc. (Larkspur Baby · Larkspur Baby Outlet · BumBunny Baby).
- *
- * WHY: replaces Gorgias. Every ticket and message lives in this app's own Postgres, so nothing ages out
- * of a 100-ticket window and there is no per-seat bill. Gorgias is used ONLY to import history; once the
- * Gmail transport is connected, mail is read and sent straight from Google Workspace.
- *
- * PIECES
- *   1. Postgres store          hd_tickets / hd_messages / hd_events / hd_sync / hd_users
- *   2. Gorgias importer        resumable, cursor-based; safe to re-run, never loses a ticket
- *   3. Gmail transport         OAuth per mailbox, incremental pull, RFC-822 send with real threading
- *   4. Inbox API + UI          list / search / read / reply / note / assign / close — all from our DB
- *
- * ENV
- *   CONSOLE_KEY                     legacy single access key (kept working; becomes "admin")
- *   CONSOLE_USERS                   "Jose:key1,Emily:key2" — one login per person, so replies are attributed
- *   DATABASE_URL                    Postgres (Railway plugin)
- *   GORGIAS_DOMAIN / _EMAIL / _API_KEY   import only; can be deleted once the import is done
- *   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / OAUTH_REDIRECT   Gmail transport
- *   SLACK_BOT_TOKEN, CS_CHANNEL, EMILY_SLACK_ID                 mirror actions + ping Emily
- *   GORGIAS_FROM_ADDRESS            last-resort sending mailbox
+ * Helpdesk — the app.  HTTP API + inbox UI.  Everything shared lives in core.js; the agent is emily.js.
+ * Start here: `node server.js` boots the database, the web app, the Gmail poller, and Emily.
  */
 const express = require("express");
 const path = require("path");
-const https = require("https");
+const core = require("./core");
+const {
+  db, pool, migrate, syncGet, userFromKey, USERS,
+  BRAND_MAILBOX, ACTIVE_MAILBOXES, brandForAddress, mailboxForName,
+  runImport, importState, gmailConfigured, clientForAddress, clientById, exchangeCode, httpJson, gapi, pollMailbox, pollAll,
+  b64urlEncode, b64urlDecode, formEncode, GMAIL_SCOPES, OAUTH_REDIRECT,
+  sendReply, addNote, slackPost, attachmentToken, attachmentUrl, fetchAttachment, policyText,
+} = core;
 const crypto = require("crypto");
-const { Pool } = require("pg");
-
-const KEY = process.env.CONSOLE_KEY || "";
-const G_DOMAIN = process.env.GORGIAS_DOMAIN || "";
-const G_AUTH = "Basic " + Buffer.from(`${process.env.GORGIAS_EMAIL}:${process.env.GORGIAS_API_KEY}`).toString("base64");
-const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN || "";
-const CS_CHANNEL = process.env.CS_CHANNEL || "";
 const EMILY_ID = process.env.EMILY_SLACK_ID || "";
-
-/* ---------------- users ---------------- */
-function loadUsers() {
-  const out = [];
-  for (const e of String(process.env.CONSOLE_USERS || "").split(",").map((s) => s.trim()).filter(Boolean)) {
-    const [name, k] = e.split(":").map((x) => (x || "").trim());
-    if (name) out.push({ name, key: k || name });
-  }
-  return out;
-}
-const USERS = loadUsers();
-function userFromKey(k) {
-  const v = String(k || "").trim();
-  if (!v) return null;
-  const u = USERS.find((x) => x.key.toLowerCase() === v.toLowerCase());
-  if (u) return u.name;
-  if (KEY && v === KEY) return "admin";
-  return null;
-}
-
-/* ---------------- Postgres ---------------- */
-const DB_URL = process.env.DATABASE_URL || "";
-const DB_SSL = (/sslmode=require/i.test(DB_URL) || /rlwy\.net|amazonaws/i.test(DB_URL)) && !/\.railway\.internal/i.test(DB_URL);
-const pool = DB_URL ? new Pool({ connectionString: DB_URL, ssl: DB_SSL ? { rejectUnauthorized: false } : false }) : null;
-async function db(q, params) {
-  if (!pool) throw new Error("DATABASE_URL not set");
-  const c = await pool.connect();
-  try { return await c.query(q, params); } finally { c.release(); }
-}
-async function migrate() {
-  await db(`CREATE TABLE IF NOT EXISTS hd_tickets (
-    id BIGINT PRIMARY KEY,
-    source TEXT NOT NULL DEFAULT 'gorgias',
-    gorgias_id BIGINT,
-    gmail_thread_id TEXT,
-    subject TEXT,
-    brand TEXT,
-    mailbox TEXT,
-    channel TEXT,
-    status TEXT NOT NULL DEFAULT 'open',
-    spam BOOLEAN DEFAULT false,
-    customer_email TEXT,
-    customer_name TEXT,
-    assignee TEXT,
-    tags TEXT[] DEFAULT '{}',
-    messages_count INTEGER DEFAULT 0,
-    created_at TIMESTAMPTZ,
-    updated_at TIMESTAMPTZ,
-    last_message_at TIMESTAMPTZ,
-    last_inbound_at TIMESTAMPTZ,
-    last_outbound_at TIMESTAMPTZ,
-    imported_at TIMESTAMPTZ DEFAULT now()
-  )`);
-  await db(`CREATE INDEX IF NOT EXISTS idx_hdt_updated ON hd_tickets(updated_at DESC)`);
-  await db(`CREATE INDEX IF NOT EXISTS idx_hdt_status ON hd_tickets(status, last_message_at DESC)`);
-  await db(`CREATE INDEX IF NOT EXISTS idx_hdt_cust ON hd_tickets(lower(customer_email))`);
-  await db(`CREATE INDEX IF NOT EXISTS idx_hdt_gmail ON hd_tickets(gmail_thread_id)`);
-  await db(`CREATE TABLE IF NOT EXISTS hd_messages (
-    id BIGSERIAL PRIMARY KEY,
-    ticket_id BIGINT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'gorgias',
-    external_id TEXT UNIQUE,
-    rfc_message_id TEXT,
-    gmail_id TEXT,
-    from_agent BOOLEAN DEFAULT false,
-    internal BOOLEAN DEFAULT false,
-    channel TEXT,
-    sender_name TEXT,
-    sender_email TEXT,
-    to_emails TEXT[] DEFAULT '{}',
-    subject TEXT,
-    body_text TEXT,
-    body_html TEXT,
-    attachments JSONB DEFAULT '[]'::jsonb,
-    sent_by TEXT,
-    at TIMESTAMPTZ
-  )`);
-  await db(`CREATE INDEX IF NOT EXISTS idx_hdm_ticket ON hd_messages(ticket_id, at)`);
-  await db(`CREATE INDEX IF NOT EXISTS idx_hdm_rfc ON hd_messages(rfc_message_id)`);
-  await db(`CREATE TABLE IF NOT EXISTS hd_events (
-    id BIGSERIAL PRIMARY KEY,
-    ticket_id BIGINT,
-    kind TEXT,
-    detail TEXT,
-    user_name TEXT,
-    ts TIMESTAMPTZ DEFAULT now()
-  )`);
-  await db(`CREATE INDEX IF NOT EXISTS idx_hde_ticket ON hd_events(ticket_id, ts DESC)`);
-  await db(`CREATE TABLE IF NOT EXISTS hd_sync (
-    key TEXT PRIMARY KEY,
-    cursor TEXT,
-    state JSONB DEFAULT '{}'::jsonb,
-    updated_at TIMESTAMPTZ DEFAULT now()
-  )`);
-  await db(`CREATE TABLE IF NOT EXISTS hd_mailboxes (
-    address TEXT PRIMARY KEY,
-    brand TEXT,
-    refresh_token TEXT,
-    history_id TEXT,
-    connected_by TEXT,
-    connected_at TIMESTAMPTZ,
-    last_poll_at TIMESTAMPTZ,
-    last_error TEXT
-  )`);
-  await db(`ALTER TABLE hd_mailboxes ADD COLUMN IF NOT EXISTS client_id TEXT`);
-  await db(`CREATE SEQUENCE IF NOT EXISTS hd_local_ticket_seq START 9000000000`);
-  try { await db(`CREATE EXTENSION IF NOT EXISTS pg_trgm`); } catch (e) { console.warn("pg_trgm unavailable — search falls back to plain ILIKE:", e.message); }
-  try { await db(`CREATE INDEX IF NOT EXISTS idx_hdt_subject_trgm ON hd_tickets USING gin (subject gin_trgm_ops)`); } catch (e) {}
-  try { await db(`CREATE INDEX IF NOT EXISTS idx_hdm_body_trgm ON hd_messages USING gin (body_text gin_trgm_ops)`); } catch (e) {}
-}
-const syncGet = async (k) => (await db(`SELECT cursor, state FROM hd_sync WHERE key=$1`, [k])).rows[0] || null;
-const syncSet = (k, cursor, state) => db(
-  `INSERT INTO hd_sync (key,cursor,state,updated_at) VALUES ($1,$2,$3,now())
-   ON CONFLICT (key) DO UPDATE SET cursor=EXCLUDED.cursor, state=EXCLUDED.state, updated_at=now()`,
-  [k, cursor || null, state || {}]);
-
-/* ---------------- HTTP helpers ---------------- */
-function httpJson(url, { method = "GET", headers = {}, body } = {}) {
-  const data = body == null ? null : (typeof body === "string" ? body : JSON.stringify(body));
-  return new Promise((resolve, reject) => {
-    const req = https.request(url, { method, headers: { Accept: "application/json", ...headers, ...(data ? { "Content-Length": Buffer.byteLength(data) } : {}) } }, (res) => {
-      let b = ""; res.on("data", (c) => (b += c));
-      res.on("end", () => {
-        let j = null; try { j = b ? JSON.parse(b) : {}; } catch (e) { return reject(new Error(`non-JSON ${res.statusCode} from ${url}: ${b.slice(0, 160)}`)); }
-        if (res.statusCode >= 400) return reject(Object.assign(new Error(`${res.statusCode}: ${(j.error && (j.error.msg || j.error.message || JSON.stringify(j.error))) || b.slice(0, 200)}`), { status: res.statusCode, body: j }));
-        resolve(j);
-      });
-    });
-    req.on("error", reject); if (data) req.write(data); req.end();
-  });
-}
-const gorgias = (method, pathname, body) =>
-  httpJson(`https://${G_DOMAIN}/api${pathname}`, { method, headers: { Authorization: G_AUTH, "Content-Type": "application/json" }, body });
-function slack(method, payload) {
-  if (!SLACK_TOKEN) return Promise.resolve({ ok: false });
-  return httpJson(`https://slack.com/api/${method}`, { method: "POST", headers: { Authorization: `Bearer ${SLACK_TOKEN}`, "Content-Type": "application/json; charset=utf-8" }, body: payload }).catch(() => ({ ok: false }));
-}
-const slackPost = (text) => (SLACK_TOKEN && CS_CHANNEL ? slack("chat.postMessage", { channel: CS_CHANNEL, text }) : Promise.resolve());
-
-/* ---------------- brand / mailbox ---------------- */
-const BRAND_MAILBOX = {
-  outlet: process.env.MAILBOX_OUTLET || "hello@larkspurbabyoutlet.com",
-  bumbunny: process.env.MAILBOX_BUMBUNNY || "hello@bumbunnybaby.com",
-  larkspur: process.env.MAILBOX_LARKSPUR || "hello@larkspurbaby.com",
-};
-// The mailboxes we actually run. BumBunny is retired, so it is no longer offered for connection —
-// its old tickets still read fine, they just have no live mailbox behind them. Override with MAILBOXES.
-const ACTIVE_MAILBOXES = String(process.env.MAILBOXES || `${BRAND_MAILBOX.larkspur},${BRAND_MAILBOX.outlet}`)
-  .split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
-function brandForAddress(a) {
-  const d = String(a || "").toLowerCase();
-  if (/outlet/.test(d)) return "Larkspur Baby Outlet";
-  if (/bumbunny/.test(d)) return "BumBunny Baby";
-  if (/larkspur/.test(d)) return "Larkspur Baby";
-  return null;
-}
-function mailboxForName(name) {
-  const n = String(name || "").toLowerCase();
-  if (/outlet/.test(n)) return BRAND_MAILBOX.outlet;
-  if (/bumbunny|bum bunny/.test(n)) return BRAND_MAILBOX.bumbunny;
-  if (/larkspur/.test(n)) return BRAND_MAILBOX.larkspur;
-  return null;
-}
-// Gorgias' single-ticket endpoint omits `integrations` entirely, so the mailbox has to come from the
-// thread: what the customer wrote TO, else the from-address of a reply we already sent.
-function addressFromMessages(msgs) {
-  const arr = Array.isArray(msgs) ? msgs : [];
-  for (const m of arr) {
-    if (!m.from_agent && m.channel === "email" && m.source && Array.isArray(m.source.to) && m.source.to[0] && m.source.to[0].address) return m.source.to[0].address;
-  }
-  for (const m of arr) {
-    if (m.from_agent && m.channel === "email" && m.source && m.source.from && m.source.from.address) return m.source.from.address;
-  }
-  return null;
-}
-function mailboxFromIntegrations(integrations) {
-  const arr = Array.isArray(integrations) ? integrations : [];
-  const emailInt = arr.find((i) => i && i.address && /@/.test(i.address) && /gmail|email|imap|smtp|outlook|microsoft/i.test(i.type || ""))
-    || arr.find((i) => i && i.address && /@/.test(i.address));
-  if (emailInt) return emailInt.address;
-  return mailboxForName(arr.map((i) => (i && i.name) || "").join(" "));
-}
-function resolveMailbox(t, msgs) {
-  return addressFromMessages(msgs) || mailboxFromIntegrations(t && t.integrations) || process.env.GORGIAS_FROM_ADDRESS || null;
-}
-
-/* ---------------- Gorgias import (history only) ----------------
- * Walks /tickets newest-first with the cursor, pulling each ticket's messages. Resumable: the cursor and
- * the ids already stored are both persisted, so a restart continues instead of starting over, and a
- * re-run is harmless. Existing rows are updated, never duplicated. */
-const stripHtml = (h) => String(h || "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\n{3,}/g, "\n\n").trim();
-const COLLAB_RE = /\b(collab|collaborat|partnership|partner with|brand ambassador|ambassador|influencer|ugc|content creator|creator program|sponsor|affiliate|gifting|brand deal|pr package|work with your brand)\b/i;
-
-function msgRow(ticketId, x) {
-  const src = x.source || {};
-  const internal = x.channel === "internal-note" || x.public === false;
-  // Gorgias' body_text is derived from the HTML with tags removed and no newline for <br>, so a long
-  // reply arrives as one run-on paragraph. Re-derive from the HTML whenever that has happened.
-  const flat = String(x.body_text || x.stripped_text || "").trim();
-  const fromHtml = stripHtml(x.body_html || x.stripped_html || "");
-  const text = (!flat || (!/\n/.test(flat) && fromHtml.includes("\n"))) ? fromHtml : flat;
-  return {
-    ticket_id: ticketId,
-    external_id: `gorgias:${x.id}`,
-    rfc_message_id: x.message_id || null,
-    from_agent: !!x.from_agent,
-    internal,
-    channel: x.channel || "email",
-    sender_name: (x.sender && (x.sender.name || x.sender.email)) || (x.from_agent ? "Agent" : "Customer"),
-    sender_email: (x.sender && x.sender.email) || (src.from && src.from.address) || null,
-    to_emails: (Array.isArray(src.to) ? src.to.map((a) => a && a.address).filter(Boolean) : []),
-    subject: x.subject || null,
-    body_text: text,
-    body_html: x.body_html || null,
-    attachments: (x.attachments || []).map((a) => ({ name: a.name, url: a.url, size: a.size, content_type: a.content_type })),
-    at: x.sent_datetime || x.created_datetime || null,
-  };
-}
-async function saveTicket(t, msgs) {
-  const mailbox = resolveMailbox(t, msgs);
-  const rows = (msgs || []).map((x) => msgRow(t.id, x)).sort((a, b) => new Date(a.at) - new Date(b.at));
-  const inbound = rows.filter((r) => !r.from_agent && !r.internal);
-  const outbound = rows.filter((r) => r.from_agent && !r.internal);
-  const tags = (t.tags || []).map((x) => x.name);
-  const isCollab = !t.spam && COLLAB_RE.test(`${t.subject || ""} ${t.excerpt || ""}`);
-  await db(
-    `INSERT INTO hd_tickets (id,source,gorgias_id,subject,brand,mailbox,channel,status,spam,customer_email,customer_name,
-                             assignee,tags,messages_count,created_at,updated_at,last_message_at,last_inbound_at,last_outbound_at)
-     VALUES ($1,'gorgias',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-     ON CONFLICT (id) DO UPDATE SET subject=EXCLUDED.subject, brand=EXCLUDED.brand, mailbox=EXCLUDED.mailbox,
-       channel=EXCLUDED.channel, status=EXCLUDED.status, spam=EXCLUDED.spam, customer_email=EXCLUDED.customer_email,
-       customer_name=EXCLUDED.customer_name, tags=EXCLUDED.tags, messages_count=EXCLUDED.messages_count,
-       updated_at=EXCLUDED.updated_at, last_message_at=EXCLUDED.last_message_at, last_inbound_at=EXCLUDED.last_inbound_at,
-       last_outbound_at=EXCLUDED.last_outbound_at,
-       assignee=COALESCE(hd_tickets.assignee, EXCLUDED.assignee)`,
-    [t.id, t.subject || "(no subject)", brandForAddress(mailbox) || (t.integrations || [])[0]?.name || null, mailbox,
-     t.channel || "email", t.status === "closed" ? "closed" : "open", !!t.spam,
-     (t.customer && t.customer.email) || null, (t.customer && (t.customer.name || t.customer.email)) || null,
-     (t.assignee_user && t.assignee_user.name) || null, tags.concat(isCollab ? ["collab"] : []),
-     rows.length, t.created_datetime || null, t.updated_datetime || null,
-     rows.length ? rows[rows.length - 1].at : null,
-     inbound.length ? inbound[inbound.length - 1].at : null,
-     outbound.length ? outbound[outbound.length - 1].at : null]
-  );
-  for (const r of rows) {
-    await db(
-      `INSERT INTO hd_messages (ticket_id,source,external_id,rfc_message_id,from_agent,internal,channel,sender_name,sender_email,
-                                to_emails,subject,body_text,body_html,attachments,at)
-       VALUES ($1,'gorgias',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-       ON CONFLICT (external_id) DO UPDATE SET body_text=EXCLUDED.body_text, body_html=EXCLUDED.body_html,
-         attachments=EXCLUDED.attachments, at=EXCLUDED.at`,
-      [r.ticket_id, r.external_id, r.rfc_message_id, r.from_agent, r.internal, r.channel, r.sender_name, r.sender_email,
-       r.to_emails, r.subject, r.body_text, r.body_html, JSON.stringify(r.attachments), r.at]
-    );
-  }
-  return rows.length;
-}
-let importRun = null;   // { running, page, tickets, messages, done, error, started }
-async function runImport({ resume = true } = {}) {
-  if (importRun && importRun.running) return importRun;
-  if (!G_DOMAIN) throw new Error("GORGIAS_DOMAIN not set — nothing to import from");
-  const saved = resume ? await syncGet("gorgias_import") : null;
-  importRun = { running: true, page: (saved && saved.state && saved.state.page) || 0, tickets: (saved && saved.state && saved.state.tickets) || 0,
-                messages: (saved && saved.state && saved.state.messages) || 0, done: false, error: null, started: new Date().toISOString() };
-  let cursor = resume && saved ? saved.cursor : null;
-  (async () => {
-    try {
-      for (;;) {
-        const qs = `?order_by=updated_datetime:desc&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-        const j = await gorgias("GET", `/tickets${qs}`);
-        const data = j.data || [];
-        if (!data.length) break;
-        for (const t of data) {
-          let msgs = [];
-          try { msgs = (await gorgias("GET", `/tickets/${t.id}/messages?limit=100`)).data || []; }
-          catch (e) { msgs = Array.isArray(t.messages) ? t.messages : []; }
-          importRun.messages += await saveTicket(t, msgs);
-          importRun.tickets++;
-          await new Promise((r) => setTimeout(r, 120));      // stay under Gorgias' rate limit
-        }
-        importRun.page++;
-        cursor = j.meta && j.meta.next_cursor;
-        await syncSet("gorgias_import", cursor, { page: importRun.page, tickets: importRun.tickets, messages: importRun.messages });
-        if (!cursor) break;
-      }
-      importRun.done = true;
-      await syncSet("gorgias_import_done", null, { at: new Date().toISOString(), tickets: importRun.tickets, messages: importRun.messages });
-      slackPost(`📥 Gorgias import finished — ${importRun.tickets} tickets, ${importRun.messages} messages now stored in the console.`);
-    } catch (e) {
-      importRun.error = e.message;
-      console.error("import failed:", e.message);
-    } finally { importRun.running = false; }
-  })();
-  return importRun;
-}
-
-/* ---------------- Gmail transport ----------------
- * One OAuth grant per mailbox (hello@larkspurbaby.com, …). We store only the refresh token; access
- * tokens are fetched on demand and kept in memory. Reading is incremental via Gmail's history feed, so
- * each poll costs one call when nothing has arrived. Sending goes out through Google exactly as if it
- * were sent from the mailbox itself — same SPF/DKIM, same deliverability, no new DNS. */
-const OAUTH_REDIRECT = process.env.OAUTH_REDIRECT || "";
-const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/userinfo.email"];
-// One OAuth client covers every mailbox inside a single Google Workspace organisation. Brands on
-// SEPARATE Workspace accounts each need their own client, because an "Internal" app can only be
-// authorised by users of the organisation that owns it. GOOGLE_OAUTH_CLIENTS holds those extras:
-//   [{"client_id":"…","client_secret":"…","domains":["larkspurbabyoutlet.com"]}, …]
-// The single GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET pair stays the default for anything unmatched.
-function loadOauthClients() {
-  const out = [];
-  try {
-    const raw = JSON.parse(process.env.GOOGLE_OAUTH_CLIENTS || "[]");
-    for (const c of Array.isArray(raw) ? raw : []) {
-      if (c && c.client_id && c.client_secret) {
-        out.push({ client_id: c.client_id, client_secret: c.client_secret, domains: (c.domains || []).map((d) => String(d).toLowerCase()) });
-      }
-    }
-  } catch (e) { console.error("GOOGLE_OAUTH_CLIENTS is not valid JSON — ignoring it:", e.message); }
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    out.push({ client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, domains: [] });
-  }
-  return out;
-}
-const OAUTH_CLIENTS = loadOauthClients();
-const domainOf = (a) => String(a || "").toLowerCase().split("@").pop();
-function clientForAddress(address) {
-  const d = domainOf(address);
-  return OAUTH_CLIENTS.find((c) => c.domains.includes(d)) || OAUTH_CLIENTS.find((c) => !c.domains.length) || OAUTH_CLIENTS[0] || null;
-}
-const clientById = (id) => OAUTH_CLIENTS.find((c) => c.client_id === id) || null;
-const gmailConfigured = () => !!(OAUTH_CLIENTS.length && OAUTH_REDIRECT);
-const accessTokens = new Map();   // address -> { token, exp }
-
-function formEncode(o) { return Object.entries(o).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&"); }
-async function exchangeCode(code, client) {
-  const c = client || OAUTH_CLIENTS[0];
-  if (!c) throw new Error("no Google OAuth client configured");
-  return httpJson("https://oauth2.googleapis.com/token", {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formEncode({ code, client_id: c.client_id, client_secret: c.client_secret, redirect_uri: OAUTH_REDIRECT, grant_type: "authorization_code" }),
-  });
-}
-async function accessTokenFor(address) {
-  const hit = accessTokens.get(address);
-  if (hit && hit.exp > Date.now() + 60000) return hit.token;
-  const r = (await db(`SELECT refresh_token, client_id FROM hd_mailboxes WHERE lower(address)=lower($1)`, [address])).rows[0];
-  if (!r || !r.refresh_token) throw new Error(`${address} is not connected to Gmail yet`);
-  // Refresh with the SAME client that issued the token — a token from one client is meaningless to another.
-  const c = clientById(r.client_id) || clientForAddress(address);
-  if (!c) throw new Error(`no Google OAuth client configured for ${address}`);
-  const j = await httpJson("https://oauth2.googleapis.com/token", {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formEncode({ refresh_token: r.refresh_token, client_id: c.client_id, client_secret: c.client_secret, grant_type: "refresh_token" }),
-  });
-  accessTokens.set(address, { token: j.access_token, exp: Date.now() + (Number(j.expires_in || 3600) * 1000) });
-  return j.access_token;
-}
-const gapi = async (address, pathname, opts = {}) => {
-  const token = await accessTokenFor(address);
-  return httpJson(`https://gmail.googleapis.com/gmail/v1/users/me${pathname}`, {
-    ...opts, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(opts.headers || {}) },
-  });
-};
-const b64urlDecode = (s) => Buffer.from(String(s || "").replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
-const b64urlEncode = (s) => Buffer.from(s, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-function headerOf(payload, name) {
-  const h = ((payload && payload.headers) || []).find((x) => String(x.name).toLowerCase() === name.toLowerCase());
-  return h ? h.value : null;
-}
-function walkParts(payload, out = { text: "", html: "", attachments: [] }) {
-  if (!payload) return out;
-  const mime = payload.mimeType || "";
-  if (payload.filename && payload.body && payload.body.attachmentId) {
-    out.attachments.push({ name: payload.filename, size: payload.body.size, content_type: mime, gmail_attachment_id: payload.body.attachmentId });
-  } else if (mime === "text/plain" && payload.body && payload.body.data) {
-    out.text += (out.text ? "\n" : "") + b64urlDecode(payload.body.data);
-  } else if (mime === "text/html" && payload.body && payload.body.data) {
-    out.html += b64urlDecode(payload.body.data);
-  }
-  for (const p of payload.parts || []) walkParts(p, out);
-  return out;
-}
-const parseAddr = (v) => {
-  const s = String(v || "");
-  const m = s.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/);
-  return m ? { name: m[1].trim() || null, email: m[2].trim().toLowerCase() } : { name: null, email: s.trim().toLowerCase() || null };
-};
-const parseAddrList = (v) => String(v || "").split(",").map((x) => parseAddr(x).email).filter(Boolean);
-// Strip the quoted history Gmail keeps on replies, so the thread reads like a conversation.
-function trimQuoted(text) {
-  const t = String(text || "");
-  const cut = t.search(/\n\s*On .{0,120}wrote:\s*\n|\n\s*-{2,}\s*Original Message\s*-{2,}|\n\s*>{1,}\s/);
-  return (cut > 40 ? t.slice(0, cut) : t).trim();
-}
-async function storeGmailMessage(address, m) {
-  const labels = m.labelIds || [];
-  if (labels.includes("DRAFT")) return null;
-  const p = m.payload || {};
-  const from = parseAddr(headerOf(p, "From"));
-  const to = parseAddrList(headerOf(p, "To")).concat(parseAddrList(headerOf(p, "Cc")));
-  const subject = headerOf(p, "Subject") || "(no subject)";
-  const rfcId = headerOf(p, "Message-ID") || headerOf(p, "Message-Id") || null;
-  const parts = walkParts(p);
-  const body = trimQuoted(parts.text || stripHtml(parts.html));
-  const fromAgent = from.email === String(address).toLowerCase();
-  const at = m.internalDate ? new Date(Number(m.internalDate)).toISOString() : new Date().toISOString();
-  const customer = fromAgent ? (to[0] || null) : from.email;
-  if (!customer) return null;
-
-  let t = (await db(`SELECT id FROM hd_tickets WHERE gmail_thread_id=$1`, [m.threadId])).rows[0];
-  if (!t) {
-    const id = (await db(`SELECT nextval('hd_local_ticket_seq')::bigint AS id`)).rows[0].id;
-    await db(
-      `INSERT INTO hd_tickets (id,source,gmail_thread_id,subject,brand,mailbox,channel,status,spam,customer_email,customer_name,created_at,updated_at)
-       VALUES ($1,'gmail',$2,$3,$4,$5,'email','open',$6,$7,$8,$9,$9)`,
-      [id, m.threadId, subject, brandForAddress(address), address, labels.includes("SPAM"), customer, fromAgent ? null : from.name, at]);
-    t = { id };
-  }
-  const ins = await db(
-    `INSERT INTO hd_messages (ticket_id,source,external_id,rfc_message_id,gmail_id,from_agent,internal,channel,sender_name,sender_email,
-                              to_emails,subject,body_text,body_html,attachments,at)
-     VALUES ($1,'gmail',$2,$3,$4,$5,false,'email',$6,$7,$8,$9,$10,$11,$12,$13)
-     ON CONFLICT (external_id) DO NOTHING RETURNING id`,
-    [t.id, `gmail:${m.id}`, rfcId, m.id, fromAgent, from.name || (fromAgent ? "Agent" : customer), from.email, to, subject,
-     body, parts.html || null, JSON.stringify(parts.attachments), at]);
-  if (!ins.rows.length) return null;                        // already had it
-  await db(
-    `UPDATE hd_tickets SET messages_count=(SELECT count(*) FROM hd_messages WHERE ticket_id=$1),
-            last_message_at=$2, updated_at=$2,
-            last_inbound_at=CASE WHEN $3 THEN last_inbound_at ELSE $2 END,
-            last_outbound_at=CASE WHEN $3 THEN $2 ELSE last_outbound_at END,
-            status=CASE WHEN $3 THEN status ELSE 'open' END,
-            customer_name=COALESCE(customer_name,$4)
-      WHERE id=$1`, [t.id, at, fromAgent, fromAgent ? null : from.name]);
-  return { ticket_id: t.id, from_agent: fromAgent, subject };
-}
-async function pollMailbox(address) {
-  const box = (await db(`SELECT * FROM hd_mailboxes WHERE lower(address)=lower($1)`, [address])).rows[0];
-  if (!box || !box.refresh_token) return { skipped: true };
-  let added = 0, ids = [];
-  try {
-    if (!box.history_id) {                                   // first run: take the recent window, then go incremental
-      const days = Number(process.env.GMAIL_FIRST_SYNC_DAYS || 30);
-      let pageToken = null;
-      do {
-        const j = await gapi(address, `/messages?maxResults=100&q=${encodeURIComponent(`newer_than:${days}d -in:chats`)}${pageToken ? `&pageToken=${pageToken}` : ""}`);
-        for (const r of j.messages || []) ids.push(r.id);
-        pageToken = j.nextPageToken;
-      } while (pageToken && ids.length < 2000);
-    } else {
-      let pageToken = null;
-      do {
-        const j = await gapi(address, `/history?startHistoryId=${box.history_id}&historyTypes=messageAdded${pageToken ? `&pageToken=${pageToken}` : ""}`);
-        for (const h of j.history || []) for (const x of h.messagesAdded || []) if (x.message) ids.push(x.message.id);
-        pageToken = j.nextPageToken;
-      } while (pageToken);
-    }
-    for (const id of [...new Set(ids)]) {
-      const full = await gapi(address, `/messages/${id}?format=full`);
-      const r = await storeGmailMessage(address, full);
-      if (r) added++;
-    }
-    const prof = await gapi(address, `/profile`);
-    await db(`UPDATE hd_mailboxes SET history_id=$2, last_poll_at=now(), last_error=NULL WHERE lower(address)=lower($1)`, [address, String(prof.historyId)]);
-    return { address, added };
-  } catch (e) {
-    // A historyId older than Gmail keeps (about a week) can't be resumed — fall back to a window re-scan.
-    if (e.status === 404 && box.history_id) {
-      await db(`UPDATE hd_mailboxes SET history_id=NULL, last_error=$2 WHERE lower(address)=lower($1)`, [address, "history expired — re-scanning"]);
-      return { address, added, requeued: true };
-    }
-    await db(`UPDATE hd_mailboxes SET last_poll_at=now(), last_error=$2 WHERE lower(address)=lower($1)`, [address, e.message.slice(0, 300)]);
-    console.error(`gmail poll ${address}:`, e.message);
-    return { address, error: e.message };
-  }
-}
-let pollBusy = false;
-async function pollAll() {
-  if (pollBusy || !pool || !gmailConfigured()) return;
-  pollBusy = true;
-  try {
-    const boxes = (await db(`SELECT address FROM hd_mailboxes WHERE refresh_token IS NOT NULL`)).rows;
-    for (const b of boxes) await pollMailbox(b.address);
-  } catch (e) { console.error("poll loop:", e.message); }
-  finally { pollBusy = false; }
-}
-// Send a reply through Gmail, threaded onto the existing conversation.
-async function gmailSend({ mailbox, to, subject, text, threadId, inReplyTo, references, fromName }) {
-  const boundaryText = String(text || "");
-  const html = boundaryText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
-  const headers = [
-    `From: ${fromName ? `"${fromName.replace(/"/g, "")}" ` : ""}<${mailbox}>`,
-    `To: ${to}`,
-    `Subject: ${/^re:/i.test(subject || "") ? subject : `Re: ${subject || ""}`}`,
-    inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
-    references ? `References: ${references}` : null,
-    "MIME-Version: 1.0",
-    'Content-Type: text/html; charset="UTF-8"',
-    "Content-Transfer-Encoding: 8bit",
-  ].filter(Boolean).join("\r\n");
-  const raw = b64urlEncode(`${headers}\r\n\r\n${html}`);
-  return gapi(mailbox, `/messages/send`, { method: "POST", body: threadId ? { raw, threadId } : { raw } });
-}
+const KEY = process.env.CONSOLE_KEY || "";
 
 /* ---------------- app ---------------- */
 const app = express();
@@ -547,29 +27,56 @@ app.use(express.static(path.join(__dirname, "public"), { setHeaders: (res, p) =>
 app.get("/health", (_q, r) => r.json({ ok: true }));
 app.get("/api/role", (req, res) => res.json({ ok: !!userFromKey(keyFrom(req)), user: userFromKey(keyFrom(req)) }));
 
+// Pending = the customer is waiting on us. Sent = we answered last. Closed = done.
 const CATEGORY_SQL = `CASE WHEN status='closed' THEN 'closed'
-  WHEN last_outbound_at IS NOT NULL AND (last_inbound_at IS NULL OR last_outbound_at >= last_inbound_at) THEN 'responded'
+  WHEN last_outbound_at IS NOT NULL AND (last_inbound_at IS NULL OR last_outbound_at >= last_inbound_at) THEN 'sent'
   ELSE 'pending' END`;
+
+/* Views — the left-hand choice of WHAT you are looking at.
+ *   lb / lbo          every email for that brand, nothing filtered out
+ *   lb_tickets / lbo_tickets   only real customer service: the junk a shop inbox collects
+ *                     (newsletters, order notifications, agency pitches, review digests, anything
+ *                     Emily marked non-CS) is held back, so the list is things that need a person
+ *   oos               every out-of-stock case, both brands
+ * "Junk" is tag-driven plus a no-reply sender check, so it improves as Emily tags more.  */
+const JUNK_TAGS = ["emily-skip", "not-cs", "automated", "automated-notification", "solicitation", "press-pitch", "tiktok-notification", "okendo", "spam"];
+const NOREPLY_RE = "(^|[._-])(no-?reply|donotreply|mailer-daemon|postmaster|notifications?|bounces?)@";
+const NEEDS_ATTENTION = `NOT spam AND NOT (tags && $JUNK$) AND (customer_email IS NULL OR customer_email !~* '${NOREPLY_RE}')`;
+const OOS_MATCH = `(tags && ARRAY['oos-offer','oos','out-of-stock'])`;
+function viewClause(view, args) {
+  const mb = (a) => { args.push(a); return `lower(mailbox) = lower($${args.length})`; };
+  const junk = () => { args.push(JUNK_TAGS); return NEEDS_ATTENTION.replace("$JUNK$", `$${args.length}`); };
+  switch (String(view || "")) {
+    case "lb": return mb(BRAND_MAILBOX.larkspur);
+    case "lbo": return mb(BRAND_MAILBOX.outlet);
+    case "lb_tickets": return `${mb(BRAND_MAILBOX.larkspur)} AND ${junk()}`;
+    case "lbo_tickets": return `${mb(BRAND_MAILBOX.outlet)} AND ${junk()}`;
+    case "oos": return OOS_MATCH;
+    case "attention": return junk();
+    default: return "TRUE";
+  }
+}
 
 /* ---- queue ---- */
 app.get("/api/tickets", async (req, res) => {
   if (!guard(req, res)) return;
   try {
     const tab = String(req.query.tab || "pending");
-    const brand = String(req.query.brand || "").trim();
+    const view = String(req.query.view || "all");
     const q = String(req.query.q || "").trim();
     const limit = Math.min(Number(req.query.limit) || 60, 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    const where = ["NOT spam"]; const args = [];
+    const args = [];
+    const where = [viewClause(view, args)];
     if (tab === "collabs") where.push(`'collab' = ANY(tags)`);
-    else if (["pending", "responded", "closed"].includes(tab)) { args.push(tab); where.push(`${CATEGORY_SQL} = $${args.length}`); }
-    if (brand) { args.push(brand); where.push(`brand = $${args.length}`); }
+    else if (["pending", "sent", "closed"].includes(tab)) { args.push(tab); where.push(`${CATEGORY_SQL} = $${args.length}`); }
     if (q) {
       args.push(`%${q}%`);
       const i = args.length;
       where.push(`(subject ILIKE $${i} OR customer_email ILIKE $${i} OR customer_name ILIKE $${i}
                    OR EXISTS (SELECT 1 FROM hd_messages m WHERE m.ticket_id=hd_tickets.id AND m.body_text ILIKE $${i}))`);
     }
+    const total = (await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE ${where.join(" AND ")}`, args)).rows[0].n;
     args.push(limit, offset);
     const r = await db(
       `SELECT id, subject, brand, status, customer_email, customer_name, assignee, tags, messages_count,
@@ -587,22 +94,30 @@ app.get("/api/tickets", async (req, res) => {
         unread: t.category === "pending",
         emily: emilyOf(t.tags),
       })),
-      count: r.rows.length, offset, limit,
+      count: r.rows.length, total, offset, limit,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.get("/api/counts", async (req, res) => {
   if (!guard(req, res)) return;
   try {
-    const brand = String(req.query.brand || "").trim();
-    const args = []; let bw = "";
-    if (brand) { args.push(brand); bw = ` AND brand = $${args.length}`; }
-    const r = await db(`SELECT ${CATEGORY_SQL} AS cat, count(*)::int AS n FROM hd_tickets WHERE NOT spam${bw} GROUP BY 1`, args);
-    const c = { pending: 0, responded: 0, closed: 0 };
+    const view = String(req.query.view || "all");
+    const args = [];
+    const w = viewClause(view, args);
+    const r = await db(`SELECT ${CATEGORY_SQL} AS cat, count(*)::int AS n FROM hd_tickets WHERE ${w} GROUP BY 1`, args);
+    const c = { pending: 0, sent: 0, closed: 0 };
     for (const x of r.rows) c[x.cat] = x.n;
-    const co = await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE NOT spam AND 'collab' = ANY(tags)${bw}`, args);
-    const all = await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE NOT spam${bw}`, args);
-    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n });
+    const co = await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE ${w} AND 'collab' = ANY(tags)`, args);
+    const all = await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE ${w}`, args);
+    // Every view's own badge, so the switcher shows where the work is without clicking through.
+    const views = {};
+    for (const v of ["lb", "lbo", "lb_tickets", "lbo_tickets", "oos", "all"]) {
+      const a2 = []; const w2 = viewClause(v, a2);
+      a2.push("pending");
+      const n = await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE ${w2} AND ${CATEGORY_SQL} = $${a2.length}`, a2);
+      views[v] = n.rows[0].n;
+    }
+    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 /* ---- one conversation ---- */
@@ -617,7 +132,8 @@ app.get("/api/ticket/:id", async (req, res) => {
     const messages = m.rows.map((x) => ({
       id: x.id, from_agent: x.from_agent, internal: x.internal, channel: x.channel,
       sender: x.sender_name || (x.from_agent ? "Agent" : "Customer"), sender_email: x.sender_email,
-      text: x.body_text || "", at: x.at, attachments: x.attachments || [],
+      text: x.body_text || "", at: x.at,
+      attachments: (x.attachments || []).map((a, i) => ({ name: a.name, content_type: a.content_type, size: a.size, url: attachmentUrl("", x.id, i) })),
       emily_draft: x.internal && /emily'?s suggested reply|review\s*&?(?:amp;)?\s*send/i.test(x.body_text || ""),
     }));
     const scan = [t.subject || ""].concat(messages.map((x) => x.text)).join("  ");
@@ -629,6 +145,7 @@ app.get("/api/ticket/:id", async (req, res) => {
       customer: { name: t.customer_name || t.customer_email || "Customer", email: t.customer_email },
       tags: t.tags || [], category: t.category, source: t.source, orders, events, messages,
       emily: (t.tags || []).includes("emily-sent") ? "sent" : (t.tags || []).includes("emily-drafted") ? "drafted" : null,
+      emily_draft: (await db(`SELECT id, draft, intent, sentiment, escalate, escalate_reason, outcome, created_at FROM emily_drafts WHERE ticket_id=$1 ORDER BY id DESC LIMIT 1`, [String(id)])).rows[0] || null,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -639,43 +156,11 @@ app.post("/api/reply", async (req, res) => {
     const { id, text } = req.body || {};
     if (!id || !text || !String(text).trim()) return res.status(400).json({ error: "id and text required" });
     const who = actorOf(req);
-    const t = (await db(`SELECT * FROM hd_tickets WHERE id=$1`, [id])).rows[0];
-    if (!t) return res.status(404).json({ error: "ticket not found" });
-    if (!t.customer_email) return res.status(400).json({ error: "no customer email on this ticket" });
-    const mailbox = t.mailbox || mailboxForName(t.brand) || process.env.GORGIAS_FROM_ADDRESS;
-    if (!mailbox) return res.status(400).json({ error: `couldn't work out which mailbox to send from on ticket ${id}` });
-    const last = (await db(`SELECT rfc_message_id FROM hd_messages WHERE ticket_id=$1 AND rfc_message_id IS NOT NULL ORDER BY at DESC LIMIT 1`, [id])).rows[0];
-    const connected = (await db(`SELECT 1 FROM hd_mailboxes WHERE lower(address)=lower($1) AND refresh_token IS NOT NULL`, [mailbox])).rows.length > 0;
-    let sentVia = "gmail", externalId = null;
-    if (connected && gmailConfigured()) {
-      const r = await gmailSend({ mailbox, to: t.customer_email, subject: t.subject, text, threadId: t.gmail_thread_id,
-        inReplyTo: last && last.rfc_message_id, references: last && last.rfc_message_id, fromName: t.brand });
-      externalId = `gmail:${r.id}`;
-      if (!t.gmail_thread_id && r.threadId) await db(`UPDATE hd_tickets SET gmail_thread_id=$2 WHERE id=$1`, [id, r.threadId]);
-    } else if (G_DOMAIN && t.gorgias_id) {                  // before Gmail is connected, Gorgias still delivers
-      sentVia = "gorgias";
-      const html = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
-      const rr = await gorgias("POST", `/tickets/${t.gorgias_id}/messages`, {
-        channel: "email", via: "api", from_agent: true,
-        subject: /^re:/i.test(t.subject || "") ? t.subject : `Re: ${t.subject || ""}`,
-        sender: { email: process.env.GORGIAS_EMAIL }, receiver: { email: t.customer_email },
-        source: { type: "email", to: [{ address: t.customer_email }], from: { address: mailbox } },
-        body_html: html, body_text: String(text),
-      });
-      externalId = `gorgias:${rr.id}`;
-    } else {
-      return res.status(400).json({ error: `${mailbox} isn't connected to Gmail yet — connect it in Settings, then send.` });
-    }
-    const at = new Date().toISOString();
-    await db(
-      `INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,sent_by,at)
-       VALUES ($1,$2,$3,true,false,'email',$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (external_id) DO NOTHING`,
-      [id, sentVia, externalId || `local:${crypto.randomUUID()}`, t.brand || "Agent", mailbox, [t.customer_email], t.subject, String(text), who, at]);
-    await db(`UPDATE hd_tickets SET last_message_at=$2, last_outbound_at=$2, updated_at=$2, status='open',
-                     messages_count=(SELECT count(*) FROM hd_messages WHERE ticket_id=$1) WHERE id=$1`, [id, at]);
-    await db(`INSERT INTO hd_events (ticket_id,kind,detail,user_name) VALUES ($1,'reply',$2,$3)`, [id, `sent via ${sentVia} from ${mailbox}`, who]);
-    slackPost(`✉️ *Reply sent* → ${t.customer_email} · ${t.brand || mailbox} · ticket ${id} · by ${who}\n>>> ${String(text).slice(0, 500)}`);
-    res.json({ ok: true, via: sentVia });
+    const r = await sendReply({ ticketId: id, text: String(text), who, via: "helpdesk" });
+    // If Emily had a draft waiting on this ticket, a human reply settles it.
+    try { const emily = require("./emily"); await emily.onHumanReply(id, String(text), who); } catch (e) {}
+    slackPost(`✉️ *Reply sent* → ${r.to} · ${r.mailbox} · ticket ${id} · by ${who}\n>>> ${String(text).slice(0, 500)}`);
+    res.json({ ok: true, via: r.via });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/note", async (req, res) => {
@@ -684,8 +169,7 @@ app.post("/api/note", async (req, res) => {
     const { id, text } = req.body || {};
     if (!id || !text) return res.status(400).json({ error: "id and text required" });
     const who = actorOf(req);
-    await db(`INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,body_text,sent_by,at)
-              VALUES ($1,'local',$2,true,true,'internal-note',$3,$4,$3,now())`, [id, `local:${crypto.randomUUID()}`, who, String(text)]);
+    await addNote({ ticketId: id, text, who });
     await db(`INSERT INTO hd_events (ticket_id,kind,detail,user_name) VALUES ($1,'note','',$2)`, [id, who]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -735,6 +219,105 @@ app.post("/api/ask-emily", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+/* ---- Emily: policies, settings, activity ---- */
+const POLICY_KEYS = ["playbook", "rules"];
+app.get("/api/emily/policies", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const out = {};
+    for (const k of POLICY_KEYS) {
+      const r = await db(`SELECT id, body, note, updated_by, created_at, (SELECT count(*)::int FROM emily_policies p2 WHERE p2.key=$1) AS versions
+                            FROM emily_policies WHERE key=$1 ORDER BY id DESC LIMIT 1`, [k]);
+      out[k] = r.rows[0] || null;
+    }
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/emily/policies/:key/history", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    if (!POLICY_KEYS.includes(req.params.key)) return res.status(400).json({ error: "unknown policy" });
+    const r = await db(`SELECT id, note, updated_by, created_at, length(body) AS chars FROM emily_policies WHERE key=$1 ORDER BY id DESC LIMIT 30`, [req.params.key]);
+    res.json({ history: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/emily/policies/:key/version/:id", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const r = await db(`SELECT id, body, note, updated_by, created_at FROM emily_policies WHERE key=$1 AND id=$2`, [req.params.key, req.params.id]); res.json(r.rows[0] || {}); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Saving never overwrites: it adds a version. Emily reads the newest within a minute.
+app.put("/api/emily/policies/:key", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const key = req.params.key;
+    if (!POLICY_KEYS.includes(key)) return res.status(400).json({ error: "unknown policy" });
+    const body = String((req.body && req.body.body) || "");
+    if (body.trim().length < 50) return res.status(400).json({ error: "that's too short to be a policy — nothing saved" });
+    const r = await db(`INSERT INTO emily_policies (key, body, note, updated_by) VALUES ($1,$2,$3,$4) RETURNING id, created_at`,
+      [key, body, String((req.body && req.body.note) || "").slice(0, 200) || null, actorOf(req)]);
+    res.json({ ok: true, id: r.rows[0].id, at: r.rows[0].created_at });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/emily/settings", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const r = await db(`SELECT key, value, updated_by, updated_at FROM emily_settings`);
+    const o = {}; for (const x of r.rows) o[x.key] = { value: x.value, updated_by: x.updated_by, updated_at: x.updated_at };
+    if (!o.auto_send) o.auto_send = { value: { enabled: false, intents: ["tracking", "subscription", "sizing_care", "returns_info", "policy_info"] } };
+    res.json(o);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.put("/api/emily/settings/:key", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    if (!["auto_send"].includes(req.params.key)) return res.status(400).json({ error: "unknown setting" });
+    const v = (req.body && req.body.value) || {};
+    await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ($1,$2,$3,now())
+              ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_by=EXCLUDED.updated_by, updated_at=now()`, [req.params.key, JSON.stringify(v), actorOf(req)]);
+    try { await db(`INSERT INTO hd_events (ticket_id,kind,detail,user_name) VALUES (NULL,'emily-setting',$1,$2)`, [`${req.params.key}=${JSON.stringify(v)}`.slice(0, 500), actorOf(req)]); } catch (e) {}
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// What Emily did lately: drafts by outcome, plus the last few actions she staged.
+app.get("/api/emily/activity", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const days = Math.min(Number(req.query.days) || 30, 365);
+    const o = await db(`SELECT COALESCE(outcome,'waiting') AS outcome, count(*)::int AS n FROM emily_drafts WHERE created_at > now() - ($1||' days')::interval GROUP BY 1`, [days]);
+    const i = await db(`SELECT COALESCE(intent,'?') AS intent, count(*)::int AS n FROM emily_drafts WHERE created_at > now() - ($1||' days')::interval GROUP BY 1 ORDER BY 2 DESC LIMIT 12`, [days]);
+    const a = await db(`SELECT kind, title, status, decided_by, created_at, decided_at FROM emily_actions ORDER BY created_at DESC LIMIT 25`);
+    const e = await db(`SELECT ticket_id, intent, escalate_reason, draft, final_text, decided_by, decided_at FROM emily_drafts WHERE outcome='edited' ORDER BY decided_at DESC LIMIT 15`);
+    res.json({ days, outcomes: o.rows, intents: i.rows, actions: a.rows, edits: e.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+/* ---- attachments (signed links; no access key in the URL) ---- */
+app.get("/att/:mid/:idx/:tok", async (req, res) => {
+  try {
+    const { mid, idx, tok } = req.params;
+    if (attachmentToken(mid, idx) !== tok) return res.status(403).send("bad link");
+    const a = await fetchAttachment(mid, Number(idx));
+    res.setHeader("Content-Type", a.content_type);
+    res.setHeader("Content-Disposition", `inline; filename="${String(a.name || "file").replace(/"/g, "")}"`);
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.send(a.buffer);
+  } catch (e) { res.status(404).send(e.message); }
+});
+/* ---- Emily's draft on a ticket: approve / edit-and-send / skip, from the app instead of Slack ---- */
+app.post("/api/emily/decide", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const { id, action, text } = req.body || {};
+    if (!id || !["approve", "edit", "skip", "redraft"].includes(action)) return res.status(400).json({ error: "id and action approve|edit|skip|redraft required" });
+    const emily = require("./emily");
+    const r = await emily.decide({ ticketId: String(id), action, text, who: actorOf(req) });
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /* ---- admin: import + mailbox connection ---- */
 app.post("/api/import/start", async (req, res) => {
   if (!guard(req, res)) return;
@@ -747,7 +330,7 @@ app.get("/api/import/status", async (req, res) => {
     const saved = await syncGet("gorgias_import");
     const done = await syncGet("gorgias_import_done");
     const counts = await db(`SELECT (SELECT count(*)::int FROM hd_tickets) AS tickets, (SELECT count(*)::int FROM hd_messages) AS messages`);
-    res.json({ run: importRun, saved: saved && saved.state, finished: done && done.state, stored: counts.rows[0] });
+    res.json({ run: importState(), saved: saved && saved.state, finished: done && done.state, stored: counts.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.get("/api/mailboxes", async (req, res) => {
@@ -807,14 +390,16 @@ app.post("/api/mailbox/poll", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); console.log("🗄️  Postgres schema ready"); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); } catch (e) { console.error("migrate failed:", e.message); } }
   app.listen(PORT, () => {
-    console.log(`📨 Emily Console on :${PORT}`);
-    console.log(`🔎 boot → users:${USERS.map((u) => u.name).join("/") || "(none)"}${KEY ? "+admin-key" : ""} · db:${pool ? "set" : "MISSING"} · gorgias:${G_DOMAIN || "off"} · gmail-oauth:${gmailConfigured() ? `${OAUTH_CLIENTS.length} client${OAUTH_CLIENTS.length === 1 ? "" : "s"}` : "not configured"} · slack:${SLACK_TOKEN ? "set" : "off"}`);
+    console.log(`📨 Helpdesk on :${PORT}`);
+    console.log(`🔎 boot → users:${USERS.map((u) => u.name).join("/") || "(none)"}${KEY ? "+admin-key" : ""} · db:${pool ? "set" : "MISSING"} · gorgias-import:${core.G_DOMAIN || "off"} · gmail-oauth:${gmailConfigured() ? `${core.OAUTH_CLIENTS.length} client${core.OAUTH_CLIENTS.length === 1 ? "" : "s"}` : "not configured"} · slack:${process.env.SLACK_BOT_TOKEN || process.env.EMILY_SLACK_BOT_TOKEN ? "set" : "off"}`);
   });
   if (pool && gmailConfigured()) {
     const every = Number(process.env.GMAIL_POLL_SEC || 45) * 1000;
     setTimeout(pollAll, 8000); setInterval(pollAll, every);
     console.log(`📬 Gmail polling every ${every / 1000}s`);
   }
+  // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
+  try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
 })();
