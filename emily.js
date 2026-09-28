@@ -40,6 +40,39 @@ const SYSTEM_PROMPT_HEAD =
   `You have TOOLS for live data. When something depends on a real order, tracking, or ticket, CALL A TOOL to look it up — never invent order status, tracking, or policy. ` +
   `For ANY product or size availability question, CALL shopify_check_stock — you DO have a live inventory/stock tool, so never tell anyone you can't check stock; check it and answer.\n\n` +
   `----- YOUR PLAYBOOK -----\n`;
+/* ---- Policy patches: rule changes that ship with a version. Each runs once (tracked in hd_sync), rewrites the
+ * stored policy text and saves it as a new version so the history in Settings shows what changed. ---- */
+const PICKUP_RULE = "LOCAL PICKUP (Larkspur Baby and Larkspur Baby Outlet): pickup is available Monday through Friday, 8:30am to 2:00pm Central. No call or appointment needed. Address: 701 E Plano Pkwy, Suite 103, Plano, TX 75074. Tell the customer to look for the door with the Larkspur logo at Suite 103 and press the doorbell \u2014 one of our team will come out with the package. Our doors stay locked for the safety of our staff, so the doorbell is the way in. No pickup on weekends. If the customer asks about pickup windows, give these hours \u2014 there are no separate morning/afternoon windows any more. ";
+const POLICY_PATCHES = [
+  { id: "policy_pickup_hours_v3_5", note: "v3.4 — local pickup hours: Mon–Fri 8:30am–2:00pm, Suite 103, doorbell (replaces 10–12 / 2–3 windows)",
+    apply: (key, body) => {
+      // any line about pickup that still carries the old windows / call-ahead wording
+      const winRe = /^[^\n]*(pickup|pick-up|pick up)[^\n]*(10(?::00)?\s*(?:am)?\s*(?:[–-]|to)\s*12(?::00)?|2(?::00)?\s*(?:pm)?\s*(?:[–-]|to)\s*3(?::00)?|windows?|call ahead|call us first|by appointment)[^\n]*\n?/gim;
+      const hadOld = winRe.test(body);
+      let out = body.replace(winRe, "");
+      if (key === "rules" && !/LOCAL PICKUP \(Larkspur/.test(out)) out = out.replace(/\s+$/, "") + "\n\n" + PICKUP_RULE;
+      if (key === "playbook" && (hadOld || /local pickup/i.test(out)) && !/Suite 103/.test(out)) out = out.replace(/\s+$/, "") + "\n\n## Local pickup\n" + PICKUP_RULE;
+      return out === body ? null : out;
+    } },
+];
+async function applyPolicyPatches() {
+  if (!pool) return;
+  for (const p of POLICY_PATCHES) {
+    try {
+      if (await core.syncGet(p.id)) continue;
+      let changed = 0;
+      for (const key of ["rules", "playbook"]) {
+        const cur = (await db(`SELECT body FROM emily_policies WHERE key=$1 ORDER BY id DESC LIMIT 1`, [key])).rows[0];
+        const body = cur ? cur.body : (key === "rules" ? DEFAULT_RULES : EMBEDDED_SKILL);
+        const next = p.apply(key, body);
+        if (next) { await db(`INSERT INTO emily_policies (key, body, note, updated_by) VALUES ($1,$2,$3,'system')`, [key, next, p.note]); core.policyCache.delete(key); changed++; }
+      }
+      await core.syncSet(p.id, String(changed), { at: new Date().toISOString() });
+      console.log(`📜 policy patch ${p.id}: ${changed} polic${changed === 1 ? "y" : "ies"} updated`);
+    } catch (e) { console.error(`policy patch ${p.id}:`, e.message); }
+  }
+}
+
 async function systemPrompt() { return SYSTEM_PROMPT_HEAD + (await core.policyText("playbook", skill)); }
 
 let app = null;   // Slack (Bolt) — set in start() when tokens exist
@@ -379,18 +412,19 @@ async function listActions(ticketId) {
   const r = await db(`SELECT id, kind, title, summary, status, result, decided_by, created_at, decided_at FROM emily_actions WHERE ticket_id=$1 ORDER BY created_at DESC LIMIT 12`, [String(ticketId)]);
   return r.rows.map((a) => ({ ...a, code: codeFrom(a.result) || codeFrom(a.summary) }));
 }
-async function applyAction(id, who) {
+async function applyAction(id, who, overrides = null) {
   const rec = (await db(`SELECT * FROM emily_actions WHERE id=$1`, [id])).rows[0];
   if (!rec) throw new Error("that action no longer exists");
   if (rec.status !== "staged") throw new Error(`that action was already ${rec.status}`);
-  const p = pendingAct.get(id);
+  const p = overrides ? null : pendingAct.get(id);
   let result;
   try {
     if (p) { result = await p.exec(); pendingAct.delete(id); }
     else if (RESTAGE[rec.kind]) {
-      // The app restarted since Emily staged this — re-run the proposal (re-checks stock/shipping) and apply it in one go.
+      // The app restarted since Emily staged this (or the person changed a detail) — re-run the proposal and apply it in one go.
+      pendingAct.delete(id);
       const ctx = { results: [] };
-      const input = { ...(rec.input || {}) };
+      const input = { ...(rec.input || {}), ...(overrides || {}) };
       if (rec.kind === "shopify_propose_discount" && !input.code) input.code = codeFrom(rec.summary);   // keep the code the draft may already mention
       const out = await execNow.run(ctx, () => RESTAGE[rec.kind](input));
       if (!ctx.results.length) throw new Error((out && (out.note || out.error)) || "couldn't be applied any more");
@@ -398,10 +432,30 @@ async function applyAction(id, who) {
     } else throw new Error("no way to run this kind of action");
   } catch (e) { await markAction(id, "failed", { by: who, result: e.message }); throw e; }
   await markAction(id, "applied", { by: who, result: (result && result.note) || "ok" });
+  if (result && result.files && result.files.length) { try { await db(`UPDATE emily_actions SET files=$2 WHERE id=$1`, [id, JSON.stringify(result.files.map((f) => ({ ...f, sent: false })))]); } catch (_) {} }
   if (p && p.ts && app) { try { await app.client.chat.update({ channel: APPROVALS_CH, ts: p.ts, text: "Applied", blocks: [{ type: "section", text: { type: "mrkdwn", text: `✅ *Applied from Helpdesk* by ${who} — ${p.title}\n${(result && result.note) || p.summary}` } }] }); } catch (_) {} }
   if (rec.ticket_id) { try { await core.addNote({ ticketId: rec.ticket_id, text: `⚙️ ${rec.title} — applied by ${who}\n→ ${(result && result.note) || "done"}`, who }); } catch (_) {} }
-  return { ok: true, note: result && result.note, code: codeFrom(result && result.note) || codeFrom(rec.summary) };
+  return { ok: true, note: result && result.note, code: codeFrom(result && result.note) || codeFrom(rec.summary), files: (result && result.files) || [] };
 }
+// Files produced by applied actions on this ticket (return labels) that haven't gone out on a reply yet.
+async function pendingFiles(ticketId) {
+  const r = await db(`SELECT id, files FROM emily_actions WHERE ticket_id=$1 AND status='applied' AND files IS NOT NULL`, [String(ticketId)]);
+  const out = [];
+  for (const a of r.rows) for (const f of a.files || []) if (!f.sent) out.push({ action_id: a.id, ...f });
+  return out;
+}
+async function markFilesSent(ticketId) {
+  await db(`UPDATE emily_actions SET files = (SELECT jsonb_agg(f || '{"sent":true}'::jsonb) FROM jsonb_array_elements(files) f) WHERE ticket_id=$1 AND status='applied' AND files IS NOT NULL`, [String(ticketId)]).catch(() => {});
+}
+async function setTodo(draftId, index, state, who) {
+  const d = (await db(`SELECT id, ticket_id, todo FROM emily_drafts WHERE id=$1`, [draftId])).rows[0];
+  if (!d || !Array.isArray(d.todo) || !d.todo[index]) throw new Error("that to-do no longer exists");
+  d.todo[index] = { ...d.todo[index], state, by: who, at: new Date().toISOString() };
+  await db(`UPDATE emily_drafts SET todo=$2 WHERE id=$1`, [draftId, JSON.stringify(d.todo)]);
+  try { await core.addNote({ ticketId: d.ticket_id, text: `${state === "done" ? "☑️ Done" : "✖ Won't do"}: ${d.todo[index].what} — ${who}`, who }); } catch (_) {}
+  return d.todo;
+}
+
 async function dismissAction(id, who) {
   const rec = (await db(`SELECT * FROM emily_actions WHERE id=$1`, [id])).rows[0];
   if (!rec) throw new Error("that action no longer exists");
@@ -830,27 +884,42 @@ async function customerHistory(email) {
 const CUSTOMER_PROFILE_QUERY = `query($q:String!){customers(first:1,query:$q){edges{node{
   id firstName lastName displayName phone createdAt tags note numberOfOrders amountSpent{amount currencyCode}
   defaultEmailAddress{ emailAddress marketingState } defaultAddress{ address1 city provinceCode zip countryCodeV2 }
-  storeCreditAccounts(first:3){edges{node{ balance{amount currencyCode} }}}
   orders(first:10,sortKey:CREATED_AT,reverse:true){edges{node{ name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus totalPriceSet{shopMoney{amount currencyCode}} }}}
 }}}}`;
-async function customerProfile(email) {
+// Store credit is asked for separately: it needs its own scope (read_store_credit_accounts) and must not take the whole profile down with it.
+const CUSTOMER_CREDIT_QUERY = `query($id:ID!){ customer(id:$id){ storeCreditAccounts(first:3){edges{node{ balance{amount currencyCode} }}} } }`;
+const CUSTOMER_BY_ID_QUERY = CUSTOMER_PROFILE_QUERY.replace("query($q:String!){customers(first:1,query:$q){edges{node{", "query($id:ID!){customer(id:$id){").replace(/\}\}\}\}`$/, "}}`");
+const ORDER_CUSTOMER_QUERY = `query($q:String!){orders(first:1,query:$q){edges{node{ customer{ id } }}}}`;
+async function customerProfile(email, orderHint) {
   const e = String(email || "").trim().toLowerCase();
   if (!e) return { error: "email required" };
   const stores = [];
   for (const st of STORES) {
     try {
       const d = await storeGraphQL(st, CUSTOMER_PROFILE_QUERY, { q: `email:${e}` });
-      const n = d.customers && d.customers.edges && d.customers.edges[0] && d.customers.edges[0].node;
+      let n = d.customers && d.customers.edges && d.customers.edges[0] && d.customers.edges[0].node;
+      if (!n) {
+        // Email search missed (different checkout email, guest account) — go through a known order instead.
+        const hint = String(orderHint || "").replace(/^#/, "").toUpperCase();
+        const q = hint ? `name:${hint}` : `email:${e}`;
+        try {
+          const o = await storeGraphQL(st, ORDER_CUSTOMER_QUERY, { q });
+          const cid = o.orders && o.orders.edges && o.orders.edges[0] && o.orders.edges[0].node.customer && o.orders.edges[0].node.customer.id;
+          if (cid) { const c = await storeGraphQL(st, CUSTOMER_BY_ID_QUERY, { id: cid }); n = c.customer || null; }
+        } catch (err) { console.error(`customer via order ${st.brand} ${q}: ${err.message}`); }
+      }
       if (!n) { stores.push({ store: st.brand, found: false }); continue; }
-      const credit = (n.storeCreditAccounts.edges || []).reduce((a, x) => a + Number(x.node.balance.amount || 0), 0);
+      let credit = 0, creditError = null;
+      try { const c = await storeGraphQL(st, CUSTOMER_CREDIT_QUERY, { id: n.id }); credit = (((c.customer || {}).storeCreditAccounts || {}).edges || []).reduce((a, x) => a + Number(x.node.balance.amount || 0), 0); }
+      catch (err) { creditError = err.message; }
       stores.push({
         store: st.brand, found: true, id: n.id, admin_url: `https://admin.shopify.com/store/${String(st.domain).replace(/\.myshopify\.com$/i, "")}/customers/${String(n.id).split("/").pop()}`,
         name: n.displayName || [n.firstName, n.lastName].filter(Boolean).join(" "), phone: n.phone, created_at: n.createdAt, tags: n.tags || [], note: n.note,
         marketing: n.defaultEmailAddress && n.defaultEmailAddress.marketingState, address: n.defaultAddress,
-        orders_count: Number(n.numberOfOrders || 0), amount_spent: Number(n.amountSpent.amount || 0), currency: n.amountSpent.currencyCode, store_credit: credit,
+        orders_count: Number(n.numberOfOrders || 0), amount_spent: Number((n.amountSpent || {}).amount || 0), currency: (n.amountSpent || {}).currencyCode || "USD", store_credit: credit, credit_error: creditError,
         orders: (n.orders.edges || []).map((x) => ({ name: x.node.name, at: x.node.createdAt, cancelled: !!x.node.cancelledAt, financial: x.node.displayFinancialStatus, fulfillment: x.node.displayFulfillmentStatus, total: Number(x.node.totalPriceSet.shopMoney.amount) })),
       });
-    } catch (err) { stores.push({ store: st.brand, found: false, error: err.message }); }
+    } catch (err) { console.error(`customer profile ${st.brand} ${e}: ${err.message}`); stores.push({ store: st.brand, found: false, error: err.message }); }
   }
   const found = stores.filter((x) => x.found);
   const tickets = pool ? (await db(`SELECT id, subject, brand, status, created_at, last_message_at, messages_count FROM hd_tickets WHERE lower(customer_email)=$1 ORDER BY last_message_at DESC NULLS LAST LIMIT 8`, [e])).rows : [];
@@ -959,6 +1028,7 @@ function parseJSON(s) { try { const a = s.indexOf("{"), b = s.lastIndexOf("}"); 
 // ---- Default rules. On first boot these are copied into the database as policy key "rules";
 // after that the console's Policies page is the source of truth and this block is only a fallback.
 const DEFAULT_RULES =
+  `LOCAL PICKUP (Larkspur Baby and Larkspur Baby Outlet): pickup is available Monday through Friday, 8:30am to 2:00pm Central. No call or appointment needed. Address: 701 E Plano Pkwy, Suite 103, Plano, TX 75074. Tell the customer to look for the door with the Larkspur logo at Suite 103 and press the doorbell — one of our team will come out with the package. Our doors stay locked for the safety of our staff, so the doorbell is the way in. No pickup on weekends. If the customer asks about pickup windows, give these hours — there are no separate morning/afternoon windows any more. IGNORE any older pickup windows (10–12, 2–3, call-ahead, appointment) that appear in earlier messages of the thread or in previous drafts: they are out of date; these hours are the only correct ones. Pickup needs no scheduling, so never ask the customer to pick a slot or promise to confirm a time. ` +
   `PRODUCT FACTS (all three brands): our fabric blend is 95% bamboo viscose and 5% spandex. Our products are NOT OEKO-TEX certified — if a customer asks about OEKO-TEX or any certification, answer honestly that our products are not OEKO certified; NEVER claim a certification we do not hold. ` +
   `RETURNED TO SENDER / UNDELIVERABLE (the package physically came BACK to us — carrier "return to sender," bad/incomplete address, unclaimed at pickup): we can RESHIP at no cost or REFUND the order total minus original shipping — offer the reship first. This applies to any customer (we have the package in hand). Money/inventory move → escalate=true; draft states it confidently. ` +
   `PACKAGE PROTECTION IS A PAID BENEFIT — TIER EVERY lost / not-received / missing-items case by whether the order HAS it. A free full reshipment/replacement, full refund, or full store credit is a PACKAGE-PROTECTION benefit ONLY. For a customer WITHOUT Package Protection you must NEVER offer a free reship or full credit — the MOST you may offer is a ONE-TIME good-faith 50% STORE CREDIT. Handing non-PP customers the same remedy as PP customers removes the reason to buy protection, so hold this line: stay warm and empathetic and be proactive to prevent bigger issues, but uphold the policy. ALWAYS check the order's line items for a "Package Protection" SKU (shopify_lookup_order) to know which tier applies; if PP presence is unclear, escalate rather than assume it is there. ` +
@@ -1051,6 +1121,7 @@ async function draftForTicket(t, force, guidance) {
     `{"category":"cs|spam|business|unclear","intent":"tracking|subscription|sizing_care|returns_info|policy_info|damage|lost|missing_items|cancel_or_address|discount|oos_reply|other",` +
     `"sentiment":"positive|neutral|upset","tags":["up to 3 short lowercase tags"],"escalate":true|false,` +
     `"escalate_reason":"short reason or empty","oos_choice":"replacement|credit|refund|none",` +
+    `"todo":["anything this reply PROMISES that no tool you called will actually do — e.g. 'send a manual return label for the 4 XL sleep sacks', 'ship the missing bonnet' — a person does these by hand; empty if none. Return labels and returns are ALWAYS a person's job: never call a tool for them, list them here. For refunds/credits/discounts/cancellations/address changes use the matching tool instead of promising."],` +
     `"draft":"the full customer-ready reply if category is cs, else empty"}\n` +
     `intent = the ONE thing the customer needs. oos_choice = only when the customer is answering an out-of-stock options email; which option they picked. ` +
     `Escalate=true for refunds/discounts/credits, order edits/cancellations, angry/sensitive cases, or low confidence.`;
@@ -1149,9 +1220,10 @@ async function sweep() {
 /* ---- draft log, outcomes, auto-send, OOS closure ---- */
 async function logDraft(t, r) {
   try {
-    const ins = await db(`INSERT INTO emily_drafts (ticket_id,brand,customer_email,category,intent,sentiment,escalate,escalate_reason,draft)
-                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-      [String(t.id), t.brand || null, t.customer_email, r.category, r.intent || null, r.sentiment || null, !!r.escalate, r.escalate_reason || null, r.draft || null]);
+    const todo = Array.isArray(r.todo) ? r.todo.filter((x) => x && String(x).trim()).slice(0, 6).map((x) => ({ what: String(x).trim().slice(0, 200), state: "open" })) : [];
+    const ins = await db(`INSERT INTO emily_drafts (ticket_id,brand,customer_email,category,intent,sentiment,escalate,escalate_reason,draft,todo)
+                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [String(t.id), t.brand || null, t.customer_email, r.category, r.intent || null, r.sentiment || null, !!r.escalate, r.escalate_reason || null, r.draft || null, JSON.stringify(todo)]);
     r._draft_id = ins.rows[0].id;
   } catch (e) { console.error("logDraft:", e.message); }
 }
@@ -1228,7 +1300,7 @@ async function updateCard(d, text, blocks) {
   try { await app.client.chat.update({ channel: d.slack_ch, ts: d.slack_ts, text, blocks }); } catch (e) {}
 }
 // The single decision function. Slack buttons and the app's buttons both land here.
-async function decide({ ticketId, action, text, who, applyActions = [] }) {
+async function decide({ ticketId, action, text, who, applyActions = [], overrides = {} }) {
   const id = String(ticketId);
   const d = await latestDraft(id);
   if (action === "redraft") {
@@ -1249,20 +1321,22 @@ async function decide({ ticketId, action, text, who, applyActions = [] }) {
   // Actions Emily proposed alongside the draft (discount code, store credit, address fix…) that the person ticked: do them first.
   const appliedNotes = [], codes = [];
   for (const aid of Array.isArray(applyActions) ? applyActions : []) {
-    try { const r = await applyAction(String(aid), who); appliedNotes.push(r.note); if (r.code) codes.push(r.code); }
+    try { const r = await applyAction(String(aid), who, overrides && overrides[aid] ? overrides[aid] : null); appliedNotes.push(r.note); if (r.code) codes.push(r.code); }
     catch (e) { return { ok: false, error: `Couldn't apply "${aid}": ${e.message} — nothing was sent.` }; }
   }
   const filled = await fillPlaceholders(id, body, codes);
   if (filled.pending) return { ok: false, error: "The draft still has a {{DISCOUNT_CODE}} placeholder — tick the discount so it gets created, or edit the text." };
   body = filled.text;
-  const s = await core.sendReply({ ticketId: id, text: body, who, via: action === "edit" ? "emily-edited" : "emily-approved" });
+  const pf = await pendingFiles(id);
+  const s = await core.sendReply({ ticketId: id, text: body, who, via: action === "edit" ? "emily-edited" : "emily-approved", files: pf.map((f) => f.file_id) });
+  if (pf.length) await markFilesSent(id);
   await core.addTags(id, ["emily-sent"]);
   await recordOutcome(id, action === "edit" ? "edited" : "approved", body, who);
   await updateCard(d, `Sent to ${s.to}`, [
     { type: "section", text: { type: "mrkdwn", text: `✅ *Sent* → ${s.to} · from ${s.mailbox} · ticket ${id} · by ${who}` } },
     { type: "section", text: { type: "mrkdwn", text: `>>> ${body.slice(0, 2800)}` } },
   ]);
-  return { ok: true, via: s.via, to: s.to, applied: appliedNotes };
+  return { ok: true, via: s.via, to: s.to, applied: appliedNotes, attached: pf.length };
 }
 // A person answered from the app while a draft was waiting — settle the draft so it doesn't linger.
 async function onHumanReply(ticketId, text, who) {
@@ -1515,6 +1589,7 @@ async function start() {
   if (!pool) { console.log("Emily: no database — not starting"); return; }
   await core.seedPolicy("playbook", skill);
   await core.seedPolicy("rules", DEFAULT_RULES);
+  await applyPolicyPatches();
   try { await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS slack_ch TEXT`); await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS slack_ts TEXT`); } catch (e) {}
   const bot = process.env.EMILY_SLACK_BOT_TOKEN, appTok = process.env.EMILY_SLACK_APP_TOKEN;
   if (App && bot && appTok) {
@@ -1532,4 +1607,4 @@ async function start() {
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear() }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders };
+module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear() }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent };

@@ -129,6 +129,9 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS emily_policies (id BIGSERIAL PRIMARY KEY, key TEXT NOT NULL, body TEXT NOT NULL, note TEXT, updated_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE INDEX IF NOT EXISTS idx_emily_policies_key ON emily_policies(key, id DESC)`);
   await db(`CREATE TABLE IF NOT EXISTS emily_settings (key TEXT PRIMARY KEY, value JSONB, updated_by TEXT, updated_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`CREATE TABLE IF NOT EXISTS hd_files (id TEXT PRIMARY KEY, ticket_id BIGINT, name TEXT, content_type TEXT, data BYTEA, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS todo JSONB`);
+  await db(`ALTER TABLE emily_actions ADD COLUMN IF NOT EXISTS files JSONB`);
   await db(`CREATE TABLE IF NOT EXISTS emily_actions (id TEXT PRIMARY KEY, kind TEXT, title TEXT, summary TEXT, ticket_id TEXT, input JSONB, status TEXT DEFAULT 'staged', result TEXT, decided_by TEXT, created_at TIMESTAMPTZ DEFAULT now(), decided_at TIMESTAMPTZ)`);
   await db(`CREATE TABLE IF NOT EXISTS emily_drafts (id BIGSERIAL PRIMARY KEY, ticket_id TEXT, brand TEXT, customer_email TEXT, category TEXT, intent TEXT, sentiment TEXT, escalate BOOLEAN, escalate_reason TEXT, draft TEXT, final_text TEXT, outcome TEXT, decided_by TEXT, created_at TIMESTAMPTZ DEFAULT now(), decided_at TIMESTAMPTZ)`);
   try { await db(`CREATE EXTENSION IF NOT EXISTS pg_trgm`); } catch (e) { console.warn("pg_trgm unavailable — search falls back to plain ILIKE:", e.message); }
@@ -652,23 +655,31 @@ async function pollAll() {
   finally { pollBusy = false; }
 }
 // Send a reply through Gmail, threaded onto the existing conversation.
-async function gmailSend({ mailbox, to, subject, text, threadId, inReplyTo, references, fromName }) {
+async function gmailSend({ mailbox, to, subject, text, threadId, inReplyTo, references, fromName, attachments = [] }) {
   const boundaryText = String(text || "");
   const html = boundaryText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
-  const headers = [
+  const top = [
     `From: ${fromName ? `"${fromName.replace(/"/g, "")}" ` : ""}<${mailbox}>`,
     `To: ${to}`,
     `Subject: ${/^re:/i.test(subject || "") ? subject : `Re: ${subject || ""}`}`,
     inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
     references ? `References: ${references}` : null,
     "MIME-Version: 1.0",
-    'Content-Type: text/html; charset="UTF-8"',
-    "Content-Transfer-Encoding: 8bit",
-  ].filter(Boolean).join("\r\n");
-  const raw = b64urlEncode(`${headers}\r\n\r\n${html}`);
-  return gapi(mailbox, `/messages/send`, { method: "POST", body: threadId ? { raw, threadId } : { raw } });
+  ].filter(Boolean);
+  let raw;
+  if (!attachments.length) {
+    raw = `${top.concat(['Content-Type: text/html; charset="UTF-8"', "Content-Transfer-Encoding: 8bit"]).join("\r\n")}\r\n\r\n${html}`;
+  } else {
+    const b = "hd_" + crypto.randomBytes(8).toString("hex");
+    const parts = [`--${b}\r\nContent-Type: text/html; charset="UTF-8"\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${html}\r\n`];
+    for (const a of attachments) {
+      const name = String(a.name || "attachment").replace(/["\r\n]/g, "");
+      parts.push(`--${b}\r\nContent-Type: ${a.content_type || "application/octet-stream"}; name="${name}"\r\nContent-Disposition: attachment; filename="${name}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${Buffer.from(a.buffer).toString("base64").replace(/(.{76})/g, "$1\r\n")}\r\n`);
+    }
+    raw = `${top.concat([`Content-Type: multipart/mixed; boundary="${b}"`]).join("\r\n")}\r\n\r\n${parts.join("")}--${b}--`;
+  }
+  return gapi(mailbox, `/messages/send`, { method: "POST", body: threadId ? { raw: b64urlEncode(raw), threadId } : { raw: b64urlEncode(raw) } });
 }
-
 
 /* ---------------- inbound hook (Emily listens here) ---------------- */
 const inboundListeners = [];
@@ -679,7 +690,7 @@ function emitInbound(ticketId, messageId) { for (const fn of inboundListeners) {
  * One path for every outbound email, whoever triggers it: a person in the UI, Emily after approval,
  * or an out-of-stock notice from the warehouse. Gmail when the mailbox is connected; Gorgias as the
  * fallback while history is still being migrated. */
-async function sendReply({ ticketId, text, who, via }) {
+async function sendReply({ ticketId, text, who, via, files = [] }) {
   const t = (await db(`SELECT * FROM hd_tickets WHERE id=$1`, [ticketId])).rows[0];
   if (!t) throw new Error("ticket not found");
   if (!t.customer_email) throw new Error("no customer email on this ticket");
@@ -688,9 +699,11 @@ async function sendReply({ ticketId, text, who, via }) {
   const last = (await db(`SELECT rfc_message_id FROM hd_messages WHERE ticket_id=$1 AND rfc_message_id IS NOT NULL ORDER BY at DESC LIMIT 1`, [ticketId])).rows[0];
   const connected = (await db(`SELECT 1 FROM hd_mailboxes WHERE lower(address)=lower($1) AND refresh_token IS NOT NULL`, [mailbox])).rows.length > 0;
   let sentVia = "gmail", externalId = null;
+  const attachments = [];
+  for (const fid of files) { const f = await getFile(String(fid)); if (f) attachments.push({ file_id: String(fid), name: f.name, content_type: f.content_type, buffer: f.buffer, size: f.buffer.length }); }
   if (connected && gmailConfigured()) {
     const r = await gmailSend({ mailbox, to: t.customer_email, subject: t.subject, text, threadId: t.gmail_thread_id,
-      inReplyTo: last && last.rfc_message_id, references: last && last.rfc_message_id, fromName: t.brand });
+      inReplyTo: last && last.rfc_message_id, references: last && last.rfc_message_id, fromName: t.brand, attachments });
     externalId = `gmail:${r.id}`;
     if (!t.gmail_thread_id && r.threadId) await db(`UPDATE hd_tickets SET gmail_thread_id=$2 WHERE id=$1`, [ticketId, r.threadId]);
   } else if (G_DOMAIN && t.gorgias_id) {
@@ -708,15 +721,17 @@ async function sendReply({ ticketId, text, who, via }) {
   } else {
     throw new Error(`${mailbox} isn't connected to Gmail yet — connect it in Settings, then send.`);
   }
+  if (sentVia === "gorgias" && attachments.length) console.error(`sendReply ${ticketId}: ${attachments.length} attachment(s) not sent — Gorgias fallback is text-only`);
   const at = new Date().toISOString();
   await db(
-    `INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,sent_by,at)
-     VALUES ($1,$2,$3,true,false,'email',$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (external_id) DO NOTHING`,
-    [ticketId, sentVia, externalId || `local:${crypto.randomUUID()}`, t.brand || "Agent", mailbox, [t.customer_email], t.subject, String(text), who, at]);
+    `INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,attachments,sent_by,at)
+     VALUES ($1,$2,$3,true,false,'email',$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (external_id) DO NOTHING`,
+    [ticketId, sentVia, externalId || `local:${crypto.randomUUID()}`, t.brand || "Agent", mailbox, [t.customer_email], t.subject, String(text),
+     JSON.stringify(attachments.map((a) => ({ name: a.name, content_type: a.content_type, size: a.size, file_id: a.file_id }))), who, at]);
   await db(`UPDATE hd_tickets SET last_message_at=$2, last_outbound_at=$2, updated_at=$2, status='open',
                    messages_count=(SELECT count(*) FROM hd_messages WHERE ticket_id=$1) WHERE id=$1`, [ticketId, at]);
   await db(`INSERT INTO hd_events (ticket_id,kind,detail,user_name) VALUES ($1,'reply',$2,$3)`, [ticketId, `sent via ${sentVia} from ${mailbox}${via ? ` (${via})` : ""}`, who]);
-  return { ok: true, via: sentVia, mailbox, to: t.customer_email };
+  return { ok: true, via: sentVia, mailbox, to: t.customer_email, attached: attachments.length };
 }
 const htmlify = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
 // A brand-new outbound conversation (the warehouse's out-of-stock notice). Creates the ticket here first
@@ -762,6 +777,16 @@ async function addTags(ticketId, tags) {
  * Gmail keeps the bytes; we keep a reference and fetch on demand. Links are signed so the console
  * and Slack can show a photo without the access key leaking into a URL. */
 const ATT_SECRET = process.env.ATTACHMENT_SECRET || process.env.CONSOLE_KEY || "helpdesk";
+
+/* ---- files we generate ourselves (return labels etc.) — stored in Postgres, served by signed link ---- */
+async function saveFile({ ticketId, name, contentType, buffer, by }) {
+  const id = crypto.randomUUID().replace(/-/g, "");
+  await db(`INSERT INTO hd_files (id, ticket_id, name, content_type, data, created_by) VALUES ($1,$2,$3,$4,$5,$6)`, [id, ticketId || null, name, contentType, buffer, by || null]);
+  return { file_id: id, name, content_type: contentType, size: buffer.length };
+}
+async function getFile(id) { const r = (await db(`SELECT id, name, content_type, data FROM hd_files WHERE id=$1`, [id])).rows[0]; return r ? { name: r.name, content_type: r.content_type, buffer: r.data } : null; }
+function fileToken(id) { return crypto.createHmac("sha256", ATT_SECRET).update(`file:${id}`).digest("hex").slice(0, 32); }
+function fileUrl(base, id) { return `${base}/file/${id}/${fileToken(id)}`; }
 function attachmentToken(messageId, idx) { return crypto.createHmac("sha256", ATT_SECRET).update(`${messageId}:${idx}`).digest("hex").slice(0, 32); }
 function attachmentUrl(base, messageId, idx) { return `${base}/att/${messageId}/${idx}/${attachmentToken(messageId, idx)}`; }
 async function fetchAttachment(messageId, idx) {
@@ -840,5 +865,5 @@ module.exports = {
   gmailConfigured, OAUTH_CLIENTS, clientForAddress, clientById, exchangeCode, accessTokenFor, gapi, gmailSend, pollMailbox, pollAll, storeGmailMessage, b64urlEncode, b64urlDecode, formEncode, GMAIL_SCOPES, OAUTH_REDIRECT,
   onInbound, emitInbound,
   sendReply, sendNewEmail, addNote, addTags, htmlify, stripQuoted,
-  attachmentToken, attachmentUrl, fetchAttachment,
+  attachmentToken, attachmentUrl, fetchAttachment, saveFile, getFile, fileToken, fileUrl,
 };

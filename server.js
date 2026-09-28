@@ -68,7 +68,7 @@ app.get("/api/order/:name", async (req, res) => {
 });
 app.get("/api/customer", async (req, res) => {
   if (!guard(req, res)) return;
-  try { const r = await require("./emily").customerProfile(String(req.query.email || "")); if (r.error) return res.status(400).json(r); res.json(r); }
+  try { const r = await require("./emily").customerProfile(String(req.query.email || ""), String(req.query.order || "")); if (r.error) return res.status(400).json(r); res.json(r); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/order/action", async (req, res) => {
@@ -157,7 +157,7 @@ app.get("/api/ticket/:id", async (req, res) => {
       id: x.id, from_agent: x.from_agent, internal: x.internal, channel: x.channel,
       sender: x.sender_name || (x.from_agent ? "Agent" : "Customer"), sender_email: x.sender_email,
       ...(() => { const q = core.stripQuoted(x.body_text); return { text: q.text, quoted: q.quoted }; })(), at: x.at,
-      attachments: (x.attachments || []).map((a, i) => ({ name: a.name, content_type: a.content_type, size: a.size, url: attachmentUrl("", x.id, i) })),
+      attachments: (x.attachments || []).map((a, i) => ({ name: a.name, content_type: a.content_type, size: a.size, url: a.file_id ? core.fileUrl("", a.file_id) : attachmentUrl("", x.id, i) })),
       emily_draft: x.internal && /emily'?s suggested reply|review\s*&?(?:amp;)?\s*send/i.test(x.body_text || ""),
     }));
     const scan = [t.subject || ""].concat(messages.map((x) => x.text)).join("  ");
@@ -169,7 +169,8 @@ app.get("/api/ticket/:id", async (req, res) => {
       customer: { name: t.customer_name || t.customer_email || "Customer", email: t.customer_email },
       tags: t.tags || [], category: t.category, source: t.source, orders, events, messages,
       emily: (t.tags || []).includes("emily-sent") ? "sent" : (t.tags || []).includes("emily-drafted") ? "drafted" : null,
-      emily_draft: (await db(`SELECT id, draft, intent, sentiment, escalate, escalate_reason, outcome, created_at FROM emily_drafts WHERE ticket_id=$1 ORDER BY id DESC LIMIT 1`, [String(id)])).rows[0] || null,
+      emily_draft: (await db(`SELECT id, draft, intent, sentiment, escalate, escalate_reason, outcome, todo, created_at FROM emily_drafts WHERE ticket_id=$1 ORDER BY id DESC LIMIT 1`, [String(id)])).rows[0] || null,
+      pending_files: await require("./emily").pendingFiles(id).catch(() => []),
       emily_actions: await require("./emily").listActions(id).catch(() => []),
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -183,7 +184,10 @@ app.post("/api/reply", async (req, res) => {
     const who = actorOf(req);
     let body = String(text);
     try { const f = await require("./emily").fillPlaceholders(id, body); if (f.pending) return res.status(400).json({ error: "Your reply still has a {{DISCOUNT_CODE}} placeholder — apply the discount on Emily's card first, or replace it." }); body = f.text; } catch (e) {}
-    const r = await sendReply({ ticketId: id, text: body, who, via: "helpdesk" });
+    let files = [];
+    try { files = (await require("./emily").pendingFiles(id)).map((f) => f.file_id); } catch (e) {}
+    const r = await sendReply({ ticketId: id, text: body, who, via: "helpdesk", files });
+    if (files.length) { try { await require("./emily").markFilesSent(id); } catch (e) {} }
     // If Emily had a draft waiting on this ticket, a human reply settles it.
     try { const emily = require("./emily"); await emily.onHumanReply(id, String(text), who); } catch (e) {}
     slackPost(`✉️ *Reply sent* → ${r.to} · ${r.mailbox} · ticket ${id} · by ${who}\n>>> ${String(text).slice(0, 500)}`);
@@ -322,6 +326,18 @@ app.get("/api/emily/activity", async (req, res) => {
 
 
 /* ---- attachments (signed links; no access key in the URL) ---- */
+app.get("/file/:id/:tok", async (req, res) => {
+  try {
+    const { id, tok } = req.params;
+    if (core.fileToken(id) !== tok) return res.status(403).send("bad link");
+    const f = await core.getFile(id);
+    if (!f) return res.status(404).send("not found");
+    res.setHeader("Content-Type", f.content_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${String(f.name || "file").replace(/"/g, "")}"`);
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(f.buffer);
+  } catch (e) { res.status(500).send(e.message); }
+});
 app.get("/att/:mid/:idx/:tok", async (req, res) => {
   try {
     const { mid, idx, tok } = req.params;
@@ -337,10 +353,10 @@ app.get("/att/:mid/:idx/:tok", async (req, res) => {
 app.post("/api/emily/decide", async (req, res) => {
   if (!guard(req, res)) return;
   try {
-    const { id, action, text, applyActions } = req.body || {};
+    const { id, action, text, applyActions, overrides } = req.body || {};
     if (!id || !["approve", "edit", "skip", "redraft"].includes(action)) return res.status(400).json({ error: "id and action approve|edit|skip|redraft required" });
     const emily = require("./emily");
-    const r = await emily.decide({ ticketId: String(id), action, text, who: actorOf(req), applyActions: Array.isArray(applyActions) ? applyActions : [] });
+    const r = await emily.decide({ ticketId: String(id), action, text, who: actorOf(req), applyActions: Array.isArray(applyActions) ? applyActions : [], overrides: overrides && typeof overrides === "object" ? overrides : {} });
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -422,10 +438,16 @@ app.post("/api/emily/action", async (req, res) => {
   try {
     const { id, do: what } = req.body || {};
     const emily = require("./emily");
-    if (what === "apply") return res.json(await emily.applyAction(String(id), actorOf(req)));
+    if (what === "apply") return res.json(await emily.applyAction(String(id), actorOf(req), req.body.overrides && typeof req.body.overrides === "object" ? req.body.overrides : null));
     if (what === "dismiss") return res.json(await emily.dismissAction(String(id), actorOf(req)));
     res.status(400).json({ error: "do must be apply or dismiss" });
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post("/api/emily/todo", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const { draft_id, index, state } = req.body || {}; if (!["done", "wont"].includes(state)) return res.status(400).json({ error: "state must be done or wont" });
+    res.json({ ok: true, todo: await require("./emily").setTodo(Number(draft_id), Number(index), state, actorOf(req)) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post("/api/admin/dedupe", async (req, res) => {
   if (!guard(req, res)) return;

@@ -3,6 +3,21 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v3.6 — Sep 28, 2026  (v3.5 skipped — its automated returns were dropped; returns stay with a person)
+- **"This reply commits you to" list.** If a draft promises something Emily has no tool for — a manual return
+  label, shipping a missing item — it's listed under the draft with Done / Won't do buttons, and marking it
+  leaves a note on the ticket. Returns and return labels are always handled by a person this way.
+- Customer profile: store credit is fetched separately so a missing scope can't blank the whole profile; Shopify
+  errors now show on the card instead of a silent "no customer".
+- Replies can carry attachments (groundwork; nothing uses it yet).
+- Pickup-hours cleanup widened to catch any old pickup wording (windows, call ahead, by appointment).
+
+## v3.4 — Sep 28, 2026
+- **Local pickup rule updated.** Mon–Fri 8:30am–2:00pm, no call needed, 701 E Plano Pkwy Suite 103, Plano TX 75074 —
+  look for the Larkspur logo door and ring the bell. The old "10–12 and 2–3 windows" line is removed from Emily's
+  rules and playbook on first boot; the change is saved as a new policy version so it shows in Settings history.
+- Rule changes can now ship with a version (policy patches) instead of being retyped in Settings.
+
 ## v3.3 — Sep 28, 2026
 - **Emily's proposed actions show up in the app.** When Emily stages a discount code, store credit, replacement,
   address change, cancellation or refund alongside a draft, the draft card now lists it under "Emily also
