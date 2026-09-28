@@ -108,6 +108,7 @@
   <div class="logo">📨 <b>Emily Console</b></div>
   <div class="sp"></div>
   <button class="link" onclick="loadList(true)">↻ Refresh</button>
+  <button class="link" onclick="openSettings()">⚙︎ Settings</button>
   <a href="#" onclick="signOut();return false">sign out</a>
 </header>
 <div class="toolbar">
@@ -118,7 +119,7 @@
   <button class="tab" data-tab="all" onclick="setTab('all')">All <span class="n" id="n-all"></span></button>
   <select id="brand" onchange="loadList()">
     <option value="">All brands</option>
-    <option>Larkspur Baby</option><option>Larkspur Baby Outlet</option><option>Bumbunny Baby</option>
+    <option>Larkspur Baby</option><option>Larkspur Baby Outlet</option><option>BumBunny Baby</option>
   </select>
   <input class="search" id="q" placeholder="Search name, subject…" oninput="debouncedList()">
 </div>
@@ -128,6 +129,18 @@
 </main>
 </div>
 
+<div id="settings" class="hidden" style="position:fixed;inset:0;z-index:50;background:rgba(3,8,16,.82);overflow:auto;padding:24px">
+  <div style="max-width:720px;margin:0 auto;background:var(--panel,#111a26);border:1px solid var(--line,#1e2a3a);border-radius:16px;padding:20px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <h2 style="flex:1;margin:0;font-size:19px">Settings</h2>
+      <button class="link" onclick="closeSettings()">✕ Close</button>
+    </div>
+    <h4 style="margin:18px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#7c8ba1">Mailboxes</h4>
+    <div id="mboxes">Loading…</div>
+    <h4 style="margin:22px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#7c8ba1">Gorgias history</h4>
+    <div id="importbox">Loading…</div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <script>
 const KEY=(function(){try{const u=new URLSearchParams(location.search).get("key");if(u){localStorage.setItem("ec_key",u);return u;}return localStorage.getItem("ec_key")||"";}catch(e){return"";}})();
@@ -164,6 +177,44 @@ async function loadList(force){
       <div class="chips"><span class="chip brand">${esc(t.brand)}</span>${t.emily?`<span class="chip ${t.emily}">Emily: ${t.emily}</span>`:""}${t.messages_count>1?`<span class="chip">${t.messages_count} msgs</span>`:""}</div>
     </button>`).join("");
   }catch(e){el.innerHTML='<div class="empty">Couldn\'t load tickets.</div>';}
+}
+
+/* ---------- settings: mailbox connection + history import ---------- */
+let _impT=null;
+function openSettings(){ $("settings").classList.remove("hidden"); loadMailboxes(); loadImport(); _impT=setInterval(loadImport,4000); }
+function closeSettings(){ $("settings").classList.add("hidden"); clearInterval(_impT); loadList(); loadCounts(); }
+async function loadMailboxes(){
+  try{
+    const d=await api("/api/mailboxes");
+    $("mboxes").innerHTML = (d.mailboxes||[]).map(m=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line,#1e2a3a)">
+        <div style="flex:1;min-width:0">
+          <div><b>${esc(m.address)}</b></div>
+          <div style="font-size:12px;color:#7c8ba1">${esc(m.brand||"")}${m.connected?` · connected${m.connected_by?` by ${esc(m.connected_by)}`:""}${m.last_poll_at?` · checked ${fmt(m.last_poll_at)}`:""}`:" · not connected"}${m.last_error?` · <span style="color:#ff8686">${esc(m.last_error)}</span>`:""}</div>
+        </div>
+        ${d.oauth_ready
+          ? `<a class="btn" style="text-decoration:none" href="/oauth/gmail/start?address=${encodeURIComponent(m.address)}&key=${encodeURIComponent(KEY)}">${m.connected?"Reconnect":"Connect Gmail"}</a>`
+          : `<span style="font-size:12px;color:#7c8ba1">Google keys not set</span>`}
+      </div>`).join("") || "<div style=\"color:#7c8ba1\">No mailboxes yet.</div>";
+  }catch(e){ $("mboxes").innerHTML="Couldn't load mailboxes."; }
+}
+async function loadImport(){
+  try{
+    const d=await api("/api/import/status");
+    const run=d.run||{}, st=d.stored||{};
+    const line = run.running
+      ? `Importing… ${run.tickets||0} tickets, ${run.messages||0} messages so far.`
+      : (d.finished ? `Finished ${fmt(d.finished.at)} — ${d.finished.tickets} tickets.` : (run.error?`Stopped: ${esc(run.error)}`:"Not started."));
+    $("importbox").innerHTML=`
+      <div style="font-size:14px;margin-bottom:6px">${esc(line)}</div>
+      <div style="font-size:12px;color:#7c8ba1;margin-bottom:10px">Stored now: <b>${st.tickets||0}</b> tickets · <b>${st.messages||0}</b> messages. Safe to run more than once — it resumes where it left off and never duplicates.</div>
+      <button class="btn" ${run.running?"disabled":""} onclick="startImport()">${run.running?"Running…":(d.finished?"Run again":"Import everything from Gorgias")}</button>`;
+  }catch(e){ $("importbox").innerHTML="Couldn't load import status."; }
+}
+async function startImport(){
+  try{ const r=await api("/api/import/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY})});
+    if(r.error){ toast(r.error,true); return; } toast("Import started — it keeps going in the background"); loadImport();
+  }catch(e){ toast("Couldn't start the import",true); }
 }
 
 let MODE="reply", DRAFTS=[];
