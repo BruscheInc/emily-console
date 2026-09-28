@@ -15,7 +15,7 @@
   /* ---- sidebar · main (table list, or the open conversation) ---- */
   .side{width:236px;flex:none;display:flex;flex-direction:column;background:#f6f7fa;border-right:1px solid var(--line);padding:14px 10px;gap:1px;overflow-y:auto}
   .brand{display:flex;gap:10px;align-items:center;padding:4px 8px 14px}
-  .brand .mark{font-size:22px}.brand .name{font-weight:800;font-size:16px;letter-spacing:-.01em}.brand .subname{font-size:11px;color:var(--muted)}
+  .brand .mark{font-size:22px}.ver{font-size:10.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.08);border-radius:5px;padding:1px 5px;vertical-align:middle;margin-left:2px}.brand .name{font-weight:800;font-size:16px;letter-spacing:-.01em}.brand .subname{font-size:11px;color:var(--muted)}
   .navsec{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:12px 10px 4px;font-weight:700}
   .nav{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;border:none;color:var(--ink);padding:7px 10px;border-radius:8px;font-size:13.5px;font-weight:500;cursor:pointer;text-decoration:none;min-width:0}
   .nav .i{width:18px;text-align:center;opacity:.8;font-size:13px;flex:none}
@@ -91,7 +91,7 @@
   .msg .muted{color:var(--muted);font-style:italic}
   .msg .draftact{margin-top:9px}
 
-  .rail{width:300px;flex:none;border-left:1px solid var(--line);background:var(--panel2);overflow-y:auto;padding:14px}
+  .rail{width:320px;flex:none;border-left:1px solid var(--line);background:var(--panel2);overflow-y:auto;padding:14px}
   .rail h4{margin:14px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
   .rail h4:first-child{margin-top:0}
   .railcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px 12px;margin-bottom:6px}
@@ -99,7 +99,31 @@
   .kv:last-child{border-bottom:none}
   .kv .k{color:var(--muted);flex:none}.kv .v{text-align:right;overflow-wrap:anywhere;font-weight:600}
   .ordwrap{display:flex;flex-wrap:wrap;gap:6px}
-  .ordchip{background:rgba(31,111,176,.12);color:#1f6fb0;font-weight:700;font-size:12px;padding:4px 10px;border-radius:8px}
+  .ordchip{background:rgba(31,111,176,.12);color:#1f6fb0;font-weight:700;font-size:12px;padding:4px 10px;border-radius:8px;border:none;cursor:pointer}.ordchip.on{background:#1f6fb0;color:#fff}
+  .cust .big{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:4px 0 8px}.cust .big div{background:var(--panel2);border-radius:9px;padding:8px 6px;text-align:center}.cust .big b{display:block;font-size:15px}.cust .big small{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+  .cust .store{border-top:1px solid var(--line);padding-top:8px;margin-top:8px;font-size:12.5px}.cust .store .sh{display:flex;justify-content:space-between;align-items:center;font-weight:700}.cust .store .sh a{color:var(--accent);text-decoration:none;font-size:11.5px;font-weight:600}
+  .cust .orow{display:flex;justify-content:space-between;gap:6px;padding:4px 0;border-bottom:1px dashed var(--line)}.cust .orow:last-child{border:none}.cust .orow button{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;padding:0;font-size:12.5px}.cust .orow small{color:var(--muted);white-space:nowrap}.cust .orow span{white-space:nowrap}
+  .cust .trow{display:flex;justify-content:space-between;gap:6px;padding:5px 0;border-bottom:1px dashed var(--line);cursor:pointer}.cust .trow:last-child{border:none}.cust .trow .s{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cust .trow small{color:var(--muted);flex:none}
+  .cust .tagl{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+  .ordfind{display:flex;gap:6px;margin-top:8px}.ordfind input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 9px;font-size:12.5px}
+  .ord{margin-top:10px;border-top:1px solid var(--line);padding-top:10px;font-size:12.5px}
+  .ord .oh{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}.ord .oh b{font-size:14px}
+  .ord .st{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+  .ord .it{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px dashed var(--line)}.ord .it:last-child{border:none}.ord .it .t{min-width:0}.ord .it .t small{display:block;color:var(--muted)}
+  .ord .addr{color:var(--muted);line-height:1.4;margin:8px 0}
+  .ord .acts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}.ord .acts .btn{padding:7px 8px;font-size:12px}
+  .ord .acts .btn.danger{color:#c0392b;border-color:rgba(192,57,43,.35)}
+  .ord .trk a{color:var(--accent);text-decoration:none;font-weight:600}
+  .modal{position:fixed;inset:0;z-index:60;background:rgba(3,8,16,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(520px,100%);max-height:90vh;overflow:auto;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .modal h3{margin:0 0 4px;font-size:17px}.modal .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+  .modal label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:10px 0 4px}
+  .modal input[type=text],.modal input[type=number],.modal select,.modal textarea{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 10px;font-size:13.5px;font-family:inherit}
+  .modal .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modal .grid3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}
+  .modal .chk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;color:var(--ink);font-weight:500}
+  .modal .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+  .modal .warn{background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.25);color:#c0392b;border-radius:9px;padding:8px 10px;font-size:12.5px;margin-top:10px}
+  .modal .iti{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}.modal .iti input[type=number]{width:64px}.modal .iti .t{flex:1;min-width:0}
   .tagchip{background:rgba(20,30,50,.06);color:var(--muted);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
 
   .composer{flex:none;border-top:1px solid var(--line);padding:10px 12px;background:var(--panel2)}
@@ -129,7 +153,7 @@
 
 <div id="app" class="hidden" style="display:flex;height:100%">
 <aside class="side">
-  <div class="brand"><span class="mark">📨</span><div><div class="name">Helpdesk</div><div class="subname">Larkspur Baby · Outlet</div></div></div>
+  <div class="brand"><span class="mark">📨</span><div><div class="name">Helpdesk <span id="ver" class="ver"></span></div><div class="subname">Larkspur Baby · Outlet</div></div></div>
   <div class="navsec">Views</div>
   <button class="nav view on" data-view="lbo_tickets" onclick="setView('lbo_tickets')"><span class="i">🏷</span>LBO Tickets<span class="n" id="v-lbo_tickets"></span></button>
   <button class="nav view" data-view="lb_tickets" onclick="setView('lb_tickets')"><span class="i">🏷</span>LB Tickets<span class="n" id="v-lb_tickets"></span></button>
@@ -198,12 +222,13 @@ async function api(p,opts){opts=opts||{};const u=p+(p.includes("?")?"&":"?")+"ke
 let TAB="pending", CUR=null, tickets=[];
 let VIEW=(function(){try{return localStorage.getItem("ec_view")||"lbo_tickets";}catch(e){return "lbo_tickets";}})();
 function fmt(ts){try{const d=new Date(ts),now=new Date();const sameDay=d.toDateString()===now.toDateString();return sameDay?d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):d.toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch(e){return"";}}
+function fmtShort(ts){try{const d=new Date(ts),n=new Date();return d.toLocaleDateString([],d.getFullYear()===n.getFullYear()?{month:"short",day:"numeric"}:{month:"short",day:"numeric",year:"2-digit"});}catch(e){return"—";}}
 function fmtDay(ts){try{return new Date(ts).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"});}catch(e){return"—";}}
 
 if(!KEY){ $("keygate").classList.remove("hidden"); }
 else {(async()=>{
   let role=null; try{ role=await (await fetch("/api/role?key="+encodeURIComponent(KEY))).json(); }catch(e){}
-  if(role&&role.ok){ $("app").classList.remove("hidden"); if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList();}},30000); }
+  if(role&&role.ok){ $("app").classList.remove("hidden"); if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); api("/api/version").then(v=>{$("ver").textContent=v.major;}).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList();}},30000); }
   else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="That key isn't recognized."; try{localStorage.removeItem("ec_key");}catch(e){} }
 })();}
 
@@ -413,10 +438,138 @@ function bubble(m){
   return `<div class="msg ${side}"><div class="meta">${esc(m.sender)} · ${fmt(m.at)}</div>${body}${quoted}${atts}</div>`;
 }
 
+/* ---------- Orders: look up + act (address / cancel / refund / replacement) ---------- */
+let ORDER=null;
+const money=(n,c)=>(c==="USD"||!c?"$":c+" ")+Number(n||0).toFixed(2);
+async function loadOrder(name){
+  name=String(name||"").trim().replace(/^#/,""); if(!name)return;
+  const pnl=$("orderpanel"); if(!pnl)return;
+  document.querySelectorAll(".ordchip").forEach(b=>b.classList.toggle("on",b.textContent.replace("#","").toUpperCase()===name.toUpperCase()));
+  pnl.innerHTML='<div class="ord" style="color:var(--muted)">Looking up '+esc(name)+'…</div>';
+  try{ const r=await api("/api/order/"+encodeURIComponent(name)); if(r.error||r.note)throw new Error(r.error||r.note); ORDER=r; renderOrder(); }
+  catch(e){ ORDER=null; pnl.innerHTML='<div class="ord" style="color:#c0392b">'+esc(e.message||"Couldn't find that order")+'</div>'; }
+}
+function pillFor(t){const u=String(t||"").toUpperCase();const cls=/PAID|FULFILLED|SUCCESS/.test(u)?"sent":/REFUNDED|CANCEL|VOID/.test(u)?"skip":"drafted";return `<span class="chip ${cls}">${esc(String(t||"").toLowerCase().replace(/_/g," "))}</span>`;}
+function renderOrder(){
+  const o=ORDER, pnl=$("orderpanel"); if(!o||!pnl)return;
+  const a=o.shipping_address||{};
+  const trk=(o.fulfillments||[]).flatMap(f=>f.tracking||[]).filter(t=>t.number);
+  const ss=o.shipstation;
+  pnl.innerHTML=`<div class="ord">
+    <div class="oh"><b>${esc(o.name)}</b><span style="color:var(--muted)">${esc(o.store)}</span></div>
+    <div class="st">${pillFor(o.financial_status)}${pillFor(o.fulfillment_status)}${o.cancelled_at?'<span class="chip skip">cancelled</span>':""}${ss?`<span class="chip">ShipStation: ${esc(ss.shipstation_status||(ss.shipped?"shipped":"?"))}</span>`:""}</div>
+    <div>${o.items.map(i=>`<div class="it"><span class="t">${i.quantity}× ${esc(i.title)}<small>${esc([i.variant,i.sku].filter(Boolean).join(" · "))}${i.in_stock===false?" · <span style='color:#c0392b'>out of stock</span>":""}</small></span><span>${money(i.line_total,o.currency)}</span></div>`).join("")}</div>
+    <div class="it" style="font-weight:700"><span>Total${o.refunded?` <small style="color:var(--muted);font-weight:500">(refunded ${money(o.refunded,o.currency)})</small>`:""}</span><span>${money(o.total,o.currency)}</span></div>
+    <div class="addr">${esc(a.name||"")}<br>${esc(a.address1||"")}${a.address2?"<br>"+esc(a.address2):""}<br>${esc([a.city,a.provinceCode||a.province,a.zip].filter(Boolean).join(", "))} ${esc(a.countryCodeV2||"")}${a.phone?"<br>"+esc(a.phone):""}</div>
+    ${trk.length?`<div class="trk">${trk.map(t=>`📦 ${esc(t.company||"")} <a href="${esc(t.url||"#")}" target="_blank" rel="noopener">${esc(t.number)}</a>`).join("<br>")}</div>`:""}
+    ${(o.refunds||[]).length?`<div style="color:var(--muted);margin-top:6px">${o.refunds.map(r=>`💸 ${money(r.amount,o.currency)} refunded ${fmtDay(r.at)}`).join("<br>")}</div>`:""}
+    <div class="acts">
+      <button class="btn sec" ${o.can_change_address?"":"disabled"} onclick="orderModal('update_address')">📍 Update address</button>
+      <button class="btn sec" onclick="orderModal('replacement')">🎁 Replacement</button>
+      <button class="btn sec" ${o.can_refund?"":"disabled"} onclick="orderModal('refund')">💸 Refund</button>
+      <button class="btn sec danger" ${o.can_cancel?"":"disabled"} onclick="orderModal('cancel')">🛑 Cancel order</button>
+    </div>
+    <div style="color:var(--muted);font-size:11.5px;margin-top:8px">Placed ${fmtDay(o.created_at)}${o.email?" · "+esc(o.email):""}</div>
+  </div>`;
+}
+function closeModal(){const m=$("modal");if(m)m.remove();}
+function orderModal(kind){
+  const o=ORDER; if(!o)return; closeModal();
+  const a=o.shipping_address||{};
+  const addrForm=(pre)=>`<div class="grid2"><div><label>Name</label><input type="text" id="f-name" value="${esc(pre?a.name||"":"")}"></div><div><label>Phone</label><input type="text" id="f-phone" value="${esc(pre?a.phone||"":"")}"></div></div>
+    <label>Street</label><input type="text" id="f-street1" value="${esc(pre?a.address1||"":"")}"><label>Apt / unit (optional)</label><input type="text" id="f-street2" value="${esc(pre?a.address2||"":"")}">
+    <div class="grid3"><div><label>City</label><input type="text" id="f-city" value="${esc(pre?a.city||"":"")}"></div><div><label>State</label><input type="text" id="f-state" maxlength="2" placeholder="TX" value="${esc(pre?a.provinceCode||"":"")}"></div><div><label>ZIP</label><input type="text" id="f-zip" value="${esc(pre?a.zip||"":"")}"></div></div>
+    <label>Country</label><input type="text" id="f-country" maxlength="2" value="${esc(pre?(a.countryCodeV2||"US"):"US")}">`;
+  const readAddr=()=>({name:$("f-name").value.trim(),phone:$("f-phone").value.trim(),street1:$("f-street1").value.trim(),street2:$("f-street2").value.trim(),city:$("f-city").value.trim(),state:$("f-state").value.trim().toUpperCase(),postal_code:$("f-zip").value.trim(),country:($("f-country").value.trim()||"US").toUpperCase()});
+  const itemsForm=(qtyKey)=>o.items.map((i,n)=>`<div class="iti"><input type="checkbox" id="it-${n}" ${(qtyKey==="refundable_quantity"?i.refundable_quantity:i.quantity)>0?"checked":"disabled"}><span class="t">${esc(i.title)}<small style="color:var(--muted)"> ${esc(i.variant||"")}</small></span><input type="number" id="itq-${n}" min="1" max="${i[qtyKey]||i.quantity}" value="${i[qtyKey]||i.quantity}"></div>`).join("");
+  const readItems=()=>o.items.map((i,n)=>$("it-"+n)&&$("it-"+n).checked?{line_item_id:i.id,sku:i.sku,title:i.title,quantity:Number($("itq-"+n).value)||1}:null).filter(Boolean);
+  let title,sub,body,confirmLabel,danger=false,build;
+  if(kind==="update_address"){
+    title="Update shipping address"; sub=`${o.name} · writes the new address to Shopify and ShipStation`; confirmLabel="Save address";
+    body=addrForm(true);
+    build=()=>{const ad=readAddr(); if(!(ad.street1&&ad.city&&ad.state&&ad.postal_code))throw new Error("Street, city, state and ZIP are required."); return {address:ad};};
+  } else if(kind==="cancel"){
+    title="Cancel order"; sub=`${o.name} · ${money(o.total,o.currency)} · this cannot be undone`; confirmLabel="Cancel this order"; danger=true;
+    body=`<label>Reason</label><select id="f-reason"><option value="CUSTOMER">Customer asked to cancel</option><option value="INVENTORY">Out of stock</option><option value="DECLINED">Payment declined</option><option value="FRAUD">Fraud</option><option value="OTHER">Other</option></select>
+      <label class="chk"><input type="checkbox" id="f-refund" checked> Refund the payment in full (${money(o.total-o.refunded,o.currency)})</label>
+      <label class="chk"><input type="checkbox" id="f-restock" checked> Return the items to stock</label>
+      <label class="chk"><input type="checkbox" id="f-notify"> Let Shopify email the customer a cancellation notice</label>
+      <label>Internal note (optional)</label><input type="text" id="f-note" placeholder="e.g. duplicate order">
+      <div class="warn">The order is cancelled in Shopify${o.shipstation&&!o.shipstation.shipped?" and ShipStation":""}. Only do this before it ships.</div>`;
+    build=()=>({reason_code:$("f-reason").value,refund:$("f-refund").checked,restock:$("f-restock").checked,notify:$("f-notify").checked,note:$("f-note").value.trim()});
+  } else if(kind==="refund"){
+    const left=o.total-o.refunded;
+    title="Refund to original payment"; sub=`${o.name} · ${money(left,o.currency)} still refundable`; confirmLabel="Issue refund"; danger=true;
+    body=`<label>What to refund</label><select id="f-mode" onchange="document.querySelectorAll('.rm').forEach(x=>x.style.display='none');$('rm-'+this.value).style.display='block'"><option value="full">Everything still refundable (${money(left,o.currency)})</option><option value="items">Specific items</option><option value="amount">A specific amount</option></select>
+      <div class="rm" id="rm-full" style="display:block;color:var(--muted);font-size:12.5px;margin-top:8px">Refunds every unrefunded item plus shipping.</div>
+      <div class="rm" id="rm-items" style="display:none">${itemsForm("refundable_quantity")}<label class="chk"><input type="checkbox" id="f-ship"> Also refund shipping (${money(o.shipping,o.currency)})</label></div>
+      <div class="rm" id="rm-amount" style="display:none"><label>Amount</label><input type="number" id="f-amount" step="0.01" min="0.01" max="${left.toFixed(2)}" placeholder="0.00"></div>
+      <label class="chk"><input type="checkbox" id="f-restock" checked> Return refunded items to stock</label>
+      <label class="chk"><input type="checkbox" id="f-notify" checked> Let Shopify email the customer a refund notice</label>
+      <label>Internal note (optional)</label><input type="text" id="f-note" placeholder="e.g. return received 9/28">`;
+    build=()=>{const mode=$("f-mode").value; const r={mode,restock:$("f-restock").checked,notify:$("f-notify").checked,note:$("f-note").value.trim()};
+      if(mode==="items"){r.items=readItems(); if(!r.items.length)throw new Error("Pick at least one item."); r.shipping=$("f-ship").checked;}
+      if(mode==="amount"){r.amount=Number($("f-amount").value); if(!(r.amount>0))throw new Error("Enter an amount."); if(r.amount>left+0.009)throw new Error("Only "+money(left,o.currency)+" is refundable.");}
+      return r;};
+  } else if(kind==="replacement"){
+    title="Create replacement order"; sub=`No-charge copy of ${o.name}, free shipping — ShipStation picks it up for fulfillment`; confirmLabel="Create replacement";
+    body=`<label>Items to send again</label>${itemsForm("quantity")}
+      <label>Reason (goes on the new order)</label><input type="text" id="f-reason" placeholder="e.g. Package Protection — lost in transit">
+      <label class="chk"><input type="checkbox" id="f-newaddr" onchange="$('newaddr').style.display=this.checked?'block':'none'"> Ship to a different address</label>
+      <div id="newaddr" style="display:none">${addrForm(false)}</div>`;
+    build=()=>{const items=readItems(); if(!items.length)throw new Error("Pick at least one item."); const r={items,reason:$("f-reason").value.trim()}; if($("f-newaddr").checked){const ad=readAddr(); if(!(ad.street1&&ad.city&&ad.state&&ad.postal_code))throw new Error("Fill in the new address."); r.address=ad;} return r;};
+  }
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box"><h3>${esc(title)}</h3><div class="sub">${esc(sub)}</div>${body}<div class="foot"><button class="btn sec" onclick="closeModal()">Back</button><button class="btn ${danger?"":""}" id="modal-go" style="${danger?"background:#c0392b":""}">${esc(confirmLabel)}</button></div></div>`;
+  document.body.appendChild(m);
+  $("modal-go").onclick=async()=>{
+    let input; try{ input=build(); }catch(e){ toast(e.message); return; }
+    if(danger&&!confirm(`${confirmLabel} on ${o.name}? This can't be undone.`))return;
+    const go=$("modal-go"); go.disabled=true; go.textContent="Working…";
+    try{
+      const r=await api("/api/order/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind,order:o.name,ticketId:CUR,input})});
+      if(r.error)throw new Error(r.error);
+      toast(r.note||r.title||"Done"); closeModal(); if(r.order){ORDER=r.order;renderOrder();} if(CUR)openTicket(CUR);
+    }catch(e){ toast(e.message||"That didn't go through"); go.disabled=false; go.textContent=confirmLabel; }
+  };
+  const first=m.querySelector("input[type=text],select"); if(first)first.focus();
+}
+
+/* ---------- Customer profile (Shopify + ticket history), like the Gorgias sidebar ---------- */
+async function loadCustomer(email){
+  const pnl=$("custpanel"); if(!pnl)return;
+  if(!email){pnl.innerHTML="";return;}
+  try{
+    const c=await api("/api/customer?email="+encodeURIComponent(email));
+    const L=c.lifetime||{}; const cur=L.currency||"USD";
+    const stores=(c.stores||[]).filter(x=>x.found);
+    if(!ORDER){const recent=stores.flatMap(st=>st.orders).sort((a,b)=>new Date(b.at)-new Date(a.at))[0]; if(recent)loadOrder(recent.name);}
+    const notFound=(c.stores||[]).filter(x=>!x.found).map(x=>x.store);
+    pnl.innerHTML=`<div class="railcard cust" style="padding:12px">
+      ${c.phone?`<div class="kv" style="padding:4px 0 8px"><span class="k">Phone</span><span class="v">${esc(c.phone)}</span></div>`:""}
+      <div class="big"><div><b>${money(L.spent,cur)}</b><small>Lifetime value</small></div><div><b>${L.orders||0}</b><small>Orders</small></div><div><b>${money(L.store_credit,cur)}</b><small>Store credit</small></div></div>
+      ${L.first_order?`<div style="color:var(--muted);font-size:12px">Customer since ${fmtDay(L.first_order)}</div>`:""}
+      ${stores.map(st=>`<div class="store">
+        <div class="sh"><span>🛍 ${esc(st.store)}</span><a href="${esc(st.admin_url)}" target="_blank" rel="noopener">Open in Shopify ↗</a></div>
+        <div style="color:var(--muted)">${st.orders_count} order${st.orders_count===1?"":"s"} · ${money(st.amount_spent,st.currency)} spent${st.store_credit?` · ${money(st.store_credit,st.currency)} credit`:""}${st.marketing==="SUBSCRIBED"?" · 📧 subscribed":""}</div>
+        ${st.tags&&st.tags.length?`<div class="tagl">${st.tags.slice(0,6).map(t=>`<span class="chip">${esc(t)}</span>`).join("")}</div>`:""}
+        ${st.note?`<div style="margin-top:4px;color:var(--muted)">📝 ${esc(st.note)}</div>`:""}
+        <div style="margin-top:6px">${st.orders.map(o=>`<div class="orow"><button onclick="loadOrder('${esc(o.name)}')">${esc(o.name)}</button><small>${fmtShort(o.at)}</small><span>${o.cancelled?'<span class="chip skip">cancelled</span>':pillFor(o.fulfillment)}</span><span style="font-weight:600">${money(o.total,st.currency)}</span></div>`).join("")||'<span style="color:var(--muted)">no orders</span>'}</div>
+      </div>`).join("")}
+      ${!stores.length?`<div style="color:var(--muted);font-size:12.5px;margin-top:6px">No Shopify customer with this email${notFound.length?` in ${notFound.join(" or ")}`:""}.</div>`:""}
+      <div class="store"><div class="sh"><span>🎫 ${c.tickets_count} ticket${c.tickets_count===1?"":"s"}</span></div>
+        ${(c.tickets||[]).map(t=>`<div class="trow" onclick="openTicket(${t.id})"><span class="s">${t.id==CUR?"▸ ":""}${esc(t.subject||"(no subject)")}</span><small>${fmtShort(t.last||t.opened)} · ${esc(t.status)}</small></div>`).join("")}
+      </div>
+    </div>`;
+  }catch(e){ pnl.innerHTML='<div class="railcard" style="padding:12px;color:var(--muted);font-size:12.5px">Shopify profile unavailable.</div>'; }
+}
+
 function rail(d){
   const kv=(k,v)=>`<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
   const emily=d.emily?`<span class="chip ${d.emily}">${esc(d.emily)}</span>`:"—";
-  const orders=(d.orders&&d.orders.length)?`<div class="ordwrap">${d.orders.map(o=>`<span class="ordchip">#${esc(o)}</span>`).join("")}</div>`:'<span class="v" style="color:var(--muted)">none referenced</span>';
+  const orders=`<div class="ordwrap">${(d.orders||[]).map(o=>`<button class="ordchip" onclick="loadOrder('${esc(o)}')">#${esc(o)}</button>`).join("")}</div>
+    <div class="ordfind"><input id="ordq" placeholder="Order # (e.g. LBO10399)" onkeydown="if(event.key==='Enter')loadOrder(this.value)"><button class="btn sec xs" onclick="loadOrder($('ordq').value)">Look up</button></div>
+    <div id="orderpanel"></div>`;
   const tags=(d.tags&&d.tags.length)?`<div class="ordwrap">${d.tags.map(t=>`<span class="tagchip">${esc(t)}</span>`).join("")}</div>`:'<span class="v" style="color:var(--muted)">none</span>';
   return `<aside class="rail">
     <h4>Customer</h4>
@@ -425,6 +578,9 @@ function rail(d){
       ${kv("Email",esc(d.customer.email||"—"))}
       ${kv("Brand",esc(d.brand))}
     </div>
+    <div id="custpanel"><div class="railcard" style="padding:12px;color:var(--muted);font-size:12.5px">Loading Shopify profile…</div></div>
+    <h4>Orders</h4>
+    <div class="railcard" style="padding:12px">${orders}</div>
     <h4>Conversation</h4>
     <div class="railcard">
       ${kv("Status",`<span class="pill ${d.status==="closed"?"closed":"open"}">${esc(d.status)}</span>`)}
@@ -434,15 +590,13 @@ function rail(d){
       ${kv("Opened",fmtDay(d.created))}
       ${kv("Last activity",fmtDay(d.updated))}
     </div>
-    <h4>Orders referenced</h4>
-    <div class="railcard" style="padding:12px">${orders}</div>
     <h4>Tags</h4>
     <div class="railcard" style="padding:12px">${tags}</div>
   </aside>`;
 }
 
 async function openTicket(id){
-  CUR=id; document.body.classList.add("viewing"); document.querySelectorAll(".row").forEach(r=>r.classList.remove("on"));
+  if(CUR!==id)ORDER=null; CUR=id; document.body.classList.add("viewing"); document.querySelectorAll(".row").forEach(r=>r.classList.remove("on"));
   const th=$("thread"); th.innerHTML='<div class="empty">Loading conversation…</div>';
   try{
     const d=await api("/api/ticket/"+id);
@@ -472,6 +626,8 @@ async function openTicket(id){
         ${rail(d)}
       </div>`;
     MODE="reply"; const mb=$("msgs"); if(mb)mb.scrollTop=mb.scrollHeight;
+    if(d.orders&&d.orders.length) loadOrder(d.orders[0]); else if(ORDER&&$("orderpanel")){renderOrder();}
+    loadCustomer(d.customer.email);
   }catch(e){ th.innerHTML='<div class="empty">Couldn\'t load this ticket.</div>'; }
 }
 function closeThread(){document.body.classList.remove("viewing");CUR=null;loadList();}
