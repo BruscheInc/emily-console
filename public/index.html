@@ -79,6 +79,12 @@
   .msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--bg)}
 
   .msg{max-width:74%;min-width:60px;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+  .acts-em{margin:0 0 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:8px 12px}
+  .acts-h{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;margin-bottom:4px}
+  .act{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px dashed var(--line);font-size:13px}.act:first-of-type{border-top:none}
+  .act input{margin-top:3px}.act .t{flex:1;min-width:0}.act .t b{display:block;font-weight:700}.act .t small{display:block;color:var(--muted);margin-top:2px;white-space:pre-wrap}.act .t small.hint{color:#2451c8}
+  .act .bt{display:flex;gap:6px;flex:none}.act.ok .t b{color:#158048}.act.bad .t b{color:#c0392b}
+  mark.ph{background:rgba(36,81,200,.12);color:#2451c8;border-radius:5px;padding:0 5px;font-weight:700}
   .quoted{margin-top:8px}.quoted summary{cursor:pointer;list-style:none;display:inline-block;font-size:11.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.06);border-radius:6px;padding:2px 8px}.quoted summary::-webkit-details-marker{display:none}.quoted .qbody{margin-top:8px;padding-left:10px;border-left:3px solid var(--line);color:var(--muted);font-size:13px;white-space:pre-wrap}
   .msg .meta{font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600;white-space:normal}
   .msg.in{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
@@ -387,7 +393,8 @@ function emilyCard(d){
       ${e.intent?`<span class="chip">${esc(e.intent)}</span>`:""}${e.sentiment==="upset"?`<span class="chip" style="color:#e0a643">customer upset</span>`:""}
       <span style="margin-left:auto;font-size:12px;color:#7c8ba1">${fmt(e.created_at)}</span>
     </div>
-    <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;margin-bottom:10px">${esc(e.draft||"")}</div>
+    <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;margin-bottom:10px">${esc(e.draft||"").replace(/\{\{\s*(DISCOUNT_)?CODE\s*\}\}/gi,'<mark class="ph">code — created when you approve</mark>')}</div>
+    ${actionsBlock(d)}
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="emilyDecide(${d.id},'approve')">✅ Approve &amp; send</button>
       <button class="btn sec" onclick="emilyUseDraft(${JSON.stringify(e.draft||"").replace(/"/g,"&quot;")})">✏️ Edit first</button>
@@ -402,11 +409,31 @@ function emilyRedraftPrompt(id){
   if(notes===null) return;
   emilyDecide(id,'redraft',notes);
 }
+// Things Emily proposed alongside the draft (discount code, store credit, address fix, replacement…).
+// Staged ones are ticked by default and get applied when you approve; you can also apply or dismiss each one now.
+function actionsBlock(d){
+  const acts=(d.emily_actions||[]).filter(a=>a.status==="staged"||(a.status==="applied"&&Date.now()-new Date(a.decided_at||a.created_at)<7*864e5)||a.status==="failed");
+  if(!acts.length) return "";
+  const icon={shopify_propose_discount:"🏷️",shopify_propose_store_credit:"💳",shopify_propose_replacement:"🎁",shipstation_propose_change:"📦",shopify_propose_cancel:"🛑",shopify_propose_refund:"💸"};
+  return `<div class="acts-em"><div class="acts-h">Emily also proposed</div>${acts.map(a=>{
+    const ic=icon[a.kind]||"⚙️";
+    if(a.status==="staged") return `<label class="act st"><input type="checkbox" class="act-apply" value="${esc(a.id)}" checked><span class="t"><b>${ic} ${esc(a.title)}</b><small>${esc((a.summary||"").replace(/\s+/g," "))}</small><small class="hint">Ticked = applied when you approve &amp; send</small></span><span class="bt"><button class="btn sec xs" onclick="emilyAction('${esc(a.id)}','apply',${d.id})">Apply now</button><button class="btn sec xs" onclick="emilyAction('${esc(a.id)}','dismiss',${d.id})">Dismiss</button></span></label>`;
+    if(a.status==="applied") return `<div class="act ok"><span class="t"><b>✅ ${esc(a.title)}</b><small>${esc(a.result||a.summary||"")}${a.decided_by?` · by ${esc(a.decided_by)}`:""}</small></span></div>`;
+    return `<div class="act bad"><span class="t"><b>⚠️ ${esc(a.title)} — failed</b><small>${esc(a.result||"")}</small></span></div>`;
+  }).join("")}</div>`;
+}
+async function emilyAction(id,what,ticketId){
+  try{ const r=await api("/api/emily/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,do:what})});
+    if(r.error){toast(r.error,true);return;} toast(what==="apply"?(r.note||"Applied ✓"):"Dismissed"); openTicket(ticketId);
+  }catch(e){toast("Failed",true);}
+}
+
 async function emilyDecide(id,action,text){
   try{
-    const r=await api("/api/emily/decide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,action,text:text||""})});
+    const applyActions=(action==="approve"||action==="edit")?[...document.querySelectorAll("#emilycard .act-apply:checked")].map(x=>x.value):[];
+    const r=await api("/api/emily/decide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,action,text:text||"",applyActions})});
     if(r.error||r.ok===false){toast(r.error||"Couldn't do that",true);return;}
-    toast(action==="approve"?"Sent ✓":action==="skip"?"Skipped":action==="redraft"?"Emily is redrafting — give her a moment":"Done");
+    toast(action==="approve"?(r.applied&&r.applied.length?`Applied ${r.applied.length} action${r.applied.length===1?"":"s"} and sent ✓`:"Sent ✓"):action==="skip"?"Skipped":action==="redraft"?"Emily is redrafting — give her a moment":"Done");
     setTimeout(()=>openTicket(id), action==="redraft"?4000:400); loadCounts();
   }catch(e){ toast("Failed",true); }
 }
