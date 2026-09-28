@@ -72,7 +72,59 @@ function isCollab(t) {
   if (t.spam) return false;
   return COLLAB_RE.test(`${t.subject || ""} ${t.excerpt || ""}`);
 }
-function brandOf(t) { const i = (t.integrations || [])[0] || {}; return { brand: i.name || "—", address: i.address || null }; }
+/* Brand + the mailbox we can actually send FROM.
+ * integrations[0] is NOT reliable: on a live-chat ticket it's the chat channel (address null), and on
+ * tickets created through the API it can be missing entirely — which is what made the console refuse to
+ * send with "no connected sending address on this ticket". Same resolver Emily uses in Slack:
+ *   1) the mailbox the customer actually wrote TO,
+ *   2) else the from-address of a previously delivered agent reply,
+ *   3) else a real email integration on the ticket,
+ *   4) else the brand's hello@ mailbox, by integration/brand name,
+ *   5) else GORGIAS_FROM_ADDRESS. (Never GORGIAS_EMAIL — that's the API login, not a mailbox.) */
+const BRAND_MAILBOX = {
+  outlet: process.env.MAILBOX_OUTLET || "hello@larkspurbabyoutlet.com",
+  bumbunny: process.env.MAILBOX_BUMBUNNY || "hello@bumbunnybaby.com",
+  larkspur: process.env.MAILBOX_LARKSPUR || "hello@larkspurbaby.com",
+};
+function mailboxForName(name) {
+  const n = String(name || "").toLowerCase();
+  if (/outlet/.test(n)) return BRAND_MAILBOX.outlet;
+  if (/bumbunny|bum bunny/.test(n)) return BRAND_MAILBOX.bumbunny;
+  if (/larkspur/.test(n)) return BRAND_MAILBOX.larkspur;
+  return null;
+}
+function mailboxFromIntegrations(integrations) {
+  const arr = Array.isArray(integrations) ? integrations : [];
+  const emailInt = arr.find((i) => i && i.address && /@/.test(i.address) && /gmail|email|imap|smtp|outlook|microsoft/i.test(i.type || ""))
+    || arr.find((i) => i && i.address && /@/.test(i.address));
+  if (emailInt) return emailInt.address;
+  return mailboxForName(arr.map((i) => (i && i.name) || "").join(" "));
+}
+function addressFromMessages(msgs) {
+  const arr = Array.isArray(msgs) ? msgs : [];
+  for (const m of arr) {                                  // what the customer wrote to
+    if (!m.from_agent && m.channel === "email" && m.source && Array.isArray(m.source.to) && m.source.to[0] && m.source.to[0].address) return m.source.to[0].address;
+  }
+  for (const m of arr) {                                  // else a reply that already went out
+    if (m.from_agent && m.channel === "email" && m.source && m.source.from && m.source.from.address) return m.source.from.address;
+  }
+  return null;
+}
+function brandLabel(t, address) {
+  const ints = t.integrations || [];
+  const named = (ints.find((i) => i && i.address && /@/.test(i.address) && i.name) || {}).name
+    || ints.map((i) => (i && i.name) || "").filter((n) => n && !/^chat$/i.test(n))[0];
+  if (named) return named;
+  const d = String(address || "").split("@")[1] || "";
+  if (/outlet/i.test(d)) return "Larkspur Baby Outlet";
+  if (/bumbunny/i.test(d)) return "Bumbunny Baby";
+  if (/larkspur/i.test(d)) return "Larkspur Baby";
+  return d || "—";
+}
+function brandOf(t, msgs) {
+  const address = addressFromMessages(msgs) || mailboxFromIntegrations(t.integrations) || process.env.GORGIAS_FROM_ADDRESS || null;
+  return { brand: brandLabel(t, address), address };
+}
 function emilyStatusOf(t) { for (const tag of (t.tags || [])) { const m = EMILY_TAGS[tag.name]; if (m) return m; } return null; }
 function repliedLast(t) { // true if our side sent the most recent message
   const lm = t.last_message_datetime, lr = t.last_received_message_datetime;
@@ -84,7 +136,7 @@ function categorize(t) {
   return repliedLast(t) ? "responded" : "pending";
 }
 function shape(t) {
-  const b = brandOf(t);
+  const b = brandOf(t, t.messages);
   return {
     id: t.id, subject: t.subject || "(no subject)", excerpt: t.excerpt || "", status: t.status,
     brand: b.brand, channel: t.channel, spam: !!t.spam, unread: !!t.is_unread, messages_count: t.messages_count,
@@ -143,7 +195,7 @@ app.get("/api/ticket/:id", async (req, res) => {
   try {
     const id = req.params.id;
     const [t, m] = await Promise.all([gorgias("GET", `/tickets/${id}`), gorgias("GET", `/tickets/${id}/messages?limit=100`)]);
-    const b = brandOf(t);
+    const b = brandOf(t, m.data || []);
     const messages = (m.data || []).map((x) => {
       const internal = x.channel === "internal-note" || x.public === false;
       const text = String(x.stripped_text || x.body_text || stripHtml(x.stripped_html || x.body_html) || "").trim();
@@ -177,9 +229,13 @@ app.post("/api/reply", async (req, res) => {
     const { id, text } = req.body || {};
     if (!id || !text || !String(text).trim()) return res.status(400).json({ error: "id and text required" });
     const t = await gorgias("GET", `/tickets/${id}`);
-    const b = brandOf(t);
+    let msgs = Array.isArray(t.messages) && t.messages.length ? t.messages : null;
+    if (!msgs) { try { msgs = (await gorgias("GET", `/tickets/${id}/messages?limit=100`)).data || []; } catch (e) { msgs = []; } }
+    const b = brandOf(t, msgs);
     const custEmail = t.customer && t.customer.email;
-    if (!b.address) return res.status(400).json({ error: "no connected sending address on this ticket" });
+    if (!b.address) {
+      return res.status(400).json({ error: `couldn't work out which mailbox to send from on ticket ${id} — no email in the thread and no connected email channel. Set GORGIAS_FROM_ADDRESS, or reply from Gorgias this once.` });
+    }
     if (!custEmail) return res.status(400).json({ error: "no customer email on this ticket" });
     const subject = /^re:/i.test(t.subject || "") ? t.subject : `Re: ${t.subject || ""}`;
     const html = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
@@ -233,5 +289,5 @@ app.post("/api/ask-emily", async (req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`📨 Emily Console on :${PORT}`);
-  console.log(`🔎 boot → key:${KEY ? "set" : "MISSING"} · gorgias:${G_DOMAIN ? G_DOMAIN : "MISSING"} · slack:${SLACK_TOKEN ? "set" : "off"} · cs-channel:${CS_CHANNEL ? "set" : "off"} · emily-id:${EMILY_ID ? "set" : "off"}`);
+  console.log(`🔎 boot → key:${KEY ? "set" : "MISSING"} · gorgias:${G_DOMAIN ? G_DOMAIN : "MISSING"} · slack:${SLACK_TOKEN ? "set" : "off"} · cs-channel:${CS_CHANNEL ? "set" : "off"} · emily-id:${EMILY_ID ? "set" : "off"} · fallback-from:${process.env.GORGIAS_FROM_ADDRESS || "none"}`);
 });
