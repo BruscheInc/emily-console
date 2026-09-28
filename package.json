@@ -2,8 +2,13 @@
   "name": "emily-console",
   "version": "1.0.0",
   "private": true,
-  "description": "Emily Console — full CS inbox over Gorgias with Slack sync (an extension of Emily).",
+  "description": "Emily Console \u2014 full CS inbox over Gorgias with Slack sync (an extension of Emily).",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "dependencies": { "express": "^4.19.2" }
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.13.1"
+  }
 }
