@@ -170,6 +170,7 @@ app.get("/api/ticket/:id", async (req, res) => {
       tags: t.tags || [], category: t.category, source: t.source, orders, events, messages,
       emily: (t.tags || []).includes("emily-sent") ? "sent" : (t.tags || []).includes("emily-drafted") ? "drafted" : null,
       emily_draft: (await db(`SELECT id, draft, intent, sentiment, escalate, escalate_reason, outcome, created_at FROM emily_drafts WHERE ticket_id=$1 ORDER BY id DESC LIMIT 1`, [String(id)])).rows[0] || null,
+      emily_actions: await require("./emily").listActions(id).catch(() => []),
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -180,7 +181,9 @@ app.post("/api/reply", async (req, res) => {
     const { id, text } = req.body || {};
     if (!id || !text || !String(text).trim()) return res.status(400).json({ error: "id and text required" });
     const who = actorOf(req);
-    const r = await sendReply({ ticketId: id, text: String(text), who, via: "helpdesk" });
+    let body = String(text);
+    try { const f = await require("./emily").fillPlaceholders(id, body); if (f.pending) return res.status(400).json({ error: "Your reply still has a {{DISCOUNT_CODE}} placeholder — apply the discount on Emily's card first, or replace it." }); body = f.text; } catch (e) {}
+    const r = await sendReply({ ticketId: id, text: body, who, via: "helpdesk" });
     // If Emily had a draft waiting on this ticket, a human reply settles it.
     try { const emily = require("./emily"); await emily.onHumanReply(id, String(text), who); } catch (e) {}
     slackPost(`✉️ *Reply sent* → ${r.to} · ${r.mailbox} · ticket ${id} · by ${who}\n>>> ${String(text).slice(0, 500)}`);
@@ -334,10 +337,10 @@ app.get("/att/:mid/:idx/:tok", async (req, res) => {
 app.post("/api/emily/decide", async (req, res) => {
   if (!guard(req, res)) return;
   try {
-    const { id, action, text } = req.body || {};
+    const { id, action, text, applyActions } = req.body || {};
     if (!id || !["approve", "edit", "skip", "redraft"].includes(action)) return res.status(400).json({ error: "id and action approve|edit|skip|redraft required" });
     const emily = require("./emily");
-    const r = await emily.decide({ ticketId: String(id), action, text, who: actorOf(req) });
+    const r = await emily.decide({ ticketId: String(id), action, text, who: actorOf(req), applyActions: Array.isArray(applyActions) ? applyActions : [] });
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -413,6 +416,16 @@ app.get("/oauth/gmail/callback", async (req, res) => {
     setTimeout(() => pollMailbox(address).catch(() => {}), 1000);
     res.send(`<body style="font-family:system-ui;background:#0b1220;color:#e6edf6;padding:40px"><h2>✅ ${address} connected</h2><p>Mail for this mailbox now lands in the console. You can close this tab.</p></body>`);
   } catch (e) { res.status(500).send(`Connection failed: ${e.message}`); }
+});
+app.post("/api/emily/action", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const { id, do: what } = req.body || {};
+    const emily = require("./emily");
+    if (what === "apply") return res.json(await emily.applyAction(String(id), actorOf(req)));
+    if (what === "dismiss") return res.json(await emily.dismissAction(String(id), actorOf(req)));
+    res.status(400).json({ error: "do must be apply or dismiss" });
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post("/api/admin/dedupe", async (req, res) => {
   if (!guard(req, res)) return;

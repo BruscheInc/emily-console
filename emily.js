@@ -15,6 +15,8 @@
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { AsyncLocalStorage } = require("async_hooks");
+const execNow = new AsyncLocalStorage();   // set while re-running a proposal to APPLY it instead of staging it
 const core = require("./core");
 const { db, pool } = core;
 
@@ -321,6 +323,12 @@ async function markAction(id, status, extra) {
   catch (e) { console.error("emily_actions update:", e.message); }
 }
 async function stageAction({ title, summary, ticketId, exec, kind, input }) {
+  const now = execNow.getStore();
+  if (now) {                                   // a person is applying this from the Helpdesk right now — run it, don't post a card
+    const r = await exec();
+    now.results.push({ kind, title, summary, ticketId, input, result: r });
+    return null;
+  }
   const id = "act_" + crypto.randomUUID();
   pendingAct.set(id, { title, summary, ticketId, exec, kind, input });
   await recordAction(id, { kind, title, summary, ticketId, input });
@@ -363,6 +371,62 @@ async function applyAddressChange(input, addr, shopHandle) {
   }
   if (failed) throw new Error(parts.join(" · ") + " (address updates are safe to re-apply)");
   return { note: parts.join(" · ") };
+}
+
+/* ---- Staged actions from the Helpdesk app (Slack has its own buttons; this is the same thing from the ticket page) ---- */
+function codeFrom(text) { const m = String(text || "").match(/\bcode\s+([A-Z0-9]{4,})\b/); return m ? m[1] : null; }
+async function listActions(ticketId) {
+  const r = await db(`SELECT id, kind, title, summary, status, result, decided_by, created_at, decided_at FROM emily_actions WHERE ticket_id=$1 ORDER BY created_at DESC LIMIT 12`, [String(ticketId)]);
+  return r.rows.map((a) => ({ ...a, code: codeFrom(a.result) || codeFrom(a.summary) }));
+}
+async function applyAction(id, who) {
+  const rec = (await db(`SELECT * FROM emily_actions WHERE id=$1`, [id])).rows[0];
+  if (!rec) throw new Error("that action no longer exists");
+  if (rec.status !== "staged") throw new Error(`that action was already ${rec.status}`);
+  const p = pendingAct.get(id);
+  let result;
+  try {
+    if (p) { result = await p.exec(); pendingAct.delete(id); }
+    else if (RESTAGE[rec.kind]) {
+      // The app restarted since Emily staged this — re-run the proposal (re-checks stock/shipping) and apply it in one go.
+      const ctx = { results: [] };
+      const input = { ...(rec.input || {}) };
+      if (rec.kind === "shopify_propose_discount" && !input.code) input.code = codeFrom(rec.summary);   // keep the code the draft may already mention
+      const out = await execNow.run(ctx, () => RESTAGE[rec.kind](input));
+      if (!ctx.results.length) throw new Error((out && (out.note || out.error)) || "couldn't be applied any more");
+      result = ctx.results[0].result;
+    } else throw new Error("no way to run this kind of action");
+  } catch (e) { await markAction(id, "failed", { by: who, result: e.message }); throw e; }
+  await markAction(id, "applied", { by: who, result: (result && result.note) || "ok" });
+  if (p && p.ts && app) { try { await app.client.chat.update({ channel: APPROVALS_CH, ts: p.ts, text: "Applied", blocks: [{ type: "section", text: { type: "mrkdwn", text: `✅ *Applied from Helpdesk* by ${who} — ${p.title}\n${(result && result.note) || p.summary}` } }] }); } catch (_) {} }
+  if (rec.ticket_id) { try { await core.addNote({ ticketId: rec.ticket_id, text: `⚙️ ${rec.title} — applied by ${who}\n→ ${(result && result.note) || "done"}`, who }); } catch (_) {} }
+  return { ok: true, note: result && result.note, code: codeFrom(result && result.note) || codeFrom(rec.summary) };
+}
+async function dismissAction(id, who) {
+  const rec = (await db(`SELECT * FROM emily_actions WHERE id=$1`, [id])).rows[0];
+  if (!rec) throw new Error("that action no longer exists");
+  if (rec.status !== "staged") throw new Error(`that action was already ${rec.status}`);
+  const p = pendingAct.get(id); pendingAct.delete(id);
+  await markAction(id, "dismissed", { by: who });
+  if (p && p.ts && app) { try { await app.client.chat.update({ channel: APPROVALS_CH, ts: p.ts, text: "Dismissed", blocks: [{ type: "section", text: { type: "mrkdwn", text: `✖ *Dismissed from Helpdesk* by ${who} — ${p.title}` } }] }); } catch (_) {} }
+  return { ok: true };
+}
+// Swap {{DISCOUNT_CODE}} for the real code of a discount applied on this ticket; if a code was created but the
+// text never mentions it, add one line before the sign-off so the customer actually receives it.
+async function fillPlaceholders(ticketId, text, extraCodes = []) {
+  let body = String(text || "");
+  const applied = (await listActions(ticketId)).filter((a) => a.status === "applied" && a.kind === "shopify_propose_discount" && a.code);
+  const codes = [...new Set([...extraCodes.filter(Boolean), ...applied.map((a) => a.code)])];
+  const code = codes[0] || null;
+  if (code) {
+    body = body.replace(/\{\{\s*(DISCOUNT_)?CODE\s*\}\}/gi, code).replace(/\[(DISCOUNT )?CODE\]/gi, code);
+    if (!body.includes(code)) {
+      const line = `Your code is ${code} — it's single-use and ready to use now.`;
+      const m = body.match(/\n\s*(—|--|-|Warmly|Best|Thanks|Thank you|Cheers|Sincerely)[^\n]*\n?[^\n]*$/i);
+      body = m && m.index > 0 ? body.slice(0, m.index).replace(/\s+$/, "") + `\n\n${line}` + body.slice(m.index) : body.replace(/\s+$/, "") + `\n\n${line}`;
+    }
+  }
+  return { text: body, code, pending: /\{\{\s*(DISCOUNT_)?CODE\s*\}\}|\[(DISCOUNT )?CODE\]/i.test(body) };
 }
 
 /* ---- Propose an order change (address / hold / unhold) ----
@@ -664,7 +728,7 @@ async function shopifyProposeDiscount(input) {
   const kind = String(input.kind || "").toLowerCase();
   if (!["percentage", "fixed", "free_shipping"].includes(kind)) return { error: "kind must be percentage, fixed, or free_shipping." };
   if ((kind === "percentage" || kind === "fixed") && !(Number(input.value) > 0)) return { error: "Provide a positive value for a percentage/fixed discount." };
-  const code = String(input.code || `EMILY${Math.floor(Date.now() / 1000) % 100000}`).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const code = String(input.code || `EMILY${(Date.now() % 1e7).toString(36)}${crypto.randomBytes(2).toString("hex").slice(0, 3)}`).toUpperCase().replace(/[^A-Z0-9]/g, "");
   const label = kind === "free_shipping" ? "free shipping" : kind === "percentage" ? `${input.value}% off` : `$${input.value} off`;
   const orderRef = input.order ? String(input.order).trim().replace(/^#?/, "#") : "";
   // Record which order the courtesy is for, in the discount's admin title (traceability).
@@ -817,7 +881,7 @@ const TOOLS = [
     input_schema: { type: "object", properties: { order: { type: "string" }, reason: { type: "string" }, reason_code: { type: "string", description: "CUSTOMER (default) | INVENTORY | OTHER" }, refund: { type: "boolean" }, ticket_id: { type: "number" } }, required: ["order"] } },
   { name: "shopify_propose_refund", description: "STAGE a refund to the customer's ORIGINAL PAYMENT for Jose's one-click approval (does NOT refund until he clicks Apply). Three ways: no items and no amount = refund everything still refundable (items + shipping); items:[{sku or title, quantity}] = refund just those lines (add shipping=true to include shipping); amount = a specific dollar figure (partial/goodwill refund). Use for approved returns received, damaged/missing items the customer wants money back for, or an approved partial refund — NOT for store credit (use shopify_propose_store_credit) and NOT to cancel an unshipped order (use shopify_propose_cancel). CALL customer_history first. Pass the order number, a reason, and ticket_id. Tell the customer the refund is being processed and takes 5–10 business days to show — never say it has been issued.",
     input_schema: { type: "object", properties: { order: { type: "string" }, items: { type: "array", items: { type: "object", properties: { sku: { type: "string" }, title: { type: "string" }, quantity: { type: "number" } } } }, amount: { type: "number" }, shipping: { type: "boolean" }, restock: { type: "boolean" }, reason: { type: "string" }, ticket_id: { type: "number" } }, required: ["order"] } },
-  { name: "shopify_propose_discount", description: "STAGE a single-use discount CODE for the customer, for Jose's one-click approval (does NOT create until he clicks Apply). kind='percentage' (value=percent, e.g. 10) | 'fixed' (value=dollars off) | 'free_shipping' (optional min_subtotal). Route by passing the order number OR a brand (Larkspur Baby / Outlet / Bumbunny). Use for approved goodwill discounts or a free-shipping courtesy. Optionally pass a code; otherwise one is generated. Pass ticket_id.",
+  { name: "shopify_propose_discount", description: "STAGE a single-use discount CODE for the customer, for Jose's one-click approval (does NOT create until he clicks Apply). kind='percentage' (value=percent, e.g. 10) | 'fixed' (value=dollars off) | 'free_shipping' (optional min_subtotal). Route by passing the order number OR a brand (Larkspur Baby / Outlet / Bumbunny). Use for approved goodwill discounts or a free-shipping courtesy. Optionally pass a code; otherwise one is generated. Pass ticket_id. In your draft reply, write the code EXACTLY as {{DISCOUNT_CODE}} (e.g. 'use code {{DISCOUNT_CODE}} at checkout') — it is swapped for the real, active code the moment Jose approves; never invent a code and never say it is active yet.",
     input_schema: { type: "object", properties: { order: { type: "string" }, brand: { type: "string" }, kind: { type: "string" }, value: { type: "number" }, code: { type: "string" }, min_subtotal: { type: "number" }, title: { type: "string" }, ticket_id: { type: "number" } }, required: ["kind"] } },
   { name: "shopify_propose_store_credit", description: "STAGE a NATIVE Shopify store-credit change on the customer's account for Jose's one-click approval (does NOT execute until he clicks Apply). action='credit' (default) ADDS real store credit to the account balance — NOT a code; it applies automatically at checkout when the customer is signed in with that email (Shopify auto-creates the account if needed). Use credit for any approved STORE-CREDIT resolution (Package Protection lost/stolen credit, goodwill credit, non-PP 50% good-faith credit). action='debit' REMOVES store credit from the account — use ONLY to correct an over-credit / duplicate credit (e.g. the same credit was applied twice); a debit is an internal correction, so do NOT email the customer about it. Pass amount (dollars) and the order number (preferred — routes the store and finds the customer) or brand + email; optional reason; ticket_id. For a credit, word your reply as account credit, never a code.",
     input_schema: { type: "object", properties: { action: { type: "string", description: "'credit' (add, default) or 'debit' (remove, to fix an over-credit)" }, order: { type: "string" }, brand: { type: "string" }, email: { type: "string" }, amount: { type: "number" }, reason: { type: "string" }, ticket_id: { type: "number" } }, required: ["amount"] } },
@@ -1164,7 +1228,7 @@ async function updateCard(d, text, blocks) {
   try { await app.client.chat.update({ channel: d.slack_ch, ts: d.slack_ts, text, blocks }); } catch (e) {}
 }
 // The single decision function. Slack buttons and the app's buttons both land here.
-async function decide({ ticketId, action, text, who }) {
+async function decide({ ticketId, action, text, who, applyActions = [] }) {
   const id = String(ticketId);
   const d = await latestDraft(id);
   if (action === "redraft") {
@@ -1180,8 +1244,17 @@ async function decide({ ticketId, action, text, who }) {
     await updateCard(d, "Skipped", [{ type: "section", text: { type: "mrkdwn", text: `🗑 *Skipped* · ticket ${id} · by ${who}` } }]);
     return { ok: true };
   }
-  const body = action === "edit" ? String(text || "").trim() : String(d.draft || "");
+  let body = action === "edit" ? String(text || "").trim() : String(d.draft || "");
   if (!body) return { ok: false, error: "nothing to send" };
+  // Actions Emily proposed alongside the draft (discount code, store credit, address fix…) that the person ticked: do them first.
+  const appliedNotes = [], codes = [];
+  for (const aid of Array.isArray(applyActions) ? applyActions : []) {
+    try { const r = await applyAction(String(aid), who); appliedNotes.push(r.note); if (r.code) codes.push(r.code); }
+    catch (e) { return { ok: false, error: `Couldn't apply "${aid}": ${e.message} — nothing was sent.` }; }
+  }
+  const filled = await fillPlaceholders(id, body, codes);
+  if (filled.pending) return { ok: false, error: "The draft still has a {{DISCOUNT_CODE}} placeholder — tick the discount so it gets created, or edit the text." };
+  body = filled.text;
   const s = await core.sendReply({ ticketId: id, text: body, who, via: action === "edit" ? "emily-edited" : "emily-approved" });
   await core.addTags(id, ["emily-sent"]);
   await recordOutcome(id, action === "edit" ? "edited" : "approved", body, who);
@@ -1189,7 +1262,7 @@ async function decide({ ticketId, action, text, who }) {
     { type: "section", text: { type: "mrkdwn", text: `✅ *Sent* → ${s.to} · from ${s.mailbox} · ticket ${id} · by ${who}` } },
     { type: "section", text: { type: "mrkdwn", text: `>>> ${body.slice(0, 2800)}` } },
   ]);
-  return { ok: true, via: s.via, to: s.to };
+  return { ok: true, via: s.via, to: s.to, applied: appliedNotes };
 }
 // A person answered from the app while a draft was waiting — settle the draft so it doesn't linger.
 async function onHumanReply(ticketId, text, who) {
@@ -1459,4 +1532,4 @@ async function start() {
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder };
+module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear() }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders };

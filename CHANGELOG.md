@@ -3,6 +3,17 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v3.3 — Sep 28, 2026
+- **Emily's proposed actions show up in the app.** When Emily stages a discount code, store credit, replacement,
+  address change, cancellation or refund alongside a draft, the draft card now lists it under "Emily also
+  proposed", ticked by default. Approve & send applies the ticked actions first and then sends; each one also has
+  Apply now / Dismiss. Applying from the app updates the matching Slack card so it can't be applied twice.
+- **The discount code actually reaches the customer.** Emily now writes `{{DISCOUNT_CODE}}` in her draft; it is
+  replaced with the real, freshly created code on approval. If a draft mentions a code without the placeholder,
+  a "Your code is …" line is added before the sign-off. A reply that still contains the placeholder is refused
+  until the discount is applied — so a customer can never receive a promise of a code that doesn't exist.
+- Generated discount codes are unique even when several are created in the same second.
+
 ## v3.2 — Sep 28, 2026
 - **No more twin tickets.** The same email used to open one ticket via the Gorgias import and another via the
   Gmail connection. Both paths now look for the conversation first (by the email's Message-ID, or the same
