@@ -1,10 +1,12 @@
 {
   "name": "helpdesk",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Helpdesk — Brusche Inc.'s own support desk (Larkspur Baby · Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
+  "description": "Helpdesk \u2014 Brusche Inc.'s own support desk (Larkspur Baby \u00b7 Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.1",
     "@slack/bolt": "^4.1.0",

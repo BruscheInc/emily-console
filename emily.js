@@ -347,6 +347,24 @@ async function shopifyUpdateOrderAddress(st, orderGid, addr) {
   return { ok: true };
 }
 
+
+// Writes a corrected ship-to to Shopify (source of truth) and, if the order has synced and hasn't shipped, ShipStation too.
+async function applyAddressChange(input, addr, shopHandle) {
+  const parts = []; let failed = false;
+  if (shopHandle) { try { await shopifyUpdateOrderAddress(shopHandle.st, shopHandle.gid, addr); parts.push(`Shopify ${shopHandle.name} ✅`); } catch (e) { failed = true; parts.push(`Shopify ✖ ${e.message}`); } }
+  if (shipstationConfigured()) {
+    try {
+      const fresh = await shipstationLookup(ssOrderNo(input.order));
+      const so = Array.isArray(fresh) ? fresh.find((x) => x.order_id) : null;
+      if (so && !(so.shipped || so.shipstation_status === "shipped")) { try { await ssUpdateAddress(so.order_id, addr); parts.push(`ShipStation ${so.order_number} ✅`); } catch (e) { failed = true; parts.push(`ShipStation ✖ ${e.message}`); } }
+      else if (so) { failed = true; parts.push(`ShipStation ✖ already shipped — Shopify updated, but ShipStation label is out`); }
+      else { parts.push(`ShipStation ⏳ not synced yet — Shopify corrected; ShipStation will import the corrected address when it pulls this order`); }
+    } catch (e) { parts.push(`ShipStation ✖ ${e.message}`); }
+  }
+  if (failed) throw new Error(parts.join(" · ") + " (address updates are safe to re-apply)");
+  return { note: parts.join(" · ") };
+}
+
 /* ---- Propose an order change (address / hold / unhold) ----
  * Address changes work whether or not the order has synced to ShipStation yet:
  *   - In ShipStation  → update BOTH ShipStation and Shopify (they don't sync address edits after placement).
@@ -395,23 +413,7 @@ async function shipstationProposeChange(input) {
   const preSyncNote = !inSS && shopHandle ? " · not yet in ShipStation — Apply corrects Shopify and also writes ShipStation the moment it has synced" : (!shopHandle ? " · Shopify order not matched — ShipStation only" : "");
   const summary = `📦 Update ship-to (${targets})${preSyncNote} → ${[input.name, input.street1, input.street2, `${input.city || ""}, ${input.state || ""} ${input.postal_code || ""}`.trim(), input.country].filter((x) => x && String(x).trim()).join(" · ")}`;
   await stageAction({ kind: "shipstation_propose_change", input, title: `Address change — order ${ordNo}`, summary, ticketId: input.ticket_id,
-    exec: async () => {
-      const parts = []; let failed = false;
-      // 1) Shopify — the source of truth. Correct it first (a not-yet-synced order imports this on sync).
-      if (shopHandle) { try { await shopifyUpdateOrderAddress(shopHandle.st, shopHandle.gid, addr); parts.push(`Shopify ${shopHandle.name} ✅`); } catch (e) { failed = true; parts.push(`Shopify ✖ ${e.message}`); } }
-      // 2) ShipStation — RE-CHECK at Apply time (it may have synced since Emily proposed) and write it too.
-      if (shipstationConfigured()) {
-        try {
-          const fresh = await shipstationLookup(ssOrderNo(input.order));
-          const so = Array.isArray(fresh) ? fresh.find((x) => x.order_id) : null;
-          if (so && !(so.shipped || so.shipstation_status === "shipped")) { try { await ssUpdateAddress(so.order_id, addr); parts.push(`ShipStation ${so.order_number} ✅`); } catch (e) { failed = true; parts.push(`ShipStation ✖ ${e.message}`); } }
-          else if (so) { failed = true; parts.push(`ShipStation ✖ already shipped — Shopify updated, but ShipStation label is out`); }
-          else { parts.push(`ShipStation ⏳ not synced yet — Shopify corrected; ShipStation will import the corrected address when it pulls this order`); }
-        } catch (e) { parts.push(`ShipStation ✖ ${e.message}`); }
-      }
-      if (failed) throw new Error(parts.join(" · ") + " (address updates are safe to re-apply)");
-      return { note: parts.join(" · ") };
-    } });
+    exec: async () => await applyAddressChange(input, addr, shopHandle) });
   return { ok: true, staged: true, note: `Staged an address change on order ${ordNo} for Jose's approval — Apply updates Shopify AND ShipStation (ShipStation is re-checked at Apply time so both stay in sync${inSS ? "" : "; if it hasn't imported yet, Shopify is corrected and ShipStation pulls the corrected address on sync"}). It will NOT change until he clicks Apply. Tell the customer we're getting it updated — do NOT say it's done.` };
 }
 
@@ -444,15 +446,17 @@ async function createReplacementOrder(st, { email, shippingAddress, lineItems, o
   const ue2 = comp.draftOrderComplete.userErrors; if (ue2 && ue2.length) throw new Error("complete: " + ue2.map((x) => x.message).join("; "));
   return { note: `Created no-charge replacement order ${comp.draftOrderComplete.draftOrder.order.name} in ${st.brand}${orig ? ` (replaces ${orig})` : ""}. ShipStation will pull it for fulfillment.` };
 }
-async function shopifyProposeReplacement(input) {
+// Resolve everything a replacement needs (store, items → variants, ship-to, email) without creating anything.
+async function prepareReplacement(input) {
   if (!input.order) return { error: "Provide the original order number." };
   const found = await shopifyLookupOrder(String(input.order).trim());
   const node = Array.isArray(found) ? found[0] : null;
   if (!node) return { note: `Couldn't find order "${input.order}" to base a replacement on. Confirm the number or checkout email.` };
   const st = storeByBrand(node.store); if (!st) return { error: `Couldn't map store "${node.store}".` };
-  const sa = node.shippingAddress || {};
+  const sa = input.address && input.address.street1 ? { address1: input.address.street1, address2: input.address.street2 || null, city: input.address.city, province: input.address.state, zip: input.address.postal_code, country: input.address.country || "US" }
+                                                    : (node.shippingAddress || {});
   if (!sa.address1 || !sa.city) return { error: `Order ${node.name} has no usable shipping address on file — can't build a replacement.` };
-  const shippingAddress = { address1: sa.address1, city: sa.city, province: sa.province, zip: sa.zip, country: sa.country || "US" };
+  const shippingAddress = { address1: sa.address1, address2: sa.address2 || null, city: sa.city, province: sa.province, zip: sa.zip, country: sa.country || "US" };
   const srcItems = ((node.lineItems && node.lineItems.edges) || []).map((e) => e.node);
   let want = srcItems;
   if (Array.isArray(input.items) && input.items.length) {
@@ -470,10 +474,172 @@ async function shopifyProposeReplacement(input) {
   }
   const email = node.email || input.email;
   const itemsSummary = want.map((i) => `${i.quantity || 1}× ${i.title || i.sku}`).join(", ");
+  return { st, node, email, shippingAddress, lineItems, itemsSummary, shipTo: [shippingAddress.address1, shippingAddress.city, shippingAddress.province, shippingAddress.zip].filter(Boolean).join(", ") };
+}
+async function shopifyProposeReplacement(input) {
+  const p = await prepareReplacement(input);
+  if (p.error || p.note) return p;
+  const { st, node, email, shippingAddress, lineItems, itemsSummary, shipTo } = p;
   await stageAction({ kind: "shopify_propose_replacement", input, title: `PP replacement — ${st.brand} (from ${node.name})`, ticketId: input.ticket_id,
-    summary: `🎁 Create a NO-CHARGE replacement order → ${email || "(no email on order)"}\nItems: ${itemsSummary}\nShip to: ${[sa.address1, sa.city, sa.province, sa.zip].filter(Boolean).join(", ")}`,
+    summary: `🎁 Create a NO-CHARGE replacement order → ${email || "(no email on order)"}\nItems: ${itemsSummary}\nShip to: ${shipTo}`,
     exec: async () => await createReplacementOrder(st, { email, shippingAddress, lineItems, origOrder: node.name, reason: input.reason }) });
   return { ok: true, staged: true, note: `Staged a no-charge PP replacement of [${itemsSummary}] for Jose's approval. It will NOT be created until he clicks Apply. Tell the customer their replacement is on its way — do NOT quote a new order number yet.` };
+}
+
+/* ---- Cancel & refund (Shopify) ----
+ * Both are approval-gated when Emily proposes them, and run directly (with a confirm) when a person does it in the app. */
+const ORDER_DETAIL_QUERY = `query($q:String!){orders(first:1,query:$q){edges{node{
+  id name email createdAt cancelledAt closed displayFinancialStatus displayFulfillmentStatus note tags
+  customer{displayName}
+  totalPriceSet{shopMoney{amount currencyCode}} subtotalPriceSet{shopMoney{amount}} totalShippingPriceSet{shopMoney{amount}} totalRefundedSet{shopMoney{amount}}
+  shippingAddress{name firstName lastName address1 address2 city province provinceCode zip country countryCodeV2 phone}
+  lineItems(first:50){edges{node{id title quantity refundableQuantity sku variantTitle originalUnitPriceSet{shopMoney{amount}} discountedTotalSet{shopMoney{amount}} variant{id availableForSale}}}}
+  fulfillments(first:5){status createdAt trackingInfo{number url company}}
+  refunds{id createdAt note totalRefundedSet{shopMoney{amount}}}
+}}}}`;
+async function orderDetail(raw) {
+  const q = String(raw || "").replace(/^#/, "").replace(/\s+/g, "").toUpperCase();
+  if (!q) return { error: "Provide an order number." };
+  const m = q.match(/^(LBO|LB|BB)0*(\d+)$/);
+  const stores = m && storeForPrefix(m[1]) ? [storeForPrefix(m[1]), ...STORES.filter((s) => s !== storeForPrefix(m[1]))] : STORES;
+  const variants = m ? [`name:${m[1]}${m[2]}`, `name:#${m[1]}${m[2]}`] : [`name:${q}`, `name:#${q}`];
+  for (const st of stores) for (const filter of variants) {
+    try {
+      const d = await storeGraphQL(st, ORDER_DETAIL_QUERY, { q: filter });
+      const e = d.orders && d.orders.edges && d.orders.edges[0];
+      if (!e) continue;
+      const n = e.node;
+      const money = (x) => x && x.shopMoney ? Number(x.shopMoney.amount) : 0;
+      let ss = null;
+      if (shipstationConfigured()) { try { const f = await shipstationLookup(ssOrderNo(n.name)); ss = Array.isArray(f) ? (f.find((x) => x.order_id) || f[0] || null) : null; } catch { ss = null; } }
+      return {
+        store: st.brand, id: n.id, name: n.name, email: n.email, customer: n.customer && n.customer.displayName, created_at: n.createdAt, cancelled_at: n.cancelledAt, closed: n.closed,
+        financial_status: n.displayFinancialStatus, fulfillment_status: n.displayFulfillmentStatus, note: n.note, tags: n.tags,
+        currency: n.totalPriceSet.shopMoney.currencyCode, total: money(n.totalPriceSet), subtotal: money(n.subtotalPriceSet), shipping: money(n.totalShippingPriceSet), refunded: money(n.totalRefundedSet),
+        shipping_address: n.shippingAddress, 
+        items: (n.lineItems.edges || []).map((x) => ({ id: x.node.id, title: x.node.title, variant: x.node.variantTitle, sku: x.node.sku, quantity: x.node.quantity, refundable_quantity: x.node.refundableQuantity, unit_price: money(x.node.originalUnitPriceSet), line_total: money(x.node.discountedTotalSet), in_stock: x.node.variant ? x.node.variant.availableForSale : null })),
+        fulfillments: (n.fulfillments || []).map((f) => ({ status: f.status, at: f.createdAt, tracking: (f.trackingInfo || []).map((t) => ({ number: t.number, url: t.url, company: t.company })) })),
+        refunds: (n.refunds || []).map((r) => ({ id: r.id, at: r.createdAt, note: r.note, amount: money(r.totalRefundedSet) })),
+        shipstation: ss,
+        can_cancel: !n.cancelledAt && String(n.displayFulfillmentStatus).toUpperCase() !== "FULFILLED" && !(ss && ss.shipped),
+        can_change_address: !n.cancelledAt && String(n.displayFulfillmentStatus).toUpperCase() !== "FULFILLED" && !(ss && ss.shipped),
+        can_refund: !n.cancelledAt && (money(n.totalPriceSet) - money(n.totalRefundedSet)) > 0.009,
+      };
+    } catch (e) { console.error(`  order detail ${st.brand} ${filter} — ${e.message}`); }
+  }
+  return { note: `No order found for "${raw}" in ${stores.map((s) => s.brand).join(", ")}.` };
+}
+async function ssCancel(orderId) {
+  const o = await ssReq("GET", `/orders/${orderId}`);
+  if (!o || !o.orderId) throw new Error(`ShipStation order ${orderId} not found.`);
+  if (o.orderStatus === "shipped") throw new Error(`already shipped`);
+  o.orderStatus = "cancelled";
+  await ssReq("POST", `/orders/createorder`, o);
+  return { ok: true };
+}
+const CANCEL_REASONS = ["CUSTOMER", "DECLINED", "FRAUD", "INVENTORY", "OTHER", "STAFF"];
+async function cancelOrder(o, { reason, refund, restock, notify, note }) {
+  const st = storeByBrand(o.store);
+  const r = await storeGraphQL(st, `mutation($orderId:ID!,$reason:OrderCancelReason!,$refund:Boolean!,$restock:Boolean!,$notify:Boolean,$note:String){
+      orderCancel(orderId:$orderId,reason:$reason,refund:$refund,restock:$restock,notifyCustomer:$notify,staffNote:$note){ job{id} orderCancelUserErrors{field message code} userErrors{field message} } }`,
+    { orderId: o.id, reason: CANCEL_REASONS.includes(String(reason || "").toUpperCase()) ? String(reason).toUpperCase() : "CUSTOMER", refund: refund !== false, restock: restock !== false, notify: !!notify, note: note || null });
+  const ue = [...(r.orderCancel.orderCancelUserErrors || []), ...(r.orderCancel.userErrors || [])];
+  if (ue.length) throw new Error(ue.map((x) => x.message).join("; "));
+  const parts = [`Shopify ${o.name} cancelled${refund !== false ? " + refunded" : ""}${restock !== false ? ", stock returned" : ""}`];
+  if (o.shipstation && o.shipstation.order_id && !o.shipstation.shipped) { try { await ssCancel(o.shipstation.order_id); parts.push("ShipStation cancelled ✅"); } catch (e) { parts.push(`ShipStation ✖ ${e.message} — cancel it there by hand`); } }
+  return { note: parts.join(" · ") };
+}
+// mode: "full" (everything still refundable, incl. shipping) | "items" (chosen line items, + shipping if asked) | "amount" (a dollar figure, no line items)
+async function refundOrder(o, { mode, items, amount, shipping, note, notify, restock }) {
+  const st = storeByBrand(o.store);
+  const lineArgs = mode === "items" ? (items || []).filter((i) => i.line_item_id && Number(i.quantity) > 0).map((i) => ({ lineItemId: i.line_item_id, quantity: Number(i.quantity), restockType: restock === false ? "NO_RESTOCK" : "RETURN" })) : [];
+  if (mode === "items" && !lineArgs.length) throw new Error("Pick at least one item to refund.");
+  const sq = await storeGraphQL(st, `query($id:ID!,$li:[RefundLineItemInput!],$full:Boolean,$ship:RefundShippingInput){ order(id:$id){ suggestedRefund(refundLineItems:$li,suggestFullRefund:$full,refundShipping:$ship){
+      amountSet{shopMoney{amount currencyCode}} maximumRefundableSet{shopMoney{amount}} shipping{amountSet{shopMoney{amount}}}
+      suggestedTransactions{ gateway kind amountSet{shopMoney{amount currencyCode}} parentTransaction{id} }
+      refundLineItems{ lineItem{id} quantity restockType } } } }`,
+    { id: o.id, li: mode === "items" ? lineArgs : null, full: mode === "full", ship: (mode === "full" || (mode === "items" && shipping)) ? { fullRefund: true } : null });
+  const sr = sq.order && sq.order.suggestedRefund;
+  if (!sr) throw new Error("Shopify returned no refund suggestion for this order.");
+  const max = Number(sr.maximumRefundableSet.shopMoney.amount);
+  let target = mode === "amount" ? Number(amount) : Number(sr.amountSet.shopMoney.amount);
+  if (!(target > 0)) throw new Error("Refund amount must be more than $0.");
+  if (target > max + 0.009) throw new Error(`Only $${max.toFixed(2)} is still refundable on ${o.name}.`);
+  const txs = (sr.suggestedTransactions || []).filter((t) => t.parentTransaction && t.parentTransaction.id);
+  if (!txs.length) throw new Error("No refundable payment found on this order (was it paid, or already fully refunded?).");
+  // Spread the target across the suggested transactions (normally there is one).
+  let left = target; const transactions = [];
+  for (const t of txs) { const a = Math.min(left, Number(t.amountSet.shopMoney.amount) || left); if (a <= 0) continue; transactions.push({ orderId: o.id, gateway: t.gateway, kind: "REFUND", amount: a.toFixed(2), parentId: t.parentTransaction.id }); left -= a; if (left <= 0.001) break; }
+  if (left > 0.01) throw new Error(`Could only place $${(target - left).toFixed(2)} of $${target.toFixed(2)} against the original payment.`);
+  const input = { orderId: o.id, note: note || null, notify: !!notify, transactions };
+  if (mode !== "amount") { input.refundLineItems = (sr.refundLineItems || []).map((x) => ({ lineItemId: x.lineItem.id, quantity: x.quantity, restockType: restock === false ? "NO_RESTOCK" : (x.restockType && x.restockType !== "NO_RESTOCK" ? x.restockType : "RETURN") })); if (sr.shipping && Number(sr.shipping.amountSet.shopMoney.amount) > 0) input.shipping = { fullRefund: true }; }
+  const r = await storeGraphQL(st, `mutation($input:RefundInput!){ refundCreate(input:$input){ refund{ id totalRefundedSet{shopMoney{amount currencyCode}} } userErrors{field message} } }`, { input });
+  const ue = r.refundCreate.userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
+  const done = Number(r.refundCreate.refund.totalRefundedSet.shopMoney.amount);
+  return { note: `Refunded $${done.toFixed(2)} on ${o.name}${mode === "items" ? ` (${lineArgs.length} item line${lineArgs.length === 1 ? "" : "s"}${shipping ? " + shipping" : ""})` : mode === "full" ? " (full refund)" : ""}${notify ? " · customer emailed by Shopify" : ""}`, amount: done };
+}
+async function shopifyProposeCancel(input) {
+  if (!input.order) return { error: "Provide the order number." };
+  const o = await orderDetail(input.order);
+  if (o.error || o.note) return o;
+  if (!o.can_cancel) return { note: `Order ${o.name} can't be cancelled — it is ${o.cancelled_at ? "already cancelled" : "already fulfilled/shipped"}. Offer a return instead; do not promise a cancellation.` };
+  const refund = input.refund !== false;
+  await stageAction({ kind: "shopify_propose_cancel", input, title: `Cancel order ${o.name} — ${o.store}`, ticketId: input.ticket_id,
+    summary: `🛑 Cancel ${o.name} ($${o.total.toFixed(2)}, ${o.items.length} item line${o.items.length === 1 ? "" : "s"}) → ${o.email || "?"}${refund ? "\nRefund the payment in full and return stock" : "\nNO refund (cancel only)"}${input.reason ? `\nReason: ${input.reason}` : ""}`,
+    exec: async () => await cancelOrder(o, { reason: input.reason_code || "CUSTOMER", refund, restock: true, notify: false, note: input.reason || `Requested via ticket ${input.ticket_id || "?"}` }) });
+  return { ok: true, staged: true, note: `Staged a cancellation of ${o.name}${refund ? " with a full refund" : ""} for Jose's approval. Nothing happens until he clicks Apply — tell the customer we're taking care of the cancellation; do NOT say it's done or that the refund has been issued.` };
+}
+async function shopifyProposeRefund(input) {
+  if (!input.order) return { error: "Provide the order number." };
+  const o = await orderDetail(input.order);
+  if (o.error || o.note) return o;
+  if (!o.can_refund) return { note: `Order ${o.name} has nothing left to refund ($${o.refunded.toFixed(2)} of $${o.total.toFixed(2)} already refunded${o.cancelled_at ? "; order is cancelled" : ""}).` };
+  const mode = input.amount ? "amount" : (Array.isArray(input.items) && input.items.length ? "items" : "full");
+  let items = [];
+  if (mode === "items") {
+    items = input.items.map((it) => { const m = o.items.find((x) => (it.sku && x.sku === it.sku) || (it.title && x.title.toLowerCase() === String(it.title).toLowerCase())); return m ? { line_item_id: m.id, quantity: Math.min(Number(it.quantity) || m.refundable_quantity || 1, m.refundable_quantity || 1), title: m.title } : null; }).filter(Boolean);
+    if (!items.length) return { error: "None of those items matched the order's line items — pass the exact sku or title from shopify_lookup_order." };
+  }
+  const what = mode === "amount" ? `$${Number(input.amount).toFixed(2)}` : mode === "items" ? items.map((i) => `${i.quantity}× ${i.title}`).join(", ") + (input.shipping ? " + shipping" : "") : `the full remaining amount ($${(o.total - o.refunded).toFixed(2)})`;
+  await stageAction({ kind: "shopify_propose_refund", input, title: `Refund — order ${o.name} (${o.store})`, ticketId: input.ticket_id,
+    summary: `💸 Refund ${what} to the original payment → ${o.email || "?"}${input.reason ? `\nReason: ${input.reason}` : ""}`,
+    exec: async () => await refundOrder(o, { mode, items, amount: input.amount, shipping: !!input.shipping, note: input.reason || `Requested via ticket ${input.ticket_id || "?"}`, notify: false, restock: input.restock !== false }) });
+  return { ok: true, staged: true, note: `Staged a refund of ${what} on ${o.name} for Jose's approval. It will NOT be issued until he clicks Apply — tell the customer the refund is being processed and takes 5–10 business days to appear; do NOT say it has been issued.` };
+}
+
+/* ---- Direct order actions from the Helpdesk app (a person is doing it, so no Slack approval) ---- */
+async function applyOrderAction({ kind, order, input = {}, who = "Helpdesk", ticketId = null }) {
+  const o = await orderDetail(order);
+  if (o.error) throw new Error(o.error);
+  if (o.note) throw new Error(o.note);
+  let result, title, summary;
+  if (kind === "update_address") {
+    const a = input.address || {};
+    if (!(a.street1 && a.city && a.state && a.postal_code)) throw new Error("Street, city, state and ZIP are required.");
+    if (!o.can_change_address) throw new Error(`${o.name} has already shipped or been cancelled — the address can't be changed.`);
+    const addr = { name: a.name, street1: a.street1, street2: a.street2, city: a.city, state: String(a.state).toUpperCase(), postal_code: a.postal_code, country: String(a.country || "US").toUpperCase(), phone: a.phone };
+    title = `Address change — order ${o.name}`; summary = [a.name, a.street1, a.street2, `${a.city}, ${a.state} ${a.postal_code}`, a.country].filter(Boolean).join(" · ");
+    result = await applyAddressChange({ order: o.name }, addr, { st: storeByBrand(o.store), gid: o.id, name: o.name });
+  } else if (kind === "cancel") {
+    if (!o.can_cancel) throw new Error(`${o.name} can't be cancelled — it is ${o.cancelled_at ? "already cancelled" : "already fulfilled/shipped"}.`);
+    title = `Cancel order ${o.name}`; summary = `${input.refund === false ? "no refund" : "full refund"} · ${input.restock === false ? "no restock" : "restock"} · reason ${input.reason_code || "CUSTOMER"}${input.note ? ` · ${input.note}` : ""}`;
+    result = await cancelOrder(o, { reason: input.reason_code, refund: input.refund !== false, restock: input.restock !== false, notify: !!input.notify, note: input.note || `Cancelled from Helpdesk by ${who}${ticketId ? ` (ticket ${ticketId})` : ""}` });
+  } else if (kind === "refund") {
+    if (!o.can_refund) throw new Error(`${o.name} has nothing left to refund.`);
+    title = `Refund — order ${o.name}`; summary = input.mode === "amount" ? `$${Number(input.amount).toFixed(2)}` : input.mode === "items" ? `${(input.items || []).length} item line(s)${input.shipping ? " + shipping" : ""}` : "full refund";
+    result = await refundOrder(o, { mode: input.mode || "full", items: input.items, amount: input.amount, shipping: !!input.shipping, note: input.note || `Refund from Helpdesk by ${who}${ticketId ? ` (ticket ${ticketId})` : ""}`, notify: !!input.notify, restock: input.restock !== false });
+  } else if (kind === "replacement") {
+    const p = await prepareReplacement({ order: o.name, items: input.items, address: input.address, reason: input.reason });
+    if (p.error) throw new Error(p.error); if (p.note) throw new Error(p.note);
+    title = `Replacement order — from ${o.name}`; summary = `${p.itemsSummary} → ${p.shipTo}`;
+    result = await createReplacementOrder(p.st, { email: p.email, shippingAddress: p.shippingAddress, lineItems: p.lineItems, origOrder: o.name, reason: input.reason });
+  } else throw new Error(`Unknown order action "${kind}".`);
+  const id = "act_" + crypto.randomUUID();
+  await recordAction(id, { kind: `helpdesk_${kind}`, title, summary, ticketId, input: { order: o.name, ...input } });
+  await markAction(id, "applied", { by: who, result: result && result.note });
+  if (ticketId) { try { await core.addNote({ ticketId: String(ticketId), text: `⚙️ ${title} — by ${who}\n${summary}\n→ ${result && result.note ? result.note : "done"}`, who }); } catch (e) { console.error("order action note:", e.message); } }
+  try { core.slackPost(`⚙️ *${title}* · by ${who}${ticketId ? ` · ticket ${ticketId}` : ""}\n${summary}\n→ ${result && result.note ? result.note : "done"}`); } catch (_) {}
+  return { ok: true, title, note: result && result.note, order: await orderDetail(o.name) };
 }
 async function createDiscount(st, { kind, value, code, title, minSubtotal }) {
   const startsAt = new Date().toISOString();
@@ -590,9 +756,47 @@ async function customerHistory(email) {
       if (r.kind === "shopify_propose_replacement") out.replacements_given += 1;
       if (r.kind === "shopify_propose_discount") out.discounts_given += 1;
     }
+    try { const cp = await customerProfile(e); out.shopify = { lifetime_orders: cp.lifetime.orders, lifetime_spent: cp.lifetime.spent, store_credit_balance: cp.lifetime.store_credit, customer_since: cp.lifetime.first_order, stores: cp.stores.filter((x) => x.found).map((x) => ({ store: x.store, orders: x.orders_count, spent: x.amount_spent, tags: x.tags, recent_orders: x.orders.slice(0, 5) })) }; } catch (_) {}
     out.note = out.tickets.length ? `${out.tickets.length} previous ticket(s); ${out.goodwill_credits_given} store credit(s), ${out.replacements_given} replacement(s), ${out.discounts_given} discount code(s) already given.` : "No previous tickets on record for this email.";
   } catch (err) { out.error = err.message; }
   return out;
+}
+
+/* ---- Customer profile (what Gorgias showed in its Shopify sidebar): profile per store, purchase summary, lifetime value, recent orders, store credit ---- */
+const CUSTOMER_PROFILE_QUERY = `query($q:String!){customers(first:1,query:$q){edges{node{
+  id firstName lastName displayName phone createdAt tags note numberOfOrders amountSpent{amount currencyCode}
+  defaultEmailAddress{ emailAddress marketingState } defaultAddress{ address1 city provinceCode zip countryCodeV2 }
+  storeCreditAccounts(first:3){edges{node{ balance{amount currencyCode} }}}
+  orders(first:10,sortKey:CREATED_AT,reverse:true){edges{node{ name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus totalPriceSet{shopMoney{amount currencyCode}} }}}
+}}}}`;
+async function customerProfile(email) {
+  const e = String(email || "").trim().toLowerCase();
+  if (!e) return { error: "email required" };
+  const stores = [];
+  for (const st of STORES) {
+    try {
+      const d = await storeGraphQL(st, CUSTOMER_PROFILE_QUERY, { q: `email:${e}` });
+      const n = d.customers && d.customers.edges && d.customers.edges[0] && d.customers.edges[0].node;
+      if (!n) { stores.push({ store: st.brand, found: false }); continue; }
+      const credit = (n.storeCreditAccounts.edges || []).reduce((a, x) => a + Number(x.node.balance.amount || 0), 0);
+      stores.push({
+        store: st.brand, found: true, id: n.id, admin_url: `https://admin.shopify.com/store/${String(st.domain).replace(/\.myshopify\.com$/i, "")}/customers/${String(n.id).split("/").pop()}`,
+        name: n.displayName || [n.firstName, n.lastName].filter(Boolean).join(" "), phone: n.phone, created_at: n.createdAt, tags: n.tags || [], note: n.note,
+        marketing: n.defaultEmailAddress && n.defaultEmailAddress.marketingState, address: n.defaultAddress,
+        orders_count: Number(n.numberOfOrders || 0), amount_spent: Number(n.amountSpent.amount || 0), currency: n.amountSpent.currencyCode, store_credit: credit,
+        orders: (n.orders.edges || []).map((x) => ({ name: x.node.name, at: x.node.createdAt, cancelled: !!x.node.cancelledAt, financial: x.node.displayFinancialStatus, fulfillment: x.node.displayFulfillmentStatus, total: Number(x.node.totalPriceSet.shopMoney.amount) })),
+      });
+    } catch (err) { stores.push({ store: st.brand, found: false, error: err.message }); }
+  }
+  const found = stores.filter((x) => x.found);
+  const tickets = pool ? (await db(`SELECT id, subject, brand, status, created_at, last_message_at, messages_count FROM hd_tickets WHERE lower(customer_email)=$1 ORDER BY last_message_at DESC NULLS LAST LIMIT 8`, [e])).rows : [];
+  const tcount = pool ? (await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE lower(customer_email)=$1`, [e])).rows[0].n : tickets.length;
+  return {
+    email: e, name: found.map((x) => x.name).find(Boolean) || null, phone: found.map((x) => x.phone).find(Boolean) || null,
+    lifetime: { orders: found.reduce((a, x) => a + x.orders_count, 0), spent: found.reduce((a, x) => a + x.amount_spent, 0), store_credit: found.reduce((a, x) => a + x.store_credit, 0), currency: (found[0] && found[0].currency) || "USD", first_order: found.map((x) => x.created_at).filter(Boolean).sort()[0] || null },
+    stores, tickets_count: tcount,
+    tickets: tickets.map((t) => ({ id: String(t.id), subject: t.subject, brand: t.brand, status: t.status, opened: t.created_at, last: t.last_message_at, messages: t.messages_count })),
+  };
 }
 
 /* ---------------- Tools (read + approval-gated writes; used by DM + draft loop) ---------------- */
@@ -609,6 +813,10 @@ const TOOLS = [
     input_schema: { type: "object", properties: { order: { type: "string" }, action: { type: "string" }, name: { type: "string" }, street1: { type: "string" }, street2: { type: "string" }, city: { type: "string" }, state: { type: "string" }, postal_code: { type: "string" }, country: { type: "string" }, phone: { type: "string" }, hold_until: { type: "string" }, ticket_id: { type: "number" } }, required: ["order", "action"] } },
   { name: "shopify_propose_replacement", description: "STAGE a NO-CHARGE replacement order for a Package Protection claim, for Jose's one-click approval (does NOT create anything until he clicks Apply). Copies the original order's ship-to and items (or a subset via items:[{sku?,title?,quantity}]) into a new $0 order with free shipping. Use ONLY for an approved PP resolution where the items are in stock. Never quote a new order number to the customer until approved. Pass the original order number and ticket_id.",
     input_schema: { type: "object", properties: { order: { type: "string" }, items: { type: "array", items: { type: "object", properties: { sku: { type: "string" }, title: { type: "string" }, quantity: { type: "number" } } } }, reason: { type: "string" }, email: { type: "string" }, ticket_id: { type: "number" } }, required: ["order"] } },
+  { name: "shopify_propose_cancel", description: "STAGE a cancellation of an UNSHIPPED order for Jose's one-click approval (does NOT cancel until he clicks Apply). Use when the customer asks to cancel an order that has not been fulfilled/shipped (check shopify_lookup_order / shipstation_lookup first). By default the payment is refunded in full and stock is returned; pass refund=false only if the customer explicitly wants to keep a credit instead. If the order has already shipped, do NOT use this — explain it's on its way and lay out the return options. Pass the order number, a short reason, and ticket_id. Never tell the customer it's done — say we're taking care of it.",
+    input_schema: { type: "object", properties: { order: { type: "string" }, reason: { type: "string" }, reason_code: { type: "string", description: "CUSTOMER (default) | INVENTORY | OTHER" }, refund: { type: "boolean" }, ticket_id: { type: "number" } }, required: ["order"] } },
+  { name: "shopify_propose_refund", description: "STAGE a refund to the customer's ORIGINAL PAYMENT for Jose's one-click approval (does NOT refund until he clicks Apply). Three ways: no items and no amount = refund everything still refundable (items + shipping); items:[{sku or title, quantity}] = refund just those lines (add shipping=true to include shipping); amount = a specific dollar figure (partial/goodwill refund). Use for approved returns received, damaged/missing items the customer wants money back for, or an approved partial refund — NOT for store credit (use shopify_propose_store_credit) and NOT to cancel an unshipped order (use shopify_propose_cancel). CALL customer_history first. Pass the order number, a reason, and ticket_id. Tell the customer the refund is being processed and takes 5–10 business days to show — never say it has been issued.",
+    input_schema: { type: "object", properties: { order: { type: "string" }, items: { type: "array", items: { type: "object", properties: { sku: { type: "string" }, title: { type: "string" }, quantity: { type: "number" } } } }, amount: { type: "number" }, shipping: { type: "boolean" }, restock: { type: "boolean" }, reason: { type: "string" }, ticket_id: { type: "number" } }, required: ["order"] } },
   { name: "shopify_propose_discount", description: "STAGE a single-use discount CODE for the customer, for Jose's one-click approval (does NOT create until he clicks Apply). kind='percentage' (value=percent, e.g. 10) | 'fixed' (value=dollars off) | 'free_shipping' (optional min_subtotal). Route by passing the order number OR a brand (Larkspur Baby / Outlet / Bumbunny). Use for approved goodwill discounts or a free-shipping courtesy. Optionally pass a code; otherwise one is generated. Pass ticket_id.",
     input_schema: { type: "object", properties: { order: { type: "string" }, brand: { type: "string" }, kind: { type: "string" }, value: { type: "number" }, code: { type: "string" }, min_subtotal: { type: "number" }, title: { type: "string" }, ticket_id: { type: "number" } }, required: ["kind"] } },
   { name: "shopify_propose_store_credit", description: "STAGE a NATIVE Shopify store-credit change on the customer's account for Jose's one-click approval (does NOT execute until he clicks Apply). action='credit' (default) ADDS real store credit to the account balance — NOT a code; it applies automatically at checkout when the customer is signed in with that email (Shopify auto-creates the account if needed). Use credit for any approved STORE-CREDIT resolution (Package Protection lost/stolen credit, goodwill credit, non-PP 50% good-faith credit). action='debit' REMOVES store credit from the account — use ONLY to correct an over-credit / duplicate credit (e.g. the same credit was applied twice); a debit is an internal correction, so do NOT email the customer about it. Pass amount (dollars) and the order number (preferred — routes the store and finds the customer) or brand + email; optional reason; ticket_id. For a credit, word your reply as account credit, never a code.",
@@ -629,6 +837,8 @@ async function runTool(name, input) {
     if (name === "shipstation_propose_change") return await shipstationProposeChange(input);
     if (name === "shopify_propose_replacement") return await shopifyProposeReplacement(input);
     if (name === "shopify_propose_discount") return await shopifyProposeDiscount(input);
+    if (name === "shopify_propose_cancel") return await shopifyProposeCancel(input);
+    if (name === "shopify_propose_refund") return await shopifyProposeRefund(input);
     if (name === "shopify_propose_store_credit") return await shopifyProposeStoreCredit(input);
     if (name === "customer_history") return await customerHistory(input.email);
     if (name === "helpdesk_recent_tickets") {
@@ -838,17 +1048,33 @@ function onInboundMessage(ticketId) {
 }
 // Safety sweep: anything where the customer is waiting and Emily hasn't drafted since they wrote.
 let sweepBusy = false;
+// Emily only sweeps mail that arrived after she went live in the Helpdesk ("sweep_since"). Anything older was
+// already handled by the previous Emily or is Jose's to pick up in the app — otherwise every restart would
+// walk the whole backlog and flood Slack with cards. New replies on old tickets still count as new mail.
+let sweepSince = null;
+async function sweepFloor() {
+  if (sweepSince) return sweepSince;
+  const v = await core.setting("sweep_since", null);
+  if (v) { sweepSince = new Date(v); return sweepSince; }
+  sweepSince = new Date();
+  try { await db(`INSERT INTO emily_settings (key,value,updated_by) VALUES ('sweep_since',$1::jsonb,'system') ON CONFLICT (key) DO NOTHING`, [JSON.stringify(sweepSince.toISOString())]); }
+  catch (e) { console.error("sweep_since:", e.message); }
+  console.log(`✍️  Emily sweep floor set: only mail after ${sweepSince.toISOString()}`);
+  return sweepSince;
+}
 async function sweep() {
   if (sweepBusy || !DRAFT_ON || !anthropic || !pool) return;
   sweepBusy = true;
   try {
+    const since = await sweepFloor();
     const r = await db(`SELECT t.id FROM hd_tickets t
                          WHERE NOT t.spam AND t.status='open' AND t.last_inbound_at IS NOT NULL
                            AND (t.last_outbound_at IS NULL OR t.last_inbound_at > t.last_outbound_at)
                            AND t.last_inbound_at > now() - ($1||' days')::interval
+                           AND t.last_inbound_at > $3
                            AND NOT (t.tags && $2::text[])
                            AND NOT EXISTS (SELECT 1 FROM emily_drafts d WHERE d.ticket_id = t.id::text AND d.created_at >= t.last_inbound_at)
-                         ORDER BY t.last_inbound_at ASC LIMIT 6`, [MAX_AGE_DAYS, JUNK_TAGS]);
+                         ORDER BY t.last_inbound_at ASC LIMIT 6`, [MAX_AGE_DAYS, JUNK_TAGS, since]);
     let n = 0;
     for (const row of r.rows) { try { const res = await handleTicket(row.id); if (res && res.category) n++; } catch (e) { console.error(`sweep ${row.id}:`, e.message); } }
     if (r.rows.length) console.log(`Emily sweep: ${r.rows.length} waiting · ${n} drafted`);
@@ -1063,7 +1289,8 @@ async function maybeRedraftCommand(text) {
   return r && r.category === "cs" ? `🔁 Redrafted ticket ${id}${guidance ? ` with your notes` : ""} — new card in <#${APPROVALS_CH}>.` : `Looked at ticket ${id} — ${r && (r.skipped || r.category) || "nothing to draft"}.`;
 }
 const RESTAGE = { shipstation_propose_change: (i) => shipstationProposeChange(i), shopify_propose_replacement: (i) => shopifyProposeReplacement(i),
-                  shopify_propose_discount: (i) => shopifyProposeDiscount(i), shopify_propose_store_credit: (i) => shopifyProposeStoreCredit(i) };
+                  shopify_propose_discount: (i) => shopifyProposeDiscount(i), shopify_propose_store_credit: (i) => shopifyProposeStoreCredit(i),
+                  shopify_propose_cancel: (i) => shopifyProposeCancel(i), shopify_propose_refund: (i) => shopifyProposeRefund(i) };
 function wireSlack() {
   app.message(async ({ message, say }) => {
     if (message.subtype || message.bot_id || message.channel_type !== "im") return;
@@ -1226,10 +1453,10 @@ async function start() {
     console.log("Emily: Slack tokens not set — approvals live only in Helpdesk");
   }
   core.onInbound((ticketId) => onInboundMessage(ticketId));
-  if (DRAFT_ON && anthropic) { setTimeout(sweep, 15000); setInterval(sweep, SWEEP_MS); console.log(`✍️  Emily drafting: on new mail + sweep every ${SWEEP_MS / 60000}m · model ${CLAUDE_MODEL}`); }
+  if (DRAFT_ON && anthropic) { sweepFloor().catch(() => {}); setTimeout(sweep, 15000); setInterval(sweep, SWEEP_MS); console.log(`✍️  Emily drafting: on new mail + sweep every ${SWEEP_MS / 60000}m · model ${CLAUDE_MODEL}`); }
   else console.log(`✍️  Emily drafting: OFF (${!anthropic ? "no ANTHROPIC_API_KEY" : "DRAFT_LOOP=off"})`);
-  if (OOS_ON) { setTimeout(oosRepostStaged, 10000); setTimeout(runOosLoop, 20000); setInterval(runOosLoop, OOS_INTERVAL); console.log(`📦❌ Out-of-stock hand-off: on (every ${OOS_INTERVAL / 1000}s)`); }
+  if (OOS_ON) { setTimeout(runOosLoop, 20000); setInterval(runOosLoop, OOS_INTERVAL); console.log(`📦❌ Out-of-stock hand-off: on (every ${OOS_INTERVAL / 1000}s)`); }
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { start, decide, onHumanReply, handleTicket, customerHistory };
+module.exports = { start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder };

@@ -24,7 +24,9 @@ const keyFrom = (req) => (req.query.key || (req.body && req.body.key) || (req.he
 const actorOf = (req) => userFromKey(keyFrom(req)) || "unknown";
 function guard(req, res) { if (!userFromKey(keyFrom(req))) { res.status(401).json({ error: "unauthorized" }); return false; } return true; }
 app.use(express.static(path.join(__dirname, "public"), { setHeaders: (res, p) => { if (p.endsWith("index.html")) res.setHeader("Cache-Control", "no-cache"); } }));
-app.get("/health", (_q, r) => r.json({ ok: true }));
+const VERSION = require("./package.json").version;
+app.get("/health", (_q, r) => r.json({ ok: true, version: VERSION }));
+app.get("/api/version", (_q, r) => r.json({ version: VERSION, major: "v" + VERSION.split(".")[0] }));
 app.get("/api/role", (req, res) => res.json({ ok: !!userFromKey(keyFrom(req)), user: userFromKey(keyFrom(req)) }));
 
 // Pending = the customer is waiting on us. Sent = we answered last. Closed = done.
@@ -56,6 +58,28 @@ function viewClause(view, args) {
     default: return "TRUE";
   }
 }
+
+
+/* ---- orders: look up and act on a Shopify order from a ticket (address / cancel / refund / replacement) ---- */
+app.get("/api/order/:name", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const o = await require("./emily").orderDetail(req.params.name); if (o.error) return res.status(400).json(o); if (o.note) return res.status(404).json(o); res.json(o); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/customer", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const r = await require("./emily").customerProfile(String(req.query.email || "")); if (r.error) return res.status(400).json(r); res.json(r); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/order/action", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const { kind, order, ticketId, input } = req.body || {};
+    if (!kind || !order) return res.status(400).json({ error: "kind and order are required" });
+    const r = await require("./emily").applyOrderAction({ kind, order, input: input || {}, who: actorOf(req), ticketId: ticketId ? String(ticketId) : null });
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 /* ---- queue ---- */
 app.get("/api/tickets", async (req, res) => {
@@ -392,7 +416,7 @@ const PORT = process.env.PORT || 8080;
 (async () => {
   if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); } catch (e) { console.error("migrate failed:", e.message); } }
   app.listen(PORT, () => {
-    console.log(`📨 Helpdesk on :${PORT}`);
+    console.log(`📨 Helpdesk v${VERSION} on :${PORT}`);
     console.log(`🔎 boot → users:${USERS.map((u) => u.name).join("/") || "(none)"}${KEY ? "+admin-key" : ""} · db:${pool ? "set" : "MISSING"} · gorgias-import:${core.G_DOMAIN || "off"} · gmail-oauth:${gmailConfigured() ? `${core.OAUTH_CLIENTS.length} client${core.OAUTH_CLIENTS.length === 1 ? "" : "s"}` : "not configured"} · slack:${process.env.SLACK_BOT_TOKEN || process.env.EMILY_SLACK_BOT_TOKEN ? "set" : "off"}`);
   });
   if (pool && gmailConfigured()) {
