@@ -136,6 +136,7 @@ async function migrate() {
     last_poll_at TIMESTAMPTZ,
     last_error TEXT
   )`);
+  await db(`ALTER TABLE hd_mailboxes ADD COLUMN IF NOT EXISTS client_id TEXT`);
   await db(`CREATE SEQUENCE IF NOT EXISTS hd_local_ticket_seq START 9000000000`);
   try { await db(`CREATE EXTENSION IF NOT EXISTS pg_trgm`); } catch (e) { console.warn("pg_trgm unavailable — search falls back to plain ILIKE:", e.message); }
   try { await db(`CREATE INDEX IF NOT EXISTS idx_hdt_subject_trgm ON hd_tickets USING gin (subject gin_trgm_ops)`); } catch (e) {}
@@ -176,6 +177,10 @@ const BRAND_MAILBOX = {
   bumbunny: process.env.MAILBOX_BUMBUNNY || "hello@bumbunnybaby.com",
   larkspur: process.env.MAILBOX_LARKSPUR || "hello@larkspurbaby.com",
 };
+// The mailboxes we actually run. BumBunny is retired, so it is no longer offered for connection —
+// its old tickets still read fine, they just have no live mailbox behind them. Override with MAILBOXES.
+const ACTIVE_MAILBOXES = String(process.env.MAILBOXES || `${BRAND_MAILBOX.larkspur},${BRAND_MAILBOX.outlet}`)
+  .split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 function brandForAddress(a) {
   const d = String(a || "").toLowerCase();
   if (/outlet/.test(d)) return "Larkspur Baby Outlet";
@@ -328,28 +333,58 @@ async function runImport({ resume = true } = {}) {
  * tokens are fetched on demand and kept in memory. Reading is incremental via Gmail's history feed, so
  * each poll costs one call when nothing has arrived. Sending goes out through Google exactly as if it
  * were sent from the mailbox itself — same SPF/DKIM, same deliverability, no new DNS. */
-const G_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
-const G_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
 const OAUTH_REDIRECT = process.env.OAUTH_REDIRECT || "";
 const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/userinfo.email"];
-const gmailConfigured = () => !!(G_CLIENT_ID && G_CLIENT_SECRET && OAUTH_REDIRECT);
+// One OAuth client covers every mailbox inside a single Google Workspace organisation. Brands on
+// SEPARATE Workspace accounts each need their own client, because an "Internal" app can only be
+// authorised by users of the organisation that owns it. GOOGLE_OAUTH_CLIENTS holds those extras:
+//   [{"client_id":"…","client_secret":"…","domains":["larkspurbabyoutlet.com"]}, …]
+// The single GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET pair stays the default for anything unmatched.
+function loadOauthClients() {
+  const out = [];
+  try {
+    const raw = JSON.parse(process.env.GOOGLE_OAUTH_CLIENTS || "[]");
+    for (const c of Array.isArray(raw) ? raw : []) {
+      if (c && c.client_id && c.client_secret) {
+        out.push({ client_id: c.client_id, client_secret: c.client_secret, domains: (c.domains || []).map((d) => String(d).toLowerCase()) });
+      }
+    }
+  } catch (e) { console.error("GOOGLE_OAUTH_CLIENTS is not valid JSON — ignoring it:", e.message); }
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    out.push({ client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, domains: [] });
+  }
+  return out;
+}
+const OAUTH_CLIENTS = loadOauthClients();
+const domainOf = (a) => String(a || "").toLowerCase().split("@").pop();
+function clientForAddress(address) {
+  const d = domainOf(address);
+  return OAUTH_CLIENTS.find((c) => c.domains.includes(d)) || OAUTH_CLIENTS.find((c) => !c.domains.length) || OAUTH_CLIENTS[0] || null;
+}
+const clientById = (id) => OAUTH_CLIENTS.find((c) => c.client_id === id) || null;
+const gmailConfigured = () => !!(OAUTH_CLIENTS.length && OAUTH_REDIRECT);
 const accessTokens = new Map();   // address -> { token, exp }
 
 function formEncode(o) { return Object.entries(o).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&"); }
-async function exchangeCode(code) {
+async function exchangeCode(code, client) {
+  const c = client || OAUTH_CLIENTS[0];
+  if (!c) throw new Error("no Google OAuth client configured");
   return httpJson("https://oauth2.googleapis.com/token", {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formEncode({ code, client_id: G_CLIENT_ID, client_secret: G_CLIENT_SECRET, redirect_uri: OAUTH_REDIRECT, grant_type: "authorization_code" }),
+    body: formEncode({ code, client_id: c.client_id, client_secret: c.client_secret, redirect_uri: OAUTH_REDIRECT, grant_type: "authorization_code" }),
   });
 }
 async function accessTokenFor(address) {
   const hit = accessTokens.get(address);
   if (hit && hit.exp > Date.now() + 60000) return hit.token;
-  const r = (await db(`SELECT refresh_token FROM hd_mailboxes WHERE lower(address)=lower($1)`, [address])).rows[0];
+  const r = (await db(`SELECT refresh_token, client_id FROM hd_mailboxes WHERE lower(address)=lower($1)`, [address])).rows[0];
   if (!r || !r.refresh_token) throw new Error(`${address} is not connected to Gmail yet`);
+  // Refresh with the SAME client that issued the token — a token from one client is meaningless to another.
+  const c = clientById(r.client_id) || clientForAddress(address);
+  if (!c) throw new Error(`no Google OAuth client configured for ${address}`);
   const j = await httpJson("https://oauth2.googleapis.com/token", {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formEncode({ refresh_token: r.refresh_token, client_id: G_CLIENT_ID, client_secret: G_CLIENT_SECRET, grant_type: "refresh_token" }),
+    body: formEncode({ refresh_token: r.refresh_token, client_id: c.client_id, client_secret: c.client_secret, grant_type: "refresh_token" }),
   });
   accessTokens.set(address, { token: j.access_token, exp: Date.now() + (Number(j.expires_in || 3600) * 1000) });
   return j.access_token;
@@ -719,18 +754,22 @@ app.get("/api/mailboxes", async (req, res) => {
   if (!guard(req, res)) return;
   try {
     const r = await db(`SELECT address, brand, (refresh_token IS NOT NULL) AS connected, connected_by, connected_at, last_poll_at, last_error FROM hd_mailboxes ORDER BY address`);
-    const known = [BRAND_MAILBOX.larkspur, BRAND_MAILBOX.outlet, BRAND_MAILBOX.bumbunny];
     const have = new Set(r.rows.map((x) => x.address.toLowerCase()));
-    const missing = known.filter((a) => !have.has(a.toLowerCase())).map((a) => ({ address: a, brand: brandForAddress(a), connected: false }));
-    res.json({ mailboxes: [...r.rows, ...missing], oauth_ready: gmailConfigured() });
+    const missing = ACTIVE_MAILBOXES.filter((a) => !have.has(a)).map((a) => ({ address: a, brand: brandForAddress(a), connected: false }));
+    // Anything connected that is no longer an active mailbox is shown as retired, not offered again.
+    const rows = r.rows.map((x) => ({ ...x, retired: !ACTIVE_MAILBOXES.includes(x.address.toLowerCase()) }));
+    res.json({ mailboxes: [...rows, ...missing], oauth_ready: gmailConfigured() });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.get("/oauth/gmail/start", (req, res) => {
   if (!guard(req, res)) return;
   if (!gmailConfigured()) return res.status(503).send("Google OAuth isn't configured yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / OAUTH_REDIRECT).");
-  const state = b64urlEncode(JSON.stringify({ k: keyFrom(req), n: crypto.randomBytes(6).toString("hex") }));
+  const address = String(req.query.address || "");
+  const client = clientForAddress(address);
+  if (!client) return res.status(503).send("No Google OAuth client is configured for that mailbox.");
+  const state = b64urlEncode(JSON.stringify({ k: keyFrom(req), c: client.client_id, n: crypto.randomBytes(6).toString("hex") }));
   const url = "https://accounts.google.com/o/oauth2/v2/auth?" + formEncode({
-    client_id: G_CLIENT_ID, redirect_uri: OAUTH_REDIRECT, response_type: "code", access_type: "offline",
+    client_id: client.client_id, redirect_uri: OAUTH_REDIRECT, response_type: "code", access_type: "offline",
     prompt: "consent", include_granted_scopes: "true", scope: GMAIL_SCOPES.join(" "), state,
     login_hint: String(req.query.address || ""),
   });
@@ -739,18 +778,22 @@ app.get("/oauth/gmail/start", (req, res) => {
 app.get("/oauth/gmail/callback", async (req, res) => {
   try {
     if (req.query.error) return res.status(400).send(`Google said: ${req.query.error}`);
-    let who = "unknown";
-    try { who = userFromKey(JSON.parse(b64urlDecode(String(req.query.state || ""))).k) || "unknown"; } catch (e) {}
+    let who = "unknown", usedClient = null;
+    try {
+      const st = JSON.parse(b64urlDecode(String(req.query.state || "")));
+      who = userFromKey(st.k) || "unknown";
+      usedClient = clientById(st.c);
+    } catch (e) {}
     if (who === "unknown") return res.status(401).send("That link didn't carry a valid access key — start again from Settings.");
-    const tok = await exchangeCode(String(req.query.code || ""));
+    const tok = await exchangeCode(String(req.query.code || ""), usedClient);
     if (!tok.refresh_token) return res.status(400).send("Google didn't return a refresh token. Remove this app at myaccount.google.com/permissions and connect again.");
     const prof = await httpJson("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: { Authorization: `Bearer ${tok.access_token}` } });
     const address = String(prof.emailAddress || "").toLowerCase();
     await db(
-      `INSERT INTO hd_mailboxes (address,brand,refresh_token,connected_by,connected_at) VALUES ($1,$2,$3,$4,now())
+      `INSERT INTO hd_mailboxes (address,brand,refresh_token,client_id,connected_by,connected_at) VALUES ($1,$2,$3,$4,$5,now())
        ON CONFLICT (address) DO UPDATE SET refresh_token=EXCLUDED.refresh_token, brand=EXCLUDED.brand,
-         connected_by=EXCLUDED.connected_by, connected_at=now(), last_error=NULL`,
-      [address, brandForAddress(address), tok.refresh_token, who]);
+         client_id=EXCLUDED.client_id, connected_by=EXCLUDED.connected_by, connected_at=now(), last_error=NULL`,
+      [address, brandForAddress(address), tok.refresh_token, (usedClient || clientForAddress(address) || {}).client_id || null, who]);
     slackPost(`📬 ${address} connected to the console by ${who} — mail now flows in directly.`);
     setTimeout(() => pollMailbox(address).catch(() => {}), 1000);
     res.send(`<body style="font-family:system-ui;background:#0b1220;color:#e6edf6;padding:40px"><h2>✅ ${address} connected</h2><p>Mail for this mailbox now lands in the console. You can close this tab.</p></body>`);
@@ -767,7 +810,7 @@ const PORT = process.env.PORT || 8080;
   if (pool) { try { await migrate(); console.log("🗄️  Postgres schema ready"); } catch (e) { console.error("migrate failed:", e.message); } }
   app.listen(PORT, () => {
     console.log(`📨 Emily Console on :${PORT}`);
-    console.log(`🔎 boot → users:${USERS.map((u) => u.name).join("/") || "(none)"}${KEY ? "+admin-key" : ""} · db:${pool ? "set" : "MISSING"} · gorgias:${G_DOMAIN || "off"} · gmail-oauth:${gmailConfigured() ? "ready" : "not configured"} · slack:${SLACK_TOKEN ? "set" : "off"}`);
+    console.log(`🔎 boot → users:${USERS.map((u) => u.name).join("/") || "(none)"}${KEY ? "+admin-key" : ""} · db:${pool ? "set" : "MISSING"} · gorgias:${G_DOMAIN || "off"} · gmail-oauth:${gmailConfigured() ? `${OAUTH_CLIENTS.length} client${OAUTH_CLIENTS.length === 1 ? "" : "s"}` : "not configured"} · slack:${SLACK_TOKEN ? "set" : "off"}`);
   });
   if (pool && gmailConfigured()) {
     const every = Number(process.env.GMAIL_POLL_SEC || 45) * 1000;
