@@ -394,7 +394,7 @@ function emilyCard(d){
       <span style="margin-left:auto;font-size:12px;color:#7c8ba1">${fmt(e.created_at)}</span>
     </div>
     <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;margin-bottom:10px">${esc(e.draft||"").replace(/\{\{\s*(DISCOUNT_)?CODE\s*\}\}/gi,'<mark class="ph">code — created when you approve</mark>')}</div>
-    ${actionsBlock(d)}
+    ${actionsBlock(d)}${todoBlock(d)}${(d.pending_files||[]).length?`<div class="acts-em" style="border-color:#158048"><div class="acts-h" style="color:#158048">Attached to your reply</div>${d.pending_files.map(f=>`<div class="act"><span class="t"><b>📎 ${esc(f.name)}</b><small>goes out with the next reply on this ticket</small></span></div>`).join("")}</div>`:""}
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="emilyDecide(${d.id},'approve')">✅ Approve &amp; send</button>
       <button class="btn sec" onclick="emilyUseDraft(${JSON.stringify(e.draft||"").replace(/"/g,"&quot;")})">✏️ Edit first</button>
@@ -422,8 +422,18 @@ function actionsBlock(d){
     return `<div class="act bad"><span class="t"><b>⚠️ ${esc(a.title)} — failed</b><small>${esc(a.result||"")}</small></span></div>`;
   }).join("")}</div>`;
 }
+// Promises in the draft that no tool will carry out — a person has to do them.
+function todoBlock(d){
+  const e=d.emily_draft; const items=(e&&Array.isArray(e.todo))?e.todo:[]; if(!items.length) return "";
+  return `<div class="acts-em" style="border-color:#e0a643"><div class="acts-h" style="color:#b7791f">This reply commits you to</div>${items.map((t,i)=>`<div class="act ${t.state==="done"?"ok":t.state==="wont"?"bad":""}"><span class="t"><b>${t.state==="done"?"☑️":t.state==="wont"?"✖":"☐"} ${esc(t.what)}</b>${t.state!=="open"?`<small>${t.state==="done"?"done":"won't do"}${t.by?` · ${esc(t.by)}`:""}</small>`:`<small class="hint">This is yours to do by hand (e.g. in Shopify or ShipStation) — then mark it here, or edit the draft so it doesn't promise it.</small>`}</span>${t.state==="open"?`<span class="bt"><button class="btn sec xs" onclick="todoSet(${e.id},${i},'done',${d.id})">Done</button><button class="btn sec xs" onclick="todoSet(${e.id},${i},'wont',${d.id})">Won't do</button></span>`:""}</div>`).join("")}</div>`;
+}
+async function todoSet(draftId,index,state,ticketId){
+  try{ const r=await api("/api/emily/todo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft_id:draftId,index,state})}); if(r.error){toast(r.error,true);return;} openTicket(ticketId); }catch(e){toast("Failed",true);}
+}
+
 async function emilyAction(id,what,ticketId){
-  try{ const r=await api("/api/emily/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,do:what})});
+  const wEl=$("w-"+id); const overrides=wEl&&Number(wEl.value)>0?{weight_oz:Number(wEl.value)}:undefined;
+  try{ const r=await api("/api/emily/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,do:what,overrides})});
     if(r.error){toast(r.error,true);return;} toast(what==="apply"?(r.note||"Applied ✓"):"Dismissed"); openTicket(ticketId);
   }catch(e){toast("Failed",true);}
 }
@@ -431,7 +441,8 @@ async function emilyAction(id,what,ticketId){
 async function emilyDecide(id,action,text){
   try{
     const applyActions=(action==="approve"||action==="edit")?[...document.querySelectorAll("#emilycard .act-apply:checked")].map(x=>x.value):[];
-    const r=await api("/api/emily/decide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,action,text:text||"",applyActions})});
+    const overrides={}; for(const a of applyActions){const w=$("w-"+a); if(w&&Number(w.value)>0)overrides[a]={weight_oz:Number(w.value)};}
+    const r=await api("/api/emily/decide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,action,text:text||"",applyActions,overrides})});
     if(r.error||r.ok===false){toast(r.error||"Couldn't do that",true);return;}
     toast(action==="approve"?(r.applied&&r.applied.length?`Applied ${r.applied.length} action${r.applied.length===1?"":"s"} and sent ✓`:"Sent ✓"):action==="skip"?"Skipped":action==="redraft"?"Emily is redrafting — give her a moment":"Done");
     setTimeout(()=>openTicket(id), action==="redraft"?4000:400); loadCounts();
@@ -565,11 +576,11 @@ function orderModal(kind){
 }
 
 /* ---------- Customer profile (Shopify + ticket history), like the Gorgias sidebar ---------- */
-async function loadCustomer(email){
+async function loadCustomer(email,orderHint){
   const pnl=$("custpanel"); if(!pnl)return;
   if(!email){pnl.innerHTML="";return;}
   try{
-    const c=await api("/api/customer?email="+encodeURIComponent(email));
+    const c=await api("/api/customer?email="+encodeURIComponent(email)+(orderHint?"&order="+encodeURIComponent(orderHint):""));
     const L=c.lifetime||{}; const cur=L.currency||"USD";
     const stores=(c.stores||[]).filter(x=>x.found);
     if(!ORDER){const recent=stores.flatMap(st=>st.orders).sort((a,b)=>new Date(b.at)-new Date(a.at))[0]; if(recent)loadOrder(recent.name);}
@@ -586,6 +597,8 @@ async function loadCustomer(email){
         <div style="margin-top:6px">${st.orders.map(o=>`<div class="orow"><button onclick="loadOrder('${esc(o.name)}')">${esc(o.name)}</button><small>${fmtShort(o.at)}</small><span>${o.cancelled?'<span class="chip skip">cancelled</span>':pillFor(o.fulfillment)}</span><span style="font-weight:600">${money(o.total,st.currency)}</span></div>`).join("")||'<span style="color:var(--muted)">no orders</span>'}</div>
       </div>`).join("")}
       ${!stores.length?`<div style="color:var(--muted);font-size:12.5px;margin-top:6px">No Shopify customer with this email${notFound.length?` in ${notFound.join(" or ")}`:""}.</div>`:""}
+      ${(c.stores||[]).filter(x=>x.error).map(x=>`<div style="color:#c0392b;font-size:12px;margin-top:6px">⚠️ ${esc(x.store)}: Shopify said "${esc(String(x.error).slice(0,220))}"</div>`).join("")}
+      ${stores.filter(x=>x.credit_error).map(x=>`<div style="color:var(--muted);font-size:11.5px;margin-top:4px">Store credit unavailable for ${esc(x.store)} — the Emily app needs the read_store_credit_accounts scope.</div>`).join("")}
       <div class="store"><div class="sh"><span>🎫 ${c.tickets_count} ticket${c.tickets_count===1?"":"s"}</span></div>
         ${(c.tickets||[]).map(t=>`<div class="trow" onclick="openTicket(${t.id})"><span class="s">${t.id==CUR?"▸ ":""}${esc(t.subject||"(no subject)")}</span><small>${fmtShort(t.last||t.opened)} · ${esc(t.status)}</small></div>`).join("")}
       </div>
@@ -657,7 +670,7 @@ async function openTicket(id){
       </div>`;
     MODE="reply"; const mb=$("msgs"); if(mb)mb.scrollTop=mb.scrollHeight;
     if(d.orders&&d.orders.length) loadOrder(d.orders[0]); else if(ORDER&&$("orderpanel")){renderOrder();}
-    loadCustomer(d.customer.email);
+    loadCustomer(d.customer.email,(d.orders&&d.orders[0])||"");
   }catch(e){ th.innerHTML='<div class="empty">Couldn\'t load this ticket.</div>'; }
 }
 function closeThread(){document.body.classList.remove("viewing");CUR=null;loadList();}
