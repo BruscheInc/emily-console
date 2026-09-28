@@ -119,7 +119,7 @@
   <button class="tab" data-tab="all" onclick="setTab('all')">All <span class="n" id="n-all"></span></button>
   <select id="brand" onchange="loadList()">
     <option value="">All brands</option>
-    <option>Larkspur Baby</option><option>Larkspur Baby Outlet</option><option>BumBunny Baby</option>
+    <option>Larkspur Baby</option><option>Larkspur Baby Outlet</option><option>BumBunny Baby</option><!-- BumBunny is retired; kept so its history stays searchable -->
   </select>
   <input class="search" id="q" placeholder="Search name, subject…" oninput="debouncedList()">
 </div>
@@ -190,7 +190,7 @@ async function loadMailboxes(){
       <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line,#1e2a3a)">
         <div style="flex:1;min-width:0">
           <div><b>${esc(m.address)}</b></div>
-          <div style="font-size:12px;color:#7c8ba1">${esc(m.brand||"")}${m.connected?` · connected${m.connected_by?` by ${esc(m.connected_by)}`:""}${m.last_poll_at?` · checked ${fmt(m.last_poll_at)}`:""}`:" · not connected"}${m.last_error?` · <span style="color:#ff8686">${esc(m.last_error)}</span>`:""}</div>
+          <div style="font-size:12px;color:#7c8ba1">${esc(m.brand||"")}${m.retired?" · retired":""}${m.connected?` · connected${m.connected_by?` by ${esc(m.connected_by)}`:""}${m.last_poll_at?` · checked ${fmt(m.last_poll_at)}`:""}`:" · not connected"}${m.last_error?` · <span style="color:#ff8686">${esc(m.last_error)}</span>`:""}</div>
         </div>
         ${d.oauth_ready
           ? `<a class="btn" style="text-decoration:none" href="/oauth/gmail/start?address=${encodeURIComponent(m.address)}&key=${encodeURIComponent(KEY)}">${m.connected?"Reconnect":"Connect Gmail"}</a>`
