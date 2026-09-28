@@ -384,7 +384,15 @@ app.get("/oauth/gmail/start", (req, res) => {
 });
 app.get("/oauth/gmail/callback", async (req, res) => {
   try {
-    if (req.query.error) return res.status(400).send(`Google said: ${req.query.error}`);
+    if (req.query.error) {
+      const hints = {
+        org_internal: "This Google project only allows accounts from its own Google Workspace. The mailbox you signed in with belongs to a different Workspace — it needs its own OAuth client (set in GOOGLE_OAUTH_CLIENTS), or the project's OAuth consent screen must be set to External.",
+        access_denied: "Google refused the sign-in. Either you clicked Cancel, or the project's consent screen is in Testing mode and this mailbox isn't listed as a test user (Google Cloud → APIs & Services → OAuth consent screen → Test users).",
+        redirect_uri_mismatch: `The OAuth client doesn't list ${OAUTH_REDIRECT} as an authorized redirect URI.`,
+        admin_policy_enforced: "Your Google Workspace admin has blocked third-party apps for this account. In admin.google.com → Security → API controls, allow this app.",
+      };
+      return res.status(400).send(`<body style="font-family:system-ui;padding:40px;max-width:640px"><h2>Google said: ${String(req.query.error)}</h2><p>${hints[String(req.query.error)] || String(req.query.error_description || "")}</p><p><a href="/">Back to Helpdesk</a></p></body>`);
+    }
     let who = "unknown", usedClient = null;
     try {
       const st = JSON.parse(b64urlDecode(String(req.query.state || "")));
@@ -406,6 +414,10 @@ app.get("/oauth/gmail/callback", async (req, res) => {
     res.send(`<body style="font-family:system-ui;background:#0b1220;color:#e6edf6;padding:40px"><h2>✅ ${address} connected</h2><p>Mail for this mailbox now lands in the console. You can close this tab.</p></body>`);
   } catch (e) { res.status(500).send(`Connection failed: ${e.message}`); }
 });
+app.post("/api/admin/dedupe", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const n = await core.dedupeTickets(); res.json({ ok: true, merged: n }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.post("/api/mailbox/poll", async (req, res) => {
   if (!guard(req, res)) return;
   try { res.json(await pollMailbox(String((req.body && req.body.address) || ""))); }
@@ -415,6 +427,8 @@ app.post("/api/mailbox/poll", async (req, res) => {
 const PORT = process.env.PORT || 8080;
 (async () => {
   if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); } catch (e) { console.error("migrate failed:", e.message); } }
+  // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
+  if (pool) { try { if (!(await syncGet("dedupe_v3_1"))) { const n = await core.dedupeTickets(); await core.syncSet("dedupe_v3_1", String(n), { at: new Date().toISOString() }); console.log(`🧹 duplicate sweep done — ${n} merged`); } } catch (e) { console.error("dedupe:", e.message); } }
   app.listen(PORT, () => {
     console.log(`📨 Helpdesk v${VERSION} on :${PORT}`);
     console.log(`🔎 boot → users:${USERS.map((u) => u.name).join("/") || "(none)"}${KEY ? "+admin-key" : ""} · db:${pool ? "set" : "MISSING"} · gorgias-import:${core.G_DOMAIN || "off"} · gmail-oauth:${gmailConfigured() ? `${core.OAUTH_CLIENTS.length} client${core.OAUTH_CLIENTS.length === 1 ? "" : "s"}` : "not configured"} · slack:${process.env.SLACK_BOT_TOKEN || process.env.EMILY_SLACK_BOT_TOKEN ? "set" : "off"}`);

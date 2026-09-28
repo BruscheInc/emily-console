@@ -270,6 +270,10 @@ async function saveTicket(t, msgs) {
      outbound.length ? outbound[outbound.length - 1].at : null]
   );
   for (const r of rows) {
+    if (r.rfc_message_id) {   // already stored through Gmail (on this ticket or its twin, merged below)? skip the copy
+      const have = await db(`SELECT 1 FROM hd_messages WHERE rfc_message_id=$1 AND external_id <> $2 LIMIT 1`, [r.rfc_message_id, r.external_id]);
+      if (have.rows.length) continue;
+    }
     await db(
       `INSERT INTO hd_messages (ticket_id,source,external_id,rfc_message_id,from_agent,internal,channel,sender_name,sender_email,
                                 to_emails,subject,body_text,body_html,attachments,at)
@@ -280,6 +284,18 @@ async function saveTicket(t, msgs) {
        r.to_emails, r.subject, r.body_text, r.body_html, JSON.stringify(r.attachments), r.at]
     );
   }
+  // Did the Gmail connection already open a ticket for this same conversation? Fold this one into it (older wins).
+  try {
+    const first = inbound[0] || rows[0];
+    if (first) {
+      const other = await findTicketForEmail({ rfcId: first.rfc_message_id, customer: first.sender_email, subject: first.subject, at: first.at, exceptId: t.id });
+      if (other) {
+        const both = (await db(`SELECT id, created_at FROM hd_tickets WHERE id = ANY($1::bigint[])`, [[String(t.id), String(other)]])).rows
+          .sort((x, y) => new Date(x.created_at || 0) - new Date(y.created_at || 0) || Number(x.id) - Number(y.id));
+        if (both.length === 2) await mergeTickets(both[0].id, both[1].id);
+      }
+    }
+  } catch (e) { console.error(`dedupe after Gorgias save ${t.id}:`, e.message); }
   return rows.length;
 }
 let importRun = null;   // { running, page, tickets, messages, done, error, started }
@@ -419,6 +435,93 @@ function trimQuoted(text) {
   const cut = t.search(/\n\s*On .{0,120}wrote:\s*\n|\n\s*-{2,}\s*Original Message\s*-{2,}|\n\s*>{1,}\s/);
   return (cut > 40 ? t.slice(0, cut) : t).trim();
 }
+/* ---- Duplicate tickets: the same email can reach us twice — once through the Gorgias import (or Gorgias
+ * webhook) and once through the Gmail connection. Both paths now look for an existing ticket before creating
+ * one, and mergeTickets folds a duplicate into the original (messages, notes, events, drafts, actions, tags). */
+const normSubject = (s) => String(s || "").replace(/^\s*((re|fw|fwd|aw|tr)\s*:\s*)+/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+async function findTicketForEmail({ rfcId, refs = [], customer, subject, at, exceptId = null }) {
+  const not = exceptId ? ` AND m.ticket_id <> ${Number(exceptId)}` : "";
+  const ids = [rfcId, ...refs].filter(Boolean);
+  if (ids.length) {
+    const r = await db(`SELECT m.ticket_id FROM hd_messages m WHERE m.rfc_message_id = ANY($1)${not} ORDER BY m.at ASC LIMIT 1`, [ids]);
+    if (r.rows.length) return r.rows[0].ticket_id;
+  }
+  // Same sender, same subject, same minute — the same email seen through the other door.
+  if (customer && subject && at) {
+    const r = await db(`SELECT m.ticket_id FROM hd_messages m JOIN hd_tickets t ON t.id = m.ticket_id
+                         WHERE lower(t.customer_email) = lower($1) AND NOT m.internal AND lower(coalesce(m.subject,'')) <> ''
+                           AND regexp_replace(lower(m.subject), '^\\s*((re|fw|fwd|aw|tr)\\s*:\\s*)+', '') = $2
+                           AND m.at BETWEEN $3::timestamptz - interval '3 minutes' AND $3::timestamptz + interval '3 minutes'${not}
+                         ORDER BY m.at ASC LIMIT 1`, [customer, normSubject(subject), at]);
+    if (r.rows.length) return r.rows[0].ticket_id;
+  }
+  return null;
+}
+async function mergeTickets(keepId, dropId) {
+  keepId = String(keepId); dropId = String(dropId);
+  if (keepId === dropId) return false;
+  const keep = (await db(`SELECT * FROM hd_tickets WHERE id=$1`, [keepId])).rows[0];
+  const drop = (await db(`SELECT * FROM hd_tickets WHERE id=$1`, [dropId])).rows[0];
+  if (!keep || !drop) return false;
+  // Messages: move across; a message the keeper already has (same Message-ID) is dropped rather than doubled.
+  await db(`DELETE FROM hd_messages d WHERE d.ticket_id=$2 AND d.rfc_message_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM hd_messages k WHERE k.ticket_id=$1 AND k.rfc_message_id = d.rfc_message_id)`, [keepId, dropId]);
+  await db(`DELETE FROM hd_messages d WHERE d.ticket_id=$2 AND d.rfc_message_id IS NULL AND NOT d.internal
+              AND EXISTS (SELECT 1 FROM hd_messages k WHERE k.ticket_id=$1 AND NOT k.internal AND k.from_agent = d.from_agent
+                          AND k.at BETWEEN d.at - interval '3 minutes' AND d.at + interval '3 minutes'
+                          AND left(regexp_replace(k.body_text,'\\s+',' ','g'),120) = left(regexp_replace(d.body_text,'\\s+',' ','g'),120))`, [keepId, dropId]);
+  await db(`UPDATE hd_messages SET ticket_id=$1 WHERE ticket_id=$2`, [keepId, dropId]);
+  await db(`UPDATE hd_events SET ticket_id=$1 WHERE ticket_id=$2`, [keepId, dropId]).catch(() => {});
+  await db(`UPDATE emily_drafts SET ticket_id=$1 WHERE ticket_id=$2`, [keepId, dropId]).catch(() => {});
+  await db(`UPDATE emily_actions SET ticket_id=$1 WHERE ticket_id=$2`, [keepId, dropId]).catch(() => {});
+  await db(`UPDATE oos_cases SET ticket_id=$1 WHERE ticket_id=$2`, [keepId, dropId]).catch(() => {});
+  await db(`UPDATE hd_tickets SET
+              gmail_thread_id = COALESCE(gmail_thread_id, $3), gorgias_id = COALESCE(gorgias_id, $4),
+              mailbox = COALESCE(mailbox, $5), brand = COALESCE(brand, $6), customer_name = COALESCE(customer_name, $7),
+              tags = (SELECT array_agg(DISTINCT x) FROM unnest(coalesce(tags,'{}'::text[]) || $8::text[]) AS x),
+              status = CASE WHEN status='closed' AND $9='closed' THEN 'closed' ELSE 'open' END,
+              spam = spam AND $10,
+              created_at = LEAST(created_at, $11::timestamptz),
+              messages_count = (SELECT count(*) FROM hd_messages WHERE ticket_id=$1),
+              last_message_at = (SELECT max(at) FROM hd_messages WHERE ticket_id=$1),
+              last_inbound_at = (SELECT max(at) FROM hd_messages WHERE ticket_id=$1 AND NOT from_agent AND NOT internal),
+              last_outbound_at = (SELECT max(at) FROM hd_messages WHERE ticket_id=$1 AND from_agent AND NOT internal),
+              updated_at = now()
+            WHERE id=$2`,
+    [keepId, keepId, drop.gmail_thread_id, drop.gorgias_id, drop.mailbox, drop.brand, drop.customer_name, drop.tags || [], drop.status, !!drop.spam, drop.created_at || keep.created_at]);
+  await db(`DELETE FROM hd_tickets WHERE id=$1`, [dropId]);
+  await db(`INSERT INTO hd_events (ticket_id, kind, detail, user_name) VALUES ($1,'merge',$2,'system')`, [keepId, `merged duplicate ticket ${dropId} (${drop.source}) into this one`]).catch(() => {});
+  return true;
+}
+// Sweep the whole table for duplicates (used once after upgrade, and from Settings).
+async function dedupeTickets() {
+  let merged = 0;
+  const seen = new Set();
+  // 1) two tickets sharing an email Message-ID
+  const a = await db(`SELECT m1.ticket_id AS a, m2.ticket_id AS b FROM hd_messages m1 JOIN hd_messages m2
+                        ON m1.rfc_message_id = m2.rfc_message_id AND m1.ticket_id < m2.ticket_id
+                       WHERE m1.rfc_message_id IS NOT NULL GROUP BY 1,2`);
+  // 2) same customer, same subject, first inbound message within 3 minutes of each other, one from each source
+  const b = await db(`SELECT t1.id AS a, t2.id AS b FROM hd_tickets t1 JOIN hd_tickets t2
+                        ON t1.id < t2.id AND t1.source <> t2.source AND lower(t1.customer_email) = lower(t2.customer_email)
+                       AND regexp_replace(lower(coalesce(t1.subject,'')), '^\\s*((re|fw|fwd|aw|tr)\\s*:\\s*)+', '') = regexp_replace(lower(coalesce(t2.subject,'')), '^\\s*((re|fw|fwd|aw|tr)\\s*:\\s*)+', '')
+                       AND coalesce(t1.subject,'') <> ''
+                       AND EXISTS (SELECT 1 FROM hd_messages x JOIN hd_messages y ON y.ticket_id = t2.id AND NOT y.internal AND NOT y.from_agent
+                                    WHERE x.ticket_id = t1.id AND NOT x.internal AND NOT x.from_agent
+                                      AND y.at BETWEEN x.at - interval '3 minutes' AND x.at + interval '3 minutes')`);
+  for (const r of [...a.rows, ...b.rows]) {
+    const pair = [String(r.a), String(r.b)];
+    if (seen.has(pair[1])) continue;
+    const rows = (await db(`SELECT id, created_at, source FROM hd_tickets WHERE id = ANY($1::bigint[])`, [pair])).rows;
+    if (rows.length < 2) continue;
+    // keep the older ticket (Gorgias history usually), fold the newer one in
+    rows.sort((x, y) => new Date(x.created_at || 0) - new Date(y.created_at || 0) || Number(x.id) - Number(y.id));
+    if (await mergeTickets(rows[0].id, rows[1].id)) { merged++; seen.add(String(rows[1].id)); }
+  }
+  if (merged) console.log(`🧹 merged ${merged} duplicate ticket(s)`);
+  return merged;
+}
+
 async function storeGmailMessage(address, m) {
   const labels = m.labelIds || [];
   if (labels.includes("DRAFT")) return null;
@@ -436,12 +539,26 @@ async function storeGmailMessage(address, m) {
 
   let t = (await db(`SELECT id FROM hd_tickets WHERE gmail_thread_id=$1`, [m.threadId])).rows[0];
   if (!t) {
+    // Same email already here through Gorgias (or a reply to one that is)? Attach to that ticket instead of opening a twin.
+    const refs = `${headerOf(p, "In-Reply-To") || ""} ${headerOf(p, "References") || ""}`.match(/<[^>]+>/g) || [];
+    const existing = await findTicketForEmail({ rfcId, refs, customer, subject, at });
+    if (existing) {
+      await db(`UPDATE hd_tickets SET gmail_thread_id = COALESCE(gmail_thread_id, $2), mailbox = COALESCE(mailbox, $3) WHERE id=$1`, [existing, m.threadId, address]);
+      t = { id: existing };
+    }
+  }
+  if (!t) {
     const id = (await db(`SELECT nextval('hd_local_ticket_seq')::bigint AS id`)).rows[0].id;
     await db(
       `INSERT INTO hd_tickets (id,source,gmail_thread_id,subject,brand,mailbox,channel,status,spam,customer_email,customer_name,created_at,updated_at)
        VALUES ($1,'gmail',$2,$3,$4,$5,'email','open',$6,$7,$8,$9,$9)`,
       [id, m.threadId, subject, brandForAddress(address), address, labels.includes("SPAM"), customer, fromAgent ? null : from.name, at]);
     t = { id };
+  }
+  // The same email already on this ticket via Gorgias? Just remember its Gmail id (for attachments) — don't store it twice.
+  if (rfcId) {
+    const dup = await db(`UPDATE hd_messages SET gmail_id = COALESCE(gmail_id, $3) WHERE ticket_id=$1 AND rfc_message_id=$2 AND external_id <> $4 RETURNING id`, [t.id, rfcId, m.id, `gmail:${m.id}`]);
+    if (dup.rows.length) return null;
   }
   const ins = await db(
     `INSERT INTO hd_messages (ticket_id,source,external_id,rfc_message_id,gmail_id,from_agent,internal,channel,sender_name,sender_email,
@@ -462,12 +579,19 @@ async function storeGmailMessage(address, m) {
       WHERE id=$1`, [t.id, at, fromAgent, fromAgent ? null : from.name]);
   return { ticket_id: t.id, from_agent: fromAgent, subject };
 }
+// Gmail allows ~15,000 quota units per user per minute (a message fetch costs 5). A first sync or a re-scan
+// used to fetch every message in one burst and trip that limit, then start the same burst over on the next
+// poll. Now: messages already stored are never re-fetched, at most GMAIL_FETCH_PER_POLL new messages are
+// pulled per poll (the rest come on the next polls), and a quota error pauses that mailbox for two minutes.
+const FETCH_PER_POLL = Number(process.env.GMAIL_FETCH_PER_POLL) || 120;
+const pollPause = new Map();   // address -> timestamp until which we leave it alone
 async function pollMailbox(address) {
   const box = (await db(`SELECT * FROM hd_mailboxes WHERE lower(address)=lower($1)`, [address])).rows[0];
   if (!box || !box.refresh_token) return { skipped: true };
-  let added = 0, ids = [];
+  if ((pollPause.get(address.toLowerCase()) || 0) > Date.now()) return { skipped: "paused" };
+  let added = 0, ids = [], partial = false;
   try {
-    if (!box.history_id) {                                   // first run: take the recent window, then go incremental
+    if (!box.history_id) {                                   // first run (or expired history): take the recent window, then go incremental
       const days = Number(process.env.GMAIL_FIRST_SYNC_DAYS || 30);
       let pageToken = null;
       do {
@@ -483,10 +607,23 @@ async function pollMailbox(address) {
         pageToken = j.nextPageToken;
       } while (pageToken);
     }
-    for (const id of [...new Set(ids)]) {
+    ids = [...new Set(ids)];
+    // Drop everything we already have — costs one DB query instead of 5 Gmail units per message.
+    if (ids.length) {
+      const have = new Set((await db(`SELECT external_id FROM hd_messages WHERE external_id = ANY($1)`, [ids.map((id) => `gmail:${id}`)])).rows.map((r) => r.external_id));
+      ids = ids.filter((id) => !have.has(`gmail:${id}`));
+    }
+    const todo = ids.slice(0, FETCH_PER_POLL); partial = ids.length > todo.length;
+    for (const id of todo) {
       const full = await gapi(address, `/messages/${id}?format=full`);
       const r = await storeGmailMessage(address, full);
       if (r) added++;
+    }
+    if (partial) {
+      // More to fetch — keep the current cursor so the next poll continues where this one stopped.
+      await db(`UPDATE hd_mailboxes SET last_poll_at=now(), last_error=$2 WHERE lower(address)=lower($1)`, [address, `catching up — ${ids.length - todo.length} more messages to pull`]);
+      console.log(`gmail poll ${address}: stored ${added}, ${ids.length - todo.length} left for the next poll`);
+      return { address, added, remaining: ids.length - todo.length };
     }
     const prof = await gapi(address, `/profile`);
     await db(`UPDATE hd_mailboxes SET history_id=$2, last_poll_at=now(), last_error=NULL WHERE lower(address)=lower($1)`, [address, String(prof.historyId)]);
@@ -497,7 +634,9 @@ async function pollMailbox(address) {
       await db(`UPDATE hd_mailboxes SET history_id=NULL, last_error=$2 WHERE lower(address)=lower($1)`, [address, "history expired — re-scanning"]);
       return { address, added, requeued: true };
     }
-    await db(`UPDATE hd_mailboxes SET last_poll_at=now(), last_error=$2 WHERE lower(address)=lower($1)`, [address, e.message.slice(0, 300)]);
+    const quota = e.status === 403 && /quota|rate/i.test(e.message || "");
+    if (quota) pollPause.set(address.toLowerCase(), Date.now() + 120000);
+    await db(`UPDATE hd_mailboxes SET last_poll_at=now(), last_error=$2 WHERE lower(address)=lower($1)`, [address, (quota ? "Gmail rate limit hit — pausing two minutes, then continuing. " : "") + e.message.slice(0, 240)]);
     console.error(`gmail poll ${address}:`, e.message);
     return { address, error: e.message };
   }
@@ -697,7 +836,7 @@ module.exports = {
   USERS, userFromKey,
   httpJson, gorgias, slack, slackPost, G_DOMAIN,
   BRAND_MAILBOX, ACTIVE_MAILBOXES, brandForAddress, mailboxForName, resolveMailbox, addressFromMessages, mailboxFromIntegrations,
-  runImport, importState: () => importRun, saveTicket, stripHtml,
+  runImport, importState: () => importRun, saveTicket, stripHtml, mergeTickets, dedupeTickets, findTicketForEmail,
   gmailConfigured, OAUTH_CLIENTS, clientForAddress, clientById, exchangeCode, accessTokenFor, gapi, gmailSend, pollMailbox, pollAll, storeGmailMessage, b64urlEncode, b64urlDecode, formEncode, GMAIL_SCOPES, OAUTH_REDIRECT,
   onInbound, emitInbound,
   sendReply, sendNewEmail, addNote, addTags, htmlify, stripQuoted,

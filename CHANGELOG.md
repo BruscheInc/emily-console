@@ -3,6 +3,22 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v3.2 — Sep 28, 2026
+- **No more twin tickets.** The same email used to open one ticket via the Gorgias import and another via the
+  Gmail connection. Both paths now look for the conversation first (by the email's Message-ID, or the same
+  sender + subject within three minutes) and attach to it. A one-time sweep on first boot merges the duplicates
+  already stored — messages, notes, Emily drafts, actions and tags all end up on the older ticket — and Settings
+  has a "Merge duplicate tickets" button to re-run it any time.
+
+## v3.1 — Sep 28, 2026
+- **Gmail rate limit fixed.** A first sync or re-scan no longer pulls thousands of messages in one burst: messages
+  already stored are skipped, at most 120 new ones are fetched per poll (the rest follow on the next polls, shown
+  as "catching up — N more"), and a Gmail quota error pauses that mailbox for two minutes instead of retrying
+  the same burst every 45 seconds.
+- **One Google client per mailbox.** `GOOGLE_OAUTH_CLIENTS` now carries both projects (brusche-helpdesk for
+  larkspurbabyoutlet.com, skilled-acolyte for larkspurbaby.com) so each mailbox signs in through its own
+  Workspace's project. Google sign-in errors now come back with a plain-English explanation of what to fix.
+
 ## v3 — Sep 28, 2026
 - **Order tools in the app.** Every ticket's sidebar now has an Orders panel with the order's items, totals, address,
   tracking and ShipStation status, plus four actions: **Update address** (writes Shopify + ShipStation),
