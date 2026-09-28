@@ -343,7 +343,7 @@ async function loadMailboxes(){
       <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line,#1e2a3a)">
         <div style="flex:1;min-width:0">
           <div><b>${esc(m.address)}</b></div>
-          <div style="font-size:12px;color:#7c8ba1">${esc(m.brand||"")}${m.retired?" · retired":""}${m.connected?` · connected${m.connected_by?` by ${esc(m.connected_by)}`:""}${m.last_poll_at?` · checked ${fmt(m.last_poll_at)}`:""}`:" · not connected"}${m.last_error?` · <span style="color:#ff8686">${esc(m.last_error)}</span>`:""}</div>
+          <div style="font-size:12px;color:#7c8ba1">${esc(m.brand||"")}${m.retired?" · retired":""}${m.connected?` · connected${m.connected_by?` by ${esc(m.connected_by)}`:""}${m.last_poll_at?` · checked ${fmt(m.last_poll_at)}`:""}`:" · not connected"}${m.last_error?` · <span style="color:${/^(catching up|Gmail rate limit)/.test(m.last_error)?"#2451c8":"#e05252"}">${esc(m.last_error)}</span>`:""}</div>
         </div>
         ${d.oauth_ready
           ? `<a class="btn" style="text-decoration:none" href="/oauth/gmail/start?address=${encodeURIComponent(m.address)}&key=${encodeURIComponent(KEY)}">${m.connected?"Reconnect":"Connect Gmail"}</a>`
@@ -361,7 +361,9 @@ async function loadImport(){
     $("importbox").innerHTML=`
       <div style="font-size:14px;margin-bottom:6px">${esc(line)}</div>
       <div style="font-size:12px;color:#7c8ba1;margin-bottom:10px">Stored now: <b>${st.tickets||0}</b> tickets · <b>${st.messages||0}</b> messages. Safe to run more than once — it resumes where it left off and never duplicates.</div>
-      <button class="btn" ${run.running?"disabled":""} onclick="startImport()">${run.running?"Running…":(d.finished?"Run again":"Import everything from Gorgias")}</button>`;
+      <button class="btn" ${run.running?"disabled":""} onclick="startImport()">${run.running?"Running…":(d.finished?"Run again":"Import everything from Gorgias")}</button>
+      <button class="btn sec" style="margin-left:8px" onclick="dedupe(this)">Merge duplicate tickets</button>
+      <div style="color:var(--muted);font-size:12px;margin-top:6px">Duplicates happen when the same email arrived through both Gorgias and Gmail. New mail is matched automatically; this button re-checks everything already stored.</div>`;
   }catch(e){ $("importbox").innerHTML="Couldn't load import status."; }
 }
 async function startImport(){
@@ -564,6 +566,7 @@ async function loadCustomer(email){
   }catch(e){ pnl.innerHTML='<div class="railcard" style="padding:12px;color:var(--muted);font-size:12.5px">Shopify profile unavailable.</div>'; }
 }
 
+async function dedupe(b){ b.disabled=true; const was=b.textContent; b.textContent="Checking…"; try{ const r=await api("/api/admin/dedupe",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(r.merged?`Merged ${r.merged} duplicate ticket${r.merged===1?"":"s"}`:"No duplicates found"); loadCounts(); loadList(true);}catch(e){toast("Couldn't run the check");} b.disabled=false; b.textContent=was; }
 function rail(d){
   const kv=(k,v)=>`<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
   const emily=d.emily?`<span class="chip ${d.emily}">${esc(d.emily)}</span>`:"—";
