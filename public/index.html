@@ -181,7 +181,9 @@
   <button class="nav view on" data-view="lbo_tickets" onclick="setView('lbo_tickets')"><span class="i">🏷</span>LBO Tickets<span class="n" id="v-lbo_tickets"></span></button>
   <button class="nav view" data-view="lb_tickets" onclick="setView('lb_tickets')"><span class="i">🏷</span>LB Tickets<span class="n" id="v-lb_tickets"></span></button>
   <button class="nav view" data-view="oos" onclick="setView('oos')"><span class="i">📦</span>Out of stock<span class="n" id="v-oos"></span></button>
-  <button class="nav view" data-view="stuck" onclick="setView('stuck')"><span class="i">⏳</span>Stuck packages<span class="n" id="v-stuck"></span></button>
+  <div class="navsec">Shipments</div>
+  <button class="nav view" data-view="stuck" onclick="setView('stuck')"><span class="i">⏳</span>Never scanned<span class="n" id="v-stuck"></span></button>
+  <button class="nav view" data-view="undelivered" onclick="setView('undelivered')"><span class="i">🚚</span>Not delivered 15+ days<span class="n" id="v-undelivered"></span></button>
   <div class="navsec">Mailboxes</div>
   <button class="nav view" data-view="lbo" onclick="setView('lbo')"><span class="i">✉️</span>Outlet · all mail<span class="n" id="v-lbo"></span></button>
   <button class="nav view" data-view="lb" onclick="setView('lb')"><span class="i">✉️</span>Larkspur · all mail<span class="n" id="v-lb"></span></button>
@@ -296,12 +298,12 @@ async function loadCounts(){try{
   const c=await api("/api/counts?view="+encodeURIComponent(VIEW));
   for(const k of ["pending","sent","closed","collabs","all"]){const el=$("n-"+k);if(el)el.textContent=c[k]!=null?c[k]:"";}
   for(const v of ["lb","lbo","lb_tickets","lbo_tickets","oos","all"]){const el=$("v-"+v);if(el)el.textContent=(c.views&&c.views[v])?c.views[v]:"";}
-  const sv=$("v-stuck"); if(sv) sv.textContent=c.stuck||"";
+  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||"";
   // tab title carries the pending count, like a real inbox
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Helpdesk`:"Helpdesk";
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Stuck packages",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function chipsFor(t){
   const hide=new Set(["emily-drafted","emily-sent"]); const out=[];
@@ -314,7 +316,7 @@ let STUCK_STATE="open";
 async function loadList(force){
   const el=$("list"); if(force)el.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
-  const isStuck=VIEW==="stuck";
+  const isStuck=VIEW==="stuck"||VIEW==="undelivered";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
@@ -671,20 +673,24 @@ async function dedupe(b){ b.disabled=true; const was=b.textContent; b.textConten
 async function loadStuck(){
   const w=$("stuckwrap"); w.innerHTML='<div class="empty">Checking…</div>';
   try{
-    const d=await api("/api/stuck?state="+encodeURIComponent(STUCK_STATE));
+    const KIND=VIEW==="undelivered"?"undelivered":"never_scanned";
+    const d=await api("/api/stuck?state="+encodeURIComponent(STUCK_STATE)+"&kind="+KIND);
     const c=d.counts||{}; const last=d.last_scan; const seg=(k,l)=>`<button class="tab ${STUCK_STATE===k?"on":""}" onclick="STUCK_STATE='${k}';loadStuck()">${l}<span class="n">${k==="open"?(c.open||0)+(c.contacted||0):k==="all"?Object.values(c).reduce((a,b)=>a+b,0):(c[k]||0)}</span></button>`;
     $("showing").textContent=d.items.length?`${d.items.length} package${d.items.length===1?"":"s"}`:"";
-    const head=`<div class="stuckhead"><span>Orders whose Shopify delivery status is still <b>Tracking added</b> after ${d.threshold_days}+ days — the carrier has never scanned the package. Orders from ${fmtDay(d.since)} onward.</span>
+    const head=`<div class="stuckhead"><span>${KIND==="undelivered"?`Orders placed <b>${d.threshold_days}+ days ago</b> that Shopify still doesn't show as delivered — moving or not.`:`Orders whose Shopify delivery status is still <b>Tracking added</b> after ${d.threshold_days}+ days — the carrier has never scanned the package.`} Orders from ${fmtDay(d.since)} onward.</span>
       <span>${last?`Last checked ${fmt(last.at)} · ${last.scanned} shipped orders scanned${(last.errors||[]).length?` · <span style="color:#c0392b">${esc(last.errors.join(" | "))}</span>`:""}`:"Not checked yet"}</span>
       <button class="btn sec xs" onclick="stuckRefresh(this)">↻ Check now</button>
       <div class="seg">${seg("open","Needs attention")}${seg("contacted","Contacted")}${seg("resolved","Resolved")}${seg("ignored","Ignored")}${seg("all","All")}</div></div>`;
-    if(!d.items.length){ w.innerHTML=head+'<div class="empty">Nothing here — every recent package has been scanned by the carrier.</div>'; return; }
-    w.innerHTML=head+`<table class="tickets stuck"><thead><tr><th class="c-t">Order</th><th>Customer</th><th>Tracking</th><th>Tracking added</th><th>Shopify status</th><th>Actions</th></tr></thead><tbody>${d.items.map(x=>`<tr>
+    if(!d.items.length){ w.innerHTML=head+`<div class="empty">${KIND==="undelivered"?"Nothing here — every order older than "+d.threshold_days+" days has been delivered.":"Nothing here — every recent package has been scanned by the carrier."}</div>`; return; }
+    w.innerHTML=head+`<table class="tickets stuck"><thead><tr><th class="c-t">Order</th><th>Customer</th><th>Tracking</th><th>${KIND==="undelivered"?"Order age":"Tracking added"}</th><th>Shopify status</th><th>Actions</th></tr></thead><tbody>${d.items.map(x=>`<tr>
       <td class="c-t" style="width:18%"><div class="subj"><button class="ordchip" onclick="stuckOrder('${esc(x.order_name)}','${esc(x.customer_email||"")}')">${esc(x.order_name)}</button></div><div class="exc">${esc(x.store)}${x.city?" · "+esc(x.city):""}${x.state!=="open"?` · <b>${esc(x.state)}</b>${x.state_by?" by "+esc(x.state_by):""}`:""}</div>${x.note?`<div class="stk-note">${esc(x.note)}</div>`:""}</td>
       <td style="width:16%">${esc(x.customer_name||"")}<div class="exc">${esc(x.customer_email||"")}</div></td>
       <td style="width:18%"><a href="${esc(x.tracking_url||"#")}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;text-decoration:none">${esc(x.tracking)}</a><div class="exc">${esc(x.carrier||"")}</div></td>
-      <td class="days ${x.days>=10?"hot":x.days>=7?"warm":""}" style="width:14%"><b>${x.days} days</b><div class="exc">${fmtDay(x.tracking_added_at)}</div></td>
-      <td style="width:12%"><span class="chip drafted">${esc(String(x.display_status||"").toLowerCase().replace(/_/g," "))}</span>${x.moved_at?`<div class="exc">moved ${fmtDay(x.moved_at)}</div>`:""}</td>
+      ${KIND==="undelivered"
+        ?`<td class="days ${x.order_days>=25?"hot":x.order_days>=20?"warm":""}" style="width:14%"><b>${x.order_days} days</b><div class="exc">ordered ${fmtDay(x.order_created_at)}</div></td>
+          <td style="width:14%"><span class="chip ${x.also_never_scanned?"skip":"drafted"}">${x.also_never_scanned?"never scanned":esc(String(x.display_status||"").toLowerCase().replace(/_/g," "))}</span>${x.in_transit_at?`<div class="exc">in transit since ${fmtShort(x.in_transit_at)}</div>`:""}${x.estimated_delivery_at?`<div class="exc">est. ${fmtShort(x.estimated_delivery_at)}</div>`:""}${x.last_update_at?`<div class="exc">last update ${fmtShort(x.last_update_at)}</div>`:""}</td>`
+        :`<td class="days ${x.days>=10?"hot":x.days>=7?"warm":""}" style="width:14%"><b>${x.days} days</b><div class="exc">${fmtDay(x.tracking_added_at)}</div></td>
+          <td style="width:12%"><span class="chip drafted">${esc(String(x.display_status||"").toLowerCase().replace(/_/g," "))}</span>${x.moved_at?`<div class="exc">moved ${fmtDay(x.moved_at)}</div>`:""}</td>`}
       <td style="width:22%"><div class="stk-acts">
         ${x.ticket_id?`<button class="btn sec xs" onclick="openTicket(${x.ticket_id})">Open ticket</button>`:`<button class="btn sec xs" onclick="stuckEmail('${esc(x.id)}')">✉️ Email customer</button>`}
         ${x.state!=="contacted"&&!x.ticket_id?`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','contacted')">Contacted</button>`:""}
@@ -694,9 +700,10 @@ async function loadStuck(){
     window._stuck=d.items;
   }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load stuck packages.</div>'; }
 }
-async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify…"; try{ const r=await api("/api/stuck/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.scanned} orders — ${r.stuck} stuck`); }catch(e){toast("Check failed",true);} loadStuck(); loadCounts(); }
+async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify…"; try{ const r=await api("/api/stuck/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.scanned} orders — ${r.never_scanned} never scanned · ${r.undelivered} not delivered`); }catch(e){toast("Check failed",true);} loadStuck(); loadCounts(); }
+function stuckKind(){ return VIEW==="undelivered"?"undelivered":"never_scanned"; }
 async function stuckState(id,state){ const note=state==="ignored"||state==="resolved"?window.prompt(state==="ignored"?"Why ignore? (optional)":"What happened? (optional)",""):null; if(note===null&&(state==="ignored"||state==="resolved"))return;
-  try{ const r=await api("/api/stuck/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,state,note})}); if(r.error){toast(r.error,true);return;} loadStuck(); loadCounts(); }catch(e){toast("Failed",true);} }
+  try{ const r=await api("/api/stuck/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,state,note,kind:stuckKind()})}); if(r.error){toast(r.error,true);return;} loadStuck(); loadCounts(); }catch(e){toast("Failed",true);} }
 function stuckEmail(id){
   const x=(window._stuck||[]).find(i=>i.id===id); if(!x)return; closeModal();
   const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
@@ -705,7 +712,7 @@ function stuckEmail(id){
     <div class="foot"><button class="btn sec" onclick="closeModal()">Back</button><button class="btn" id="modal-go">Send email</button></div></div>`;
   document.body.appendChild(m);
   $("modal-go").onclick=async()=>{ const text=$("stk-text").value.trim(); if(!text)return; const go=$("modal-go"); go.disabled=true; go.textContent="Sending…";
-    try{ const r=await api("/api/stuck/email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,text})}); if(r.error)throw new Error(r.error); toast("Sent ✓ — ticket opened"); closeModal(); loadStuck(); loadCounts(); }
+    try{ const r=await api("/api/stuck/email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,text,kind:stuckKind()})}); if(r.error)throw new Error(r.error); toast("Sent ✓ — ticket opened"); closeModal(); loadStuck(); loadCounts(); }
     catch(e){ toast(e.message||"Couldn't send",true); go.disabled=false; go.textContent="Send email"; } };
 }
 async function stuckOrder(name,email){
