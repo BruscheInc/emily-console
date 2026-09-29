@@ -3,6 +3,18 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v3.9 — Sep 29, 2026
+- **Tickets views now filter properly.** Every incoming email is classified on arrival — bulk-mail headers
+  (List-Unsubscribe, Precedence: bulk), robot senders (noreply/notifications), social networks, vendors and
+  platforms (PayPal, Apple, carriers, Shopify admin notices), marketing subjects — and tagged automated /
+  newsletter / social / vendor, which keeps it out of LB/LBO Tickets and away from Emily. A reply from a personal
+  mailbox is never filtered. The whole backlog is classified once on first boot; Settings has
+  "Re-filter notifications & newsletters" to run it again.
+- **Shopify contact-form messages** ("New customer message on …") now carry the real customer's name and
+  email, so replies go to the customer instead of Shopify's mailer.
+- Ticket header: "Not a customer" hides a ticket from the Tickets views; "This is a customer" brings a
+  filtered one back (and Emily will handle it).
+
 ## v3.8 — Sep 29, 2026
 - **New mark.** A speech bubble with a heart — the conversation, handled with care — in the sidebar, browser tab
   and home-screen icon.

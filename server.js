@@ -41,9 +41,9 @@ const CATEGORY_SQL = `CASE WHEN status='closed' THEN 'closed'
  *                     Emily marked non-CS) is held back, so the list is things that need a person
  *   oos               every out-of-stock case, both brands
  * "Junk" is tag-driven plus a no-reply sender check, so it improves as Emily tags more.  */
-const JUNK_TAGS = ["emily-skip", "not-cs", "automated", "automated-notification", "solicitation", "press-pitch", "tiktok-notification", "okendo", "spam"];
+const JUNK_TAGS = core.JUNK_TAG_SET;
 const NOREPLY_RE = "(^|[._-])(no-?reply|donotreply|mailer-daemon|postmaster|notifications?|bounces?)@";
-const NEEDS_ATTENTION = `NOT spam AND NOT (tags && $JUNK$) AND (customer_email IS NULL OR customer_email !~* '${NOREPLY_RE}')`;
+const NEEDS_ATTENTION = `NOT spam AND ('human' = ANY(tags) OR (NOT (tags && $JUNK$) AND (customer_email IS NULL OR customer_email !~* '${NOREPLY_RE}')))`;
 const OOS_MATCH = `(tags && ARRAY['oos-offer','oos','out-of-stock'])`;
 function viewClause(view, args) {
   const mb = (a) => { args.push(a); return `lower(mailbox) = lower($${args.length})`; };
@@ -471,6 +471,20 @@ app.post("/api/emily/todo", async (req, res) => {
     res.json({ ok: true, todo: await require("./emily").setTodo(Number(draft_id), Number(index), state, actorOf(req)) }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+app.post("/api/ticket/:id/human", async (req, res) => {          // "this IS a person — show it in Tickets"
+  if (!guard(req, res)) return;
+  try { await core.removeTags(req.params.id, JUNK_TAGS); await core.addTags(req.params.id, ["human"]); await db(`UPDATE hd_tickets SET spam=false WHERE id=$1`, [req.params.id]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/ticket/:id/junk", async (req, res) => {           // "this is machinery — hide it"
+  if (!guard(req, res)) return;
+  try { await core.removeTags(req.params.id, ["human"]); await core.addTags(req.params.id, ["automated"]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/admin/classify", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json(await core.classifyBacklog()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.post("/api/admin/dedupe", async (req, res) => {
   if (!guard(req, res)) return;
   try { const n = await core.dedupeTickets(); res.json({ ok: true, merged: n }); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -484,6 +498,7 @@ app.post("/api/mailbox/poll", async (req, res) => {
 const PORT = process.env.PORT || 8080;
 (async () => {
   if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
   if (pool) { try { if (!(await syncGet("dedupe_v3_1"))) { const n = await core.dedupeTickets(); await core.syncSet("dedupe_v3_1", String(n), { at: new Date().toISOString() }); console.log(`🧹 duplicate sweep done — ${n} merged`); } } catch (e) { console.error("dedupe:", e.message); } }
   app.listen(PORT, () => {

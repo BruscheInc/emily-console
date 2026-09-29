@@ -1144,7 +1144,7 @@ const DEFAULT_RULES =
 const DRAFT_ON = (process.env.DRAFT_LOOP || "on").toLowerCase() === "on";
 const SWEEP_MS = (Number(process.env.DRAFT_SWEEP_MIN) || 5) * 60 * 1000;
 const MAX_AGE_DAYS = Number(process.env.DRAFT_MAX_AGE_DAYS) || 14;
-const JUNK_TAGS = ["emily-skip", "not-cs", "automated", "automated-notification", "solicitation", "press-pitch", "tiktok-notification", "okendo", "spam", "emily-skip-manual"];
+const JUNK_TAGS = core.JUNK_TAG_SET;
 const NOREPLY_RE = /(^|[._-])(no-?reply|donotreply|mailer-daemon|postmaster|notifications?|bounces?)@/i;
 
 async function loadTicket(id) { return (await db(`SELECT * FROM hd_tickets WHERE id=$1`, [id])).rows[0] || null; }

@@ -259,8 +259,13 @@ async function saveTicket(t, msgs) {
   const rows = (msgs || []).map((x) => msgRow(t.id, x)).sort((a, b) => new Date(a.at) - new Date(b.at));
   const inbound = rows.filter((r) => !r.from_agent && !r.internal);
   const outbound = rows.filter((r) => r.from_agent && !r.internal);
-  const tags = (t.tags || []).map((x) => x.name);
+  let tags = (t.tags || []).map((x) => x.name);
   const isCollab = !t.spam && COLLAB_RE.test(`${t.subject || ""} ${t.excerpt || ""}`);
+  const first = inbound[0];
+  const cls = classifyInbound({ from: { email: (first && first.sender_email) || (t.customer && t.customer.email) }, subject: t.subject, body: first && first.body_text });
+  if (cls.tags && cls.tags.length) tags = tags.concat(cls.tags);
+  let custEmail = (t.customer && t.customer.email) || null, custName = (t.customer && (t.customer.name || t.customer.email)) || null;
+  if (cls.form) { const f = parseShopifyForm(first && first.body_text); if (f && f.email) { custEmail = f.email; custName = f.name || custName; } }
   await db(
     `INSERT INTO hd_tickets (id,source,gorgias_id,subject,brand,mailbox,channel,status,spam,customer_email,customer_name,
                              assignee,tags,messages_count,created_at,updated_at,last_message_at,last_inbound_at,last_outbound_at)
@@ -273,7 +278,7 @@ async function saveTicket(t, msgs) {
        assignee=COALESCE(hd_tickets.assignee, EXCLUDED.assignee)`,
     [t.id, t.subject || "(no subject)", brandForAddress(mailbox) || (t.integrations || [])[0]?.name || null, mailbox,
      t.channel || "email", t.status === "closed" ? "closed" : "open", !!t.spam,
-     (t.customer && t.customer.email) || null, (t.customer && (t.customer.name || t.customer.email)) || null,
+     custEmail, custName,
      (t.assignee_user && t.assignee_user.name) || null, tags.concat(isCollab ? ["collab"] : []),
      rows.length, t.created_datetime || null, t.updated_datetime || null,
      rows.length ? rows[rows.length - 1].at : null,
@@ -533,6 +538,68 @@ async function dedupeTickets() {
   return merged;
 }
 
+/* ---- Inbound classification: is this a person who needs an answer, or machinery / marketing / a platform notice?
+ * Runs on every email as it arrives (with headers) and once over the backlog (sender + subject + body only).
+ * A reply from a personal mailbox is never junked, whatever its subject says. ---- */
+const JUNK_TAG_SET = ["automated", "newsletter", "social", "vendor", "automated-notification", "solicitation", "press-pitch", "tiktok-notification", "okendo", "spam", "not-cs", "emily-skip", "emily-skip-manual"];
+const PERSONAL_DOMAIN_RE = /(^|\.)(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|mac|aol|comcast|att|verizon|sbcglobal|cox|charter|spectrum|earthlink|protonmail|proton|pm|zoho|gmx|mail|fastmail|hey)\.(com|net|me|ch|de|co\.uk|ca)$/i;
+const ROLE_LOCAL_RE = /^(no-?reply|donotreply|do-not-reply|noreply[-.]|notifications?|notify|newsletters?|news|marketing|alerts?|updates?|digest|mailer|bounces?|postmaster|mailer-daemon|receipts?|billing|invoices?|promo(tions)?|offers?|deals|service|customerservice|community|feedback|surveys?|reviews?|friendsuggestions?|friend-?updates?|notification)(\+.*)?$/i;
+const SOCIAL_DOMAIN_RE = /(facebook|facebookmail|instagram|tiktok|linkedin|pinterest|twitter|x|youtube|snapchat|threads|reddit|nextdoor)\.(com|net)$/i;
+const VENDOR_DOMAIN_RE = /(paypal|stripe|apple|itunes|google|googleapis|microsoft|zoom|slack|notion|dropbox|canva|adobe|intuit|quickbooks|godaddy|squarespace|wix|klaviyo|mailchimp|okendo|yotpo|judge\.me|loopreturns|shipstation|shippo|easypost|usps|ups|fedex|dhl|amazon|ebay|etsy|faire|meta|business\.fb|fb|instagram|shop|shopify|shopifyemail|myshopify|gorgias|zendesk|hubspot|calendly|docusign|adsgpt|openai)\.(com|net|io)$/i;
+const JUNK_SUBJECT_RE = /(suggested for you|sent you a message|more updates?|new message from .* and other updates|invited you to|billing agreement|your receipt|receipt for|invoice #?\d|payment (received|failed)|payout|webinar|unsubscribe|\b\d{1,2}% off\b|sale ends|flash sale|last chance|new (sign-?in|login)|security alert|verify your (email|account)|reset your password|weekly (digest|report|summary)|monthly (digest|report|statement)|your statement|order confirmation|has been (shipped|delivered)|is out for delivery|shipping confirmation|\[larkspur baby( outlet)?\] order|new order #|payout sent|low stock|abandoned checkout|domain (renewal|expir)|trial (ends|expir)|subscription renew|action required: (update|verify)|your (weekly|monthly) (ad|campaign)|ad (account|campaign)|advertisers? page|built for search|product update|what'?s new in|release notes)/i;
+const SHOPIFY_FORM_RE = /^(re:\s*)?new customer message on /i;
+function classifyInbound({ from = {}, subject = "", body = "", headers = {} }) {
+  const email = String(from.email || "").toLowerCase();
+  const local = email.split("@")[0] || "", domain = email.split("@")[1] || "";
+  const subj = String(subject || "");
+  const isReply = /^\s*(re|fwd?|aw|tr)\s*:/i.test(subj);
+  const personal = PERSONAL_DOMAIN_RE.test(domain);
+  // Shopify's contact-form forward is a real customer inquiry wearing a robot's address.
+  if (SHOPIFY_FORM_RE.test(subj)) return { junk: false, tags: ["contact-form"], form: true };
+  if (personal && isReply) return { junk: false, tags: [] };
+  const h = (n) => String(headers[n] || headers[n.toLowerCase()] || "");
+  const bulk = /list-unsubscribe/i.test(Object.keys(headers).join(",")) || /bulk|list|junk/i.test(h("Precedence")) || /auto-(generated|replied)/i.test(h("Auto-Submitted")) || !!h("X-Campaign") || !!h("X-Mailchimp-Campaign") || /klaviyo|mailchimp|sendgrid|braze|iterable|hubspot|constantcontact|marketo/i.test(h("X-Mailer") + h("X-Sender") + h("Sender"));
+  if (!personal && bulk) return { junk: true, tags: ["newsletter"] };
+  if (SOCIAL_DOMAIN_RE.test(domain)) return { junk: true, tags: ["social"] };
+  if (ROLE_LOCAL_RE.test(local)) return { junk: true, tags: ["automated"] };
+  if (VENDOR_DOMAIN_RE.test(domain)) return { junk: true, tags: ["vendor"] };
+  if (!personal && JUNK_SUBJECT_RE.test(subj)) return { junk: true, tags: ["automated"] };
+  if (!personal && /unsubscribe|manage (your )?preferences|view (this email )?in (your )?browser/i.test(String(body || "").slice(0, 6000))) return { junk: true, tags: ["newsletter"] };
+  return { junk: false, tags: [] };
+}
+// Shopify contact-form forwards: "You received a new message from your online store's contact form. … 'Email': x@y …"
+function parseShopifyForm(body) {
+  const t = String(body || "");
+  const em = t.match(/['"]?E-?mail['"]?\s*[:=]\s*['"]?\s*([^\s'"<>,]+@[^\s'"<>,]+)/i);
+  const fn = t.match(/['"]?First\s*-?name['"]?\s*[:=]\s*['"]?\s*([^'"\n]+?)\s*['"]?\s*(?=['"]?Last|$)/i);
+  const ln = t.match(/['"]?Last\s*-?name['"]?\s*[:=]\s*['"]?\s*([^'"\n]+?)\s*['"]?\s*(?=['"]?(E-?mail|Phone|Body|Message)|$)/i);
+  const name = [fn && fn[1], ln && ln[1]].filter(Boolean).map((x) => x.trim()).join(" ").trim() || null;
+  return em ? { email: em[1].toLowerCase(), name } : null;
+}
+async function removeTags(ticketId, tags) {
+  if (!tags || !tags.length) return;
+  await db(`UPDATE hd_tickets SET tags = (SELECT coalesce(array_agg(x), '{}') FROM unnest(tags) x WHERE NOT (x = ANY($2::text[]))), updated_at=now() WHERE id=$1`, [ticketId, tags]);
+}
+// One pass over everything stored: tag what's machinery so the Tickets views only show people. Safe to re-run.
+async function classifyBacklog() {
+  const rows = (await db(`SELECT t.id, t.subject, t.tags, t.customer_email, t.customer_name,
+                                 (SELECT body_text FROM hd_messages m WHERE m.ticket_id=t.id AND NOT m.internal ORDER BY m.at ASC LIMIT 1) AS body,
+                                 (SELECT sender_email FROM hd_messages m WHERE m.ticket_id=t.id AND NOT m.internal AND NOT m.from_agent ORDER BY m.at ASC LIMIT 1) AS sender
+                            FROM hd_tickets t WHERE NOT (t.tags && $1::text[]) AND NOT ('human' = ANY(t.tags))`, [JUNK_TAG_SET])).rows;
+  let junk = 0, forms = 0;
+  for (const t of rows) {
+    const c = classifyInbound({ from: { email: t.sender || t.customer_email }, subject: t.subject, body: t.body });
+    if (c.junk) { await addTags(t.id, c.tags); junk++; continue; }
+    if (c.form) {
+      const f = parseShopifyForm(t.body);
+      if (f && f.email && f.email !== String(t.customer_email || "").toLowerCase()) { await db(`UPDATE hd_tickets SET customer_email=$2, customer_name=COALESCE($3, customer_name) WHERE id=$1`, [t.id, f.email, f.name]); forms++; }
+      if (!(t.tags || []).includes("contact-form")) await addTags(t.id, ["contact-form"]);
+    }
+  }
+  console.log(`🧽 classified backlog: ${rows.length} checked · ${junk} tagged as machinery/marketing · ${forms} contact-form tickets re-pointed at the customer`);
+  return { checked: rows.length, junk, forms };
+}
+
 async function storeGmailMessage(address, m) {
   const labels = m.labelIds || [];
   if (labels.includes("DRAFT")) return null;
@@ -545,8 +612,12 @@ async function storeGmailMessage(address, m) {
   const body = trimQuoted(parts.text || stripHtml(parts.html));
   const fromAgent = from.email === String(address).toLowerCase();
   const at = m.internalDate ? new Date(Number(m.internalDate)).toISOString() : new Date().toISOString();
-  const customer = fromAgent ? (to[0] || null) : from.email;
+  let customer = fromAgent ? (to[0] || null) : from.email;
   if (!customer) return null;
+  const hdrs = {}; for (const h of (p.headers || [])) hdrs[h.name] = h.value;
+  const cls = fromAgent ? { junk: false, tags: [] } : classifyInbound({ from, subject, body, headers: hdrs });
+  let formCustomer = null;
+  if (cls.form) { formCustomer = parseShopifyForm(body); if (formCustomer && formCustomer.email) customer = formCustomer.email; }
 
   let t = (await db(`SELECT id FROM hd_tickets WHERE gmail_thread_id=$1`, [m.threadId])).rows[0];
   if (!t) {
@@ -561,11 +632,12 @@ async function storeGmailMessage(address, m) {
   if (!t) {
     const id = (await db(`SELECT nextval('hd_local_ticket_seq')::bigint AS id`)).rows[0].id;
     await db(
-      `INSERT INTO hd_tickets (id,source,gmail_thread_id,subject,brand,mailbox,channel,status,spam,customer_email,customer_name,created_at,updated_at)
-       VALUES ($1,'gmail',$2,$3,$4,$5,'email','open',$6,$7,$8,$9,$9)`,
-      [id, m.threadId, subject, brandForAddress(address), address, labels.includes("SPAM"), customer, fromAgent ? null : from.name, at]);
+      `INSERT INTO hd_tickets (id,source,gmail_thread_id,subject,brand,mailbox,channel,status,spam,customer_email,customer_name,tags,created_at,updated_at)
+       VALUES ($1,'gmail',$2,$3,$4,$5,'email','open',$6,$7,$8,$9,$10,$10)`,
+      [id, m.threadId, subject, brandForAddress(address), address, labels.includes("SPAM"), customer, formCustomer ? formCustomer.name : (fromAgent ? null : from.name), cls.tags || [], at]);
     t = { id };
-  }
+  } else if (cls.tags && cls.tags.length) { await addTags(t.id, cls.tags); }
+  if (formCustomer && formCustomer.email) await db(`UPDATE hd_tickets SET customer_email=$2, customer_name=COALESCE($3, customer_name) WHERE id=$1 AND (customer_email IS NULL OR customer_email ~* 'shopify|noreply|no-reply')`, [t.id, formCustomer.email, formCustomer.name]);
   // The same email already on this ticket via Gorgias? Just remember its Gmail id (for attachments) — don't store it twice.
   if (rfcId) {
     const dup = await db(`UPDATE hd_messages SET gmail_id = COALESCE(gmail_id, $3) WHERE ticket_id=$1 AND rfc_message_id=$2 AND external_id <> $4 RETURNING id`, [t.id, rfcId, m.id, `gmail:${m.id}`]);
@@ -579,7 +651,7 @@ async function storeGmailMessage(address, m) {
     [t.id, `gmail:${m.id}`, rfcId, m.id, fromAgent, from.name || (fromAgent ? "Agent" : customer), from.email, to, subject,
      body, parts.html || null, JSON.stringify(parts.attachments), at]);
   if (!ins.rows.length) return null;                        // already had it
-  if (!fromAgent) setImmediate(() => emitInbound(t.id, ins.rows[0].id));
+  if (!fromAgent && !cls.junk) setImmediate(() => emitInbound(t.id, ins.rows[0].id));
   await db(
     `UPDATE hd_tickets SET messages_count=(SELECT count(*) FROM hd_messages WHERE ticket_id=$1),
             last_message_at=$2, updated_at=$2,
@@ -869,7 +941,7 @@ module.exports = {
   USERS, userFromKey,
   httpJson, gorgias, slack, slackPost, G_DOMAIN,
   BRAND_MAILBOX, ACTIVE_MAILBOXES, brandForAddress, mailboxForName, resolveMailbox, addressFromMessages, mailboxFromIntegrations,
-  runImport, importState: () => importRun, saveTicket, stripHtml, mergeTickets, dedupeTickets, findTicketForEmail,
+  runImport, importState: () => importRun, saveTicket, stripHtml, mergeTickets, dedupeTickets, findTicketForEmail, classifyInbound, classifyBacklog, parseShopifyForm, removeTags, JUNK_TAG_SET,
   gmailConfigured, OAUTH_CLIENTS, clientForAddress, clientById, exchangeCode, accessTokenFor, gapi, gmailSend, pollMailbox, pollAll, storeGmailMessage, b64urlEncode, b64urlDecode, formEncode, GMAIL_SCOPES, OAUTH_REDIRECT,
   onInbound, emitInbound,
   sendReply, sendNewEmail, addNote, addTags, htmlify, stripQuoted,
