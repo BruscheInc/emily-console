@@ -284,7 +284,7 @@ function fmtDay(ts){try{return new Date(ts).toLocaleDateString([],{month:"short"
 if(!KEY){ $("keygate").classList.remove("hidden"); }
 else {(async()=>{
   let role=null; try{ role=await (await fetch("/api/role?key="+encodeURIComponent(KEY))).json(); }catch(e){}
-  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); const so=document.querySelector('a.nav[onclick*="signOut"]'); if(so&&role.user) so.innerHTML='<span class="i">⎋</span>Sign out · '+role.user; if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); api("/api/version").then(v=>{$("ver").textContent=v.major;}).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList();}},30000); }
+  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); const so=document.querySelector('a.nav[onclick*="signOut"]'); if(so&&role.user) so.innerHTML='<span class="i">⎋</span>Sign out · '+role.user; if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); api("/api/version").then(v=>{$("ver").textContent=v.major;}).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
   else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="Your session has ended — sign in again."; try{localStorage.removeItem("ec_key");}catch(e){} }
 })();}
 
@@ -313,18 +313,21 @@ function chipsFor(t){
   return out.join("");
 }
 let STUCK_STATE="open";
-async function loadList(force){
-  const el=$("list"); if(force)el.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';
+let _listSig="";
+async function loadList(force,silent){
+  const el=$("list"); if(force){el.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';_listSig="";}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
   const isStuck=VIEW==="stuck"||VIEW==="undelivered";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
-  if(isStuck) return loadStuck();
+  if(isStuck) return loadStuck(silent);
   try{
     const d=await api(`/api/tickets?tab=${TAB}&view=${encodeURIComponent(VIEW)}&q=${encodeURIComponent($("q").value.trim())}&limit=${PAGE}&offset=${OFFSET}`);
     tickets=d.tickets||[]; TOTAL=d.total||tickets.length;
+    const sig=JSON.stringify([VIEW,TAB,OFFSET,TOTAL,tickets.map(t=>[t.id,t.last,t.unread,t.tags,t.messages_count])]);
+    if(silent&&sig===_listSig) return; _listSig=sig;
     if(OFFSET>0&&!tickets.length){OFFSET=0;return loadList(true);}
     const from=TOTAL?OFFSET+1:0, to=Math.min(OFFSET+tickets.length,TOTAL);
     $("showing").textContent=TOTAL?`Showing ${from}–${to} of ${TOTAL.toLocaleString()}`:"";
@@ -670,14 +673,19 @@ async function loadCustomer(email,orderHint){
 async function reclassify(b){ b.disabled=true; const was=b.textContent; b.textContent="Checking…"; try{ const r=await api("/api/admin/classify",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.checked} — ${r.junk} hidden as machinery/marketing`); loadCounts(); loadList(true);}catch(e){toast("Couldn't run the check");} b.disabled=false; b.textContent=was; }
 async function dedupe(b){ b.disabled=true; const was=b.textContent; b.textContent="Checking…"; try{ const r=await api("/api/admin/dedupe",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(r.merged?`Merged ${r.merged} duplicate ticket${r.merged===1?"":"s"}`:"No duplicates found"); loadCounts(); loadList(true);}catch(e){toast("Couldn't run the check");} b.disabled=false; b.textContent=was; }
 /* ---------- Stuck packages: Shopify "Tracking added" with no carrier movement for 4+ days ---------- */
-async function loadStuck(){
-  const w=$("stuckwrap"); w.innerHTML='<div class="empty">Checking…</div>';
+let _stuckSig="";
+async function loadStuck(silent){
+  const w=$("stuckwrap"); if(!silent){ w.innerHTML='<div class="empty">Checking…</div>'; _stuckSig=""; }
   try{
     const KIND=VIEW==="undelivered"?"undelivered":"never_scanned";
     const d=await api("/api/stuck?state="+encodeURIComponent(STUCK_STATE)+"&kind="+KIND);
+    const sig=JSON.stringify([KIND,STUCK_STATE,d.counts,d.last_scan&&d.last_scan.at,d.items.map(x=>[x.id,x.state,x.carrier_status,x.note,x.ticket_id])]);
+    if(silent&&sig===_stuckSig) return;          // nothing changed — leave the page alone (no blink, keeps your dropdown choice)
+    if(silent&&document.querySelector("#stuckwrap select.stk-sel") && [...document.querySelectorAll("#stuckwrap select.stk-sel")].some(x=>x.value)) return;   // you're mid-action; redraw later
+    _stuckSig=sig;
     const c=d.counts||{}; const last=d.last_scan; const seg=(k,l)=>`<button class="tab ${STUCK_STATE===k?"on":""}" onclick="STUCK_STATE='${k}';loadStuck()">${l}<span class="n">${k==="open"?(c.open||0)+(c.contacted||0):k==="all"?Object.values(c).reduce((a,b)=>a+b,0):(c[k]||0)}</span></button>`;
     $("showing").textContent=d.items.length?`${d.items.length} package${d.items.length===1?"":"s"}`:"";
-    const head=`<div class="stuckhead"><span>${KIND==="undelivered"?`Orders placed <b>${d.threshold_days}+ days ago</b> that Shopify still doesn't show as delivered — moving or not.`:`Orders whose Shopify delivery status is still <b>Tracking added</b> after ${d.threshold_days}+ days — the carrier has never scanned the package.`} Orders from ${fmtDay(d.since)} onward.</span>
+    const head=`<div class="stuckhead"><span>${KIND==="undelivered"?`Orders placed <b>${d.threshold_days}+ days ago</b> that Shopify still doesn't show as delivered — moving or not.`:`Labels created ${d.threshold_days}+ days ago with <b>no in-transit scan</b> from the carrier — either never scanned at all, or accepted at the counter and not moved since.`} Orders from ${fmtDay(d.since)} onward.</span>
       <span>${last?`Last checked ${fmt(last.at)} · ${last.scanned} shipped orders scanned${(last.errors||[]).length?` · <span style="color:#c0392b">${esc(last.errors.join(" | "))}</span>`:""}`:"Not checked yet"}</span>
       <button class="btn sec xs" onclick="stuckRefresh(this)">↻ Check now</button>
       <span style="flex-basis:100%;color:var(--muted);font-size:12px">How to read this: Shopify only updates delivery status itself for labels bought through Shopify Shipping. ShipStation-fulfilled orders stay on "Tracking added" whatever happens to the package, so a package here may already be delivered — check the tracking link before acting.${d.carrier_api?" Each row is also checked with the carrier automatically.":""}</span>
