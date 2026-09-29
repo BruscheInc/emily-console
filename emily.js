@@ -850,7 +850,9 @@ function shapeTrack(j) {
   const ev = (j.events || [])[0] || null;
   const code = String(j.status_code || "").toUpperCase();   // AC accepted · IT in transit · DE delivered · EX exception · UN unknown · NY not yet in system · AT attempted · SP available for pickup
   return { code, description: j.status_description || j.carrier_status_description || code, delivered: code === "DE" || !!j.actual_delivery_date, delivered_at: j.actual_delivery_date || null, estimated: j.estimated_delivery_date || null,
-           last_event: ev ? { at: ev.occurred_at, desc: ev.description || ev.carrier_status_description, where: [ev.city_locality, ev.state_province].filter(Boolean).join(", ") } : null, in_transit: ["IT", "AC", "AT", "SP"].includes(code) };
+           last_event: ev ? { at: ev.occurred_at, desc: ev.description || ev.carrier_status_description, where: [ev.city_locality, ev.state_province].filter(Boolean).join(", ") } : null,
+           // "moving" means a real transit scan. An acceptance scan (AC) only proves the carrier took the package — if nothing follows, it's still stuck.
+           moving: ["IT", "AT", "SP"].includes(code), accepted_only: code === "AC", not_in_system: code === "NY" || code === "UN" };
 }
 let trackRoute = null;   // "tracking" | "label" — remembered once we know which endpoint the plan allows
 let trackDiagLogged = false;
@@ -882,6 +884,9 @@ let lastVerify = null;
 let fixTrackingBlocked = null;   // set to the reason once Shopify refuses (missing scope) so we don't retry every row
 // Cross-check every open row with the carrier and, where allowed, repair Shopify's carrier field.
 async function verifyWatch() {
+  try { const fx = await db(`UPDATE hd_stuck SET state='open', moved_at=NULL, note=regexp_replace(note, ' · carrier shows movement \\((Accepted|USPS in possession[^)]*|Acceptance[^)]*|AC)\\)', '', 'gi')
+                             WHERE kind='never_scanned' AND state='resolved' AND note ~* 'carrier shows movement \\((Accepted|USPS in possession|Acceptance|AC)' AND (display_status IS NULL OR display_status NOT IN ('IN_TRANSIT','DELIVERED','OUT_FOR_DELIVERY','ATTEMPTED_DELIVERY'))`);
+        if (fx.rowCount) console.log(`📦🔎 reopened ${fx.rowCount} package(s) that had only an acceptance scan`); } catch (_) {}
   const rows = (await db(`SELECT * FROM hd_stuck WHERE state IN ('open','contacted') ORDER BY order_created_at ASC`)).rows;
   let checked = 0, delivered = 0, fixed = 0, apiError = null; const fixedIds = new Set(), asked = new Map();
   for (const r of rows) {
@@ -904,11 +909,16 @@ async function verifyWatch() {
       catch (e) { if (!apiError) console.error(`carrier check ${r.order_name}: ${e.message}`); if (!e.nolabel && /401|403|billing plan|unauthori/i.test(e.message)) apiError = /billing plan|required features/i.test(e.message) ? "ShipStation says the tracking API isn't included in your plan (\"upgrade your billing plan or add required features\")." : `ShipStation rejected the V2 key (${e.message.slice(0, 120)})`; }
     }
     if (cs) {
-      const status = cs.delivered ? `Delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}` : (cs.description || cs.code);
+      const lastAt = cs.last_event && cs.last_event.at ? new Date(cs.last_event.at) : null;
+      const quietDays = lastAt ? Math.floor((Date.now() - lastAt.getTime()) / 864e5) : null;
+      const status = cs.delivered ? `Delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}`
+                   : cs.accepted_only ? `Accepted by carrier${lastAt ? " " + lastAt.toISOString().slice(0, 10) : ""} — no movement since${quietDays != null ? ` (${quietDays} d)` : ""}`
+                   : cs.not_in_system ? "Not in carrier's system yet"
+                   : `${cs.description || cs.code}${quietDays != null && quietDays >= 3 ? ` — no scan for ${quietDays} d` : ""}`;
       await db(`UPDATE hd_stuck SET carrier_status=$2, carrier_status_at=$3, carrier_checked_at=now(), carrier_note=$4, shopify_trackable=COALESCE(shopify_trackable,$5) WHERE id=$1`,
         [r.id, status, cs.last_event ? cs.last_event.at : (cs.delivered_at || null), [note, cs.last_event ? `${cs.last_event.desc}${cs.last_event.where ? " · " + cs.last_event.where : ""}` : null].filter(Boolean).join(" "), trackable]);
       if (cs.delivered) { delivered++; await closeWatch(r.id, "never_scanned", `carrier says delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}`, "DELIVERED", { delivered_at: cs.delivered_at }); await closeWatch(r.id, "undelivered", `carrier says delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}`, "DELIVERED", { delivered_at: cs.delivered_at }); }
-      else if (cs.in_transit) await closeWatch(r.id, "never_scanned", `carrier shows movement (${cs.description || cs.code})`, "IN_TRANSIT");
+      else if (cs.moving) await closeWatch(r.id, "never_scanned", `carrier shows movement (${cs.description || cs.code})`, "IN_TRANSIT");
     } else {
       await db(`UPDATE hd_stuck SET carrier_note=$2, shopify_trackable=COALESCE(shopify_trackable,$3), carrier_checked_at=CASE WHEN $4 THEN carrier_checked_at ELSE now() END WHERE id=$1`, [r.id, note, trackable, !!SS_V2_KEY]);
     }

@@ -3,6 +3,15 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.8 — Sep 29, 2026
+- No more blinking: the 30-second background refresh redraws the ticket table and the Shipments views only when
+  something actually changed, never shows a "Checking…" placeholder, and waits if you have an action selected.
+
+## v4.7 — Sep 29, 2026
+- Never scanned: an acceptance scan no longer counts as movement. Only a real in-transit scan (or delivery)
+  clears a package; "accepted, no movement since (N days)" stays on the list and says so. Packages closed on an
+  acceptance scan by v4.6 are reopened automatically.
+
 ## v4.6 — Sep 29, 2026
 - Carrier check falls back to ShipStation's "track this label" route (included with API access) when the
   track-any-number route is a plan add-on; the log reports which route works.
