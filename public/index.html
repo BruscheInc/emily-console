@@ -158,10 +158,20 @@
 </head>
 <body>
 <div id="keygate" class="keyprompt hidden">
-  <h2>📨 Helpdesk</h2>
-  <p style="color:#647087" id="gateMsg">Enter your access key.</p>
-  <input id="keyInput" type="password" placeholder="access key" onkeydown="if(event.key==='Enter')saveKey()" />
-  <button class="btn" style="width:100%" onclick="saveKey()">Open</button>
+  <img src="logo.svg" alt="" width="56" height="56" style="border-radius:14px;box-shadow:0 6px 18px rgba(30,70,184,.25)">
+  <h2 style="margin:12px 0 2px">Helpdesk</h2>
+  <p style="color:#647087;margin:0 0 14px" id="gateMsg">Sign in with your email and password.</p>
+  <div id="loginForm">
+    <input id="loginEmail" type="email" placeholder="you@larkspurbaby.com" autocomplete="username" onkeydown="if(event.key==='Enter')$('loginPass').focus()" />
+    <input id="loginPass" type="password" placeholder="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+    <button class="btn" style="width:100%" id="loginBtn" onclick="doLogin()">Sign in</button>
+    <p style="margin:14px 0 0"><a href="#" style="color:#647087;font-size:12px" onclick="$('loginForm').style.display='none';$('keyForm').style.display='block';return false">Use an access key instead</a></p>
+  </div>
+  <div id="keyForm" style="display:none">
+    <input id="keyInput" type="password" placeholder="access key" onkeydown="if(event.key==='Enter')saveKey()" />
+    <button class="btn" style="width:100%" onclick="saveKey()">Open</button>
+    <p style="margin:14px 0 0"><a href="#" style="color:#647087;font-size:12px" onclick="$('keyForm').style.display='none';$('loginForm').style.display='block';return false">Sign in with email instead</a></p>
+  </div>
 </div>
 
 <div id="app" class="hidden" style="display:flex;height:100%">
@@ -209,6 +219,26 @@
       <h2 style="flex:1;margin:0;font-size:19px">Settings</h2>
       <button class="link" onclick="closeSettings()">✕ Close</button>
     </div>
+    <div id="usersSec">
+    <h4 style="margin:18px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#7c8ba1">Users</h4>
+    <div id="users" style="color:#647087;font-size:13px">Loading…</div>
+    <div id="adduser" style="display:none;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)">
+      <div style="font-weight:700;margin-bottom:8px">Add a user</div>
+      <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <input id="nu-name" type="text" placeholder="Name" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink)">
+        <input id="nu-email" type="email" placeholder="Email (their login)" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink)">
+        <input id="nu-pass" type="text" placeholder="Password (8+ characters)" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink)">
+        <select id="nu-role" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink)"><option value="agent">Agent — works tickets</option><option value="admin">Admin — also manages users &amp; settings</option></select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><button class="btn" onclick="createUser()">Create user</button><button class="btn sec" onclick="$('adduser').style.display='none'">Cancel</button><span style="color:#647087;font-size:12px">Tell them their email and this password; they can change it from Settings.</span></div>
+    </div>
+    </div>
+    <h4 style="margin:18px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#7c8ba1">Your password</h4>
+    <div id="mypass" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="pw-cur" type="password" placeholder="current password" autocomplete="current-password" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--ink)">
+      <input id="pw-new" type="password" placeholder="new password (8+)" autocomplete="new-password" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--ink)">
+      <button class="btn sec" onclick="changeMyPassword()">Change password</button>
+    </div>
     <h4 style="margin:18px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#7c8ba1">Mailboxes</h4>
     <div id="mboxes">Loading…</div>
     <h4 style="margin:22px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#7c8ba1">Gorgias history</h4>
@@ -232,7 +262,16 @@ const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(m,bad){const t=$("toast");t.textContent=m;t.className="toast show"+(bad?" bad":"");clearTimeout(t._t);t._t=setTimeout(()=>t.className="toast",2600);}
 function saveKey(){const v=$("keyInput").value.trim();if(!v)return;try{localStorage.setItem("ec_key",v);}catch(e){}location.href=location.pathname+"?key="+encodeURIComponent(v);}
-function signOut(){try{localStorage.removeItem("ec_key");}catch(e){}location.href=location.pathname;}
+function signOut(){ try{ fetch("/api/logout?key="+encodeURIComponent(KEY),{method:"POST"}).catch(()=>{}); }catch(e){} try{localStorage.removeItem("ec_key");}catch(e){} setTimeout(()=>{location.href=location.pathname;},150); }
+async function doLogin(){
+  const email=$("loginEmail").value.trim(), password=$("loginPass").value; if(!email||!password){$("gateMsg").textContent="Enter your email and password.";return;}
+  const b=$("loginBtn"); b.disabled=true; b.textContent="Signing in…";
+  try{ const r=await (await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})})).json();
+    if(r.error||!r.token){ $("gateMsg").textContent=r.error||"Couldn't sign in."; $("gateMsg").style.color="#c0392b"; b.disabled=false; b.textContent="Sign in"; return; }
+    try{localStorage.setItem("ec_key",r.token);}catch(e){} location.href=location.pathname;
+  }catch(e){ $("gateMsg").textContent="Couldn't reach the server."; b.disabled=false; b.textContent="Sign in"; }
+}
+let ME=null;
 async function api(p,opts){opts=opts||{};const u=p+(p.includes("?")?"&":"?")+"key="+encodeURIComponent(KEY);const r=await fetch(u,opts);if(r.status===401){toast("Unauthorized",true);throw new Error("401");}return r.json();}
 let TAB="pending", CUR=null, tickets=[];
 let VIEW=(function(){try{return localStorage.getItem("ec_view")||"lbo_tickets";}catch(e){return "lbo_tickets";}})();
@@ -243,8 +282,8 @@ function fmtDay(ts){try{return new Date(ts).toLocaleDateString([],{month:"short"
 if(!KEY){ $("keygate").classList.remove("hidden"); }
 else {(async()=>{
   let role=null; try{ role=await (await fetch("/api/role?key="+encodeURIComponent(KEY))).json(); }catch(e){}
-  if(role&&role.ok){ $("app").classList.remove("hidden"); if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); api("/api/version").then(v=>{$("ver").textContent=v.major;}).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList();}},30000); }
-  else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="That key isn't recognized."; try{localStorage.removeItem("ec_key");}catch(e){} }
+  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); const so=document.querySelector('a.nav[onclick*="signOut"]'); if(so&&role.user) so.innerHTML='<span class="i">⎋</span>Sign out · '+role.user; if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); api("/api/version").then(v=>{$("ver").textContent=v.major;}).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList();}},30000); }
+  else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="Your session has ended — sign in again."; try{localStorage.removeItem("ec_key");}catch(e){} }
 })();}
 
 function applyView(){document.querySelectorAll(".nav.view").forEach(b=>b.classList.toggle("on",b.dataset.view===VIEW));}
@@ -301,7 +340,7 @@ async function loadList(force){
 
 /* ---------- settings: mailbox connection + history import ---------- */
 let _impT=null;
-function openSettings(){ $("settings").classList.remove("hidden"); loadMailboxes(); loadImport(); loadEmilyAuto(); loadEmilyPolicies(); loadEmilyActivity(); _impT=setInterval(loadImport,4000); }
+function openSettings(){ $("settings").classList.remove("hidden"); loadUsers(); loadMailboxes(); loadImport(); loadEmilyAuto(); loadEmilyPolicies(); loadEmilyActivity(); _impT=setInterval(loadImport,4000); }
 const INTENTS=[["tracking","Where is my order / tracking"],["subscription","Newsletter sign-up or status"],["sizing_care","Sizing, fabric, care questions"],["returns_info","How do I return (link + policy)"],["policy_info","Shipping, discount and policy questions"],["damage","Damaged item"],["lost","Lost / not received"],["missing_items","Missing items"],["cancel_or_address","Cancel or address change"],["discount","Asking for a discount"],["oos_reply","Reply to an out-of-stock email"]];
 async function loadEmilyAuto(){
   try{
@@ -673,6 +712,33 @@ async function stuckOrder(name,email){
   // Jump to the customer's latest ticket if there is one; otherwise just look the order up in a fresh ticket-less view isn't possible, so open the customer's most recent ticket or explain.
   try{ const d=await api(`/api/tickets?tab=all&view=all&q=${encodeURIComponent(email||name)}&limit=1`); if(d.tickets&&d.tickets.length){ openTicket(d.tickets[0].id); setTimeout(()=>loadOrder(name),1200); return; } }catch(e){}
   toast("No ticket with this customer yet — use Email customer to start one");
+}
+
+/* ---------- users & passwords ---------- */
+async function loadUsers(){
+  const el=$("users"); const sec=$("usersSec");
+  if(!ME||ME.role!=="admin"){ sec.style.display="none"; $("mypass").style.display=ME&&ME.email?"flex":"none"; return; }
+  sec.style.display=""; $("mypass").style.display=ME.email?"flex":"none";
+  try{ const d=await api("/api/users"); const us=d.users||[];
+    el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">${us.map(u=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px 4px"><b>${esc(u.name)}</b>${u.active?"":' <span class="chip skip">deactivated</span>'}<div style="color:#647087">${esc(u.email)}</div></td><td style="padding:8px 4px;color:#647087">${esc(u.role)}${u.last_login?`<div>last sign-in ${fmtDay(u.last_login)}</div>`:"<div>never signed in</div>"}</td><td style="padding:8px 4px;text-align:right;white-space:nowrap">
+      <button class="btn sec xs" onclick="resetUserPassword(${u.id},'${esc(u.name)}')">Reset password</button>
+      <button class="btn sec xs" onclick="updateUser(${u.id},{role:'${u.role==="admin"?"agent":"admin"}'})">${u.role==="admin"?"Make agent":"Make admin"}</button>
+      <button class="btn sec xs" onclick="updateUser(${u.id},{active:${u.active?"false":"true"}})">${u.active?"Deactivate":"Reactivate"}</button></td></tr>`).join("")}</table>
+      ${us.length?"":'<div style="padding:8px 0">No user accounts yet — you are signed in with the access key. Add yourself first.</div>'}
+      <button class="btn sec" style="margin-top:10px" onclick="$('adduser').style.display='block';$('nu-name').focus()">+ Add user</button>`;
+  }catch(e){ el.textContent="Couldn't load users."; }
+}
+async function createUser(){
+  const body={name:$("nu-name").value,email:$("nu-email").value,password:$("nu-pass").value,role:$("nu-role").value};
+  try{ const r=await api("/api/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error){toast(r.error,true);return;} toast(`Added ${r.user.name}`); $("nu-name").value=$("nu-email").value=$("nu-pass").value=""; $("adduser").style.display="none"; loadUsers(); }catch(e){toast("Failed",true);}
+}
+async function updateUser(id,patch){
+  try{ const r=await api("/api/users/"+id,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(patch)}); if(r.error){toast(r.error,true);return;} toast("Saved"); loadUsers(); }catch(e){toast("Failed",true);}
+}
+function resetUserPassword(id,name){ const pw=window.prompt(`New password for ${name} (8+ characters):`); if(pw===null)return; updateUser(id,{password:pw}); }
+async function changeMyPassword(){
+  const current=$("pw-cur").value, password=$("pw-new").value; if(!current||!password){toast("Fill in both fields",true);return;}
+  try{ const r=await api("/api/me/password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({current,password})}); if(r.error){toast(r.error,true);return;} toast("Password changed — sign in again"); setTimeout(signOut,800); }catch(e){toast("Failed",true);}
 }
 
 function rail(d){
