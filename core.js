@@ -129,6 +129,14 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS emily_policies (id BIGSERIAL PRIMARY KEY, key TEXT NOT NULL, body TEXT NOT NULL, note TEXT, updated_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE INDEX IF NOT EXISTS idx_emily_policies_key ON emily_policies(key, id DESC)`);
   await db(`CREATE TABLE IF NOT EXISTS emily_settings (key TEXT PRIMARY KEY, value JSONB, updated_by TEXT, updated_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`CREATE TABLE IF NOT EXISTS hd_stuck (
+    id TEXT PRIMARY KEY,                       -- fulfillment gid
+    store TEXT, order_name TEXT, order_id TEXT, customer_name TEXT, customer_email TEXT, city TEXT,
+    tracking TEXT, tracking_url TEXT, carrier TEXT, display_status TEXT,
+    tracking_added_at TIMESTAMPTZ, order_created_at TIMESTAMPTZ,
+    state TEXT NOT NULL DEFAULT 'open',        -- open | contacted | resolved | ignored
+    note TEXT, ticket_id BIGINT, state_by TEXT, state_at TIMESTAMPTZ,
+    first_seen TIMESTAMPTZ DEFAULT now(), last_seen TIMESTAMPTZ DEFAULT now(), moved_at TIMESTAMPTZ)`);
   await db(`CREATE TABLE IF NOT EXISTS hd_files (id TEXT PRIMARY KEY, ticket_id BIGINT, name TEXT, content_type TEXT, data BYTEA, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS todo JSONB`);
   await db(`ALTER TABLE emily_actions ADD COLUMN IF NOT EXISTS files JSONB`);

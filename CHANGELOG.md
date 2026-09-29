@@ -3,6 +3,20 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v3.8 — Sep 29, 2026
+- **New mark.** A speech bubble with a heart — the conversation, handled with care — in the sidebar, browser tab
+  and home-screen icon.
+- Stuck packages only considers orders placed on or after Sep 1, 2026 (STUCK_SINCE); anything older is never added.
+
+## v3.7 — Sep 29, 2026
+- **Stuck packages tab.** Scans both Shopify stores every 6 hours (and on "Check now") for shipped orders whose
+  delivery status is still "Tracking added" — a tracking number exists but the carrier has never scanned it — for
+  4+ days (STUCK_DAYS). Lists order, customer, tracking link, days since tracking was added, Shopify status, with
+  Email customer (pre-written note, opens a ticket from the brand mailbox), Contacted, Resolved, Ignore. A package
+  drops off automatically once Shopify sees it move or get delivered. Count shows in the sidebar.
+- **Logo.** Helpdesk has its own mark (inbox tray with a letter dropping in) in the sidebar, the browser tab, and the
+  home-screen icon; the tab title shows the pending-ticket count.
+
 ## v3.6 — Sep 28, 2026  (v3.5 skipped — its automated returns were dropped; returns stay with a person)
 - **"This reply commits you to" list.** If a draft promises something Emily has no tool for — a manual return
   label, shipping a missing item — it's listed under the draft with Done / Won't do buttons, and marking it
