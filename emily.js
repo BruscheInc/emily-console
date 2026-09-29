@@ -840,16 +840,37 @@ function carrierFromNumber(n) {
   return null;
 }
 const SS_V2_KEY = process.env.SHIPSTATION_V2_KEY || "";
-async function ssV2Track(carrierCode, number) {
-  if (!SS_V2_KEY) return null;
-  const r = await fetch(`https://api.shipstation.com/v2/tracking?carrier_code=${encodeURIComponent(carrierCode)}&tracking_number=${encodeURIComponent(number)}`, { headers: { "API-Key": SS_V2_KEY, Accept: "application/json" } });
-  const t = await r.text();
-  if (!r.ok) throw new Error(`ShipStation tracking ${r.status}: ${t.slice(0, 160)}`);
-  const j = JSON.parse(t);
+const ssV2 = async (pathname) => {
+  const r = await fetch(`https://api.shipstation.com${pathname}`, { headers: { "API-Key": SS_V2_KEY, Accept: "application/json" } });
+  const t = await r.text(); let j = null; try { j = t ? JSON.parse(t) : {}; } catch { j = { raw: t.slice(0, 200) }; }
+  if (!r.ok) { const msg = (j && j.errors && j.errors[0] && j.errors[0].message) || t.slice(0, 160); const e = new Error(`ShipStation ${r.status}: ${msg}`); e.status = r.status; e.plan = /billing plan|required features/i.test(msg); throw e; }
+  return j;
+};
+function shapeTrack(j) {
   const ev = (j.events || [])[0] || null;
   const code = String(j.status_code || "").toUpperCase();   // AC accepted · IT in transit · DE delivered · EX exception · UN unknown · NY not yet in system · AT attempted · SP available for pickup
   return { code, description: j.status_description || j.carrier_status_description || code, delivered: code === "DE" || !!j.actual_delivery_date, delivered_at: j.actual_delivery_date || null, estimated: j.estimated_delivery_date || null,
            last_event: ev ? { at: ev.occurred_at, desc: ev.description || ev.carrier_status_description, where: [ev.city_locality, ev.state_province].filter(Boolean).join(", ") } : null, in_transit: ["IT", "AC", "AT", "SP"].includes(code) };
+}
+let trackRoute = null;   // "tracking" | "label" — remembered once we know which endpoint the plan allows
+let trackDiagLogged = false;
+// Track a package. Route 1 (any number) is a paid add-on on some ShipStation plans; route 2 (labels created in this
+// account) is included with API access, and every label we care about came from this account.
+async function ssV2Track(carrierCode, number) {
+  if (!SS_V2_KEY) return null;
+  const diag = [];
+  if (trackRoute !== "label") {
+    try { const j = await ssV2(`/v2/tracking?carrier_code=${encodeURIComponent(carrierCode)}&tracking_number=${encodeURIComponent(number)}`); trackRoute = "tracking"; diag.push("tracking endpoint: ok"); if (!trackDiagLogged) { trackDiagLogged = true; console.log(`📦🔎 carrier route: ${diag.join(" · ")}`); } return shapeTrack(j); }
+    catch (e) { diag.push(`tracking endpoint: ${e.message}`); if (!(e.status === 401 || e.status === 403 || e.plan)) { if (!trackDiagLogged) { trackDiagLogged = true; console.log(`📦🔎 carrier route: ${diag.join(" · ")}`); } throw e; } }
+  }
+  // find the label by tracking number, then track the label
+  let labels;
+  try { labels = await ssV2(`/v2/labels?tracking_number=${encodeURIComponent(number)}&page_size=5`); diag.push(`labels lookup: ${(labels.labels || []).length} found`); }
+  catch (e) { diag.push(`labels lookup: ${e.message}`); if (!trackDiagLogged) { trackDiagLogged = true; console.log(`📦🔎 carrier route: ${diag.join(" · ")}`); } throw e; }
+  const lab = (labels.labels || []).find((l) => String(l.tracking_number) === String(number) && l.status !== "voided") || (labels.labels || [])[0];
+  if (!lab) { if (!trackDiagLogged) { trackDiagLogged = true; console.log(`📦🔎 carrier route: ${diag.join(" · ")}`); } const e = new Error("no label with that tracking number in this ShipStation account"); e.nolabel = true; throw e; }
+  try { const j = await ssV2(`/v2/labels/${encodeURIComponent(lab.label_id)}/track`); trackRoute = "label"; diag.push(`label track: ok (${j.status_code || "?"})`); if (!trackDiagLogged) { trackDiagLogged = true; console.log(`📦🔎 carrier route: ${diag.join(" · ")}`); } return shapeTrack(j); }
+  catch (e) { diag.push(`label track: ${e.message}`); if (!trackDiagLogged) { trackDiagLogged = true; console.log(`📦🔎 carrier route: ${diag.join(" · ")}`); } throw e; }
 }
 async function shopifyFixTracking(st, fulfillmentId, company, number, url) {
   const d = await storeGraphQL(st, `mutation($id:ID!,$t:FulfillmentTrackingInput!){ fulfillmentTrackingInfoUpdate(fulfillmentId:$id, trackingInfoInput:$t, notifyCustomer:false){ fulfillment{ id trackingInfo{ company number } } userErrors{ field message } } }`,
@@ -880,7 +901,7 @@ async function verifyWatch() {
     let cs = null;
     if (SS_V2_KEY && guess) {
       try { if (apiError) throw new Error(apiError); cs = asked.has(r.id) ? asked.get(r.id) : await ssV2Track(guess.v2, r.tracking); if (!asked.has(r.id)) { asked.set(r.id, cs); checked++; } }
-      catch (e) { if (!apiError) console.error(`carrier check ${r.order_name}: ${e.message}`); if (/401|403|billing plan|unauthori/i.test(e.message)) apiError = /billing plan|required features/i.test(e.message) ? "ShipStation says the tracking API isn't included in your plan (\"upgrade your billing plan or add required features\")." : `ShipStation rejected the V2 key (${e.message.slice(0, 120)})`; }
+      catch (e) { if (!apiError) console.error(`carrier check ${r.order_name}: ${e.message}`); if (!e.nolabel && /401|403|billing plan|unauthori/i.test(e.message)) apiError = /billing plan|required features/i.test(e.message) ? "ShipStation says the tracking API isn't included in your plan (\"upgrade your billing plan or add required features\")." : `ShipStation rejected the V2 key (${e.message.slice(0, 120)})`; }
     }
     if (cs) {
       const status = cs.delivered ? `Delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}` : (cs.description || cs.code);

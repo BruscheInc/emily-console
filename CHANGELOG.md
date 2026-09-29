@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.6 — Sep 29, 2026
+- Carrier check falls back to ShipStation's "track this label" route (included with API access) when the
+  track-any-number route is a plan add-on; the log reports which route works.
+
 ## v4.5 — Sep 29, 2026
 - Shipments: the row actions are now one dropdown (Email customer / Open ticket, Check stock, Offer replacement,
   Offer credit +15%, Mark contacted, Mark resolved, Ignore / Reopen) with a Go button, instead of a wall of buttons.

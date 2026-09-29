@@ -1,6 +1,6 @@
 {
   "name": "helpdesk",
-  "version": "4.5.0",
+  "version": "4.6.0",
   "private": true,
   "description": "Helpdesk \u2014 Brusche Inc.'s own support desk (Larkspur Baby \u00b7 Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
   "main": "server.js",
