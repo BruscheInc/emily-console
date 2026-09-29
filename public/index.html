@@ -680,14 +680,15 @@ async function loadStuck(){
     const head=`<div class="stuckhead"><span>${KIND==="undelivered"?`Orders placed <b>${d.threshold_days}+ days ago</b> that Shopify still doesn't show as delivered — moving or not.`:`Orders whose Shopify delivery status is still <b>Tracking added</b> after ${d.threshold_days}+ days — the carrier has never scanned the package.`} Orders from ${fmtDay(d.since)} onward.</span>
       <span>${last?`Last checked ${fmt(last.at)} · ${last.scanned} shipped orders scanned${(last.errors||[]).length?` · <span style="color:#c0392b">${esc(last.errors.join(" | "))}</span>`:""}`:"Not checked yet"}</span>
       <button class="btn sec xs" onclick="stuckRefresh(this)">↻ Check now</button>
-      ${!d.carrier_api?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Shopify's status is only as good as its carrier link. Add a ShipStation API key (SHIPSTATION_V2_KEY) and each package below is checked with the carrier directly — delivered ones close themselves.</span>`:""}
-      ${d.repair_blocked?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Some fulfillments carry a carrier name Shopify doesn't follow. Add the <b>write_fulfillments</b> scope to the Emily Shopify app and the Helpdesk will correct them so Shopify starts updating.</span>`:""}
+      <span style="flex-basis:100%;color:var(--muted);font-size:12px">How to read this: Shopify only updates delivery status itself for labels bought through Shopify Shipping. ShipStation-fulfilled orders stay on "Tracking added" whatever happens to the package, so a package here may already be delivered — check the tracking link before acting.${d.carrier_api?" Each row is also checked with the carrier automatically.":""}</span>
+      ${d.carrier_api_error?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Carrier check unavailable: ${esc(d.carrier_api_error)}</span>`:(!d.carrier_api?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ No carrier check configured — add SHIPSTATION_V2_KEY (ShipStation plan with API tracking) and delivered packages will close themselves.</span>`:"")}
+      ${d.repair_blocked?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Some fulfillments carry a carrier name Shopify doesn't recognise. Add the <b>write_fulfillments</b> scope to the Emily Shopify app and the Helpdesk will correct them.</span>`:""}
       <div class="seg">${seg("open","Needs attention")}${seg("contacted","Contacted")}${seg("resolved","Resolved")}${seg("ignored","Ignored")}${seg("all","All")}</div></div>`;
     if(!d.items.length){ w.innerHTML=head+`<div class="empty">${KIND==="undelivered"?"Nothing here — every order older than "+d.threshold_days+" days has been delivered.":"Nothing here — every recent package has been scanned by the carrier."}</div>`; return; }
     w.innerHTML=head+`<table class="tickets stuck"><thead><tr><th class="c-t">Order</th><th>Customer</th><th>Tracking</th><th>${KIND==="undelivered"?"Order age":"Tracking added"}</th><th>Shopify status</th><th>Actions</th></tr></thead><tbody>${d.items.map(x=>`<tr>
       <td class="c-t" style="width:18%"><div class="subj"><button class="ordchip" onclick="stuckOrder('${esc(x.order_name)}','${esc(x.customer_email||"")}')">${esc(x.order_name)}</button></div><div class="exc">${esc(x.store)}${x.city?" · "+esc(x.city):""}${x.state!=="open"?` · <b>${esc(x.state)}</b>${x.state_by?" by "+esc(x.state_by):""}`:""}</div>${x.note?`<div class="stk-note">${esc(x.note)}</div>`:""}</td>
       <td style="width:16%">${esc(x.customer_name||"")}<div class="exc">${esc(x.customer_email||"")}</div></td>
-      <td style="width:18%"><a href="${esc(x.tracking_url||"#")}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;text-decoration:none">${esc(x.tracking)}</a><div class="exc">${esc(x.carrier||"")}${x.shopify_trackable===false?' <span style="color:#b7791f" title="Shopify does not follow this carrier name, so its status never updates">· not followed by Shopify</span>':""}</div>
+      <td style="width:18%"><a href="${esc(x.tracking_url||"#")}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;text-decoration:none">${esc(x.tracking)}</a><div class="exc">${esc(x.carrier||"")}${x.shopify_trackable===false?' <span style="color:#b7791f" title="Shopify does not recognise this carrier name">· unrecognised carrier</span>':""}</div>
         ${x.carrier_status?`<div style="margin-top:3px;font-size:12px"><b style="color:${/deliver/i.test(x.carrier_status)?"#158048":"var(--ink)"}">Carrier: ${esc(x.carrier_status)}</b>${x.carrier_status_at?` <span class="exc" style="display:inline">${fmtShort(x.carrier_status_at)}</span>`:""}</div>`:""}
         ${x.carrier_note?`<div class="stk-note" style="font-size:11.5px">${esc(x.carrier_note)}</div>`:""}</td>
       ${KIND==="undelivered"
@@ -695,19 +696,31 @@ async function loadStuck(){
           <td style="width:14%"><span class="chip ${x.also_never_scanned?"skip":"drafted"}">${x.also_never_scanned?"never scanned":esc(String(x.display_status||"").toLowerCase().replace(/_/g," "))}</span>${x.in_transit_at?`<div class="exc">in transit since ${fmtShort(x.in_transit_at)}</div>`:""}${x.estimated_delivery_at?`<div class="exc">est. ${fmtShort(x.estimated_delivery_at)}</div>`:""}${x.last_update_at?`<div class="exc">last update ${fmtShort(x.last_update_at)}</div>`:""}</td>`
         :`<td class="days ${x.days>=10?"hot":x.days>=7?"warm":""}" style="width:14%"><b>${x.days} days</b><div class="exc">${fmtDay(x.tracking_added_at)}</div></td>
           <td style="width:12%"><span class="chip drafted">${esc(String(x.display_status||"").toLowerCase().replace(/_/g," "))}</span>${x.moved_at?`<div class="exc">moved ${fmtDay(x.moved_at)}</div>`:""}</td>`}
-      <td style="width:22%"><div class="stk-acts">
-        ${x.ticket_id?`<button class="btn sec xs" onclick="openTicket(${x.ticket_id})">Open ticket</button>`:`<button class="btn sec xs" onclick="stuckEmail('${esc(x.id)}')">✉️ Email customer</button>`}
-        <button class="btn sec xs" onclick="stuckStock('${esc(x.id)}')" title="Live stock check only — nothing is drafted or sent">📦 Check stock</button>
-        <button class="btn sec xs" onclick="stuckOffer('${esc(x.id)}','replacement')" title="Live stock check, then draft an offer to reship">🎁 Replacement</button>
-        <button class="btn sec xs" onclick="stuckOffer('${esc(x.id)}','credit')" title="Store credit for the order plus a 15% bonus">💳 Credit +15%</button>
-        ${x.state!=="contacted"&&!x.ticket_id?`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','contacted')">Contacted</button>`:""}
-        ${x.state!=="resolved"?`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','resolved')">Resolved</button>`:""}
-        ${x.state!=="ignored"?`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','ignored')">Ignore</button>`:`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','open')">Reopen</button>`}
+      <td style="width:22%"><div class="stk-acts" style="flex-wrap:nowrap;align-items:center">
+        <select class="stk-sel" id="act-${esc(x.id)}" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font-size:12.5px">
+          <option value="">Choose an action…</option>
+          ${x.ticket_id?`<option value="ticket">Open ticket</option>`:`<option value="email">✉️ Email customer</option>`}
+          <option value="stock">📦 Check stock</option>
+          <option value="replacement">🎁 Offer replacement</option>
+          <option value="credit">💳 Offer credit +15%</option>
+          ${x.state!=="contacted"&&!x.ticket_id?`<option value="contacted">Mark contacted</option>`:""}
+          ${x.state!=="resolved"?`<option value="resolved">Mark resolved</option>`:""}
+          ${x.state!=="ignored"?`<option value="ignored">Ignore</option>`:`<option value="open">Reopen</option>`}
+        </select>
+        <button class="btn xs" onclick="stuckGo('${esc(x.id)}',${x.ticket_id||"null"})">Go</button>
       </div></td></tr>`).join("")}</tbody></table>`;
     window._stuck=d.items;
   }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load stuck packages.</div>'; }
 }
 async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify…"; try{ const r=await api("/api/stuck/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.scanned} orders — ${r.never_scanned} never scanned · ${r.undelivered} not delivered`); }catch(e){toast("Check failed",true);} loadStuck(); loadCounts(); }
+function stuckGo(id,ticketId){
+  const sel=$("act-"+id); const v=sel&&sel.value; if(!v){toast("Pick an action first",true);return;}
+  if(v==="ticket") return openTicket(ticketId);
+  if(v==="email") return stuckEmail(id);
+  if(v==="stock") return stuckStock(id);
+  if(v==="replacement"||v==="credit") return stuckOffer(id,v);
+  return stuckState(id,v);
+}
 function stuckKind(){ return VIEW==="undelivered"?"undelivered":"never_scanned"; }
 async function stuckState(id,state){ const note=state==="ignored"||state==="resolved"?window.prompt(state==="ignored"?"Why ignore? (optional)":"What happened? (optional)",""):null; if(note===null&&(state==="ignored"||state==="resolved"))return;
   try{ const r=await api("/api/stuck/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,state,note,kind:stuckKind()})}); if(r.error){toast(r.error,true);return;} loadStuck(); loadCounts(); }catch(e){toast("Failed",true);} }
