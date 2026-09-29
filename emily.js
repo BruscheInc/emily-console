@@ -730,16 +730,14 @@ async function shopifyProposeRefund(input) {
  * both stores, keep the list in hd_stuck so each one can be worked (contacted / resolved / ignored), and drop a
  * package from the open list automatically once Shopify sees it move or get delivered. ---- */
 const STUCK_DAYS = Number(process.env.STUCK_DAYS) || 4;
-const STUCK_LOOKBACK_DAYS = Number(process.env.STUCK_LOOKBACK_DAYS) || 45;
-const STUCK_SINCE = process.env.STUCK_SINCE || "2026-09-01";   // never track anything ordered before this date
+const STUCK_SINCE = process.env.STUCK_SINCE || "2026-06-01";   // never track anything ordered before this date
 const NO_MOVEMENT = new Set(["FULFILLED", "LABEL_PRINTED", "LABEL_PURCHASED", "SUBMITTED", "MARKED_AS_FULFILLED"]);
 const STUCK_QUERY = `query($q:String!,$after:String){ orders(first:50, after:$after, query:$q, sortKey:CREATED_AT, reverse:true){
   pageInfo{ hasNextPage endCursor }
   edges{ node{ id name createdAt email customer{ displayName } shippingAddress{ city provinceCode }
     fulfillments(first:5){ id status displayStatus createdAt updatedAt inTransitAt deliveredAt estimatedDeliveryAt trackingInfo{ number url company } } } } } }`;
 async function scanStuck() {
-  const lookback = new Date(Date.now() - STUCK_LOOKBACK_DAYS * 864e5).toISOString().slice(0, 10);
-  const since = lookback > STUCK_SINCE ? lookback : STUCK_SINCE;
+  const since = STUCK_SINCE;                                   // scan everything from the start date (lookback no longer caps it)
   const cutoff = Date.now() - STUCK_DAYS * 864e5;
   const seen = new Set(); let scanned = 0, stuck = 0, errors = [];
   for (const st of STORES) {
@@ -772,7 +770,7 @@ async function scanStuck() {
           }
         }
         after = o.pageInfo && o.pageInfo.hasNextPage ? o.pageInfo.endCursor : null;
-      } while (after && pages < 12);
+      } while (after && pages < 150);
     } catch (e) { errors.push(`${st.brand}: ${e.message}`); console.error(`stuck scan ${st.brand}:`, e.message); }
   }
   try { await db(`DELETE FROM hd_stuck WHERE order_created_at < $1`, [STUCK_SINCE]); } catch (_) {}

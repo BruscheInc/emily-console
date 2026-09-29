@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.0 — Sep 29, 2026
+- **User accounts.** Sign in with email + password. Admins add users from Settings → Users (name, email,
+  password, role), reset passwords, deactivate/reactivate, and promote to admin; everyone can change their own
+  password. Roles: admin (everything) and agent (works tickets, can't manage users). Sessions last 30 days and
+  survive deploys; five wrong passwords lock that email/IP out for 15 minutes. The old access key still works
+  as an admin fallback ("Use an access key instead" on the sign-in screen).
+- Stuck packages now scans all orders from Jun 1, 2026 onward.
+
 ## v3.9 — Sep 29, 2026
 - **Tickets views now filter properly.** Every incoming email is classified on arrival — bulk-mail headers
   (List-Unsubscribe, Precedence: bulk), robot senders (noreply/notifications), social networks, vendors and

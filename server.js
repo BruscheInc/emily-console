@@ -27,7 +27,36 @@ app.use(express.static(path.join(__dirname, "public"), { setHeaders: (res, p) =>
 const VERSION = require("./package.json").version;
 app.get("/health", (_q, r) => r.json({ ok: true, version: VERSION }));
 app.get("/api/version", (_q, r) => r.json({ version: VERSION, major: "v" + VERSION.split(".")[0] }));
-app.get("/api/role", (req, res) => res.json({ ok: !!userFromKey(keyFrom(req)), user: userFromKey(keyFrom(req)) }));
+app.get("/api/role", (req, res) => { const s = core.sessionOf(keyFrom(req)); res.json({ ok: !!s, user: s ? s.name : null, role: s ? s.role : null, email: s ? s.email : null }); });
+const isAdmin = (req) => { const s = core.sessionOf(keyFrom(req)); return !!(s && s.role === "admin"); };
+/* ---- accounts ---- */
+app.post("/api/login", async (req, res) => {
+  try { const { email, password } = req.body || {}; res.json(await core.login({ email, password, ip: req.ip })); }
+  catch (e) { res.status(401).json({ error: e.message }); }
+});
+app.post("/api/logout", async (req, res) => { await core.logout(keyFrom(req)); res.json({ ok: true }); });
+app.get("/api/users", async (req, res) => {
+  if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "admins only" });
+  try { res.json({ users: await core.listUsers() }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/users", async (req, res) => {
+  if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "admins only" });
+  try { const { name, email, password, role } = req.body || {}; res.json({ user: await core.createUser({ name, email, password, role, by: actorOf(req) }) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post("/api/users/:id", async (req, res) => {
+  if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "admins only" });
+  try { const { name, role, active, password } = req.body || {}; res.json({ user: await core.updateUser(Number(req.params.id), { name, role, active, password }) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post("/api/me/password", async (req, res) => {          // anyone can change their own password
+  if (!guard(req, res)) return;
+  try { const s = core.sessionOf(keyFrom(req)); if (!s || !s.user_id) return res.status(400).json({ error: "Env-key users don't have a password here." });
+    const { current, password } = req.body || {}; const u = (await db(`SELECT * FROM hd_users WHERE id=$1`, [s.user_id])).rows[0];
+    if (!core.checkPassword(current, u.pass_salt, u.pass_hash)) return res.status(400).json({ error: "Current password is wrong." });
+    await core.updateUser(s.user_id, { password }); res.json({ ok: true, relogin: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 // Pending = the customer is waiting on us. Sent = we answered last. Closed = done.
 const CATEGORY_SQL = `CASE WHEN status='closed' THEN 'closed'
@@ -497,7 +526,7 @@ app.post("/api/mailbox/poll", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); await core.loadSessions(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
   if (pool) { try { if (!(await syncGet("dedupe_v3_1"))) { const n = await core.dedupeTickets(); await core.syncSet("dedupe_v3_1", String(n), { at: new Date().toISOString() }); console.log(`🧹 duplicate sweep done — ${n} merged`); } } catch (e) { console.error("dedupe:", e.message); } }

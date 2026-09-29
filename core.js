@@ -30,13 +30,67 @@ function loadUsers() {
   return out;
 }
 const USERS = loadUsers();
-function userFromKey(k) {
+/* Accounts live in hd_users (email + password, role admin|agent). A login creates a session token that the app
+ * sends as its key; sessions are kept in hd_sessions and mirrored in memory so every request stays synchronous.
+ * The old CONSOLE_USERS / CONSOLE_KEY env keys still work and count as admins, so nobody gets locked out. */
+const SESSIONS = new Map();     // token -> { name, email, role, user_id, exp }
+const SESSION_DAYS = Number(process.env.SESSION_DAYS) || 30;
+function sessionOf(k) {
   const v = String(k || "").trim();
   if (!v) return null;
   const u = USERS.find((x) => x.key.toLowerCase() === v.toLowerCase());
-  if (u) return u.name;
-  if (KEY && v === KEY) return "admin";
+  if (u) return { name: u.name, email: null, role: "admin", user_id: null };
+  if (KEY && v === KEY) return { name: "admin", email: null, role: "admin", user_id: null };
+  const s = SESSIONS.get(v);
+  if (s && s.exp > Date.now()) return s;
+  if (s) SESSIONS.delete(v);
   return null;
+}
+function userFromKey(k) { const s = sessionOf(k); return s ? s.name : null; }
+function hashPassword(pw, salt) { salt = salt || crypto.randomBytes(16).toString("hex"); return { salt, hash: crypto.scryptSync(String(pw), salt, 64).toString("hex") }; }
+function checkPassword(pw, salt, hash) { try { const h = crypto.scryptSync(String(pw), salt, 64); const b = Buffer.from(hash, "hex"); return h.length === b.length && crypto.timingSafeEqual(h, b); } catch { return false; } }
+const loginFails = new Map();   // email|ip -> { n, until }
+async function loadSessions() {
+  try { const r = await db(`SELECT s.token, s.expires_at, u.id, u.name, u.email, u.role FROM hd_sessions s JOIN hd_users u ON u.id = s.user_id WHERE s.expires_at > now() AND u.active`);
+    for (const x of r.rows) SESSIONS.set(x.token, { name: x.name, email: x.email, role: x.role, user_id: x.id, exp: new Date(x.expires_at).getTime() });
+    await db(`DELETE FROM hd_sessions WHERE expires_at < now()`);
+  } catch (e) { console.error("sessions:", e.message); }
+}
+async function login({ email, password, ip }) {
+  const e = String(email || "").trim().toLowerCase(); const lockKey = `${e}|${ip || ""}`;
+  const f = loginFails.get(lockKey);
+  if (f && f.until > Date.now()) throw new Error("Too many attempts — try again in 15 minutes.");
+  const u = (await db(`SELECT * FROM hd_users WHERE lower(email)=$1 AND active`, [e])).rows[0];
+  if (!u || !checkPassword(password, u.pass_salt, u.pass_hash)) {
+    const n = (f && f.last > Date.now() - 3600e3 ? f.n : 0) + 1; loginFails.set(lockKey, { n, last: Date.now(), until: n >= 5 ? Date.now() + 15 * 60e3 : 0 });
+    throw new Error("Wrong email or password.");
+  }
+  loginFails.delete(lockKey);
+  const token = crypto.randomBytes(32).toString("hex"); const exp = Date.now() + SESSION_DAYS * 864e5;
+  await db(`INSERT INTO hd_sessions (token, user_id, expires_at) VALUES ($1,$2,$3)`, [token, u.id, new Date(exp)]);
+  await db(`UPDATE hd_users SET last_login=now() WHERE id=$1`, [u.id]);
+  SESSIONS.set(token, { name: u.name, email: u.email, role: u.role, user_id: u.id, exp });
+  return { token, user: { name: u.name, email: u.email, role: u.role } };
+}
+async function logout(token) { SESSIONS.delete(String(token || "")); try { await db(`DELETE FROM hd_sessions WHERE token=$1`, [String(token || "")]); } catch (_) {} }
+async function listUsers() { return (await db(`SELECT id, name, email, role, active, created_at, last_login FROM hd_users ORDER BY active DESC, name`)).rows; }
+async function createUser({ name, email, password, role, by }) {
+  const e = String(email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Error("Enter a valid email address.");
+  if (!String(name || "").trim()) throw new Error("Enter a name.");
+  if (String(password || "").length < 8) throw new Error("Password must be at least 8 characters.");
+  const { salt, hash } = hashPassword(password);
+  try { const r = await db(`INSERT INTO hd_users (name, email, pass_salt, pass_hash, role, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, email, role, active, created_at`, [String(name).trim(), e, salt, hash, role === "admin" ? "admin" : "agent", by || null]); return r.rows[0]; }
+  catch (err) { if (/unique/i.test(err.message)) throw new Error("There is already a user with that email."); throw err; }
+}
+async function updateUser(id, { name, role, active, password }) {
+  const u = (await db(`SELECT * FROM hd_users WHERE id=$1`, [id])).rows[0]; if (!u) throw new Error("user not found");
+  if (password != null) { if (String(password).length < 8) throw new Error("Password must be at least 8 characters."); const { salt, hash } = hashPassword(password); await db(`UPDATE hd_users SET pass_salt=$2, pass_hash=$3 WHERE id=$1`, [id, salt, hash]); await db(`DELETE FROM hd_sessions WHERE user_id=$1`, [id]); for (const [t, s] of SESSIONS) if (s.user_id === Number(id)) SESSIONS.delete(t); }
+  if (name != null) await db(`UPDATE hd_users SET name=$2 WHERE id=$1`, [id, String(name).trim()]);
+  if (role != null) await db(`UPDATE hd_users SET role=$2 WHERE id=$1`, [id, role === "admin" ? "admin" : "agent"]);
+  if (active != null) { await db(`UPDATE hd_users SET active=$2 WHERE id=$1`, [id, !!active]); if (!active) { await db(`DELETE FROM hd_sessions WHERE user_id=$1`, [id]); for (const [t, s] of SESSIONS) if (s.user_id === Number(id)) SESSIONS.delete(t); } }
+  for (const [, s] of SESSIONS) if (s.user_id === Number(id)) { if (name != null) s.name = String(name).trim(); if (role != null) s.role = role === "admin" ? "admin" : "agent"; }
+  return (await db(`SELECT id, name, email, role, active FROM hd_users WHERE id=$1`, [id])).rows[0];
 }
 
 /* ---------------- Postgres ---------------- */
@@ -129,6 +183,8 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS emily_policies (id BIGSERIAL PRIMARY KEY, key TEXT NOT NULL, body TEXT NOT NULL, note TEXT, updated_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE INDEX IF NOT EXISTS idx_emily_policies_key ON emily_policies(key, id DESC)`);
   await db(`CREATE TABLE IF NOT EXISTS emily_settings (key TEXT PRIMARY KEY, value JSONB, updated_by TEXT, updated_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`CREATE TABLE IF NOT EXISTS hd_users (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, pass_salt TEXT NOT NULL, pass_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'agent', active BOOLEAN NOT NULL DEFAULT true, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(), last_login TIMESTAMPTZ)`);
+  await db(`CREATE TABLE IF NOT EXISTS hd_sessions (token TEXT PRIMARY KEY, user_id INT NOT NULL, created_at TIMESTAMPTZ DEFAULT now(), expires_at TIMESTAMPTZ NOT NULL)`);
   await db(`CREATE TABLE IF NOT EXISTS hd_stuck (
     id TEXT PRIMARY KEY,                       -- fulfillment gid
     store TEXT, order_name TEXT, order_id TEXT, customer_name TEXT, customer_email TEXT, city TEXT,
@@ -938,7 +994,7 @@ function stripQuoted(text) {
 module.exports = {
   policyText, seedPolicy, setting, policyCache,
   db, pool, migrate, syncGet, syncSet,
-  USERS, userFromKey,
+  USERS, userFromKey, sessionOf, loadSessions, login, logout, listUsers, createUser, updateUser, checkPassword,
   httpJson, gorgias, slack, slackPost, G_DOMAIN,
   BRAND_MAILBOX, ACTIVE_MAILBOXES, brandForAddress, mailboxForName, resolveMailbox, addressFromMessages, mailboxFromIntegrations,
   runImport, importState: () => importRun, saveTicket, stripHtml, mergeTickets, dedupeTickets, findTicketForEmail, classifyInbound, classifyBacklog, parseShopifyForm, removeTags, JUNK_TAG_SET,
