@@ -193,6 +193,14 @@ async function migrate() {
     state TEXT NOT NULL DEFAULT 'open',        -- open | contacted | resolved | ignored
     note TEXT, ticket_id BIGINT, state_by TEXT, state_at TIMESTAMPTZ,
     first_seen TIMESTAMPTZ DEFAULT now(), last_seen TIMESTAMPTZ DEFAULT now(), moved_at TIMESTAMPTZ)`);
+  // v4.1: one row per (fulfillment, kind) — kind = never_scanned | undelivered
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'never_scanned'`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS in_transit_at TIMESTAMPTZ`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS estimated_delivery_at TIMESTAMPTZ`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS last_update_at TIMESTAMPTZ`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ`);
+  try { const pk = (await db(`SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey) WHERE i.indrelid='hd_stuck'::regclass AND i.indisprimary`)).rows.map((r) => r.attname);
+        if (!pk.includes("kind")) { await db(`ALTER TABLE hd_stuck DROP CONSTRAINT IF EXISTS hd_stuck_pkey`); await db(`ALTER TABLE hd_stuck ADD PRIMARY KEY (id, kind)`); } } catch (e) { console.error("hd_stuck pk:", e.message); }
   await db(`CREATE TABLE IF NOT EXISTS hd_files (id TEXT PRIMARY KEY, ticket_id BIGINT, name TEXT, content_type TEXT, data BYTEA, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS todo JSONB`);
   await db(`ALTER TABLE emily_actions ADD COLUMN IF NOT EXISTS files JSONB`);

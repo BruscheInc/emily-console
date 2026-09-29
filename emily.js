@@ -725,21 +725,37 @@ async function shopifyProposeRefund(input) {
   return { ok: true, staged: true, note: `Staged a refund of ${what} on ${o.name} for Jose's approval. It will NOT be issued until he clicks Apply — tell the customer the refund is being processed and takes 5–10 business days to appear; do NOT say it has been issued.` };
 }
 
-/* ---- Stuck packages: Shopify shows "Tracking added" when a fulfillment has a tracking number but the carrier has
- * never scanned it (inTransitAt is empty). After STUCK_DAYS in that state it's a problem worth chasing. We scan
- * both stores, keep the list in hd_stuck so each one can be worked (contacted / resolved / ignored), and drop a
- * package from the open list automatically once Shopify sees it move or get delivered. ---- */
+/* ---- Shipment watch. Two lists, one scan of every shipped order since STUCK_SINCE (every 6 hours or on demand):
+ *   never_scanned — Shopify still says "Tracking added": a label exists but the carrier has never scanned it, for STUCK_DAYS+.
+ *   undelivered   — the order is UNDELIVERED_DAYS+ old and Shopify has no delivery on record (moving or not).
+ * Rows are worked in the app (contacted / resolved / ignored) and close themselves when Shopify sees movement
+ * (never_scanned) or delivery (both). ---- */
 const STUCK_DAYS = Number(process.env.STUCK_DAYS) || 4;
+const UNDELIVERED_DAYS = Number(process.env.UNDELIVERED_DAYS) || 15;
 const STUCK_SINCE = process.env.STUCK_SINCE || "2026-06-01";   // never track anything ordered before this date
 const NO_MOVEMENT = new Set(["FULFILLED", "LABEL_PRINTED", "LABEL_PURCHASED", "SUBMITTED", "MARKED_AS_FULFILLED"]);
 const STUCK_QUERY = `query($q:String!,$after:String){ orders(first:50, after:$after, query:$q, sortKey:CREATED_AT, reverse:true){
   pageInfo{ hasNextPage endCursor }
   edges{ node{ id name createdAt email customer{ displayName } shippingAddress{ city provinceCode }
     fulfillments(first:5){ id status displayStatus createdAt updatedAt inTransitAt deliveredAt estimatedDeliveryAt trackingInfo{ number url company } } } } } }`;
+async function upsertWatch(kind, st, n, f, t) {
+  await db(`INSERT INTO hd_stuck (id, kind, store, order_name, order_id, customer_name, customer_email, city, tracking, tracking_url, carrier, display_status, tracking_added_at, order_created_at, in_transit_at, estimated_delivery_at, last_update_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+            ON CONFLICT (id, kind) DO UPDATE SET display_status=EXCLUDED.display_status, tracking=EXCLUDED.tracking, tracking_url=EXCLUDED.tracking_url, carrier=EXCLUDED.carrier,
+              in_transit_at=EXCLUDED.in_transit_at, estimated_delivery_at=EXCLUDED.estimated_delivery_at, last_update_at=EXCLUDED.last_update_at, last_seen=now()`,
+    [f.id, kind, st.brand, n.name, n.id, (n.customer && n.customer.displayName) || null, n.email || null, [n.shippingAddress && n.shippingAddress.city, n.shippingAddress && n.shippingAddress.provinceCode].filter(Boolean).join(", ") || null,
+     t.number, t.url || null, t.company || null, f.displayStatus || null, f.createdAt, n.createdAt, f.inTransitAt || null, f.estimatedDeliveryAt || null, f.updatedAt || null]);
+}
+async function closeWatch(id, kind, why, status, extra = {}) {
+  await db(`UPDATE hd_stuck SET moved_at=COALESCE(moved_at, now()), display_status=$3, last_seen=now(), delivered_at=COALESCE(delivered_at,$5),
+              state=CASE WHEN state IN ('open','contacted') THEN 'resolved' ELSE state END,
+              note=COALESCE(note,'') || CASE WHEN state IN ('open','contacted') THEN ' · ' || $4 ELSE '' END
+            WHERE id=$1 AND kind=$2 AND moved_at IS NULL`, [id, kind, status, why, extra.delivered_at || null]).catch(() => {});
+}
 async function scanStuck() {
-  const since = STUCK_SINCE;                                   // scan everything from the start date (lookback no longer caps it)
-  const cutoff = Date.now() - STUCK_DAYS * 864e5;
-  const seen = new Set(); let scanned = 0, stuck = 0, errors = [];
+  const since = STUCK_SINCE;
+  const stuckCut = Date.now() - STUCK_DAYS * 864e5, oldCut = Date.now() - UNDELIVERED_DAYS * 864e5;
+  let scanned = 0, never = 0, undelivered = 0, errors = [];
   for (const st of STORES) {
     let after = null, pages = 0;
     try {
@@ -748,63 +764,68 @@ async function scanStuck() {
         const o = d.orders; pages++;
         for (const e of o.edges || []) {
           const n = e.node; scanned++;
+          if (new Date(n.createdAt) < new Date(STUCK_SINCE)) continue;
           for (const f of n.fulfillments || []) {
             const t = (f.trackingInfo || [])[0];
-            if (!t || !t.number) continue;
-            if (f.status !== "SUCCESS") continue;
-            const moved = !!(f.inTransitAt || f.deliveredAt) || !NO_MOVEMENT.has(String(f.displayStatus || "").toUpperCase());
-            const addedAt = new Date(f.createdAt).getTime();
-            if (moved) {
-              // If we were tracking it, close it out — Shopify says it's moving now.
-              await db(`UPDATE hd_stuck SET moved_at=COALESCE(moved_at, now()), display_status=$2, last_seen=now(), state=CASE WHEN state IN ('open','contacted') THEN 'resolved' ELSE state END, note=COALESCE(note,'') || CASE WHEN state IN ('open','contacted') THEN ' · moved on its own (' || $2 || ')' ELSE '' END WHERE id=$1 AND moved_at IS NULL`, [f.id, f.displayStatus]).catch(() => {});
-              continue;
-            }
-            if (addedAt > cutoff) continue;                       // not old enough yet
-            if (new Date(n.createdAt) < new Date(STUCK_SINCE)) continue;   // before the tracking start date
-            seen.add(f.id); stuck++;
-            await db(`INSERT INTO hd_stuck (id, store, order_name, order_id, customer_name, customer_email, city, tracking, tracking_url, carrier, display_status, tracking_added_at, order_created_at)
-                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-                      ON CONFLICT (id) DO UPDATE SET display_status=EXCLUDED.display_status, tracking=EXCLUDED.tracking, tracking_url=EXCLUDED.tracking_url, carrier=EXCLUDED.carrier, last_seen=now()`,
-              [f.id, st.brand, n.name, n.id, (n.customer && n.customer.displayName) || null, n.email || null, [n.shippingAddress && n.shippingAddress.city, n.shippingAddress && n.shippingAddress.provinceCode].filter(Boolean).join(", ") || null,
-               t.number, t.url || null, t.company || null, f.displayStatus || null, f.createdAt, n.createdAt]);
+            if (!t || !t.number || f.status !== "SUCCESS") continue;
+            const ds = String(f.displayStatus || "").toUpperCase();
+            const delivered = !!f.deliveredAt || ds === "DELIVERED" || ds === "PICKED_UP";
+            const voided = ds === "CANCELED" || ds === "LABEL_VOIDED";
+            if (delivered || voided) { const why = delivered ? `delivered (${f.deliveredAt ? new Date(f.deliveredAt).toISOString().slice(0, 10) : ds})` : `label ${ds.toLowerCase().replace("_", " ")}`; await closeWatch(f.id, "never_scanned", why, ds, { delivered_at: f.deliveredAt }); await closeWatch(f.id, "undelivered", why, ds, { delivered_at: f.deliveredAt }); continue; }
+            const moved = !!f.inTransitAt || !NO_MOVEMENT.has(ds);
+            if (moved) await closeWatch(f.id, "never_scanned", `moved on its own (${ds})`, ds);
+            else if (new Date(f.createdAt).getTime() <= stuckCut) { await upsertWatch("never_scanned", st, n, f, t); never++; }
+            if (new Date(n.createdAt).getTime() <= oldCut) { await upsertWatch("undelivered", st, n, f, t); undelivered++; }
           }
         }
         after = o.pageInfo && o.pageInfo.hasNextPage ? o.pageInfo.endCursor : null;
       } while (after && pages < 150);
-    } catch (e) { errors.push(`${st.brand}: ${e.message}`); console.error(`stuck scan ${st.brand}:`, e.message); }
+    } catch (e) { errors.push(`${st.brand}: ${e.message}`); console.error(`shipment scan ${st.brand}:`, e.message); }
   }
   try { await db(`DELETE FROM hd_stuck WHERE order_created_at < $1`, [STUCK_SINCE]); } catch (_) {}
-  try { await core.syncSet("stuck_scan", String(stuck), { at: new Date().toISOString(), scanned, stuck, errors }); } catch (_) {}
-  console.log(`📦⏳ stuck scan: ${scanned} shipped orders checked · ${stuck} sitting on "Tracking added" ${STUCK_DAYS}+ days${errors.length ? ` · errors: ${errors.join(" | ")}` : ""}`);
-  return { scanned, stuck, errors };
+  try { await core.syncSet("stuck_scan", String(never + undelivered), { at: new Date().toISOString(), scanned, stuck: never, never_scanned: never, undelivered, errors }); } catch (_) {}
+  console.log(`📦⏳ shipment scan: ${scanned} shipped orders checked · ${never} never scanned (${STUCK_DAYS}+ d) · ${undelivered} not delivered (${UNDELIVERED_DAYS}+ d)${errors.length ? ` · errors: ${errors.join(" | ")}` : ""}`);
+  return { scanned, stuck: never, never_scanned: never, undelivered, errors };
 }
-async function listStuck(state) {
-  const where = state && state !== "all" ? `WHERE state=$1` : `WHERE state IN ('open','contacted')`;
-  const r = await db(`SELECT *, EXTRACT(EPOCH FROM (now() - tracking_added_at))/86400 AS days FROM hd_stuck ${where} ORDER BY tracking_added_at ASC`, state && state !== "all" ? [state] : []);
-  const counts = (await db(`SELECT state, count(*)::int AS n FROM hd_stuck GROUP BY state`)).rows.reduce((a, x) => (a[x.state] = x.n, a), {});
+async function listStuck(state, kind = "never_scanned") {
+  kind = kind === "undelivered" ? "undelivered" : "never_scanned";
+  const where = state && state !== "all" ? `WHERE kind=$2 AND state=$1` : `WHERE kind=$1 AND state IN ('open','contacted')`;
+  const args = state && state !== "all" ? [state, kind] : [kind];
+  const r = await db(`SELECT *, EXTRACT(EPOCH FROM (now() - tracking_added_at))/86400 AS days, EXTRACT(EPOCH FROM (now() - order_created_at))/86400 AS order_days,
+                             (SELECT count(*)::int FROM hd_stuck x WHERE x.id = hd_stuck.id AND x.kind='never_scanned' AND x.state IN ('open','contacted')) AS also_never_scanned
+                        FROM hd_stuck ${where} ORDER BY order_created_at ASC`, args);
+  const counts = (await db(`SELECT state, count(*)::int AS n FROM hd_stuck WHERE kind=$1 GROUP BY state`, [kind])).rows.reduce((a, x) => (a[x.state] = x.n, a), {});
   const last = await core.syncGet("stuck_scan");
-  return { items: r.rows.map((x) => ({ ...x, days: Math.floor(Number(x.days)) })), counts, last_scan: last ? last.state : null, threshold_days: STUCK_DAYS, since: STUCK_SINCE };
+  return { kind, items: r.rows.map((x) => ({ ...x, days: Math.floor(Number(x.days)), order_days: Math.floor(Number(x.order_days)), also_never_scanned: x.also_never_scanned > 0 })), counts, last_scan: last ? last.state : null, threshold_days: kind === "undelivered" ? UNDELIVERED_DAYS : STUCK_DAYS, since: STUCK_SINCE };
 }
-async function setStuckState(id, state, who, note) {
+async function stuckCounts() {
+  const r = (await db(`SELECT kind, count(*)::int AS n FROM hd_stuck WHERE state IN ('open','contacted') GROUP BY kind`)).rows;
+  return r.reduce((a, x) => (a[x.kind] = x.n, a), { never_scanned: 0, undelivered: 0 });
+}
+async function setStuckState(id, state, who, note, kind) {
   if (!["open", "contacted", "resolved", "ignored"].includes(state)) throw new Error("bad state");
-  const r = await db(`UPDATE hd_stuck SET state=$2, state_by=$3, state_at=now(), note=COALESCE($4, note) WHERE id=$1 RETURNING order_name`, [id, state, who, note || null]);
+  const r = await db(`UPDATE hd_stuck SET state=$2, state_by=$3, state_at=now(), note=COALESCE($4, note) WHERE id=$1 AND kind=$5 RETURNING order_name`, [id, state, who, note || null, kind === "undelivered" ? "undelivered" : "never_scanned"]);
   if (!r.rows.length) throw new Error("not found");
   return { ok: true };
 }
-// Open (or reuse) a ticket with the customer about the stuck package and send the first email from the brand mailbox.
-async function emailStuckCustomer(id, who, text) {
-  const s = (await db(`SELECT * FROM hd_stuck WHERE id=$1`, [id])).rows[0];
+// Open a ticket with the customer about the package and send the first email from the brand mailbox.
+async function emailStuckCustomer(id, who, text, kind) {
+  kind = kind === "undelivered" ? "undelivered" : "never_scanned";
+  const s = (await db(`SELECT * FROM hd_stuck WHERE id=$1 AND kind=$2`, [id, kind])).rows[0];
   if (!s) throw new Error("not found");
   if (!s.customer_email) throw new Error("no customer email on this order");
   const mailbox = mailboxForBrand(s.store);
   if (!mailbox) throw new Error(`no mailbox for ${s.store}`);
   const subject = `An update on your ${s.store} order ${s.order_name}`;
   const r = await core.sendNewEmail({ mailbox, to: s.customer_email, subject, text, who, tags: ["stuck-package"] });
-  await db(`UPDATE hd_stuck SET state='contacted', state_by=$2, state_at=now(), ticket_id=$3 WHERE id=$1`, [id, who, r.ticket_id]);
+  await db(`UPDATE hd_stuck SET state='contacted', state_by=$2, state_at=now(), ticket_id=$3 WHERE id=$1`, [id, who, r.ticket_id]);   // both kinds, same package
   return { ok: true, ticket_id: r.ticket_id };
 }
 function stuckEmailTemplate(s) {
   const first = String(s.customer_name || "").split(" ")[0] || "there";
+  if (s.kind === "undelivered" && !s.also_never_scanned) {
+    return `Hi ${first},\n\nWe wanted to check in about your order ${s.order_name}. It left us a while ago, but ${s.carrier || "the carrier"}'s tracking still doesn't show it delivered, and that's longer than it should take.\n\nWe've opened a trace with the carrier. If it hasn't arrived by the end of this week, just reply here and we'll make it right — we can send a replacement or refund the order, whichever you prefer.\n\nTracking: ${s.tracking}${s.tracking_url ? ` (${s.tracking_url})` : ""}\n\nSorry for the wait, and thank you for your patience.\n\n— The ${s.store} Team`;
+  }
   return `Hi ${first},\n\nWe wanted to reach out about your order ${s.order_name}. A shipping label was created and the package was handed to ${s.carrier || "the carrier"}, but their tracking still hasn't shown it moving, which usually means it's sitting somewhere in their network rather than lost.\n\nWe've flagged it with the carrier on our end. If tracking doesn't update in the next couple of days, just reply here and we'll make it right — we can send a replacement or refund the order, whichever you prefer.\n\nTracking: ${s.tracking}${s.tracking_url ? ` (${s.tracking_url})` : ""}\n\nSorry for the wait, and thank you for your patience.\n\n— The ${s.store} Team`;
 }
 
@@ -1686,9 +1707,9 @@ async function start() {
   core.onInbound((ticketId) => onInboundMessage(ticketId));
   if (DRAFT_ON && anthropic) { sweepFloor().catch(() => {}); setTimeout(sweep, 15000); setInterval(sweep, SWEEP_MS); console.log(`✍️  Emily drafting: on new mail + sweep every ${SWEEP_MS / 60000}m · model ${CLAUDE_MODEL}`); }
   else console.log(`✍️  Emily drafting: OFF (${!anthropic ? "no ANTHROPIC_API_KEY" : "DRAFT_LOOP=off"})`);
-  if (STORES.length && pool) { setTimeout(() => scanStuck().catch(() => {}), 60000); setInterval(() => scanStuck().catch(() => {}), 6 * 3600 * 1000); console.log(`📦⏳ Stuck-package scan: every 6h (Tracking added ${STUCK_DAYS}+ days)`); }
+  if (STORES.length && pool) { setTimeout(() => scanStuck().catch(() => {}), 60000); setInterval(() => scanStuck().catch(() => {}), 6 * 3600 * 1000); console.log(`📦⏳ Shipment watch: every 6h (never scanned ${STUCK_DAYS}+ d · not delivered ${UNDELIVERED_DAYS}+ d · orders since ${STUCK_SINCE})`); }
   if (OOS_ON) { setTimeout(runOosLoop, 20000); setInterval(runOosLoop, OOS_INTERVAL); console.log(`📦❌ Out-of-stock hand-off: on (every ${OOS_INTERVAL / 1000}s)`); }
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear() }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, setStuckState, emailStuckCustomer, stuckEmailTemplate };
+module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear() }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate };

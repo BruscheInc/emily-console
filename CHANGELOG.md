@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.1 — Sep 29, 2026
+- **Shipments section** replaces "Stuck packages" with two views fed by the same 6-hour scan:
+  **Never scanned** (label created, carrier never scanned it, 4+ days) and **Not delivered 15+ days** (order
+  placed 15+ days ago and Shopify has no delivery on record, whether it's moving or not — with in-transit-since,
+  estimated delivery and last-update dates, and a "never scanned" flag when it's in both). Both close themselves
+  when Shopify records movement (never scanned) or delivery (both). Thresholds: STUCK_DAYS, UNDELIVERED_DAYS.
+
 ## v4.0 — Sep 29, 2026
 - **User accounts.** Sign in with email + password. Admins add users from Settings → Users (name, email,
   password, role), reset passwords, deactivate/reactivate, and promote to admin; everyone can change their own

@@ -113,7 +113,7 @@ app.post("/api/order/action", async (req, res) => {
 /* ---- stuck packages (Shopify "Tracking added" for 4+ days) ---- */
 app.get("/api/stuck", async (req, res) => {
   if (!guard(req, res)) return;
-  try { const r = await require("./emily").listStuck(String(req.query.state || "")); r.items = r.items.map((x) => ({ ...x, email_template: require("./emily").stuckEmailTemplate(x) })); res.json(r); }
+  try { const r = await require("./emily").listStuck(String(req.query.state || ""), String(req.query.kind || "")); r.items = r.items.map((x) => ({ ...x, email_template: require("./emily").stuckEmailTemplate(x) })); res.json(r); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/stuck/refresh", async (req, res) => {
@@ -122,12 +122,12 @@ app.post("/api/stuck/refresh", async (req, res) => {
 });
 app.post("/api/stuck/state", async (req, res) => {
   if (!guard(req, res)) return;
-  try { const { id, state, note } = req.body || {}; res.json(await require("./emily").setStuckState(String(id), String(state), actorOf(req), note)); }
+  try { const { id, state, note, kind } = req.body || {}; res.json(await require("./emily").setStuckState(String(id), String(state), actorOf(req), note, kind)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post("/api/stuck/email", async (req, res) => {
   if (!guard(req, res)) return;
-  try { const { id, text } = req.body || {}; if (!text || !String(text).trim()) return res.status(400).json({ error: "text required" }); res.json(await require("./emily").emailStuckCustomer(String(id), actorOf(req), String(text))); }
+  try { const { id, text, kind } = req.body || {}; if (!text || !String(text).trim()) return res.status(400).json({ error: "text required" }); res.json(await require("./emily").emailStuckCustomer(String(id), actorOf(req), String(text), kind)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -191,7 +191,7 @@ app.get("/api/counts", async (req, res) => {
       const n = await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE ${w2} AND ${CATEGORY_SQL} = $${a2.length}`, a2);
       views[v] = n.rows[0].n;
     }
-    let stuck = 0; try { stuck = (await db(`SELECT count(*)::int AS n FROM hd_stuck WHERE state IN ('open','contacted')`)).rows[0].n; } catch (_) {}
+    let stuck = { never_scanned: 0, undelivered: 0 }; try { stuck = await require("./emily").stuckCounts(); } catch (_) {}
     res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
