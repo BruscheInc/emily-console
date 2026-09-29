@@ -388,6 +388,7 @@ async function loadImport(){
       <div style="font-size:12px;color:#7c8ba1;margin-bottom:10px">Stored now: <b>${st.tickets||0}</b> tickets · <b>${st.messages||0}</b> messages. Safe to run more than once — it resumes where it left off and never duplicates.</div>
       <button class="btn" ${run.running?"disabled":""} onclick="startImport()">${run.running?"Running…":(d.finished?"Run again":"Import everything from Gorgias")}</button>
       <button class="btn sec" style="margin-left:8px" onclick="dedupe(this)">Merge duplicate tickets</button>
+      <button class="btn sec" style="margin-left:8px" onclick="reclassify(this)">Re-filter notifications &amp; newsletters</button>
       <div style="color:var(--muted);font-size:12px;margin-top:6px">Duplicates happen when the same email arrived through both Gorgias and Gmail. New mail is matched automatically; this button re-checks everything already stored.</div>`;
   }catch(e){ $("importbox").innerHTML="Couldn't load import status."; }
 }
@@ -625,6 +626,7 @@ async function loadCustomer(email,orderHint){
   }catch(e){ pnl.innerHTML='<div class="railcard" style="padding:12px;color:var(--muted);font-size:12.5px">Shopify profile unavailable.</div>'; }
 }
 
+async function reclassify(b){ b.disabled=true; const was=b.textContent; b.textContent="Checking…"; try{ const r=await api("/api/admin/classify",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.checked} — ${r.junk} hidden as machinery/marketing`); loadCounts(); loadList(true);}catch(e){toast("Couldn't run the check");} b.disabled=false; b.textContent=was; }
 async function dedupe(b){ b.disabled=true; const was=b.textContent; b.textContent="Checking…"; try{ const r=await api("/api/admin/dedupe",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(r.merged?`Merged ${r.merged} duplicate ticket${r.merged===1?"":"s"}`:"No duplicates found"); loadCounts(); loadList(true);}catch(e){toast("Couldn't run the check");} b.disabled=false; b.textContent=was; }
 /* ---------- Stuck packages: Shopify "Tracking added" with no carrier movement for 4+ days ---------- */
 async function loadStuck(){
@@ -718,6 +720,8 @@ async function openTicket(id){
         <div class="sp"></div>
         <span class="pill ${d.status==="closed"?"closed":"open"}">${esc(d.status)}</span>
         ${d.emily?`<span class="chip ${d.emily}">Emily: ${d.emily}</span>`:""}
+        ${(()=>{const JT=["automated","newsletter","social","vendor","automated-notification","solicitation","press-pitch","tiktok-notification","okendo","spam","not-cs","emily-skip","emily-skip-manual"]; const isJunk=(d.tags||[]).some(t=>JT.includes(t))&&!(d.tags||[]).includes("human");
+          return isJunk?`<span class="chip skip" title="Filtered out of Tickets as ${esc((d.tags||[]).filter(t=>JT.includes(t)).join(", "))}">not a customer</span><button class="btn sec" onclick="markHuman(${id},true)" title="Move this into the Tickets view and let Emily handle it">This is a customer</button>`:`<button class="btn sec" onclick="markHuman(${id},false)" title="Hide from Tickets — it's a notification, newsletter or vendor email">Not a customer</button>`;})()}
         <button class="btn ghost" onclick="askEmily(${id})">Ask Emily</button>
         <button class="btn sec" onclick="setStatus(${id},'${d.status==="closed"?"open":"closed"}')">${d.status==="closed"?"Reopen":"Close"}</button>
       </div>
@@ -754,6 +758,7 @@ async function send(id){
 }
 async function setStatus(id,status){try{const r=await api("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,status})});if(r.error){toast(r.error,true);return;}toast(status==="closed"?"Closed":"Reopened");openTicket(id);loadCounts();}catch(e){toast("Failed",true);}}
 async function askEmily(id){ emilyDecide(id,'redraft',''); }
+async function markHuman(id,human){ try{ const r=await api(`/api/ticket/${id}/${human?"human":"junk"}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error){toast(r.error,true);return;} toast(human?"Moved into Tickets":"Hidden from Tickets"); openTicket(id); loadCounts(); }catch(e){toast("Failed",true);} }
 </script>
 </body>
 </html>
