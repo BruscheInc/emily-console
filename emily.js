@@ -785,7 +785,8 @@ async function scanStuck() {
   try { await db(`DELETE FROM hd_stuck WHERE order_created_at < $1`, [STUCK_SINCE]); } catch (_) {}
   try { await core.syncSet("stuck_scan", String(never + undelivered), { at: new Date().toISOString(), scanned, stuck: never, never_scanned: never, undelivered, errors }); } catch (_) {}
   console.log(`📦⏳ shipment scan: ${scanned} shipped orders checked · ${never} never scanned (${STUCK_DAYS}+ d) · ${undelivered} not delivered (${UNDELIVERED_DAYS}+ d)${errors.length ? ` · errors: ${errors.join(" | ")}` : ""}`);
-  return { scanned, stuck: never, never_scanned: never, undelivered, errors };
+  let verify = null; try { verify = await verifyWatch(); } catch (e) { console.error("carrier check:", e.message); }
+  return { scanned, stuck: never, never_scanned: never, undelivered, errors, verify };
 }
 async function listStuck(state, kind = "never_scanned") {
   kind = kind === "undelivered" ? "undelivered" : "never_scanned";
@@ -796,7 +797,7 @@ async function listStuck(state, kind = "never_scanned") {
                         FROM hd_stuck ${where} ORDER BY order_created_at ASC`, args);
   const counts = (await db(`SELECT state, count(*)::int AS n FROM hd_stuck WHERE kind=$1 GROUP BY state`, [kind])).rows.reduce((a, x) => (a[x.state] = x.n, a), {});
   const last = await core.syncGet("stuck_scan");
-  return { kind, items: r.rows.map((x) => ({ ...x, days: Math.floor(Number(x.days)), order_days: Math.floor(Number(x.order_days)), also_never_scanned: x.also_never_scanned > 0 })), counts, last_scan: last ? last.state : null, threshold_days: kind === "undelivered" ? UNDELIVERED_DAYS : STUCK_DAYS, since: STUCK_SINCE };
+  return { kind, items: r.rows.map((x) => ({ ...x, days: Math.floor(Number(x.days)), order_days: Math.floor(Number(x.order_days)), also_never_scanned: x.also_never_scanned > 0 })), counts, last_scan: last ? last.state : null, threshold_days: kind === "undelivered" ? UNDELIVERED_DAYS : STUCK_DAYS, since: STUCK_SINCE, carrier_api: !!SS_V2_KEY, repair_blocked: fixTrackingBlocked };
 }
 async function stuckCounts() {
   const r = (await db(`SELECT kind, count(*)::int AS n FROM hd_stuck WHERE state IN ('open','contacted') GROUP BY kind`)).rows;
@@ -821,6 +822,134 @@ async function emailStuckCustomer(id, who, text, kind) {
   await db(`UPDATE hd_stuck SET state='contacted', state_by=$2, state_at=now(), ticket_id=$3 WHERE id=$1`, [id, who, r.ticket_id]);   // both kinds, same package
   return { ok: true, ticket_id: r.ticket_id };
 }
+/* ---- Why Shopify's "Tracking added" can lie, and what we do about it.
+ * Shopify only follows a shipment when it recognises the carrier on the fulfillment (USPS, UPS, FedEx, DHL… by exact
+ * name) or the label was bought through Shopify Shipping. ShipStation-created fulfillments often carry a company
+ * Shopify doesn't follow ("Stamps.com", "Other", blank) — then Shopify never asks the carrier, the status stays
+ * "Tracking added" forever, and the package may well be delivered. Two remedies:
+ *   1. Ask the carrier directly through ShipStation's tracking API (needs SHIPSTATION_V2_KEY) — the source of truth.
+ *   2. Repair the fulfillment in Shopify (set company to the real carrier) so Shopify starts following it — needs
+ *      the write_fulfillments scope on the Emily app.                                                              */
+const SHOPIFY_TRACKS = /^(usps|ups|fedex|dhl( express| ecommerce)?|canada post|australia post|royal mail|purolator|ontrac|lasership|gls|dpd|amazon logistics)$/i;
+function carrierFromNumber(n) {
+  const x = String(n || "").replace(/\s+/g, "");
+  if (/^1Z[0-9A-Z]{16}$/i.test(x)) return { name: "UPS", v2: "ups" };
+  if (/^(9[2345]\d{18,24}|9400\d{16,18}|82\d{8}|[A-Z]{2}\d{9}US)$/i.test(x)) return { name: "USPS", v2: process.env.SHIPSTATION_USPS_CODE || "stamps_com" };
+  if (/^(\d{12}|\d{15}|\d{20}|96\d{20})$/.test(x)) return { name: "FedEx", v2: "fedex" };
+  if (/^\d{10}$/.test(x) || /^JD\d{18}$/i.test(x)) return { name: "DHL Express", v2: "dhl_express" };
+  return null;
+}
+const SS_V2_KEY = process.env.SHIPSTATION_V2_KEY || "";
+async function ssV2Track(carrierCode, number) {
+  if (!SS_V2_KEY) return null;
+  const r = await fetch(`https://api.shipstation.com/v2/tracking?carrier_code=${encodeURIComponent(carrierCode)}&tracking_number=${encodeURIComponent(number)}`, { headers: { "API-Key": SS_V2_KEY, Accept: "application/json" } });
+  const t = await r.text();
+  if (!r.ok) throw new Error(`ShipStation tracking ${r.status}: ${t.slice(0, 160)}`);
+  const j = JSON.parse(t);
+  const ev = (j.events || [])[0] || null;
+  const code = String(j.status_code || "").toUpperCase();   // AC accepted · IT in transit · DE delivered · EX exception · UN unknown · NY not yet in system · AT attempted · SP available for pickup
+  return { code, description: j.status_description || j.carrier_status_description || code, delivered: code === "DE" || !!j.actual_delivery_date, delivered_at: j.actual_delivery_date || null, estimated: j.estimated_delivery_date || null,
+           last_event: ev ? { at: ev.occurred_at, desc: ev.description || ev.carrier_status_description, where: [ev.city_locality, ev.state_province].filter(Boolean).join(", ") } : null, in_transit: ["IT", "AC", "AT", "SP"].includes(code) };
+}
+async function shopifyFixTracking(st, fulfillmentId, company, number, url) {
+  const d = await storeGraphQL(st, `mutation($id:ID!,$t:FulfillmentTrackingInput!){ fulfillmentTrackingInfoUpdate(fulfillmentId:$id, trackingInfoInput:$t, notifyCustomer:false){ fulfillment{ id trackingInfo{ company number } } userErrors{ field message } } }`,
+    { id: fulfillmentId, t: { company, number, url: url || null } });
+  const ue = d.fulfillmentTrackingInfoUpdate.userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
+  return true;
+}
+let fixTrackingBlocked = null;   // set to the reason once Shopify refuses (missing scope) so we don't retry every row
+// Cross-check every open row with the carrier and, where allowed, repair Shopify's carrier field.
+async function verifyWatch() {
+  const rows = (await db(`SELECT * FROM hd_stuck WHERE state IN ('open','contacted') ORDER BY order_created_at ASC`)).rows;
+  let checked = 0, delivered = 0, fixed = 0; const fixedIds = new Set(), asked = new Map();
+  for (const r of rows) {
+    const guess = carrierFromNumber(r.tracking);
+    const company = String(r.carrier || "").trim();
+    const trackable = SHOPIFY_TRACKS.test(company);
+    let note = trackable ? null : `Shopify isn't following this shipment — its carrier is "${company || "blank"}", which Shopify doesn't track${guess ? ` (number looks like ${guess.name})` : ""}.`;
+    // 2) repair in Shopify (once per fulfillment; both kinds share it)
+    if (!trackable && guess && !r.tracking_fixed_at && !fixedIds.has(r.id) && !fixTrackingBlocked) {
+      fixedIds.add(r.id);
+      const st = storeByBrand(r.store);
+      try { await shopifyFixTracking(st, r.id, guess.name, r.tracking, r.tracking_url || null); await db(`UPDATE hd_stuck SET tracking_fixed_at=now(), shopify_trackable=true WHERE id=$1`, [r.id]); fixed++; note = `Carrier corrected to ${guess.name} in Shopify — Shopify will start updating this shipment.`; }
+      catch (e) { if (/access|scope|permission|forbidden|401|403/i.test(e.message)) { fixTrackingBlocked = e.message; console.error(`shipment repair blocked — add the write_fulfillments scope to the Emily Shopify app: ${e.message}`); } else console.error(`shipment repair ${r.order_name}: ${e.message}`); }
+    }
+    if (!trackable && fixTrackingBlocked && !r.tracking_fixed_at) note += " Add the write_fulfillments scope to the Emily Shopify app and the Helpdesk will fix this automatically.";
+    // 1) ask the carrier
+    let cs = null;
+    if (SS_V2_KEY && guess) {
+      try { cs = asked.has(r.id) ? asked.get(r.id) : await ssV2Track(guess.v2, r.tracking); if (!asked.has(r.id)) { asked.set(r.id, cs); checked++; } }
+      catch (e) { console.error(`carrier check ${r.order_name}: ${e.message}`); }
+    }
+    if (cs) {
+      const status = cs.delivered ? `Delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}` : (cs.description || cs.code);
+      await db(`UPDATE hd_stuck SET carrier_status=$2, carrier_status_at=$3, carrier_checked_at=now(), carrier_note=$4, shopify_trackable=COALESCE(shopify_trackable,$5) WHERE id=$1`,
+        [r.id, status, cs.last_event ? cs.last_event.at : (cs.delivered_at || null), [note, cs.last_event ? `${cs.last_event.desc}${cs.last_event.where ? " · " + cs.last_event.where : ""}` : null].filter(Boolean).join(" "), trackable]);
+      if (cs.delivered) { delivered++; await closeWatch(r.id, "never_scanned", `carrier says delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}`, "DELIVERED", { delivered_at: cs.delivered_at }); await closeWatch(r.id, "undelivered", `carrier says delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}`, "DELIVERED", { delivered_at: cs.delivered_at }); }
+      else if (cs.in_transit) await closeWatch(r.id, "never_scanned", `carrier shows movement (${cs.description || cs.code})`, "IN_TRANSIT");
+    } else {
+      await db(`UPDATE hd_stuck SET carrier_note=$2, shopify_trackable=COALESCE(shopify_trackable,$3), carrier_checked_at=CASE WHEN $4 THEN carrier_checked_at ELSE now() END WHERE id=$1`, [r.id, note, trackable, !!SS_V2_KEY]);
+    }
+  }
+  console.log(`📦🔎 carrier check: ${rows.length} open · ${checked} asked the carrier${SS_V2_KEY ? "" : " (SHIPSTATION_V2_KEY not set — skipped)"} · ${delivered} actually delivered · ${fixed} carrier fields repaired in Shopify`);
+  return { open: rows.length, checked, delivered, fixed, carrier_api: !!SS_V2_KEY, repair_blocked: fixTrackingBlocked };
+}
+
+/* ---- Offers for a stuck / undelivered package: a replacement (after a live stock check) or store credit for the
+ * order plus a bonus. Each builds an editable draft; sending opens a ticket from the brand mailbox. ---- */
+const CREDIT_BONUS_PCT = Number(process.env.STUCK_CREDIT_BONUS_PCT) || 15;
+const usd = (n) => `$${Number(n || 0).toFixed(2)}`;
+async function stuckOptions(id, kind) {
+  kind = kind === "undelivered" ? "undelivered" : "never_scanned";
+  const s = (await db(`SELECT * FROM hd_stuck WHERE id=$1 AND kind=$2`, [id, kind])).rows[0];
+  if (!s) throw new Error("not found");
+  const o = await orderDetail(s.order_name);
+  if (o.error || o.note) throw new Error(o.error || o.note);
+  // live stock per line: the variant's availableForSale plus, when we can read it, the sellable quantity
+  const items = [];
+  for (const it of o.items) {
+    let qty = null;
+    try { if (it.sku) { const r = await shopifyCheckStock(it.sku, o.store); const v = Array.isArray(r) ? r.flatMap((p) => p.variants || []).find((x) => x.sku === it.sku) : null; if (v && typeof v.qty === "number") qty = v.qty; else if (v) qty = v.in_stock ? it.quantity : 0; } } catch (_) {}
+    items.push({ title: it.title, variant: it.variant, sku: it.sku, quantity: it.quantity, in_stock: qty != null ? qty >= it.quantity : it.in_stock !== false, available: qty });
+  }
+  const inStock = items.filter((i) => i.in_stock), out = items.filter((i) => !i.in_stock);
+  const base = Number(o.total || 0), bonus = Math.round(base * CREDIT_BONUS_PCT) / 100, total = Math.round((base + bonus) * 100) / 100;
+  const first = String(s.customer_name || o.customer || "").split(" ")[0] || "there";
+  const why = kind === "undelivered" ? `it left us on ${new Date(s.tracking_added_at).toLocaleDateString("en-US", { month: "long", day: "numeric" })} but ${s.carrier || "the carrier"}'s tracking still doesn't show it delivered` : `a shipping label was created but ${s.carrier || "the carrier"}'s tracking never showed it moving`;
+  const list = (arr) => arr.map((i) => `  • ${i.quantity}× ${i.title}${i.variant ? ` (${i.variant})` : ""}`).join("\n");
+  const replacementDraft = inStock.length
+    ? `Hi ${first},\n\nWe've been keeping an eye on your order ${o.name} — ${why}, and we don't want you waiting any longer.\n\nWe'd like to send you a replacement right away, at no charge:\n${list(inStock)}\n${out.length ? `\nUnfortunately these are no longer in stock, so we'll refund them to your original payment:\n${list(out)}\n` : ""}\nJust reply "yes" and we'll get the replacement out on the next shipping day and send you new tracking. If you'd rather have a refund instead, tell us and we'll take care of that.\n\nSorry for the trouble, and thank you for your patience.\n\n— The ${o.store} Team`
+    : `Hi ${first},\n\nWe've been keeping an eye on your order ${o.name} — ${why}, and we don't want you waiting any longer.\n\nUnfortunately the items on your order are no longer in stock, so we can't send a replacement. We'd like to make it right another way: a full refund to your original payment, or store credit for the order (${usd(base)}) plus an extra ${CREDIT_BONUS_PCT}% (${usd(total)} total) to use on anything you like.\n\nJust reply with which you'd prefer.\n\nSorry for the trouble, and thank you for your patience.\n\n— The ${o.store} Team`;
+  const creditDraft = (issued) => `Hi ${first},\n\nWe've been keeping an eye on your order ${o.name} — ${why}, and we don't want you waiting any longer.\n\n${issued ? `We've added store credit to your account for the full order (${usd(base)}) plus an extra ${CREDIT_BONUS_PCT}% for the trouble — ${usd(total)} in total. It's on your ${o.store} account now and applies automatically at checkout when you're signed in with this email.` : `We'd like to offer you store credit for the full order (${usd(base)}) plus an extra ${CREDIT_BONUS_PCT}% for the trouble — ${usd(total)} in total, added to your ${o.store} account to use on anything you like. Just reply "yes" and it'll be on your account the same day.`}\n\nIf the package does turn up, keep it with our compliments.\n\nSorry for the trouble, and thank you for your patience.\n\n— The ${o.store} Team`;
+  return { order: { name: o.name, store: o.store, total: base, currency: o.currency, email: o.email || s.customer_email, customer: o.customer || s.customer_name }, items, all_in_stock: !out.length, any_in_stock: !!inStock.length,
+           credit: { base, bonus_pct: CREDIT_BONUS_PCT, bonus, total }, drafts: { replacement: replacementDraft, credit_offer: creditDraft(false), credit_issued: creditDraft(true) } };
+}
+async function stuckOffer(id, kind, { type, text, issue_now, who }) {
+  kind = kind === "undelivered" ? "undelivered" : "never_scanned";
+  const s = (await db(`SELECT * FROM hd_stuck WHERE id=$1 AND kind=$2`, [id, kind])).rows[0];
+  if (!s) throw new Error("not found");
+  if (!s.customer_email) throw new Error("no customer email on this order");
+  if (!["replacement", "credit"].includes(type)) throw new Error("type must be replacement or credit");
+  const mailbox = mailboxForBrand(s.store); if (!mailbox) throw new Error(`no mailbox for ${s.store}`);
+  const opts = await stuckOptions(id, kind);
+  let creditNote = null;
+  if (type === "credit" && issue_now) {
+    const st = storeByBrand(s.store); const cust = await findCustomer(st, opts.order.email || s.customer_email);
+    if (!cust) throw new Error(`No Shopify customer for ${opts.order.email || s.customer_email} in ${s.store} — can't add credit. Send it as an offer instead.`);
+    const r = await issueStoreCredit(st, cust.id, opts.credit.total.toFixed(2), opts.order.currency || "USD");
+    creditNote = r.note;
+    const aid = "act_" + crypto.randomUUID();
+    await recordAction(aid, { kind: "shopify_propose_store_credit", title: `Store credit — ${s.store} (stuck package ${s.order_name})`, summary: `💳 ${usd(opts.credit.total)} = order ${usd(opts.credit.base)} + ${CREDIT_BONUS_PCT}% bonus`, ticketId: null, input: { email: opts.order.email || s.customer_email, amount: opts.credit.total, order: s.order_name, brand: s.store, reason: `stuck package ${kind}` } });
+    await markAction(aid, "applied", { by: who, result: creditNote });
+  }
+  const subject = `An update on your ${s.store} order ${s.order_name}`;
+  const r = await core.sendNewEmail({ mailbox, to: s.customer_email, subject, text, who, tags: ["stuck-package", type === "credit" ? "stuck-credit-offer" : "stuck-replacement-offer"] });
+  if (creditNote) { try { await db(`UPDATE emily_actions SET ticket_id=$2 WHERE title LIKE $1 AND ticket_id IS NULL`, [`Store credit — ${s.store} (stuck package ${s.order_name})`, String(r.ticket_id)]); await core.addNote({ ticketId: String(r.ticket_id), text: `💳 ${creditNote} (${usd(opts.credit.base)} order + ${CREDIT_BONUS_PCT}% bonus) — by ${who}`, who }); } catch (_) {} }
+  const note = type === "credit" ? `${issue_now ? "issued" : "offered"} store credit ${usd(opts.credit.total)} (incl. ${CREDIT_BONUS_PCT}% bonus)` : `offered replacement (${opts.items.filter((i) => i.in_stock).length}/${opts.items.length} lines in stock)`;
+  await db(`UPDATE hd_stuck SET state='contacted', state_by=$2, state_at=now(), ticket_id=$3, note=COALESCE(note,'') || ' · ' || $4 WHERE id=$1`, [id, who, r.ticket_id, note]);
+  return { ok: true, ticket_id: r.ticket_id, note, credit_note: creditNote };
+}
+
 function stuckEmailTemplate(s) {
   const first = String(s.customer_name || "").split(" ")[0] || "there";
   if (s.kind === "undelivered" && !s.also_never_scanned) {
@@ -1712,4 +1841,4 @@ async function start() {
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear() }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate };
+module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear() }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };

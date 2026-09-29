@@ -125,6 +125,16 @@ app.post("/api/stuck/state", async (req, res) => {
   try { const { id, state, note, kind } = req.body || {}; res.json(await require("./emily").setStuckState(String(id), String(state), actorOf(req), note, kind)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+app.get("/api/stuck/options", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json(await require("./emily").stuckOptions(String(req.query.id || ""), String(req.query.kind || ""))); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post("/api/stuck/offer", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const { id, kind, type, text, issue_now } = req.body || {}; if (!text || !String(text).trim()) return res.status(400).json({ error: "text required" });
+    res.json(await require("./emily").stuckOffer(String(id), String(kind || ""), { type, text: String(text), issue_now: !!issue_now, who: actorOf(req) })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 app.post("/api/stuck/email", async (req, res) => {
   if (!guard(req, res)) return;
   try { const { id, text, kind } = req.body || {}; if (!text || !String(text).trim()) return res.status(400).json({ error: "text required" }); res.json(await require("./emily").emailStuckCustomer(String(id), actorOf(req), String(text), kind)); }

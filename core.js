@@ -199,6 +199,12 @@ async function migrate() {
   await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS estimated_delivery_at TIMESTAMPTZ`);
   await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS last_update_at TIMESTAMPTZ`);
   await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS carrier_status TEXT`);          // what the carrier itself says (ShipStation tracking)
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS carrier_status_at TIMESTAMPTZ`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS carrier_checked_at TIMESTAMPTZ`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS carrier_note TEXT`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS shopify_trackable BOOLEAN`);
+  await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS tracking_fixed_at TIMESTAMPTZ`);
   try { const pk = (await db(`SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey) WHERE i.indrelid='hd_stuck'::regclass AND i.indisprimary`)).rows.map((r) => r.attname);
         if (!pk.includes("kind")) { await db(`ALTER TABLE hd_stuck DROP CONSTRAINT IF EXISTS hd_stuck_pkey`); await db(`ALTER TABLE hd_stuck ADD PRIMARY KEY (id, kind)`); } } catch (e) { console.error("hd_stuck pk:", e.message); }
   await db(`CREATE TABLE IF NOT EXISTS hd_files (id TEXT PRIMARY KEY, ticket_id BIGINT, name TEXT, content_type TEXT, data BYTEA, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);

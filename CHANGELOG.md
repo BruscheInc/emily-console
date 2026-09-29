@@ -3,6 +3,23 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.3 — Sep 29, 2026
+- **Check stock** button on shipment rows: live availability for every line on the order, nothing drafted or sent.
+  From the result you can jump to "Draft replacement offer" or "Draft credit offer" if you want to.
+
+## v4.2 — Sep 29, 2026
+- **Offers on stuck / undelivered packages.** Two buttons per row: **Replacement** runs a live stock check on every
+  line of the order and drafts an offer to reship what's available (refunding what isn't, or offering refund/credit
+  if nothing is); **Credit +15%** works out order total + 15% bonus and drafts the offer, with a checkbox to add the
+  credit to the customer's Shopify account immediately. Both drafts are editable; sending opens a ticket from the
+  brand mailbox and marks the row contacted.
+- **Reliable delivery status.** Shopify only follows a shipment when the fulfillment names a carrier it recognises;
+  ShipStation-created ones often say "Stamps.com"/"Other", so Shopify never checks and the status stays "Tracking
+  added" even after delivery (#LB190443). Now every open row is cross-checked with the carrier through
+  ShipStation's tracking API (needs SHIPSTATION_V2_KEY) — delivered packages close themselves and the row shows
+  what the carrier says — and, with the write_fulfillments scope, the carrier name is corrected in Shopify so
+  Shopify starts updating too. Rows flag "not followed by Shopify" when that's the situation.
+
 ## v4.1 — Sep 29, 2026
 - **Shipments section** replaces "Stuck packages" with two views fed by the same 6-hour scan:
   **Never scanned** (label created, carrier never scanned it, 4+ days) and **Not delivered 15+ days** (order
