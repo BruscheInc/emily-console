@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#eef2f8" />
 <link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/svg+xml" href="logo.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <title>Helpdesk</title>
 <style>
@@ -15,7 +17,7 @@
   /* ---- sidebar · main (table list, or the open conversation) ---- */
   .side{width:236px;flex:none;display:flex;flex-direction:column;background:#f6f7fa;border-right:1px solid var(--line);padding:14px 10px;gap:1px;overflow-y:auto}
   .brand{display:flex;gap:10px;align-items:center;padding:4px 8px 14px}
-  .brand .mark{font-size:22px}.ver{font-size:10.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.08);border-radius:5px;padding:1px 5px;vertical-align:middle;margin-left:2px}.brand .name{font-weight:800;font-size:16px;letter-spacing:-.01em}.brand .subname{font-size:11px;color:var(--muted)}
+  .brand .mark{width:34px;height:34px;border-radius:9px;flex:none;box-shadow:0 2px 6px rgba(30,70,184,.25)}.ver{font-size:10.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.08);border-radius:5px;padding:1px 5px;vertical-align:middle;margin-left:2px}.brand .name{font-weight:800;font-size:16px;letter-spacing:-.01em}.brand .subname{font-size:11px;color:var(--muted)}
   .navsec{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:12px 10px 4px;font-weight:700}
   .nav{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;border:none;color:var(--ink);padding:7px 10px;border-radius:8px;font-size:13.5px;font-weight:500;cursor:pointer;text-decoration:none;min-width:0}
   .nav .i{width:18px;text-align:center;opacity:.8;font-size:13px;flex:none}
@@ -59,6 +61,11 @@
   td.c-cust{width:16%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0}
   td.c-last{width:14%;white-space:nowrap;color:var(--muted)} td.c-last.unread{color:var(--ink);font-weight:700}
   td.empty{text-align:center;color:var(--muted);padding:40px}
+  .stuckhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 22px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+  .stuckhead .seg{margin-left:auto}
+  table.stuck td.days b{font-size:14px}.days.hot b{color:#c0392b}.days.warm b{color:#b7791f}
+  .stk-acts{display:flex;gap:5px;flex-wrap:wrap}
+  .stk-note{color:var(--muted);font-size:12px;white-space:pre-wrap}
   .pager{flex:none;display:flex;gap:8px;align-items:center;padding:10px 22px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
   .chips{display:flex;gap:5px;flex-wrap:wrap}
   .chip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(20,30,50,.06);color:var(--muted);white-space:nowrap}
@@ -159,11 +166,12 @@
 
 <div id="app" class="hidden" style="display:flex;height:100%">
 <aside class="side">
-  <div class="brand"><span class="mark">📨</span><div><div class="name">Helpdesk <span id="ver" class="ver"></span></div><div class="subname">Larkspur Baby · Outlet</div></div></div>
+  <div class="brand"><img class="mark" src="logo.svg" alt="" width="34" height="34"><div><div class="name">Helpdesk <span id="ver" class="ver"></span></div><div class="subname">Larkspur Baby · Outlet</div></div></div>
   <div class="navsec">Views</div>
   <button class="nav view on" data-view="lbo_tickets" onclick="setView('lbo_tickets')"><span class="i">🏷</span>LBO Tickets<span class="n" id="v-lbo_tickets"></span></button>
   <button class="nav view" data-view="lb_tickets" onclick="setView('lb_tickets')"><span class="i">🏷</span>LB Tickets<span class="n" id="v-lb_tickets"></span></button>
   <button class="nav view" data-view="oos" onclick="setView('oos')"><span class="i">📦</span>Out of stock<span class="n" id="v-oos"></span></button>
+  <button class="nav view" data-view="stuck" onclick="setView('stuck')"><span class="i">⏳</span>Stuck packages<span class="n" id="v-stuck"></span></button>
   <div class="navsec">Mailboxes</div>
   <button class="nav view" data-view="lbo" onclick="setView('lbo')"><span class="i">✉️</span>Outlet · all mail<span class="n" id="v-lbo"></span></button>
   <button class="nav view" data-view="lb" onclick="setView('lb')"><span class="i">✉️</span>Larkspur · all mail<span class="n" id="v-lb"></span></button>
@@ -188,6 +196,7 @@
       </div>
     </div>
     <div class="tablewrap"><table class="tickets"><thead><tr><th class="c-t">Ticket</th><th class="c-tags">Tags</th><th class="c-cust">Customer</th><th class="c-last">Last message ↓</th></tr></thead><tbody id="list"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
+    <div id="stuckwrap" class="tablewrap" style="display:none"></div>
     <div class="pager"><span id="pageinfo"></span><span class="sp"></span><button class="btn sec xs" id="prevpg" onclick="page(-1)">‹ Prev</button><button class="btn sec xs" id="nextpg" onclick="page(1)">Next ›</button></div>
   </div>
 <div class="thread" id="thread"></div>
@@ -248,9 +257,12 @@ async function loadCounts(){try{
   const c=await api("/api/counts?view="+encodeURIComponent(VIEW));
   for(const k of ["pending","sent","closed","collabs","all"]){const el=$("n-"+k);if(el)el.textContent=c[k]!=null?c[k]:"";}
   for(const v of ["lb","lbo","lb_tickets","lbo_tickets","oos","all"]){const el=$("v-"+v);if(el)el.textContent=(c.views&&c.views[v])?c.views[v]:"";}
+  const sv=$("v-stuck"); if(sv) sv.textContent=c.stuck||"";
+  // tab title carries the pending count, like a real inbox
+  const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Helpdesk`:"Helpdesk";
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Stuck packages",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function chipsFor(t){
   const hide=new Set(["emily-drafted","emily-sent"]); const out=[];
@@ -259,9 +271,16 @@ function chipsFor(t){
   const extra=(t.tags||[]).filter(g=>!hide.has(g)).length-(out.length-(t.emily?1:0)); if(extra>0) out.push(`<span class="chip">+${extra}</span>`);
   return out.join("");
 }
+let STUCK_STATE="open";
 async function loadList(force){
   const el=$("list"); if(force)el.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
+  const isStuck=VIEW==="stuck";
+  document.querySelector(".lh2").style.display=isStuck?"none":"";
+  document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
+  document.querySelector(".pager").style.display=isStuck?"none":"";
+  $("stuckwrap").style.display=isStuck?"":"none";
+  if(isStuck) return loadStuck();
   try{
     const d=await api(`/api/tickets?tab=${TAB}&view=${encodeURIComponent(VIEW)}&q=${encodeURIComponent($("q").value.trim())}&limit=${PAGE}&offset=${OFFSET}`);
     tickets=d.tickets||[]; TOTAL=d.total||tickets.length;
@@ -607,6 +626,53 @@ async function loadCustomer(email,orderHint){
 }
 
 async function dedupe(b){ b.disabled=true; const was=b.textContent; b.textContent="Checking…"; try{ const r=await api("/api/admin/dedupe",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(r.merged?`Merged ${r.merged} duplicate ticket${r.merged===1?"":"s"}`:"No duplicates found"); loadCounts(); loadList(true);}catch(e){toast("Couldn't run the check");} b.disabled=false; b.textContent=was; }
+/* ---------- Stuck packages: Shopify "Tracking added" with no carrier movement for 4+ days ---------- */
+async function loadStuck(){
+  const w=$("stuckwrap"); w.innerHTML='<div class="empty">Checking…</div>';
+  try{
+    const d=await api("/api/stuck?state="+encodeURIComponent(STUCK_STATE));
+    const c=d.counts||{}; const last=d.last_scan; const seg=(k,l)=>`<button class="tab ${STUCK_STATE===k?"on":""}" onclick="STUCK_STATE='${k}';loadStuck()">${l}<span class="n">${k==="open"?(c.open||0)+(c.contacted||0):k==="all"?Object.values(c).reduce((a,b)=>a+b,0):(c[k]||0)}</span></button>`;
+    $("showing").textContent=d.items.length?`${d.items.length} package${d.items.length===1?"":"s"}`:"";
+    const head=`<div class="stuckhead"><span>Orders whose Shopify delivery status is still <b>Tracking added</b> after ${d.threshold_days}+ days — the carrier has never scanned the package. Orders from ${fmtDay(d.since)} onward.</span>
+      <span>${last?`Last checked ${fmt(last.at)} · ${last.scanned} shipped orders scanned${(last.errors||[]).length?` · <span style="color:#c0392b">${esc(last.errors.join(" | "))}</span>`:""}`:"Not checked yet"}</span>
+      <button class="btn sec xs" onclick="stuckRefresh(this)">↻ Check now</button>
+      <div class="seg">${seg("open","Needs attention")}${seg("contacted","Contacted")}${seg("resolved","Resolved")}${seg("ignored","Ignored")}${seg("all","All")}</div></div>`;
+    if(!d.items.length){ w.innerHTML=head+'<div class="empty">Nothing here — every recent package has been scanned by the carrier.</div>'; return; }
+    w.innerHTML=head+`<table class="tickets stuck"><thead><tr><th class="c-t">Order</th><th>Customer</th><th>Tracking</th><th>Tracking added</th><th>Shopify status</th><th>Actions</th></tr></thead><tbody>${d.items.map(x=>`<tr>
+      <td class="c-t" style="width:18%"><div class="subj"><button class="ordchip" onclick="stuckOrder('${esc(x.order_name)}','${esc(x.customer_email||"")}')">${esc(x.order_name)}</button></div><div class="exc">${esc(x.store)}${x.city?" · "+esc(x.city):""}${x.state!=="open"?` · <b>${esc(x.state)}</b>${x.state_by?" by "+esc(x.state_by):""}`:""}</div>${x.note?`<div class="stk-note">${esc(x.note)}</div>`:""}</td>
+      <td style="width:16%">${esc(x.customer_name||"")}<div class="exc">${esc(x.customer_email||"")}</div></td>
+      <td style="width:18%"><a href="${esc(x.tracking_url||"#")}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;text-decoration:none">${esc(x.tracking)}</a><div class="exc">${esc(x.carrier||"")}</div></td>
+      <td class="days ${x.days>=10?"hot":x.days>=7?"warm":""}" style="width:14%"><b>${x.days} days</b><div class="exc">${fmtDay(x.tracking_added_at)}</div></td>
+      <td style="width:12%"><span class="chip drafted">${esc(String(x.display_status||"").toLowerCase().replace(/_/g," "))}</span>${x.moved_at?`<div class="exc">moved ${fmtDay(x.moved_at)}</div>`:""}</td>
+      <td style="width:22%"><div class="stk-acts">
+        ${x.ticket_id?`<button class="btn sec xs" onclick="openTicket(${x.ticket_id})">Open ticket</button>`:`<button class="btn sec xs" onclick="stuckEmail('${esc(x.id)}')">✉️ Email customer</button>`}
+        ${x.state!=="contacted"&&!x.ticket_id?`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','contacted')">Contacted</button>`:""}
+        ${x.state!=="resolved"?`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','resolved')">Resolved</button>`:""}
+        ${x.state!=="ignored"?`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','ignored')">Ignore</button>`:`<button class="btn sec xs" onclick="stuckState('${esc(x.id)}','open')">Reopen</button>`}
+      </div></td></tr>`).join("")}</tbody></table>`;
+    window._stuck=d.items;
+  }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load stuck packages.</div>'; }
+}
+async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify…"; try{ const r=await api("/api/stuck/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.scanned} orders — ${r.stuck} stuck`); }catch(e){toast("Check failed",true);} loadStuck(); loadCounts(); }
+async function stuckState(id,state){ const note=state==="ignored"||state==="resolved"?window.prompt(state==="ignored"?"Why ignore? (optional)":"What happened? (optional)",""):null; if(note===null&&(state==="ignored"||state==="resolved"))return;
+  try{ const r=await api("/api/stuck/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,state,note})}); if(r.error){toast(r.error,true);return;} loadStuck(); loadCounts(); }catch(e){toast("Failed",true);} }
+function stuckEmail(id){
+  const x=(window._stuck||[]).find(i=>i.id===id); if(!x)return; closeModal();
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box"><h3>Email ${esc(x.customer_name||x.customer_email)}</h3><div class="sub">From the ${esc(x.store)} mailbox · opens a ticket so the reply lands in your inbox</div>
+    <textarea id="stk-text" rows="14" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:10px;font:inherit;font-size:13.5px;line-height:1.45">${esc(x.email_template||"")}</textarea>
+    <div class="foot"><button class="btn sec" onclick="closeModal()">Back</button><button class="btn" id="modal-go">Send email</button></div></div>`;
+  document.body.appendChild(m);
+  $("modal-go").onclick=async()=>{ const text=$("stk-text").value.trim(); if(!text)return; const go=$("modal-go"); go.disabled=true; go.textContent="Sending…";
+    try{ const r=await api("/api/stuck/email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,text})}); if(r.error)throw new Error(r.error); toast("Sent ✓ — ticket opened"); closeModal(); loadStuck(); loadCounts(); }
+    catch(e){ toast(e.message||"Couldn't send",true); go.disabled=false; go.textContent="Send email"; } };
+}
+async function stuckOrder(name,email){
+  // Jump to the customer's latest ticket if there is one; otherwise just look the order up in a fresh ticket-less view isn't possible, so open the customer's most recent ticket or explain.
+  try{ const d=await api(`/api/tickets?tab=all&view=all&q=${encodeURIComponent(email||name)}&limit=1`); if(d.tickets&&d.tickets.length){ openTicket(d.tickets[0].id); setTimeout(()=>loadOrder(name),1200); return; } }catch(e){}
+  toast("No ticket with this customer yet — use Email customer to start one");
+}
+
 function rail(d){
   const kv=(k,v)=>`<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
   const emily=d.emily?`<span class="chip ${d.emily}">${esc(d.emily)}</span>`:"—";
