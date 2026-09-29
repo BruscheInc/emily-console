@@ -797,7 +797,7 @@ async function listStuck(state, kind = "never_scanned") {
                         FROM hd_stuck ${where} ORDER BY order_created_at ASC`, args);
   const counts = (await db(`SELECT state, count(*)::int AS n FROM hd_stuck WHERE kind=$1 GROUP BY state`, [kind])).rows.reduce((a, x) => (a[x.state] = x.n, a), {});
   const last = await core.syncGet("stuck_scan");
-  return { kind, items: r.rows.map((x) => ({ ...x, days: Math.floor(Number(x.days)), order_days: Math.floor(Number(x.order_days)), also_never_scanned: x.also_never_scanned > 0 })), counts, last_scan: last ? last.state : null, threshold_days: kind === "undelivered" ? UNDELIVERED_DAYS : STUCK_DAYS, since: STUCK_SINCE, carrier_api: !!SS_V2_KEY, repair_blocked: fixTrackingBlocked };
+  return { kind, items: r.rows.map((x) => ({ ...x, days: Math.floor(Number(x.days)), order_days: Math.floor(Number(x.order_days)), also_never_scanned: x.also_never_scanned > 0 })), counts, last_scan: last ? last.state : null, threshold_days: kind === "undelivered" ? UNDELIVERED_DAYS : STUCK_DAYS, since: STUCK_SINCE, carrier_api: !!SS_V2_KEY && !(lastVerify && lastVerify.carrier_api_error), carrier_api_error: lastVerify ? lastVerify.carrier_api_error : null, repair_blocked: fixTrackingBlocked };
 }
 async function stuckCounts() {
   const r = (await db(`SELECT kind, count(*)::int AS n FROM hd_stuck WHERE state IN ('open','contacted') GROUP BY kind`)).rows;
@@ -857,16 +857,17 @@ async function shopifyFixTracking(st, fulfillmentId, company, number, url) {
   const ue = d.fulfillmentTrackingInfoUpdate.userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
   return true;
 }
+let lastVerify = null;
 let fixTrackingBlocked = null;   // set to the reason once Shopify refuses (missing scope) so we don't retry every row
 // Cross-check every open row with the carrier and, where allowed, repair Shopify's carrier field.
 async function verifyWatch() {
   const rows = (await db(`SELECT * FROM hd_stuck WHERE state IN ('open','contacted') ORDER BY order_created_at ASC`)).rows;
-  let checked = 0, delivered = 0, fixed = 0; const fixedIds = new Set(), asked = new Map();
+  let checked = 0, delivered = 0, fixed = 0, apiError = null; const fixedIds = new Set(), asked = new Map();
   for (const r of rows) {
     const guess = carrierFromNumber(r.tracking);
     const company = String(r.carrier || "").trim();
     const trackable = SHOPIFY_TRACKS.test(company);
-    let note = trackable ? null : `Shopify isn't following this shipment — its carrier is "${company || "blank"}", which Shopify doesn't track${guess ? ` (number looks like ${guess.name})` : ""}.`;
+    let note = trackable ? null : `Its carrier is "${company || "blank"}", which Shopify doesn't recognise${guess ? ` (number looks like ${guess.name})` : ""}.`;
     // 2) repair in Shopify (once per fulfillment; both kinds share it)
     if (!trackable && guess && !r.tracking_fixed_at && !fixedIds.has(r.id) && !fixTrackingBlocked) {
       fixedIds.add(r.id);
@@ -878,8 +879,8 @@ async function verifyWatch() {
     // 1) ask the carrier
     let cs = null;
     if (SS_V2_KEY && guess) {
-      try { cs = asked.has(r.id) ? asked.get(r.id) : await ssV2Track(guess.v2, r.tracking); if (!asked.has(r.id)) { asked.set(r.id, cs); checked++; } }
-      catch (e) { console.error(`carrier check ${r.order_name}: ${e.message}`); }
+      try { if (apiError) throw new Error(apiError); cs = asked.has(r.id) ? asked.get(r.id) : await ssV2Track(guess.v2, r.tracking); if (!asked.has(r.id)) { asked.set(r.id, cs); checked++; } }
+      catch (e) { if (!apiError) console.error(`carrier check ${r.order_name}: ${e.message}`); if (/401|403|billing plan|unauthori/i.test(e.message)) apiError = /billing plan|required features/i.test(e.message) ? "ShipStation says the tracking API isn't included in your plan (\"upgrade your billing plan or add required features\")." : `ShipStation rejected the V2 key (${e.message.slice(0, 120)})`; }
     }
     if (cs) {
       const status = cs.delivered ? `Delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}` : (cs.description || cs.code);
@@ -891,8 +892,10 @@ async function verifyWatch() {
       await db(`UPDATE hd_stuck SET carrier_note=$2, shopify_trackable=COALESCE(shopify_trackable,$3), carrier_checked_at=CASE WHEN $4 THEN carrier_checked_at ELSE now() END WHERE id=$1`, [r.id, note, trackable, !!SS_V2_KEY]);
     }
   }
-  console.log(`📦🔎 carrier check: ${rows.length} open · ${checked} asked the carrier${SS_V2_KEY ? "" : " (SHIPSTATION_V2_KEY not set — skipped)"} · ${delivered} actually delivered · ${fixed} carrier fields repaired in Shopify`);
-  return { open: rows.length, checked, delivered, fixed, carrier_api: !!SS_V2_KEY, repair_blocked: fixTrackingBlocked };
+  console.log(`📦🔎 carrier check: ${rows.length} open · ${checked} asked the carrier${SS_V2_KEY ? (apiError ? ` (${apiError})` : "") : " (SHIPSTATION_V2_KEY not set — skipped)"} · ${delivered} actually delivered · ${fixed} carrier fields repaired in Shopify`);
+  const out = { open: rows.length, checked, delivered, fixed, carrier_api: !!SS_V2_KEY && !apiError, carrier_api_error: apiError, repair_blocked: fixTrackingBlocked };
+  lastVerify = out;
+  return out;
 }
 
 /* ---- Offers for a stuck / undelivered package: a replacement (after a live stock check) or store credit for the

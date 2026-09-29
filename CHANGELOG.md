@@ -3,6 +3,15 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.5 — Sep 29, 2026
+- Shipments: the row actions are now one dropdown (Email customer / Open ticket, Check stock, Offer replacement,
+  Offer credit +15%, Mark contacted, Mark resolved, Ignore / Reopen) with a Go button, instead of a wall of buttons.
+
+## v4.4 — Sep 29, 2026
+- Shipments: corrected explanation of why Shopify stays on "Tracking added" (it only follows Shopify Shipping labels;
+  ShipStation doesn't push delivery events), and the carrier-check status/error now shows at the top of the view
+  (e.g. ShipStation plan without the tracking API).
+
 ## v4.3 — Sep 29, 2026
 - **Check stock** button on shipment rows: live availability for every line on the order, nothing drafted or sent.
   From the result you can jump to "Draft replacement offer" or "Draft credit offer" if you want to.
