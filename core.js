@@ -209,6 +209,7 @@ async function migrate() {
         if (!pk.includes("kind")) { await db(`ALTER TABLE hd_stuck DROP CONSTRAINT IF EXISTS hd_stuck_pkey`); await db(`ALTER TABLE hd_stuck ADD PRIMARY KEY (id, kind)`); } } catch (e) { console.error("hd_stuck pk:", e.message); }
   await db(`CREATE TABLE IF NOT EXISTS hd_files (id TEXT PRIMARY KEY, ticket_id BIGINT, name TEXT, content_type TEXT, data BYTEA, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS todo JSONB`);
+  try { await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS items JSONB`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS followup_sent_at TIMESTAMPTZ`); } catch (_) {}
   await db(`ALTER TABLE emily_actions ADD COLUMN IF NOT EXISTS files JSONB`);
   await db(`CREATE TABLE IF NOT EXISTS emily_actions (id TEXT PRIMARY KEY, kind TEXT, title TEXT, summary TEXT, ticket_id TEXT, input JSONB, status TEXT DEFAULT 'staged', result TEXT, decided_by TEXT, created_at TIMESTAMPTZ DEFAULT now(), decided_at TIMESTAMPTZ)`);
   await db(`CREATE TABLE IF NOT EXISTS emily_drafts (id BIGSERIAL PRIMARY KEY, ticket_id TEXT, brand TEXT, customer_email TEXT, category TEXT, intent TEXT, sentiment TEXT, escalate BOOLEAN, escalate_reason TEXT, draft TEXT, final_text TEXT, outcome TEXT, decided_by TEXT, created_at TIMESTAMPTZ DEFAULT now(), decided_at TIMESTAMPTZ)`);
@@ -805,13 +806,16 @@ async function pollAll() {
   finally { pollBusy = false; }
 }
 // Send a reply through Gmail, threaded onto the existing conversation.
-async function gmailSend({ mailbox, to, subject, text, threadId, inReplyTo, references, fromName, attachments = [] }) {
+async function gmailSend({ mailbox, to, subject, text, threadId, inReplyTo, references, fromName, attachments = [], reply = true }) {
   const boundaryText = String(text || "");
   const html = boundaryText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+  // Our own Message-ID so later replies/follow-ups can reference it and thread properly in the customer's mail client.
+  const messageId = `<hd-${crypto.randomUUID()}@${String(mailbox).split("@")[1] || "helpdesk"}>`;
   const top = [
     `From: ${fromName ? `"${fromName.replace(/"/g, "")}" ` : ""}<${mailbox}>`,
     `To: ${to}`,
-    `Subject: ${/^re:/i.test(subject || "") ? subject : `Re: ${subject || ""}`}`,
+    `Subject: ${!reply || /^re:/i.test(subject || "") ? (subject || "") : `Re: ${subject || ""}`}`,
+    `Message-ID: ${messageId}`,
     inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
     references ? `References: ${references}` : null,
     "MIME-Version: 1.0",
@@ -828,7 +832,8 @@ async function gmailSend({ mailbox, to, subject, text, threadId, inReplyTo, refe
     }
     raw = `${top.concat([`Content-Type: multipart/mixed; boundary="${b}"`]).join("\r\n")}\r\n\r\n${parts.join("")}--${b}--`;
   }
-  return gapi(mailbox, `/messages/send`, { method: "POST", body: threadId ? { raw: b64urlEncode(raw), threadId } : { raw: b64urlEncode(raw) } });
+  const r = await gapi(mailbox, `/messages/send`, { method: "POST", body: threadId ? { raw: b64urlEncode(raw), threadId } : { raw: b64urlEncode(raw) } });
+  return { ...r, messageId };
 }
 
 /* ---------------- inbound hook (Emily listens here) ---------------- */
@@ -847,14 +852,16 @@ async function sendReply({ ticketId, text, who, via, files = [] }) {
   const mailbox = t.mailbox || mailboxForName(t.brand) || process.env.GORGIAS_FROM_ADDRESS;
   if (!mailbox) throw new Error(`couldn't work out which mailbox to send from on ticket ${ticketId}`);
   const last = (await db(`SELECT rfc_message_id FROM hd_messages WHERE ticket_id=$1 AND rfc_message_id IS NOT NULL ORDER BY at DESC LIMIT 1`, [ticketId])).rows[0];
+  const chain = (await db(`SELECT rfc_message_id FROM hd_messages WHERE ticket_id=$1 AND rfc_message_id IS NOT NULL ORDER BY at ASC LIMIT 20`, [ticketId])).rows.map((x) => x.rfc_message_id).join(" ");
+  let ourId = null;
   const connected = (await db(`SELECT 1 FROM hd_mailboxes WHERE lower(address)=lower($1) AND refresh_token IS NOT NULL`, [mailbox])).rows.length > 0;
   let sentVia = "gmail", externalId = null;
   const attachments = [];
   for (const fid of files) { const f = await getFile(String(fid)); if (f) attachments.push({ file_id: String(fid), name: f.name, content_type: f.content_type, buffer: f.buffer, size: f.buffer.length }); }
   if (connected && gmailConfigured()) {
     const r = await gmailSend({ mailbox, to: t.customer_email, subject: t.subject, text, threadId: t.gmail_thread_id,
-      inReplyTo: last && last.rfc_message_id, references: last && last.rfc_message_id, fromName: t.brand, attachments });
-    externalId = `gmail:${r.id}`;
+      inReplyTo: last && last.rfc_message_id, references: chain || (last && last.rfc_message_id), fromName: t.brand, attachments });
+    externalId = `gmail:${r.id}`; ourId = r.messageId || null;
     if (!t.gmail_thread_id && r.threadId) await db(`UPDATE hd_tickets SET gmail_thread_id=$2 WHERE id=$1`, [ticketId, r.threadId]);
   } else if (G_DOMAIN && t.gorgias_id) {
     sentVia = "gorgias";
@@ -874,9 +881,9 @@ async function sendReply({ ticketId, text, who, via, files = [] }) {
   if (sentVia === "gorgias" && attachments.length) console.error(`sendReply ${ticketId}: ${attachments.length} attachment(s) not sent — Gorgias fallback is text-only`);
   const at = new Date().toISOString();
   await db(
-    `INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,attachments,sent_by,at)
-     VALUES ($1,$2,$3,true,false,'email',$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (external_id) DO NOTHING`,
-    [ticketId, sentVia, externalId || `local:${crypto.randomUUID()}`, t.brand || "Agent", mailbox, [t.customer_email], t.subject, String(text),
+    `INSERT INTO hd_messages (ticket_id,source,external_id,rfc_message_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,attachments,sent_by,at)
+     VALUES ($1,$2,$3,$4,true,false,'email',$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (external_id) DO NOTHING`,
+    [ticketId, sentVia, externalId || `local:${crypto.randomUUID()}`, ourId, t.brand || "Agent", mailbox, [t.customer_email], t.subject, String(text),
      JSON.stringify(attachments.map((a) => ({ name: a.name, content_type: a.content_type, size: a.size, file_id: a.file_id }))), who, at]);
   await db(`UPDATE hd_tickets SET last_message_at=$2, last_outbound_at=$2, updated_at=$2, status='open',
                    messages_count=(SELECT count(*) FROM hd_messages WHERE ticket_id=$1) WHERE id=$1`, [ticketId, at]);
@@ -891,10 +898,10 @@ async function sendNewEmail({ mailbox, to, subject, text, who, tags }) {
   const connected = (await db(`SELECT 1 FROM hd_mailboxes WHERE lower(address)=lower($1) AND refresh_token IS NOT NULL`, [mailbox])).rows.length > 0;
   const id = (await db(`SELECT nextval('hd_local_ticket_seq')::bigint AS id`)).rows[0].id;
   const at = new Date().toISOString();
-  let threadId = null, externalId = null, via = "gmail";
+  let threadId = null, externalId = null, via = "gmail", ourId = null;
   if (connected && gmailConfigured()) {
-    const r = await gmailSend({ mailbox, to, subject, text, fromName: brand });
-    threadId = r.threadId || null; externalId = `gmail:${r.id}`;
+    const r = await gmailSend({ mailbox, to, subject, text, fromName: brand, reply: false });
+    threadId = r.threadId || null; externalId = `gmail:${r.id}`; ourId = r.messageId || null;
   } else if (G_DOMAIN) {
     via = "gorgias";
     const html = htmlify(text);
@@ -910,8 +917,8 @@ async function sendNewEmail({ mailbox, to, subject, text, who, tags }) {
   }
   await db(`INSERT INTO hd_tickets (id,source,gmail_thread_id,subject,brand,mailbox,channel,status,customer_email,tags,messages_count,created_at,updated_at,last_message_at,last_outbound_at)
             VALUES ($1,$2,$3,$4,$5,$6,'email','open',$7,$8,1,$9,$9,$9,$9)`, [id, via, threadId, subject, brand, mailbox, to, tags || [], at]);
-  await db(`INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,sent_by,at)
-            VALUES ($1,$2,$3,true,false,'email',$4,$5,$6,$7,$8,$9,$10)`, [id, via, externalId, brand || "Agent", mailbox, [to], subject, String(text), who, at]);
+  await db(`INSERT INTO hd_messages (ticket_id,source,external_id,rfc_message_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,sent_by,at)
+            VALUES ($1,$2,$3,$4,true,false,'email',$5,$6,$7,$8,$9,$10,$11)`, [id, via, externalId, ourId, brand || "Agent", mailbox, [to], subject, String(text), who, at]);
   return { ok: true, ticket_id: id, via };
 }
 async function addNote({ ticketId, text, who }) {

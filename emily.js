@@ -1618,6 +1618,8 @@ async function onHumanReply(ticketId, text, who) {
  * ====================================================================================================== */
 const OOS_ON = (process.env.OOS_LOOP || "on").toLowerCase() === "on";
 const OOS_INTERVAL = (Number(process.env.OOS_INTERVAL_SEC) || 45) * 1000;
+const OOS_AUTO_SEND = (process.env.OOS_AUTO_SEND || "on").toLowerCase() === "on";     // Stockroom emails go straight out — no Slack approval
+const OOS_FOLLOWUP_HOURS = Number(process.env.OOS_FOLLOWUP_HOURS) || 48;
 const money2 = (n) => Number(n || 0).toFixed(2);
 const slackEsc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 function mailboxForBrand(brand) { return core.mailboxForName(brand) || process.env.GORGIAS_FROM_ADDRESS || null; }
@@ -1665,8 +1667,9 @@ async function oosSendCase(caseId, who) {
     if (!email) throw new Error("no customer email on this case");
     if (!fromAddress) throw new Error(`couldn't resolve a sending mailbox for brand "${c.brand}"`);
     const r = await core.sendNewEmail({ mailbox: fromAddress, to: email, subject: c.email_subject || "About your order", text: c.email_text, who: who || "Emily", tags: ["oos-offer", "emily"] });
-    await core.addNote({ ticketId: r.ticket_id, text: `[OOS-CASE #${c.id}] ${c.item_name} (${c.sku}) · value $${money2(c.item_value)} · store-credit(+15%) $${money2(c.credit_value)} · order ${c.order_number}. Options offered: equal-value replacement / store credit +15% / refund. When the customer replies with their choice, apply that brand's policy and route the money/inventory move to Jose.`, who: "Emily" });
-    await db(`UPDATE oos_cases SET status='offered', ticket_id=$2, updated_at=now() WHERE id=$1`, [c.id, String(r.ticket_id)]);
+    const itemList = Array.isArray(c.items) && c.items.length ? c.items.map((i) => `${i.qty}× ${i.name} (${i.sku})`).join(", ") : `${c.item_name} (${c.sku})`;
+    await core.addNote({ ticketId: r.ticket_id, text: `[OOS-CASE #${c.id}] Out of stock on order ${c.order_number}: ${itemList} · total value $${money2(c.item_value)} · store-credit(+15%) $${money2(c.credit_value)}. Options offered: equal-value replacement / store credit +15% / refund. When the customer replies with their choice, apply that brand's policy and route the money/inventory move to Jose.`, who: "Emily" });
+    await db(`UPDATE oos_cases SET status='offered', ticket_id=$2, sent_at=now(), updated_at=now() WHERE id=$1`, [c.id, String(r.ticket_id)]);
     return { c, note: `Sent out-of-stock email to ${email} · ticket ${r.ticket_id} (via ${r.via})` };
   } catch (e) {
     try { await db(`UPDATE oos_cases SET status='staged', updated_at=now() WHERE id=$1 AND status='sending'`, [c.id]); } catch (_) {}
@@ -1683,11 +1686,60 @@ async function runOosLoop() {
     for (const c of rows) {
       const claim = await db(`UPDATE oos_cases SET status='staging', updated_at=now() WHERE id=$1 AND status='pending_approval' RETURNING id`, [c.id]);
       if (!claim.rows.length) continue;
-      try { await stageOosSend(c); }
-      catch (e) { console.error(`OOS stage failed for case ${c.id}:`, e.message); try { await db(`UPDATE oos_cases SET status='pending_approval' WHERE id=$1`, [c.id]); } catch (_) {} }
+      if (OOS_AUTO_SEND) {
+        // Stockroom already reviewed the wording — send it now, tell Slack after the fact.
+        try {
+          await db(`UPDATE oos_cases SET status='staged', updated_at=now() WHERE id=$1`, [c.id]);
+          const r = await oosSendCase(c.id, c.created_by ? `${c.created_by} via Stockroom` : "Stockroom");
+          const itemList = Array.isArray(c.items) && c.items.length ? c.items.map((i) => `${i.qty}× ${i.name}`).join(", ") : c.item_name;
+          core.slackPost(`📦❌ *Out-of-stock email sent* — order ${c.order_number} · ${c.brand || ""} · ${itemList} · $${money2(c.item_value)} (credit $${money2(c.credit_value)}) → ${c.customer_email}${r.c && r.c.ticket_id ? `` : ``}\n<${PUBLIC_URL}/?ticket=${(r.c && r.c.ticket_id) || ""}|Open ticket> · follows up automatically after ${OOS_FOLLOWUP_HOURS}h if there's no reply`).catch(() => {});
+          console.log(`📦❌ OOS case ${c.id}: ${r.note}`);
+        } catch (e) {
+          console.error(`OOS auto-send failed for case ${c.id}:`, e.message);
+          try { await db(`UPDATE oos_cases SET status='pending_approval', updated_at=now() WHERE id=$1 AND status IN ('staged','staging')`, [c.id]); } catch (_) {}
+          core.slackPost(`⚠️ Couldn't send the out-of-stock email for order ${c.order_number} (${e.message}) — will retry.`).catch(() => {});
+        }
+      } else {
+        try { await stageOosSend(c); }
+        catch (e) { console.error(`OOS stage failed for case ${c.id}:`, e.message); try { await db(`UPDATE oos_cases SET status='pending_approval' WHERE id=$1`, [c.id]); } catch (_) {} }
+      }
     }
+    await oosFollowUps();
   } catch (e) { if (!/does not exist/.test(e.message)) console.error("OOS loop error:", e.message); }
   finally { oosBusy = false; }
+}
+// 48 hours of silence after the out-of-stock email → one nudge on the same thread. Only once, only while the
+// ticket is still open and the customer hasn't written back since the offer.
+async function oosFollowUps() {
+  const { rows } = await db(`SELECT c.*, t.status AS ticket_status, t.last_inbound_at, t.customer_name AS t_name
+                               FROM oos_cases c JOIN hd_tickets t ON t.id::text = c.ticket_id
+                              WHERE c.status='offered' AND c.followup_sent_at IS NULL AND c.ticket_id IS NOT NULL
+                                AND COALESCE(c.sent_at, c.updated_at) < now() - ($1 || ' hours')::interval
+                                AND (t.last_inbound_at IS NULL OR t.last_inbound_at < COALESCE(c.sent_at, c.updated_at))
+                                AND t.status <> 'closed'
+                              ORDER BY c.sent_at ASC LIMIT 10`, [String(OOS_FOLLOWUP_HOURS)]);
+  for (const c of rows) {
+    try {
+      const fn = String(c.customer_name || c.t_name || "").trim().split(/\s+/)[0] || "there";
+      const items = Array.isArray(c.items) && c.items.length ? c.items : [{ name: c.item_name, qty: c.qty || 1 }];
+      const many = items.length > 1;
+      const text = [
+        `Hi ${fn},`, ``,
+        `Just checking in on my note from a couple of days ago about your order #${c.order_number} — ${many ? `${items.length} items are` : `the ${items[0].name} is`} out of stock, and I don't want it to hold things up for you.`, ``,
+        `Whenever you have a second, just reply with the option you'd like:`, ``,
+        `1) An equal-value replacement (anything in stock up to $${money2(c.item_value)})`,
+        `2) Store credit of $${money2(c.credit_value)} — the full value plus 15% extra`,
+        `3) A refund of $${money2(c.item_value)} to your original payment`, ``,
+        `If I don't hear back, I'll keep the order on hold so nothing is decided without you. Thanks so much for your patience!`, ``,
+        `Warmly,`, `The ${c.brand || "Larkspur Baby"} Team`,
+      ].join("\n");
+      await core.sendReply({ ticketId: c.ticket_id, text, who: "Emily", via: "oos-followup" });
+      await db(`UPDATE oos_cases SET followup_sent_at=now(), updated_at=now() WHERE id=$1`, [c.id]);
+      await core.addNote({ ticketId: c.ticket_id, text: `⏰ Follow-up sent after ${OOS_FOLLOWUP_HOURS}h without a reply to the out-of-stock email (case #${c.id}).`, who: "Emily" });
+      core.slackPost(`⏰ *Out-of-stock follow-up sent* — order ${c.order_number} → ${c.customer_email} (no reply in ${OOS_FOLLOWUP_HOURS}h) · <${PUBLIC_URL}/?ticket=${c.ticket_id}|Open ticket>`).catch(() => {});
+      console.log(`📦❌ OOS case ${c.id}: follow-up sent on ticket ${c.ticket_id}`);
+    } catch (e) { console.error(`OOS follow-up for case ${c.id}:`, e.message); }
+  }
 }
 
 /* ======================================================================================================
@@ -1871,7 +1923,7 @@ async function start() {
   if (DRAFT_ON && anthropic) { sweepFloor().catch(() => {}); setTimeout(sweep, 15000); setInterval(sweep, SWEEP_MS); console.log(`✍️  Emily drafting: on new mail + sweep every ${SWEEP_MS / 60000}m · model ${CLAUDE_MODEL}`); }
   else console.log(`✍️  Emily drafting: OFF (${!anthropic ? "no ANTHROPIC_API_KEY" : "DRAFT_LOOP=off"})`);
   if (STORES.length && pool) { setTimeout(() => scanStuck().catch(() => {}), 60000); setInterval(() => scanStuck().catch(() => {}), 6 * 3600 * 1000); console.log(`📦⏳ Shipment watch: every 6h (never scanned ${STUCK_DAYS}+ d · not delivered ${UNDELIVERED_DAYS}+ d · orders since ${STUCK_SINCE})`); }
-  if (OOS_ON) { setTimeout(runOosLoop, 20000); setInterval(runOosLoop, OOS_INTERVAL); console.log(`📦❌ Out-of-stock hand-off: on (every ${OOS_INTERVAL / 1000}s)`); }
+  if (OOS_ON) { setTimeout(runOosLoop, 20000); setInterval(runOosLoop, OOS_INTERVAL); console.log(`📦❌ Out-of-stock hand-off: on (every ${OOS_INTERVAL / 1000}s · ${OOS_AUTO_SEND ? "auto-send" : "Slack approval"} · follow-up after ${OOS_FOLLOWUP_HOURS}h)`); }
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }

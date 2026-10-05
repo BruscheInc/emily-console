@@ -3,6 +3,16 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.9 — Oct 5, 2026
+- **Out-of-stock emails from Stockroom send automatically** — no Slack approval step (OOS_AUTO_SEND=off restores
+  the card). Slack gets an after-the-fact note with a link to the ticket.
+- **48-hour follow-up**: if the customer hasn't replied to the out-of-stock email after 48 hours (OOS_FOLLOWUP_HOURS)
+  and the ticket is still open, one follow-up goes out on the same thread listing the three options again.
+- Outbound emails now carry their own Message-ID, so follow-ups and later replies thread correctly in the
+  customer's mail client; a brand-new email no longer gets a "Re:" prefix.
+- One email can cover several out-of-stock items on the same order (Stockroom v1.1 lets you tick them); the
+  ticket note and Slack message list all of them.
+
 ## v4.8 — Sep 29, 2026
 - No more blinking: the 30-second background refresh redraws the ticket table and the Shipments views only when
   something actually changed, never shows a "Checking…" placeholder, and waits if you have an action selected.
