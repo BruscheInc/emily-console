@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <defs><linearGradient id="gd" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b6ef5"/><stop offset="1" stop-color="#1e46b8"/></linearGradient></defs>
-  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#gd)"/>
-  <!-- speech bubble -->
-  <path d="M18 13 h28 a9 9 0 0 1 9 9 v16 a9 9 0 0 1 -9 9 H31 l-10 9 v-9 h-3 a9 9 0 0 1 -9 -9 V22 a9 9 0 0 1 9 -9 z" fill="#ffffff"/>
-  <!-- heart: care -->
-  <path d="M32 40.5 c-1.2 -1 -9 -6.2 -9 -12.2 a5 5 0 0 1 9 -2.8 a5 5 0 0 1 9 2.8 c0 6 -7.8 11.2 -9 12.2 z" fill="#ff6b8a"/>
-</svg>
