@@ -146,8 +146,12 @@
   .crow{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
   .modetog{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:8px;width:max-content;max-width:100%}
   .modetog button .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#2451c8;margin-left:6px;vertical-align:middle}
-  #emilypane{max-height:46vh;overflow-y:auto}
-  #emilypane #emilycard{margin:0}
+  #emilypane{height:46vh;min-height:300px}
+  #emilypane #emilycard{margin:0;height:100%;box-sizing:border-box;display:flex;flex-direction:column;min-height:0}
+  #emilycard .ehead{flex:none}
+  #emilycard .ebody{flex:1;min-height:0;overflow-y:auto;padding-right:6px}
+  #emilycard .efoot{flex:none;display:flex;gap:8px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--line);margin-top:8px}
+  #emilycard .chip.esc{white-space:normal;flex-basis:100%;line-height:1.35;padding:4px 10px;border-radius:8px}
   .modetog button{background:var(--panel);color:var(--muted);border:none;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
   .modetog button.on{background:rgba(59,110,245,.14);color:#2451c8}
   .empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:30px}
@@ -505,19 +509,23 @@ function emilyCard(d){
     return `<div style="margin:0 0 10px;padding:8px 12px;border:1px dashed var(--line,#1e2a3a);border-radius:10px;font-size:12.5px;color:#7c8ba1">✍️ Emily's last draft on this ticket was <b>${esc(label)}</b>${e.intent?` · ${esc(e.intent)}`:""}. <a href="#" onclick="emilyDecide(${d.id},'redraft');return false" style="color:var(--accent,#5aa0ff)">Ask her to draft again</a></div>`;
   }
   return `<div id="emilycard" style="margin:0 0 12px;padding:12px 14px;border:1px solid var(--accent,#5aa0ff);border-radius:12px;background:rgba(90,160,255,.06)">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+    <div class="ehead" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
       <b>✍️ Emily's draft</b>
-      ${e.escalate?`<span class="chip" style="background:rgba(255,120,120,.15);color:#ff8a80">🛑 needs your call — ${esc(e.escalate_reason||"review")}</span>`:`<span class="chip">ready</span>`}
+      ${e.escalate?"":`<span class="chip">ready</span>`}
       ${e.intent?`<span class="chip">${esc(e.intent)}</span>`:""}${e.sentiment==="upset"?`<span class="chip" style="color:#e0a643">customer upset</span>`:""}
       <span style="margin-left:auto;font-size:12px;color:#7c8ba1">${fmt(e.created_at)}</span>
+      ${e.escalate?`<span class="chip esc" style="background:rgba(255,120,120,.15);color:#c62828">🛑 Needs your call — ${esc(e.escalate_reason||"review")}</span>`:""}
     </div>
+    <div class="ebody">
     <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;margin-bottom:10px">${esc(e.draft||"").replace(/\{\{\s*(DISCOUNT_)?CODE\s*\}\}/gi,'<mark class="ph">code — created when you approve</mark>')}</div>
     ${actionsBlock(d)}${todoBlock(d)}${(d.pending_files||[]).length?`<div class="acts-em" style="border-color:#158048"><div class="acts-h" style="color:#158048">Attached to your reply</div>${d.pending_files.map(f=>`<div class="act"><span class="t"><b>📎 ${esc(f.name)}</b><small>goes out with the next reply on this ticket</small></span></div>`).join("")}</div>`:""}
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    </div>
+    <div class="efoot">
       <button class="btn" onclick="emilyDecide(${d.id},'approve')">✅ Approve &amp; send</button>
       <button class="btn sec" onclick="emilyUseDraft(${JSON.stringify(e.draft||"").replace(/"/g,"&quot;")})">✏️ Edit first</button>
       <button class="btn sec" onclick="emilyRedraftPrompt(${d.id})">🔁 Redraft with notes</button>
       <button class="btn sec" onclick="emilyDecide(${d.id},'skip')">🗑 Skip</button>
+      ${(d.emily_actions||[]).some(a=>a.status==="staged")||(e.todo||[]).length?`<span style="margin-left:auto;align-self:center;font-size:12px;color:#7c8ba1">scroll the draft for proposed actions &amp; to-dos</span>`:""}
     </div>
   </div>`;
 }
