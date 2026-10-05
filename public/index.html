@@ -52,12 +52,14 @@
   table.tickets tr.row{cursor:pointer}
   table.tickets tr.row:hover td{background:rgba(59,110,245,.045)}
   table.tickets tr.row.on td{background:rgba(59,110,245,.10)}
-  td.c-t{padding-left:22px;min-width:0;max-width:0;width:46%}
+  td.c-t{padding-left:22px;min-width:0;max-width:0;width:32%}
+  td.c-ord{width:9%;white-space:nowrap}td.c-ost{width:15%}
+  .ordno{font-weight:700;font-size:12.5px;color:#1f6fb0;font-variant-numeric:tabular-nums}
   td.c-t .subj{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   td.c-t .subj.unread{font-weight:800}
   td.c-t .subj .cnt{color:var(--muted);font-weight:600;margin-right:5px;font-size:12px}
   td.c-t .exc{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-  td.c-tags{width:24%}.chips{display:flex;gap:5px;flex-wrap:wrap}
+  td.c-tags{width:16%}.chips{display:flex;gap:5px;flex-wrap:wrap}
   td.c-cust{width:16%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0}
   td.c-last{width:14%;white-space:nowrap;color:var(--muted)} td.c-last.unread{color:var(--ink);font-weight:700}
   td.empty{text-align:center;color:var(--muted);padding:40px}
@@ -151,7 +153,7 @@
   @media(max-width:1040px){ .rail{display:none} }
   @media(max-width:920px){
     .side{width:64px;padding:10px 6px} .side .brand div,.side .navsec,.side .nav span:not(.i){display:none} .side .nav{justify-content:center;padding:10px 0} .side .brand{justify-content:center;padding-bottom:10px}
-    td.c-tags,th.c-tags{display:none}
+    td.c-tags,th.c-tags,td.c-ost,th.c-ost{display:none}
   }
   .hidden{display:none!important}
 </style>
@@ -209,7 +211,7 @@
         <input class="search" id="q" placeholder="Search name, subject or message…" oninput="debouncedList()">
       </div>
     </div>
-    <div class="tablewrap"><table class="tickets"><thead><tr><th class="c-t">Ticket</th><th class="c-tags">Tags</th><th class="c-cust">Customer</th><th class="c-last">Last message ↓</th></tr></thead><tbody id="list"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
+    <div class="tablewrap"><table class="tickets"><thead><tr><th class="c-t">Ticket</th><th class="c-ord">Order</th><th class="c-ost">Order status</th><th class="c-tags">Tags</th><th class="c-cust">Customer</th><th class="c-last">Last message ↓</th></tr></thead><tbody id="list"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody></table></div>
     <div id="stuckwrap" class="tablewrap" style="display:none"></div>
     <div class="pager"><span id="pageinfo"></span><span class="sp"></span><button class="btn sec xs" id="prevpg" onclick="page(-1)">‹ Prev</button><button class="btn sec xs" id="nextpg" onclick="page(1)">Next ›</button></div>
   </div>
@@ -286,7 +288,7 @@ function fmtDay(ts){try{return new Date(ts).toLocaleDateString([],{month:"short"
 if(!KEY){ $("keygate").classList.remove("hidden"); }
 else {(async()=>{
   let role=null; try{ role=await (await fetch("/api/role?key="+encodeURIComponent(KEY))).json(); }catch(e){}
-  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); const so=document.querySelector('a.nav[onclick*="signOut"]'); if(so&&role.user) so.innerHTML='<span class="i">⎋</span>Sign out · '+role.user; if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); api("/api/version").then(v=>{$("ver").textContent=v.major;}).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
+  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); const so=document.querySelector('a.nav[onclick*="signOut"]'); if(so&&role.user) so.innerHTML='<span class="i">⎋</span>Sign out · '+role.user; if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); api("/api/version").then(v=>{$("ver").textContent="v"+String(v.version||"").replace(/\.0$/,""); $("ver").title="Helpdesk "+v.version;}).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
   else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="Your session has ended — sign in again."; try{localStorage.removeItem("ec_key");}catch(e){} }
 })();}
 
@@ -320,6 +322,17 @@ function oosChips(t){
   out.push(`<span class="chip ${c.case_status==="bounced"||c.case_status==="needs_review"?"skip":c.case_status==="resolved"||c.case_status==="already_handled"?"sent":""}" title="${esc(c.resolution||"")}">${esc(cs)}${c.followup_sent_at?" · followed up":""}</span>`);
   return out.join("");
 }
+// Shopify-style order status: payment pill + fulfillment pill, from the background cache.
+function orderStatusChips(oi){
+  if(!oi) return '<span class="exc">—</span>';
+  if(oi.error) return `<span class="chip" title="${esc(oi.error)}">not found</span>`;
+  const fin=String(oi.financial||"").toUpperCase(), ful=String(oi.fulfillment||"").toUpperCase();
+  const pay=oi.cancelled?'<span class="chip skip">Cancelled</span>':fin==="REFUNDED"?'<span class="chip skip">Refunded</span>':fin==="PARTIALLY_REFUNDED"?'<span class="chip" style="background:rgba(36,81,200,.12);color:#2451c8">Partially refunded</span>':fin==="PAID"?'<span class="chip" style="background:rgba(20,30,50,.08);color:var(--ink)">● Paid</span>':fin?`<span class="chip">${esc(fin.toLowerCase().replace(/_/g," "))}</span>`:"";
+  const ff=oi.cancelled?"":ful==="FULFILLED"?'<span class="chip sent">● Fulfilled</span>':ful==="PARTIALLY_FULFILLED"?'<span class="chip drafted">◐ Partially fulfilled</span>':ful==="UNFULFILLED"||!ful?'<span class="chip drafted">○ Unfulfilled</span>':`<span class="chip">${esc(ful.toLowerCase().replace(/_/g," "))}</span>`;
+  const extra=[oi.edited?'<span class="chip" title="Order was edited after it was placed">edited</span>':"",oi.shipstation&&!oi.cancelled&&ful!=="FULFILLED"?`<span class="chip" title="ShipStation status">${esc(String(oi.shipstation).replace(/_/g," "))}</span>`:""].join("");
+  return `<div class="chips">${pay}${ff}${extra}</div>`;
+}
+
 function chipsFor(t){
   const hide=new Set(["emily-drafted","emily-sent"]); const out=[];
   if(VIEW==="oos"&&t.oos){ out.push(oosChips(t)); for(const g of (t.tags||[])){ if(hide.has(g)||g==="oos-offer"||g==="emily") continue; out.push(`<span class="chip">${esc(g)}</span>`); if(out.length>=6) break; } return out.join(""); }
@@ -331,7 +344,7 @@ function chipsFor(t){
 let STUCK_STATE="open";
 let _listSig="";
 async function loadList(force,silent){
-  const el=$("list"); if(force){el.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';_listSig="";}
+  const el=$("list"); if(force){el.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';_listSig="";}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
   const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
@@ -350,14 +363,16 @@ async function loadList(force,silent){
     $("showing").textContent=TOTAL?`Showing ${from}–${to} of ${TOTAL.toLocaleString()}`:"";
     $("pageinfo").textContent=TOTAL?`Page ${Math.floor(OFFSET/PAGE)+1} of ${Math.max(1,Math.ceil(TOTAL/PAGE))}`:"";
     $("prevpg").disabled=OFFSET<=0; $("nextpg").disabled=OFFSET+PAGE>=TOTAL;
-    if(!tickets.length){el.innerHTML='<tr><td colspan="4" class="empty">No '+TAB+' tickets here.</td></tr>';return;}
+    if(!tickets.length){el.innerHTML='<tr><td colspan="6" class="empty">No '+TAB+' tickets here.</td></tr>';return;}
     el.innerHTML=tickets.map(t=>`<tr class="row ${CUR===t.id?"on":""}" onclick="openTicket(${t.id})">
       <td class="c-t"><div class="subj ${t.unread?"unread":""}">${t.messages_count>1?`<span class="cnt">${t.messages_count}</span>`:""}${esc(t.subject||"(no subject)")}</div><div class="exc">${esc((t.excerpt||"").replace(/\s+/g," ")).slice(0,140)}</div></td>
+      <td class="c-ord">${t.order_number?`<span class="ordno">#${esc(t.order_number)}</span>`:'<span class="exc">—</span>'}</td>
+      <td class="c-ost">${orderStatusChips(t.order_info)}</td>
       <td class="c-tags"><div class="chips">${chipsFor(t)}</div></td>
       <td class="c-cust" title="${esc(t.customer.email||"")}">${esc(t.customer.name||"")}</td>
       <td class="c-last ${t.unread?"unread":""}">${fmt(t.last)}</td>
     </tr>`).join("");
-  }catch(e){el.innerHTML='<tr><td colspan="4" class="empty">Couldn\'t load tickets.</td></tr>';}
+  }catch(e){el.innerHTML='<tr><td colspan="6" class="empty">Couldn\'t load tickets.</td></tr>';}
 }
 
 /* ---------- settings: mailbox connection + history import ---------- */
@@ -927,7 +942,7 @@ async function openTicket(id){
         ${rail(d)}
       </div>`;
     MODE="reply"; const mb=$("msgs"); if(mb)mb.scrollTop=mb.scrollHeight;
-    if(d.orders&&d.orders.length) loadOrder(d.orders[0]); else if(ORDER&&$("orderpanel")){renderOrder();}
+    if(d.order_number) loadOrder(d.order_number); else if(d.orders&&d.orders.length) loadOrder(d.orders[0]); else if(ORDER&&$("orderpanel")){renderOrder();}
     loadCustomer(d.customer.email,(d.orders&&d.orders[0])||"");
   }catch(e){ th.innerHTML='<div class="empty">Couldn\'t load this ticket.</div>'; }
 }
@@ -944,7 +959,7 @@ async function send(id){
     if(r.error){toast(r.error,true);} else {toast(MODE==="reply"?"Reply sent ✓":"Note added ✓");$("composer").value="";openTicket(id);loadCounts();}
   }catch(e){toast("Failed",true);} b.disabled=false; b.textContent=was;
 }
-async function setStatus(id,status){try{const r=await api("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,status})});if(r.error){toast(r.error,true);return;}toast(status==="closed"?"Closed":"Reopened");openTicket(id);loadCounts();}catch(e){toast("Failed",true);}}
+async function setStatus(id,status){try{const r=await api("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,status})});if(r.error){toast(r.error,true);return;}toast(status==="closed"?"Closed":"Reopened — back in Pending");loadCounts();if(status==="closed")closeThread();else openTicket(id);}catch(e){toast("Failed",true);}}
 async function askEmily(id){ emilyDecide(id,'redraft',''); }
 async function markHuman(id,human){ try{ const r=await api(`/api/ticket/${id}/${human?"human":"junk"}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error){toast(r.error,true);return;} toast(human?"Moved into Tickets":"Hidden from Tickets"); openTicket(id); loadCounts(); }catch(e){toast("Failed",true);} }
 </script>
