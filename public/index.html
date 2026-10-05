@@ -54,7 +54,8 @@
   table.tickets tr.row.on td{background:rgba(59,110,245,.10)}
   td.c-t{padding-left:22px;min-width:0;max-width:0;width:32%}
   td.c-ord{width:9%;white-space:nowrap}td.c-ost{width:15%}
-  .ordno{font-weight:700;font-size:12.5px;color:#1f6fb0;font-variant-numeric:tabular-nums}
+  .ordno{font-weight:700;font-size:12.5px;color:#1f6fb0;font-variant-numeric:tabular-nums;text-decoration:none}
+  a.ordno:hover{text-decoration:underline}
   td.c-t .subj{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   td.c-t .subj.unread{font-weight:800}
   td.c-t .subj .cnt{color:var(--muted);font-weight:600;margin-right:5px;font-size:12px}
@@ -387,7 +388,7 @@ async function loadList(force,silent){
     if(!tickets.length){el.innerHTML='<tr><td colspan="6" class="empty">No '+TAB+' tickets here.</td></tr>';return;}
     el.innerHTML=tickets.map(t=>`<tr class="row ${CUR===t.id?"on":""}" onclick="openTicket(${t.id})">
       <td class="c-t"><div class="subj ${t.unread?"unread":""}">${t.messages_count>1?`<span class="cnt">${t.messages_count}</span>`:""}${esc(t.subject||"(no subject)")}</div><div class="exc">${esc((t.excerpt||"").replace(/\s+/g," ")).slice(0,140)}</div></td>
-      <td class="c-ord">${t.order_number?`<span class="ordno">#${esc(t.order_number)}</span>`:'<span class="exc">—</span>'}</td>
+      <td class="c-ord">${t.order_number?(t.order_info&&t.order_info.admin_url?`<a class="ordno" href="${esc(t.order_info.admin_url)}" target="_blank" rel="noopener" title="Open this order in Shopify" onclick="event.stopPropagation()">#${esc(t.order_number)} ↗</a>`:`<span class="ordno">#${esc(t.order_number)}</span>`):'<span class="exc">—</span>'}</td>
       <td class="c-ost">${orderStatusChips(t.order_info)}</td>
       <td class="c-tags"><div class="chips">${chipsFor(t)}</div></td>
       <td class="c-cust" title="${esc(t.customer.email||"")}">${esc(t.customer.name||"")}</td>
@@ -622,7 +623,7 @@ function renderOrder(){
   const trk=(o.fulfillments||[]).flatMap(f=>f.tracking||[]).filter(t=>t.number);
   const ss=o.shipstation;
   pnl.innerHTML=`<div class="ord">
-    <div class="oh"><b>${esc(o.name)}</b><span style="color:var(--muted)">${esc(o.store)}</span></div>
+    <div class="oh"><b>${o.admin_url?`<a href="${esc(o.admin_url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="Open in Shopify">${esc(o.name)} ↗</a>`:esc(o.name)}</b><span style="color:var(--muted)">${esc(o.store)}</span></div>
     <div class="st">${pillFor(o.financial_status)}${pillFor(o.fulfillment_status)}${o.cancelled_at?'<span class="chip skip">cancelled</span>':""}${ss?`<span class="chip">ShipStation: ${esc(ss.shipstation_status||(ss.shipped?"shipped":"?"))}</span>`:""}</div>
     <div>${o.items.map(i=>`<div class="it"><span class="t">${i.quantity}× ${esc(i.title)}<small>${esc([i.variant,i.sku].filter(Boolean).join(" · "))}${i.in_stock===false?" · <span style='color:#c0392b'>out of stock</span>":""}</small></span><span>${money(i.line_total,o.currency)}</span></div>`).join("")}</div>
     <div class="it" style="font-weight:700"><span>Total${o.refunded?` <small style="color:var(--muted);font-weight:500">(refunded ${money(o.refunded,o.currency)})</small>`:""}</span><span>${money(o.total,o.currency)}</span></div>
@@ -720,7 +721,7 @@ async function loadCustomer(email,orderHint){
         <div style="color:var(--muted)">${st.orders_count} order${st.orders_count===1?"":"s"} · ${money(st.amount_spent,st.currency)} spent${st.store_credit?` · ${money(st.store_credit,st.currency)} credit`:""}${st.marketing==="SUBSCRIBED"?" · 📧 subscribed":""}</div>
         ${st.tags&&st.tags.length?`<div class="tagl">${st.tags.slice(0,6).map(t=>`<span class="chip">${esc(t)}</span>`).join("")}</div>`:""}
         ${st.note?`<div style="margin-top:4px;color:var(--muted)">📝 ${esc(st.note)}</div>`:""}
-        <div style="margin-top:6px">${st.orders.map(o=>`<div class="orow"><button onclick="loadOrder('${esc(o.name)}')">${esc(o.name)}</button><small>${fmtShort(o.at)}</small><span>${o.cancelled?'<span class="chip skip">cancelled</span>':pillFor(o.fulfillment)}</span><span style="font-weight:600">${money(o.total,st.currency)}</span></div>`).join("")||'<span style="color:var(--muted)">no orders</span>'}</div>
+        <div style="margin-top:6px">${st.orders.map(o=>`<div class="orow"><button onclick="loadOrder('${esc(o.name)}')" title="Show in the Orders panel">${esc(o.name)}</button>${o.admin_url?`<a href="${esc(o.admin_url)}" target="_blank" rel="noopener" title="Open in Shopify" style="font-size:12px;text-decoration:none;color:#1f6fb0">↗</a>`:""}<small>${fmtShort(o.at)}</small><span>${o.cancelled?'<span class="chip skip">cancelled</span>':pillFor(o.fulfillment)}</span><span style="font-weight:600">${money(o.total,st.currency)}</span></div>`).join("")||'<span style="color:var(--muted)">no orders</span>'}</div>
       </div>`).join("")}
       ${!stores.length?`<div style="color:var(--muted);font-size:12.5px;margin-top:6px">No Shopify customer with this email${notFound.length?` in ${notFound.join(" or ")}`:""}.</div>`:""}
       ${(c.stores||[]).filter(x=>x.error).map(x=>`<div style="color:#c0392b;font-size:12px;margin-top:6px">⚠️ ${esc(x.store)}: Shopify said "${esc(String(x.error).slice(0,220))}"</div>`).join("")}
