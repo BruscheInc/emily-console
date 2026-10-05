@@ -288,7 +288,7 @@ function fmtDay(ts){try{return new Date(ts).toLocaleDateString([],{month:"short"
 if(!KEY){ $("keygate").classList.remove("hidden"); }
 else {(async()=>{
   let role=null; try{ role=await (await fetch("/api/role?key="+encodeURIComponent(KEY))).json(); }catch(e){}
-  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); const so=document.querySelector('a.nav[onclick*="signOut"]'); if(so&&role.user) so.innerHTML='<span class="i">⎋</span>Sign out · '+role.user; if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); api("/api/version").then(v=>{$("ver").textContent="v"+String(v.version||"").replace(/\.0$/,""); $("ver").title="Helpdesk "+v.version;}).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
+  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); const so=document.querySelector('a.nav[onclick*="signOut"]'); if(so&&role.user) so.innerHTML='<span class="i">⎋</span>Sign out · '+role.user; if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); checkVersion(true).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
   else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="Your session has ended — sign in again."; try{localStorage.removeItem("ec_key");}catch(e){} }
 })();}
 
@@ -332,6 +332,20 @@ function orderStatusChips(oi){
   const extra=[oi.edited?'<span class="chip" title="Order was edited after it was placed">edited</span>':"",oi.shipstation&&!oi.cancelled&&ful!=="FULFILLED"?`<span class="chip" title="ShipStation status">${esc(String(oi.shipstation).replace(/_/g," "))}</span>`:""].join("");
   return `<div class="chips">${pay}${ff}${extra}</div>`;
 }
+
+// The page knows which build it is (__VERSION__ is stamped by the server). When Railway finishes a new deploy the
+// server reports a newer version → reload automatically, unless someone is mid-reply (then show a small banner).
+const PAGE_VERSION="__VERSION__"; let _newVer=null;
+async function checkVersion(first){
+  try{ const v=await api("/api/version"); const cur=String(v.version||"");
+    $("ver").textContent="v"+cur.replace(/\.0$/,""); $("ver").title="Helpdesk "+cur;
+    if(cur&&PAGE_VERSION&&!/__/.test(PAGE_VERSION)&&cur!==PAGE_VERSION){ _newVer=cur;
+      const typing=[...document.querySelectorAll("textarea")].some(t=>t.value.trim().length>0);
+      if(!typing&&!first) location.reload(); else if(!$("upbanner")){ const b=document.createElement("div"); b.id="upbanner"; b.style.cssText="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer"; b.innerHTML="Helpdesk v"+cur.replace(/\.0$/,"")+" is ready — click to reload"; b.onclick=()=>location.reload(); document.body.appendChild(b); }
+    }
+  }catch(e){}
+}
+setInterval(()=>checkVersion(false),60000);
 
 function chipsFor(t){
   const hide=new Set(["emily-drafted","emily-sent"]); const out=[];
