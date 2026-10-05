@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.15 — Oct 5, 2026
+- **Emily's suggestion box is a fixed size.** The header and the Approve / Edit / Redraft / Skip buttons stay put;
+  only the draft text (with proposed actions and to-dos) scrolls inside the box.
+- The red "needs your call" reason wraps onto multiple lines instead of running off the edge.
+
 ## v4.14 — Oct 5, 2026
 - **Bigger reply box** (about 2.5× taller, and you can drag it taller still).
 - **Emily's suggestion is now a tab at the bottom** next to "Reply to customer" and "Internal note", instead of a
