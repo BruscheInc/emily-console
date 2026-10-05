@@ -85,6 +85,8 @@ let app = null;   // Slack (Bolt) — set in start() when tokens exist
  *   [{"brand":"Larkspur Baby","domain":"x.myshopify.com","id":"...","secret":"..."}, ...]
  * Falls back to the single SHOPIFY_STORE_DOMAIN/CLIENT_ID/CLIENT_SECRET if SHOPIFY_STORES is unset. */
 const SHOP_VER = process.env.SHOPIFY_API_VERSION || "2025-07";
+// Link straight to the order in the Shopify admin: https://admin.shopify.com/store/<handle>/orders/<numeric id>
+const adminOrderUrl = (st, gid) => `https://admin.shopify.com/store/${String(st.domain).replace(/\.myshopify\.com$/i, "")}/orders/${String(gid || "").split("/").pop()}`;
 function loadStores() {
   const out = [];
   if (process.env.SHOPIFY_STORES) {
@@ -637,7 +639,7 @@ async function orderDetail(raw) {
       let ss = null;
       if (shipstationConfigured()) { try { const f = await shipstationLookup(ssOrderNo(n.name)); ss = Array.isArray(f) ? (f.find((x) => x.order_id) || f[0] || null) : null; } catch { ss = null; } }
       return {
-        store: st.brand, id: n.id, name: n.name, email: n.email, customer: n.customer && n.customer.displayName, created_at: n.createdAt, cancelled_at: n.cancelledAt, closed: n.closed,
+        store: st.brand, id: n.id, name: n.name, admin_url: adminOrderUrl(st, n.id), email: n.email, customer: n.customer && n.customer.displayName, created_at: n.createdAt, cancelled_at: n.cancelledAt, closed: n.closed,
         financial_status: n.displayFinancialStatus, fulfillment_status: n.displayFulfillmentStatus, note: n.note, tags: n.tags, edited: !!n.edited,
         currency: n.totalPriceSet.shopMoney.currencyCode, total: money(n.totalPriceSet), subtotal: money(n.subtotalPriceSet), shipping: money(n.totalShippingPriceSet), refunded: money(n.totalRefundedSet),
         shipping_address: n.shippingAddress, 
@@ -1069,16 +1071,16 @@ async function refreshOrderCache() {
   if (!STORES.length) return;
   const { rows } = await db(`SELECT DISTINCT t.order_number FROM hd_tickets t LEFT JOIN hd_order_cache oc ON oc.order_name = t.order_number
                               WHERE t.order_number IS NOT NULL AND t.updated_at > now() - interval '60 days'
-                                AND (oc.order_name IS NULL OR oc.checked_at < now() - interval '3 hours')
+                                AND (oc.order_name IS NULL OR oc.checked_at < now() - interval '3 hours' OR (oc.admin_url IS NULL AND oc.error IS NULL))
                               ORDER BY 1 DESC LIMIT 20`);
   for (const r of rows) {
     try {
       const o = await orderDetail(r.order_number);
       if (o && o.id) {
-        await db(`INSERT INTO hd_order_cache (order_name, store, financial, fulfillment, cancelled, edited, refunded, total, shipstation, tracking, error, checked_at)
-                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULL,now())
-                  ON CONFLICT (order_name) DO UPDATE SET store=EXCLUDED.store, financial=EXCLUDED.financial, fulfillment=EXCLUDED.fulfillment, cancelled=EXCLUDED.cancelled, edited=EXCLUDED.edited, refunded=EXCLUDED.refunded, total=EXCLUDED.total, shipstation=EXCLUDED.shipstation, tracking=EXCLUDED.tracking, error=NULL, checked_at=now()`,
-          [r.order_number, o.store, o.financial_status, o.fulfillment_status, !!o.cancelled_at, !!o.edited, Number(o.refunded || 0), Number(o.total || 0), o.shipstation ? (o.shipstation.shipstation_status || (o.shipstation.shipped ? "shipped" : null)) : null, (o.fulfillments || []).flatMap((f) => f.tracking || []).map((t) => t.number)[0] || null]);
+        await db(`INSERT INTO hd_order_cache (order_name, store, financial, fulfillment, cancelled, edited, refunded, total, shipstation, tracking, admin_url, error, checked_at)
+                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULL,now())
+                  ON CONFLICT (order_name) DO UPDATE SET store=EXCLUDED.store, financial=EXCLUDED.financial, fulfillment=EXCLUDED.fulfillment, cancelled=EXCLUDED.cancelled, edited=EXCLUDED.edited, refunded=EXCLUDED.refunded, total=EXCLUDED.total, shipstation=EXCLUDED.shipstation, tracking=EXCLUDED.tracking, admin_url=EXCLUDED.admin_url, error=NULL, checked_at=now()`,
+          [r.order_number, o.store, o.financial_status, o.fulfillment_status, !!o.cancelled_at, !!o.edited, Number(o.refunded || 0), Number(o.total || 0), o.shipstation ? (o.shipstation.shipstation_status || (o.shipstation.shipped ? "shipped" : null)) : null, (o.fulfillments || []).flatMap((f) => f.tracking || []).map((t) => t.number)[0] || null, o.admin_url || null]);
       } else {
         await db(`INSERT INTO hd_order_cache (order_name, error, checked_at) VALUES ($1,$2,now()) ON CONFLICT (order_name) DO UPDATE SET error=EXCLUDED.error, checked_at=now()`, [r.order_number, String((o && (o.error || (!o.id && o.note))) || "not found").slice(0, 200)]);
       }
@@ -1247,7 +1249,7 @@ async function customerHistory(email) {
 const CUSTOMER_PROFILE_QUERY = `query($q:String!){customers(first:1,query:$q){edges{node{
   id firstName lastName displayName phone createdAt tags note numberOfOrders amountSpent{amount currencyCode}
   defaultEmailAddress{ emailAddress marketingState } defaultAddress{ address1 city provinceCode zip countryCodeV2 }
-  orders(first:10,sortKey:CREATED_AT,reverse:true){edges{node{ name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus totalPriceSet{shopMoney{amount currencyCode}} }}}
+  orders(first:10,sortKey:CREATED_AT,reverse:true){edges{node{ id name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus totalPriceSet{shopMoney{amount currencyCode}} }}}
 }}}}`;
 // Store credit is asked for separately: it needs its own scope (read_store_credit_accounts) and must not take the whole profile down with it.
 const CUSTOMER_CREDIT_QUERY = `query($id:ID!){ customer(id:$id){ storeCreditAccounts(first:3){edges{node{ balance{amount currencyCode} }}} } }`;
@@ -1280,7 +1282,7 @@ async function customerProfile(email, orderHint) {
         name: n.displayName || [n.firstName, n.lastName].filter(Boolean).join(" "), phone: n.phone, created_at: n.createdAt, tags: n.tags || [], note: n.note,
         marketing: n.defaultEmailAddress && n.defaultEmailAddress.marketingState, address: n.defaultAddress,
         orders_count: Number(n.numberOfOrders || 0), amount_spent: Number((n.amountSpent || {}).amount || 0), currency: (n.amountSpent || {}).currencyCode || "USD", store_credit: credit, credit_error: creditError,
-        orders: (n.orders.edges || []).map((x) => ({ name: x.node.name, at: x.node.createdAt, cancelled: !!x.node.cancelledAt, financial: x.node.displayFinancialStatus, fulfillment: x.node.displayFulfillmentStatus, total: Number(x.node.totalPriceSet.shopMoney.amount) })),
+        orders: (n.orders.edges || []).map((x) => ({ name: x.node.name, admin_url: adminOrderUrl(st, x.node.id), at: x.node.createdAt, cancelled: !!x.node.cancelledAt, financial: x.node.displayFinancialStatus, fulfillment: x.node.displayFulfillmentStatus, total: Number(x.node.totalPriceSet.shopMoney.amount) })),
       });
     } catch (err) { console.error(`customer profile ${st.brand} ${e}: ${err.message}`); stores.push({ store: st.brand, found: false, error: err.message }); }
   }

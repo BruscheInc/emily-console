@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.16 — Oct 5, 2026
+- **Order numbers link to Shopify.** In the ticket list, the Orders panel header, and the customer profile's order
+  history, the order number opens that order in the Shopify admin in a new tab (↗). The list link appears once the
+  background status check has seen the order.
+
 ## v4.15 — Oct 5, 2026
 - **Emily's suggestion box is a fixed size.** The header and the Approve / Edit / Redraft / Skip buttons stay put;
   only the draft text (with proposed actions and to-dos) scrolls inside the box.
