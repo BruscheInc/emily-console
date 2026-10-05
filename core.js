@@ -627,6 +627,9 @@ function classifyInbound({ from = {}, subject = "", body = "", headers = {} }) {
   const personal = PERSONAL_DOMAIN_RE.test(domain);
   // Shopify's contact-form forward is a real customer inquiry wearing a robot's address.
   if (SHOPIFY_FORM_RE.test(subj)) return { junk: false, tags: ["contact-form"], form: true };
+  // A bounce: the email we sent didn't get through. Machinery, but it must stop follow-ups and raise a flag.
+  if (/^(mailer-daemon|postmaster|microsoftexchange[0-9a-f]*)@/i.test(email) || (!personal && !isReply && /^(delivery (has )?failed|undeliver|delivery status notification|mail delivery (failed|subsystem)|returned mail|failure notice|message not delivered)/i.test(subj)))
+    return { junk: true, tags: ["bounce", "automated"], bounce: true, reason: bounceReason(body) };
   if (personal && isReply) return { junk: false, tags: [] };
   const h = (n) => String(headers[n] || headers[n.toLowerCase()] || "");
   const bulk = /list-unsubscribe/i.test(Object.keys(headers).join(",")) || /bulk|list|junk/i.test(h("Precedence")) || /auto-(generated|replied)/i.test(h("Auto-Submitted")) || !!h("X-Campaign") || !!h("X-Mailchimp-Campaign") || /klaviyo|mailchimp|sendgrid|braze|iterable|hubspot|constantcontact|marketo/i.test(h("X-Mailer") + h("X-Sender") + h("Sender"));
@@ -639,6 +642,14 @@ function classifyInbound({ from = {}, subject = "", body = "", headers = {} }) {
   return { junk: false, tags: [] };
 }
 // Shopify contact-form forwards: "You received a new message from your online store's contact form. … 'Email': x@y …"
+function bounceReason(body) {
+  const t = String(body || "");
+  if (/mailbox (is )?full|quota ?exceeded|over quota|storage.*(full|exceeded)/i.test(t)) return "mailbox full";
+  if (/(address|user|recipient|mailbox) (not found|does ?n.t exist|unknown|rejected)|no such (user|address)|550 5\.1\.1/i.test(t)) return "address doesn't exist";
+  if (/blocked|spam|policy|reputation|5\.7\.1/i.test(t)) return "blocked as spam / policy";
+  if (/could not be delivered|delayed|temporar/i.test(t)) return "temporary failure";
+  return "delivery failed";
+}
 function parseShopifyForm(body) {
   const t = String(body || "");
   const em = t.match(/['"]?E-?mail['"]?\s*[:=]\s*['"]?\s*([^\s'"<>,]+@[^\s'"<>,]+)/i);
@@ -723,6 +734,16 @@ async function storeGmailMessage(address, m) {
      body, parts.html || null, JSON.stringify(parts.attachments), at]);
   if (!ins.rows.length) return null;                        // already had it
   if (!fromAgent && !cls.junk) setImmediate(() => emitInbound(t.id, ins.rows[0].id));
+  if (cls.bounce) {
+    try {
+      const tk = (await db(`SELECT customer_email, subject, customer_name FROM hd_tickets WHERE id=$1`, [t.id])).rows[0] || {};
+      await addTags(t.id, ["bounced"]);
+      await db(`INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,body_text,sent_by,at) VALUES ($1,'system',$2,true,true,'note','Helpdesk',$3,'Helpdesk',now())`,
+        [t.id, `local:${crypto.randomUUID()}`, `⚠️ Our email to ${tk.customer_email || "the customer"} bounced — ${cls.reason}. Nothing we send to this address will arrive until that changes; reach them another way (phone on the order) or wait and resend.`]);
+      const oos = await db(`UPDATE oos_cases SET status='bounced', updated_at=now() WHERE ticket_id=$1 AND status IN ('offered','staged') RETURNING order_number`, [String(t.id)]).catch(() => ({ rows: [] }));
+      slackPost(`📭 *Email bounced* — ${tk.customer_email || "?"} · ${cls.reason}${oos.rows.length ? ` · out-of-stock email for order ${oos.rows[0].order_number} did NOT reach the customer (follow-up cancelled)` : ""} · ticket ${t.id}`).catch(() => {});
+    } catch (e) { console.error("bounce handling:", e.message); }
+  }
   await db(
     `UPDATE hd_tickets SET messages_count=(SELECT count(*) FROM hd_messages WHERE ticket_id=$1),
             last_message_at=$2, updated_at=$2,
@@ -893,7 +914,7 @@ async function sendReply({ ticketId, text, who, via, files = [] }) {
 const htmlify = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
 // A brand-new outbound conversation (the warehouse's out-of-stock notice). Creates the ticket here first
 // so the customer's reply threads straight back onto it.
-async function sendNewEmail({ mailbox, to, subject, text, who, tags }) {
+async function sendNewEmail({ mailbox, to, subject, text, who, tags, name }) {
   const brand = brandForAddress(mailbox);
   const connected = (await db(`SELECT 1 FROM hd_mailboxes WHERE lower(address)=lower($1) AND refresh_token IS NOT NULL`, [mailbox])).rows.length > 0;
   const id = (await db(`SELECT nextval('hd_local_ticket_seq')::bigint AS id`)).rows[0].id;
@@ -917,6 +938,7 @@ async function sendNewEmail({ mailbox, to, subject, text, who, tags }) {
   }
   await db(`INSERT INTO hd_tickets (id,source,gmail_thread_id,subject,brand,mailbox,channel,status,customer_email,tags,messages_count,created_at,updated_at,last_message_at,last_outbound_at)
             VALUES ($1,$2,$3,$4,$5,$6,'email','open',$7,$8,1,$9,$9,$9,$9)`, [id, via, threadId, subject, brand, mailbox, to, tags || [], at]);
+  if (name) await db(`UPDATE hd_tickets SET customer_name=$2 WHERE id=$1`, [id, String(name).trim()]).catch(() => {});
   await db(`INSERT INTO hd_messages (ticket_id,source,external_id,rfc_message_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,sent_by,at)
             VALUES ($1,$2,$3,$4,true,false,'email',$5,$6,$7,$8,$9,$10,$11)`, [id, via, externalId, ourId, brand || "Agent", mailbox, [to], subject, String(text), who, at]);
   return { ok: true, ticket_id: id, via };
@@ -1018,7 +1040,7 @@ module.exports = {
   USERS, userFromKey, sessionOf, loadSessions, login, logout, listUsers, createUser, updateUser, checkPassword,
   httpJson, gorgias, slack, slackPost, G_DOMAIN,
   BRAND_MAILBOX, ACTIVE_MAILBOXES, brandForAddress, mailboxForName, resolveMailbox, addressFromMessages, mailboxFromIntegrations,
-  runImport, importState: () => importRun, saveTicket, stripHtml, mergeTickets, dedupeTickets, findTicketForEmail, classifyInbound, classifyBacklog, parseShopifyForm, removeTags, JUNK_TAG_SET,
+  runImport, importState: () => importRun, saveTicket, stripHtml, mergeTickets, dedupeTickets, findTicketForEmail, classifyInbound, classifyBacklog, parseShopifyForm, removeTags, bounceReason, JUNK_TAG_SET,
   gmailConfigured, OAUTH_CLIENTS, clientForAddress, clientById, exchangeCode, accessTokenFor, gapi, gmailSend, pollMailbox, pollAll, storeGmailMessage, b64urlEncode, b64urlDecode, formEncode, GMAIL_SCOPES, OAUTH_REDIRECT,
   onInbound, emitInbound,
   sendReply, sendNewEmail, addNote, addTags, htmlify, stripQuoted,

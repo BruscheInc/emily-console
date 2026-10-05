@@ -818,7 +818,7 @@ async function emailStuckCustomer(id, who, text, kind) {
   const mailbox = mailboxForBrand(s.store);
   if (!mailbox) throw new Error(`no mailbox for ${s.store}`);
   const subject = `An update on your ${s.store} order ${s.order_name}`;
-  const r = await core.sendNewEmail({ mailbox, to: s.customer_email, subject, text, who, tags: ["stuck-package"] });
+  const r = await core.sendNewEmail({ mailbox, to: s.customer_email, subject, text, who, tags: ["stuck-package"], name: s.customer_name });
   await db(`UPDATE hd_stuck SET state='contacted', state_by=$2, state_at=now(), ticket_id=$3 WHERE id=$1`, [id, who, r.ticket_id]);   // both kinds, same package
   return { ok: true, ticket_id: r.ticket_id };
 }
@@ -977,7 +977,7 @@ async function stuckOffer(id, kind, { type, text, issue_now, who }) {
     await markAction(aid, "applied", { by: who, result: creditNote });
   }
   const subject = `An update on your ${s.store} order ${s.order_name}`;
-  const r = await core.sendNewEmail({ mailbox, to: s.customer_email, subject, text, who, tags: ["stuck-package", type === "credit" ? "stuck-credit-offer" : "stuck-replacement-offer"] });
+  const r = await core.sendNewEmail({ mailbox, to: s.customer_email, subject, text, who, tags: ["stuck-package", type === "credit" ? "stuck-credit-offer" : "stuck-replacement-offer"], name: s.customer_name });
   if (creditNote) { try { await db(`UPDATE emily_actions SET ticket_id=$2 WHERE title LIKE $1 AND ticket_id IS NULL`, [`Store credit — ${s.store} (stuck package ${s.order_name})`, String(r.ticket_id)]); await core.addNote({ ticketId: String(r.ticket_id), text: `💳 ${creditNote} (${usd(opts.credit.base)} order + ${CREDIT_BONUS_PCT}% bonus) — by ${who}`, who }); } catch (_) {} }
   const note = type === "credit" ? `${issue_now ? "issued" : "offered"} store credit ${usd(opts.credit.total)} (incl. ${CREDIT_BONUS_PCT}% bonus)` : `offered replacement (${opts.items.filter((i) => i.in_stock).length}/${opts.items.length} lines in stock)`;
   await db(`UPDATE hd_stuck SET state='contacted', state_by=$2, state_at=now(), ticket_id=$3, note=COALESCE(note,'') || ' · ' || $4 WHERE id=$1`, [id, who, r.ticket_id, note]);
@@ -1666,7 +1666,7 @@ async function oosSendCase(caseId, who) {
   try {
     if (!email) throw new Error("no customer email on this case");
     if (!fromAddress) throw new Error(`couldn't resolve a sending mailbox for brand "${c.brand}"`);
-    const r = await core.sendNewEmail({ mailbox: fromAddress, to: email, subject: c.email_subject || "About your order", text: c.email_text, who: who || "Emily", tags: ["oos-offer", "emily"] });
+    const r = await core.sendNewEmail({ mailbox: fromAddress, to: email, subject: c.email_subject || "About your order", text: c.email_text, who: who || "Emily", tags: ["oos-offer", "emily"], name: c.customer_name });
     const itemList = Array.isArray(c.items) && c.items.length ? c.items.map((i) => `${i.qty}× ${i.name} (${i.sku})`).join(", ") : `${c.item_name} (${c.sku})`;
     await core.addNote({ ticketId: r.ticket_id, text: `[OOS-CASE #${c.id}] Out of stock on order ${c.order_number}: ${itemList} · total value $${money2(c.item_value)} · store-credit(+15%) $${money2(c.credit_value)}. Options offered: equal-value replacement / store credit +15% / refund. When the customer replies with their choice, apply that brand's policy and route the money/inventory move to Jose.`, who: "Emily" });
     await db(`UPDATE oos_cases SET status='offered', ticket_id=$2, sent_at=now(), updated_at=now() WHERE id=$1`, [c.id, String(r.ticket_id)]);

@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.10 — Oct 5, 2026
+- **Bounces are handled.** A delivery-failure email is recognised (mailer-daemon / "Delivery has failed" /
+  "Undeliverable"), the ticket is tagged "bounced" with a note giving the reason (mailbox full, address doesn't
+  exist, blocked…), any out-of-stock case on that ticket is marked bounced so no 48-hour follow-up goes into a
+  dead mailbox, and Slack gets an alert.
+- Tickets opened by outbound emails (out-of-stock, stuck-package offers) carry the customer's name, not just
+  the address.
+
 ## v4.9 — Oct 5, 2026
 - **Out-of-stock emails from Stockroom send automatically** — no Slack approval step (OOS_AUTO_SEND=off restores
   the card). Slack gets an after-the-fact note with a link to the ticket.
