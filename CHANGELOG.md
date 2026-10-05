@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.14 — Oct 5, 2026
+- **Bigger reply box** (about 2.5× taller, and you can drag it taller still).
+- **Emily's suggestion is now a tab at the bottom** next to "Reply to customer" and "Internal note", instead of a
+  large card on top of the conversation. The tab shows a blue dot when a draft is waiting and opens on it
+  automatically; Approve & send / Edit first / Redraft / Skip work exactly as before.
+
 ## v4.13 — Oct 5, 2026
 - **Updates itself.** Each page knows which build it is; a minute after a new version deploys, open tabs reload on their own
   (if you're mid-reply, a small "v4.13 is ready — click to reload" banner shows instead). The page and the service worker are
