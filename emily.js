@@ -1063,6 +1063,29 @@ async function shopifyProposeOrderEdit(input) {
   return { ok: true, staged: true, note: `Staged an edit of ${o.name} for Jose's approval (remove ${remove.map((r) => r.sku || r.title).join(", ") || "nothing"}; add ${adds.join(", ") || "nothing"}). Nothing changes until he applies it. Tell the customer we're updating their order — do NOT say it's done.` };
 }
 
+/* ---- Order status next to every ticket (like Shopify's order list): a small cache refreshed in the background.
+ * Orders referenced by tickets touched in the last 60 days, refreshed when older than 3 hours, 20 per pass. ---- */
+async function refreshOrderCache() {
+  if (!STORES.length) return;
+  const { rows } = await db(`SELECT DISTINCT t.order_number FROM hd_tickets t LEFT JOIN hd_order_cache oc ON oc.order_name = t.order_number
+                              WHERE t.order_number IS NOT NULL AND t.updated_at > now() - interval '60 days'
+                                AND (oc.order_name IS NULL OR oc.checked_at < now() - interval '3 hours')
+                              ORDER BY 1 DESC LIMIT 20`);
+  for (const r of rows) {
+    try {
+      const o = await orderDetail(r.order_number);
+      if (o && o.id) {
+        await db(`INSERT INTO hd_order_cache (order_name, store, financial, fulfillment, cancelled, edited, refunded, total, shipstation, tracking, error, checked_at)
+                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULL,now())
+                  ON CONFLICT (order_name) DO UPDATE SET store=EXCLUDED.store, financial=EXCLUDED.financial, fulfillment=EXCLUDED.fulfillment, cancelled=EXCLUDED.cancelled, edited=EXCLUDED.edited, refunded=EXCLUDED.refunded, total=EXCLUDED.total, shipstation=EXCLUDED.shipstation, tracking=EXCLUDED.tracking, error=NULL, checked_at=now()`,
+          [r.order_number, o.store, o.financial_status, o.fulfillment_status, !!o.cancelled_at, !!o.edited, Number(o.refunded || 0), Number(o.total || 0), o.shipstation ? (o.shipstation.shipstation_status || (o.shipstation.shipped ? "shipped" : null)) : null, (o.fulfillments || []).flatMap((f) => f.tracking || []).map((t) => t.number)[0] || null]);
+      } else {
+        await db(`INSERT INTO hd_order_cache (order_name, error, checked_at) VALUES ($1,$2,now()) ON CONFLICT (order_name) DO UPDATE SET error=EXCLUDED.error, checked_at=now()`, [r.order_number, String((o && (o.error || (!o.id && o.note))) || "not found").slice(0, 200)]);
+      }
+    } catch (e) { await db(`INSERT INTO hd_order_cache (order_name, error, checked_at) VALUES ($1,$2,now()) ON CONFLICT (order_name) DO UPDATE SET error=EXCLUDED.error, checked_at=now()`, [r.order_number, e.message.slice(0, 200)]).catch(() => {}); }
+  }
+}
+
 /* ---- Direct order actions from the Helpdesk app (a person is doing it, so no Slack approval) ---- */
 async function applyOrderAction({ kind, order, input = {}, who = "Helpdesk", ticketId = null }) {
   const o = await orderDetail(order);
@@ -1095,7 +1118,9 @@ async function applyOrderAction({ kind, order, input = {}, who = "Helpdesk", tic
   await markAction(id, "applied", { by: who, result: result && result.note });
   if (ticketId) { try { await core.addNote({ ticketId: String(ticketId), text: `⚙️ ${title} — by ${who}\n${summary}\n→ ${result && result.note ? result.note : "done"}`, who }); } catch (e) { console.error("order action note:", e.message); } }
   try { core.slackPost(`⚙️ *${title}* · by ${who}${ticketId ? ` · ticket ${ticketId}` : ""}\n${summary}\n→ ${result && result.note ? result.note : "done"}`); } catch (_) {}
-  return { ok: true, title, note: result && result.note, order: await orderDetail(o.name) };
+  const after = await orderDetail(o.name);
+  try { await db(`UPDATE hd_order_cache SET checked_at = now() - interval '1 day' WHERE order_name=$1`, [o.name]); } catch (_) {}
+  return { ok: true, title, note: result && result.note, order: after };
 }
 async function createDiscount(st, { kind, value, code, title, minSubtotal }) {
   const startsAt = new Date().toISOString();
@@ -1778,7 +1803,7 @@ async function refreshOosOrderStatus() {
   for (const c of rows) {
     try {
       const o = await orderDetail(c.order_number);
-      const st = o && !o.error && !o.note ? { fulfillment: o.fulfillment_status, financial: o.financial_status, edited: !!o.edited, cancelled: !!o.cancelled_at, refunded: Number(o.refunded || 0), total: Number(o.total || 0), shipstation: o.shipstation ? (o.shipstation.shipstation_status || (o.shipstation.shipped ? "shipped" : null)) : null, shipped: String(o.fulfillment_status || "").toUpperCase() === "FULFILLED" || !!(o.shipstation && o.shipstation.shipped), tracking: (o.fulfillments || []).flatMap((f) => f.tracking || []).map((t) => t.number)[0] || null } : { error: (o && (o.error || o.note)) || "not found" };
+      const st = o && o.id ? { fulfillment: o.fulfillment_status, financial: o.financial_status, edited: !!o.edited, cancelled: !!o.cancelled_at, refunded: Number(o.refunded || 0), total: Number(o.total || 0), shipstation: o.shipstation ? (o.shipstation.shipstation_status || (o.shipstation.shipped ? "shipped" : null)) : null, shipped: String(o.fulfillment_status || "").toUpperCase() === "FULFILLED" || !!(o.shipstation && o.shipstation.shipped), tracking: (o.fulfillments || []).flatMap((f) => f.tracking || []).map((t) => t.number)[0] || null } : { error: (o && (o.error || (!o.id && o.note))) || "not found" };
       await db(`UPDATE oos_cases SET order_status=$2, order_checked_at=now() WHERE id=$1`, [c.id, JSON.stringify(st)]);
     } catch (e) { await db(`UPDATE oos_cases SET order_status=$2, order_checked_at=now() WHERE id=$1`, [c.id, JSON.stringify({ error: e.message })]).catch(() => {}); }
   }
@@ -2052,9 +2077,10 @@ async function start() {
   core.onInbound((ticketId) => onInboundMessage(ticketId));
   if (DRAFT_ON && anthropic) { sweepFloor().catch(() => {}); setTimeout(sweep, 15000); setInterval(sweep, SWEEP_MS); console.log(`✍️  Emily drafting: on new mail + sweep every ${SWEEP_MS / 60000}m · model ${CLAUDE_MODEL}`); }
   else console.log(`✍️  Emily drafting: OFF (${!anthropic ? "no ANTHROPIC_API_KEY" : "DRAFT_LOOP=off"})`);
+  if (STORES.length && pool) { setTimeout(() => refreshOrderCache().catch(() => {}), 20000); setInterval(() => refreshOrderCache().catch(() => {}), 90 * 1000); }
   if (STORES.length && pool) { setTimeout(() => scanStuck().catch(() => {}), 60000); setInterval(() => scanStuck().catch(() => {}), 6 * 3600 * 1000); console.log(`📦⏳ Shipment watch: every 6h (never scanned ${STUCK_DAYS}+ d · not delivered ${UNDELIVERED_DAYS}+ d · orders since ${STUCK_SINCE})`); }
   if (OOS_ON) { setTimeout(runOosLoop, 20000); setInterval(runOosLoop, OOS_INTERVAL); console.log(`📦❌ Out-of-stock hand-off: on (every ${OOS_INTERVAL / 1000}s · ${OOS_AUTO_SEND ? "auto-send" : "Slack approval"} · follow-up after ${OOS_FOLLOWUP_HOURS}h)`); }
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };
+module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };

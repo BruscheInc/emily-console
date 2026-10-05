@@ -3,6 +3,15 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.12 — Oct 5, 2026
+- **Order and Order status columns** in every ticket list, like Shopify's order page: the order the conversation is
+  about (#LBO11008) and its payment + fulfillment pills (Paid · Unfulfilled / Fulfilled / Refunded / Cancelled,
+  plus "edited" and the ShipStation hold state). Statuses come from a background cache refreshed every few
+  hours; search finds tickets by order number; opening a ticket loads its order in the side panel.
+- **Reopen puts a ticket back in Pending** until someone replies again.
+- **Close returns you to the list** you came from instead of staying on the closed conversation.
+- Sidebar shows the exact running version (v4.12), not just the major number.
+
 ## v4.11 — Oct 5, 2026
 - **Out-of-stock pre-send check.** Before the email (or the 48-hour follow-up) goes out, the order is checked in
   Shopify: if the out-of-stock items were already removed/swapped, the amount refunded, or the order cancelled,

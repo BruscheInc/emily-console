@@ -60,6 +60,7 @@ app.post("/api/me/password", async (req, res) => {          // anyone can change
 
 // Pending = the customer is waiting on us. Sent = we answered last. Closed = done.
 const CATEGORY_SQL = `CASE WHEN status='closed' THEN 'closed'
+  WHEN reopened_at IS NOT NULL AND (last_outbound_at IS NULL OR reopened_at > last_outbound_at) THEN 'pending'
   WHEN last_outbound_at IS NOT NULL AND (last_inbound_at IS NULL OR last_outbound_at >= last_inbound_at) THEN 'sent'
   ELSE 'pending' END`;
 
@@ -178,13 +179,14 @@ app.get("/api/tickets", async (req, res) => {
     if (q) {
       args.push(`%${q}%`);
       const i = args.length;
-      where.push(`(subject ILIKE $${i} OR customer_email ILIKE $${i} OR customer_name ILIKE $${i}
+      where.push(`(subject ILIKE $${i} OR customer_email ILIKE $${i} OR customer_name ILIKE $${i} OR order_number ILIKE $${i}
                    OR EXISTS (SELECT 1 FROM hd_messages m WHERE m.ticket_id=hd_tickets.id AND m.body_text ILIKE $${i}))`);
     }
     const total = (await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE ${where.join(" AND ")}`, args)).rows[0].n;
     args.push(limit, offset);
     const r = await db(
-      `SELECT id, subject, brand, status, customer_email, customer_name, assignee, tags, messages_count,
+      `SELECT id, subject, brand, status, customer_email, customer_name, assignee, tags, messages_count, order_number,
+              (SELECT row_to_json(oc) FROM hd_order_cache oc WHERE oc.order_name = hd_tickets.order_number) AS order_info,
               last_message_at, last_inbound_at, ${CATEGORY_SQL} AS category,
               (SELECT left(m.body_text, 220) FROM hd_messages m WHERE m.ticket_id=hd_tickets.id AND NOT m.internal ORDER BY m.at DESC LIMIT 1) AS excerpt
               ${view === "oos" ? `, (SELECT row_to_json(x) FROM (SELECT c.status AS case_status, c.order_number, c.order_status, c.resolution, c.sent_at, c.followup_sent_at, c.item_name, c.items FROM oos_cases c WHERE c.ticket_id = hd_tickets.id::text ORDER BY c.created_at DESC LIMIT 1) x) AS oos` : ""}
@@ -247,7 +249,7 @@ app.get("/api/ticket/:id", async (req, res) => {
     const orders = [...new Set((scan.match(/#?\b((?:LBO|LB|BB)\s?\d{3,6})\b/gi) || []).map((s) => s.replace(/[#\s]/g, "").toUpperCase()))].slice(0, 8);
     const events = (await db(`SELECT kind, detail, user_name, target, ts FROM hd_events WHERE ticket_id=$1 ORDER BY ts DESC LIMIT 100`, [id])).rows;
     res.json({
-      id: t.id, subject: t.subject, status: t.status, brand: t.brand, brand_address: t.mailbox, channel: t.channel,
+      id: t.id, subject: t.subject, status: t.status, brand: t.brand, brand_address: t.mailbox, channel: t.channel, order_number: t.order_number || null,
       created: t.created_at, updated: t.updated_at, messages_count: messages.length, assignee: t.assignee,
       customer: { name: t.customer_name || t.customer_email || "Customer", email: t.customer_email },
       tags: t.tags || [], category: t.category, source: t.source, orders, events, messages,
@@ -294,8 +296,8 @@ app.post("/api/status", async (req, res) => {
     const { id, status } = req.body || {};
     if (!id || !["open", "closed"].includes(status)) return res.status(400).json({ error: "id and status open|closed required" });
     const who = actorOf(req);
-    await db(`UPDATE hd_tickets SET status=$2, updated_at=now() WHERE id=$1`, [id, status]);
-    await db(`INSERT INTO hd_events (ticket_id,kind,detail,user_name) VALUES ($1,'status',$2,$3)`, [id, status, who]);
+    await db(`UPDATE hd_tickets SET status=$2, updated_at=now(), reopened_at=CASE WHEN $2='open' THEN now() ELSE NULL END WHERE id=$1`, [id, status]);
+    await db(`INSERT INTO hd_events (ticket_id,kind,detail,user_name) VALUES ($1,'status',$2,$3)`, [id, status === "open" ? "reopened — back to Pending" : status, who]);
     slackPost(`${status === "closed" ? "✅ Closed" : "↩️ Reopened"} ticket ${id} · by ${who}`);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -562,6 +564,7 @@ const PORT = process.env.PORT || 8080;
 (async () => {
   if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); await core.loadSessions(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
+  if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
   if (pool) { try { if (!(await syncGet("dedupe_v3_1"))) { const n = await core.dedupeTickets(); await core.syncSet("dedupe_v3_1", String(n), { at: new Date().toISOString() }); console.log(`🧹 duplicate sweep done — ${n} merged`); } } catch (e) { console.error("dedupe:", e.message); } }
   app.listen(PORT, () => {

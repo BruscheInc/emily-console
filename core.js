@@ -211,6 +211,10 @@ async function migrate() {
   await db(`ALTER TABLE hd_stuck ADD COLUMN IF NOT EXISTS tracking_fixed_at TIMESTAMPTZ`);
   try { const pk = (await db(`SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey) WHERE i.indrelid='hd_stuck'::regclass AND i.indisprimary`)).rows.map((r) => r.attname);
         if (!pk.includes("kind")) { await db(`ALTER TABLE hd_stuck DROP CONSTRAINT IF EXISTS hd_stuck_pkey`); await db(`ALTER TABLE hd_stuck ADD PRIMARY KEY (id, kind)`); } } catch (e) { console.error("hd_stuck pk:", e.message); }
+  await db(`ALTER TABLE hd_tickets ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ`);     // reopen → back to Pending until someone replies
+  await db(`ALTER TABLE hd_tickets ADD COLUMN IF NOT EXISTS order_number TEXT`);           // first order the conversation refers to
+  await db(`CREATE INDEX IF NOT EXISTS idx_hdt_order ON hd_tickets(order_number)`);
+  await db(`CREATE TABLE IF NOT EXISTS hd_order_cache (order_name TEXT PRIMARY KEY, store TEXT, financial TEXT, fulfillment TEXT, cancelled BOOLEAN, edited BOOLEAN, refunded NUMERIC, total NUMERIC, shipstation TEXT, tracking TEXT, error TEXT, checked_at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE TABLE IF NOT EXISTS hd_files (id TEXT PRIMARY KEY, ticket_id BIGINT, name TEXT, content_type TEXT, data BYTEA, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS todo JSONB`);
   try { await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS order_status JSONB`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS order_checked_at TIMESTAMPTZ`); } catch (_) {}
@@ -376,6 +380,7 @@ async function saveTicket(t, msgs) {
        r.to_emails, r.subject, r.body_text, r.body_html, JSON.stringify(r.attachments), r.at]
     );
   }
+  try { await setTicketOrder(t.id, `${t.subject || ""} ${rows.map((r) => r.body_text || "").join(" ").slice(0, 6000)}`); } catch (_) {}
   // Did the Gmail connection already open a ticket for this same conversation? Fold this one into it (older wins).
   try {
     const first = inbound[0] || rows[0];
@@ -738,6 +743,7 @@ async function storeGmailMessage(address, m) {
     [t.id, `gmail:${m.id}`, rfcId, m.id, fromAgent, from.name || (fromAgent ? "Agent" : customer), from.email, to, subject,
      body, parts.html || null, JSON.stringify(parts.attachments), at]);
   if (!ins.rows.length) return null;                        // already had it
+  setTicketOrder(t.id, `${subject} ${body}`).catch(() => {});
   if (!fromAgent && !cls.junk) setImmediate(() => emitInbound(t.id, ins.rows[0].id));
   if (cls.bounce) {
     try {
@@ -944,10 +950,26 @@ async function sendNewEmail({ mailbox, to, subject, text, who, tags, name }) {
   await db(`INSERT INTO hd_tickets (id,source,gmail_thread_id,subject,brand,mailbox,channel,status,customer_email,tags,messages_count,created_at,updated_at,last_message_at,last_outbound_at)
             VALUES ($1,$2,$3,$4,$5,$6,'email','open',$7,$8,1,$9,$9,$9,$9)`, [id, via, threadId, subject, brand, mailbox, to, tags || [], at]);
   if (name) await db(`UPDATE hd_tickets SET customer_name=$2 WHERE id=$1`, [id, String(name).trim()]).catch(() => {});
+  setTicketOrder(id, `${subject} ${text}`).catch(() => {});
   await db(`INSERT INTO hd_messages (ticket_id,source,external_id,rfc_message_id,from_agent,internal,channel,sender_name,sender_email,to_emails,subject,body_text,sent_by,at)
             VALUES ($1,$2,$3,$4,true,false,'email',$5,$6,$7,$8,$9,$10,$11)`, [id, via, externalId, ourId, brand || "Agent", mailbox, [to], subject, String(text), who, at]);
   return { ok: true, ticket_id: id, via };
 }
+/* ---- Order references in conversations: "#LBO11008", "LB 190443", "lbo10799" → "LBO11008" ---- */
+const ORDER_REF_RE = /#?\b((?:LBO|LB|BB)[\s-]?\d{3,7})\b/gi;
+function orderRefs(text) { return [...new Set((String(text || "").match(ORDER_REF_RE) || []).map((x) => x.replace(/[#\s-]/g, "").toUpperCase()))]; }
+async function setTicketOrder(ticketId, text) {
+  const refs = orderRefs(text); if (!refs.length) return null;
+  await db(`UPDATE hd_tickets SET order_number = COALESCE(order_number, $2) WHERE id=$1`, [ticketId, refs[0]]).catch(() => {});
+  return refs[0];
+}
+async function backfillTicketOrders() {
+  const rows = (await db(`SELECT t.id, t.subject, (SELECT string_agg(left(m.body_text, 3000), ' ') FROM hd_messages m WHERE m.ticket_id=t.id AND NOT m.internal) AS body FROM hd_tickets t WHERE t.order_number IS NULL`)).rows;
+  let n = 0; for (const t of rows) { if (await setTicketOrder(t.id, `${t.subject || ""} ${t.body || ""}`)) n++; }
+  console.log(`🔗 order numbers linked on ${n} of ${rows.length} tickets`);
+  return n;
+}
+
 /* ---- Audit trail: one row per action — when, who (person or Emily), what, on which ticket/order. ---- */
 async function audit({ ticketId = null, kind, detail = "", who = "system", target = null }) {
   try { await db(`INSERT INTO hd_events (ticket_id, kind, detail, user_name, target) VALUES ($1,$2,$3,$4,$5)`, [ticketId != null ? String(ticketId) : null, String(kind).slice(0, 60), String(detail || "").slice(0, 1000), String(who || "system").slice(0, 120), target ? String(target).slice(0, 120) : null]); }
@@ -1051,7 +1073,7 @@ module.exports = {
   USERS, userFromKey, sessionOf, loadSessions, login, logout, listUsers, createUser, updateUser, checkPassword,
   httpJson, gorgias, slack, slackPost, G_DOMAIN,
   BRAND_MAILBOX, ACTIVE_MAILBOXES, brandForAddress, mailboxForName, resolveMailbox, addressFromMessages, mailboxFromIntegrations,
-  runImport, importState: () => importRun, saveTicket, stripHtml, mergeTickets, dedupeTickets, findTicketForEmail, classifyInbound, classifyBacklog, parseShopifyForm, removeTags, bounceReason, JUNK_TAG_SET,
+  runImport, importState: () => importRun, saveTicket, stripHtml, mergeTickets, dedupeTickets, findTicketForEmail, classifyInbound, classifyBacklog, parseShopifyForm, removeTags, bounceReason, JUNK_TAG_SET, orderRefs, setTicketOrder, backfillTicketOrders,
   gmailConfigured, OAUTH_CLIENTS, clientForAddress, clientById, exchangeCode, accessTokenFor, gapi, gmailSend, pollMailbox, pollAll, storeGmailMessage, b64urlEncode, b64urlDecode, formEncode, GMAIL_SCOPES, OAUTH_REDIRECT,
   onInbound, emitInbound,
   sendReply, sendNewEmail, addNote, addTags, htmlify, stripQuoted,
