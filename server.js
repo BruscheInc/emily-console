@@ -46,7 +46,7 @@ app.post("/api/users", async (req, res) => {
 });
 app.post("/api/users/:id", async (req, res) => {
   if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "admins only" });
-  try { const { name, role, active, password } = req.body || {}; res.json({ user: await core.updateUser(Number(req.params.id), { name, role, active, password }) }); }
+  try { const { name, role, active, password } = req.body || {}; res.json({ user: await core.updateUser(Number(req.params.id), { name, role, active, password, by: actorOf(req) }) }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post("/api/me/password", async (req, res) => {          // anyone can change their own password
@@ -54,7 +54,7 @@ app.post("/api/me/password", async (req, res) => {          // anyone can change
   try { const s = core.sessionOf(keyFrom(req)); if (!s || !s.user_id) return res.status(400).json({ error: "Env-key users don't have a password here." });
     const { current, password } = req.body || {}; const u = (await db(`SELECT * FROM hd_users WHERE id=$1`, [s.user_id])).rows[0];
     if (!core.checkPassword(current, u.pass_salt, u.pass_hash)) return res.status(400).json({ error: "Current password is wrong." });
-    await core.updateUser(s.user_id, { password }); res.json({ ok: true, relogin: true }); }
+    await core.updateUser(s.user_id, { password, by: s.name }); res.json({ ok: true, relogin: true }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -106,8 +106,29 @@ app.post("/api/order/action", async (req, res) => {
     const { kind, order, ticketId, input } = req.body || {};
     if (!kind || !order) return res.status(400).json({ error: "kind and order are required" });
     const r = await require("./emily").applyOrderAction({ kind, order, input: input || {}, who: actorOf(req), ticketId: ticketId ? String(ticketId) : null });
+    await core.audit({ ticketId: ticketId || null, kind: `order-${kind}`, detail: r.note || r.title || "", who: actorOf(req), target: order });
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+/* ---- activity log: everything anyone (or Emily) did, newest first ---- */
+app.get("/api/activity", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const limit = Math.min(Number(req.query.limit) || 100, 500), offset = Math.max(Number(req.query.offset) || 0, 0);
+    const args = [], where = [];
+    if (req.query.who) { args.push(`%${req.query.who}%`); where.push(`user_name ILIKE $${args.length}`); }
+    if (req.query.kind) { args.push(`${req.query.kind}%`); where.push(`kind ILIKE $${args.length}`); }
+    if (req.query.q) { args.push(`%${req.query.q}%`); where.push(`(detail ILIKE $${args.length} OR target ILIKE $${args.length} OR ticket_id::text ILIKE $${args.length})`); }
+    if (req.query.since) { args.push(req.query.since); where.push(`ts >= $${args.length}`); }
+    const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const total = (await db(`SELECT count(*)::int AS n FROM hd_events ${w}`, args)).rows[0].n;
+    args.push(limit, offset);
+    const r = await db(`SELECT e.id, e.ts, e.user_name AS who, e.kind, e.detail, e.target, e.ticket_id, t.subject, t.customer_email
+                          FROM hd_events e LEFT JOIN hd_tickets t ON t.id = e.ticket_id ${w} ORDER BY e.ts DESC LIMIT $${args.length - 1} OFFSET $${args.length}`, args);
+    const whos = (await db(`SELECT user_name, count(*)::int AS n FROM hd_events WHERE ts > now() - interval '30 days' GROUP BY user_name ORDER BY n DESC LIMIT 20`)).rows;
+    res.json({ items: r.rows, total, limit, offset, whos });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ---- stuck packages (Shopify "Tracking added" for 4+ days) ---- */
@@ -118,11 +139,11 @@ app.get("/api/stuck", async (req, res) => {
 });
 app.post("/api/stuck/refresh", async (req, res) => {
   if (!guard(req, res)) return;
-  try { res.json(await require("./emily").scanStuck()); } catch (e) { res.status(500).json({ error: e.message }); }
+  try { const r = await require("./emily").scanStuck(); await core.audit({ kind: "shipment-scan", detail: `${r.scanned} orders · ${r.never_scanned} never scanned · ${r.undelivered} not delivered`, who: actorOf(req) }); res.json(r); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/stuck/state", async (req, res) => {
   if (!guard(req, res)) return;
-  try { const { id, state, note, kind } = req.body || {}; res.json(await require("./emily").setStuckState(String(id), String(state), actorOf(req), note, kind)); }
+  try { const { id, state, note, kind } = req.body || {}; const r = await require("./emily").setStuckState(String(id), String(state), actorOf(req), note, kind); await core.audit({ kind: `shipment-${state}`, detail: `${kind || "never_scanned"}${note ? ` — ${note}` : ""}`, who: actorOf(req), target: id }); res.json(r); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.get("/api/stuck/options", async (req, res) => {
@@ -132,12 +153,12 @@ app.get("/api/stuck/options", async (req, res) => {
 app.post("/api/stuck/offer", async (req, res) => {
   if (!guard(req, res)) return;
   try { const { id, kind, type, text, issue_now } = req.body || {}; if (!text || !String(text).trim()) return res.status(400).json({ error: "text required" });
-    res.json(await require("./emily").stuckOffer(String(id), String(kind || ""), { type, text: String(text), issue_now: !!issue_now, who: actorOf(req) })); }
+    const r = await require("./emily").stuckOffer(String(id), String(kind || ""), { type, text: String(text), issue_now: !!issue_now, who: actorOf(req) }); await core.audit({ ticketId: r.ticket_id, kind: `offer-${type}`, detail: r.note || "", who: actorOf(req), target: id }); res.json(r); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post("/api/stuck/email", async (req, res) => {
   if (!guard(req, res)) return;
-  try { const { id, text, kind } = req.body || {}; if (!text || !String(text).trim()) return res.status(400).json({ error: "text required" }); res.json(await require("./emily").emailStuckCustomer(String(id), actorOf(req), String(text), kind)); }
+  try { const { id, text, kind } = req.body || {}; if (!text || !String(text).trim()) return res.status(400).json({ error: "text required" }); const r = await require("./emily").emailStuckCustomer(String(id), actorOf(req), String(text), kind); await core.audit({ ticketId: r.ticket_id, kind: "shipment-email", detail: `emailed customer about ${kind || "never_scanned"} package`, who: actorOf(req), target: id }); res.json(r); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -166,6 +187,7 @@ app.get("/api/tickets", async (req, res) => {
       `SELECT id, subject, brand, status, customer_email, customer_name, assignee, tags, messages_count,
               last_message_at, last_inbound_at, ${CATEGORY_SQL} AS category,
               (SELECT left(m.body_text, 220) FROM hd_messages m WHERE m.ticket_id=hd_tickets.id AND NOT m.internal ORDER BY m.at DESC LIMIT 1) AS excerpt
+              ${view === "oos" ? `, (SELECT row_to_json(x) FROM (SELECT c.status AS case_status, c.order_number, c.order_status, c.resolution, c.sent_at, c.followup_sent_at, c.item_name, c.items FROM oos_cases c WHERE c.ticket_id = hd_tickets.id::text ORDER BY c.created_at DESC LIMIT 1) x) AS oos` : ""}
          FROM hd_tickets WHERE ${where.join(" AND ")}
         ORDER BY last_message_at DESC NULLS LAST, id DESC
         LIMIT $${args.length - 1} OFFSET $${args.length}`, args);
@@ -223,7 +245,7 @@ app.get("/api/ticket/:id", async (req, res) => {
     }));
     const scan = [t.subject || ""].concat(messages.map((x) => x.text)).join("  ");
     const orders = [...new Set((scan.match(/#?\b((?:LBO|LB|BB)\s?\d{3,6})\b/gi) || []).map((s) => s.replace(/[#\s]/g, "").toUpperCase()))].slice(0, 8);
-    const events = (await db(`SELECT kind, detail, user_name, ts FROM hd_events WHERE ticket_id=$1 ORDER BY ts DESC LIMIT 20`, [id])).rows;
+    const events = (await db(`SELECT kind, detail, user_name, target, ts FROM hd_events WHERE ticket_id=$1 ORDER BY ts DESC LIMIT 100`, [id])).rows;
     res.json({
       id: t.id, subject: t.subject, status: t.status, brand: t.brand, brand_address: t.mailbox, channel: t.channel,
       created: t.created_at, updated: t.updated_at, messages_count: messages.length, assignee: t.assignee,
@@ -347,6 +369,7 @@ app.put("/api/emily/policies/:key", async (req, res) => {
     if (!POLICY_KEYS.includes(key)) return res.status(400).json({ error: "unknown policy" });
     const body = String((req.body && req.body.body) || "");
     if (body.trim().length < 50) return res.status(400).json({ error: "that's too short to be a policy — nothing saved" });
+    await core.audit({ kind: "policy-edit", detail: `${req.params.key}${note ? ` — ${String(note).slice(0, 200)}` : ""}`, who: actorOf(req), target: req.params.key });
     const r = await db(`INSERT INTO emily_policies (key, body, note, updated_by) VALUES ($1,$2,$3,$4) RETURNING id, created_at`,
       [key, body, String((req.body && req.body.note) || "").slice(0, 200) || null, actorOf(req)]);
     res.json({ ok: true, id: r.rows[0].id, at: r.rows[0].created_at });
@@ -418,6 +441,7 @@ app.post("/api/emily/decide", async (req, res) => {
     if (!id || !["approve", "edit", "skip", "redraft"].includes(action)) return res.status(400).json({ error: "id and action approve|edit|skip|redraft required" });
     const emily = require("./emily");
     const r = await emily.decide({ ticketId: String(id), action, text, who: actorOf(req), applyActions: Array.isArray(applyActions) ? applyActions : [], overrides: overrides && typeof overrides === "object" ? overrides : {} });
+    await core.audit({ ticketId: id, kind: `emily-${action}`, detail: r.ok ? (action === "approve" || action === "edit" ? `draft ${action === "edit" ? "edited and " : ""}sent to ${r.to || "customer"}${r.applied && r.applied.length ? ` · applied: ${r.applied.join(" | ")}` : ""}` : action === "skip" ? "draft skipped" : `redraft requested${text ? ` — ${String(text).slice(0, 200)}` : ""}`) : `failed: ${r.error}`, who: actorOf(req) });
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -499,34 +523,34 @@ app.post("/api/emily/action", async (req, res) => {
   try {
     const { id, do: what } = req.body || {};
     const emily = require("./emily");
-    if (what === "apply") return res.json(await emily.applyAction(String(id), actorOf(req), req.body.overrides && typeof req.body.overrides === "object" ? req.body.overrides : null));
-    if (what === "dismiss") return res.json(await emily.dismissAction(String(id), actorOf(req)));
+    if (what === "apply") { const r = await emily.applyAction(String(id), actorOf(req), req.body.overrides && typeof req.body.overrides === "object" ? req.body.overrides : null); await core.audit({ kind: "action-apply", detail: r.note || id, who: actorOf(req), target: id }); return res.json(r); }
+    if (what === "dismiss") { const r = await emily.dismissAction(String(id), actorOf(req)); await core.audit({ kind: "action-dismiss", detail: id, who: actorOf(req), target: id }); return res.json(r); }
     res.status(400).json({ error: "do must be apply or dismiss" });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post("/api/emily/todo", async (req, res) => {
   if (!guard(req, res)) return;
   try { const { draft_id, index, state } = req.body || {}; if (!["done", "wont"].includes(state)) return res.status(400).json({ error: "state must be done or wont" });
-    res.json({ ok: true, todo: await require("./emily").setTodo(Number(draft_id), Number(index), state, actorOf(req)) }); }
+    const todo = await require("./emily").setTodo(Number(draft_id), Number(index), state, actorOf(req)); await core.audit({ kind: "todo", detail: `${state === "done" ? "done" : "won't do"}: ${(todo[Number(index)] || {}).what || ""}`, who: actorOf(req), target: `draft ${draft_id}` }); res.json({ ok: true, todo }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post("/api/ticket/:id/human", async (req, res) => {          // "this IS a person — show it in Tickets"
   if (!guard(req, res)) return;
-  try { await core.removeTags(req.params.id, JUNK_TAGS); await core.addTags(req.params.id, ["human"]); await db(`UPDATE hd_tickets SET spam=false WHERE id=$1`, [req.params.id]); res.json({ ok: true }); }
+  try { await core.removeTags(req.params.id, JUNK_TAGS); await core.addTags(req.params.id, ["human"]); await db(`UPDATE hd_tickets SET spam=false WHERE id=$1`, [req.params.id]); await core.audit({ ticketId: req.params.id, kind: "classify", detail: "marked as a customer (shown in Tickets)", who: actorOf(req) }); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/ticket/:id/junk", async (req, res) => {           // "this is machinery — hide it"
   if (!guard(req, res)) return;
-  try { await core.removeTags(req.params.id, ["human"]); await core.addTags(req.params.id, ["automated"]); res.json({ ok: true }); }
+  try { await core.removeTags(req.params.id, ["human"]); await core.addTags(req.params.id, ["automated"]); await core.audit({ ticketId: req.params.id, kind: "classify", detail: "marked not a customer (hidden from Tickets)", who: actorOf(req) }); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/admin/classify", async (req, res) => {
   if (!guard(req, res)) return;
-  try { res.json(await core.classifyBacklog()); } catch (e) { res.status(500).json({ error: e.message }); }
+  try { const r = await core.classifyBacklog(); await core.audit({ kind: "admin-classify", detail: `${r.checked} checked · ${r.junk} hidden`, who: actorOf(req) }); res.json(r); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/admin/dedupe", async (req, res) => {
   if (!guard(req, res)) return;
-  try { const n = await core.dedupeTickets(); res.json({ ok: true, merged: n }); } catch (e) { res.status(500).json({ error: e.message }); }
+  try { const n = await core.dedupeTickets(); await core.audit({ kind: "admin-dedupe", detail: `${n} merged`, who: actorOf(req) }); res.json({ ok: true, merged: n }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/mailbox/poll", async (req, res) => {
   if (!guard(req, res)) return;

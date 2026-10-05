@@ -3,6 +3,23 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.11 — Oct 5, 2026
+- **Out-of-stock pre-send check.** Before the email (or the 48-hour follow-up) goes out, the order is checked in
+  Shopify: if the out-of-stock items were already removed/swapped, the amount refunded, or the order cancelled,
+  nothing is sent and the case is marked "already handled" (Slack gets a one-line note). If the order changed but
+  not every item is resolved, the email is held as "needs review" instead of sent.
+- **Replacements are order edits.** New Emily action `shopify_propose_order_edit`: remove the out-of-stock line and
+  add the chosen item on the customer's existing order; the added item is discounted so nothing extra is charged,
+  and if it's cheaper the difference is refunded automatically. The old "create a replacement order" is now a
+  last resort for shipped, lost/damaged packages only; Emily's rules say so.
+- **Activity log.** Every action — replies, notes, status changes, Emily's drafts/sends/skips, proposed actions
+  staged/applied/dismissed (from the app or Slack), order edits/refunds/cancellations/credits, shipment actions,
+  out-of-stock emails and follow-ups, sign-ins, user and policy changes, scheduled scans — is recorded with the
+  time and who did it. Sidebar → Records → Activity log (filter by person, type, or search); each ticket also
+  shows its own History in the sidebar.
+- **Out of stock view** shows each ticket's order status (open/on hold, shipped, edited, refunded, cancelled) and
+  the case state (waiting on customer, followed up, bounced, already handled…).
+
 ## v4.10 — Oct 5, 2026
 - **Bounces are handled.** A delivery-failure email is recognised (mailer-daemon / "Delivery has failed" /
   "Undeliverable"), the ticket is tagged "bounced" with a note giving the reason (mailbox full, address doesn't

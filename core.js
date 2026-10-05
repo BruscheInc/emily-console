@@ -70,6 +70,7 @@ async function login({ email, password, ip }) {
   await db(`INSERT INTO hd_sessions (token, user_id, expires_at) VALUES ($1,$2,$3)`, [token, u.id, new Date(exp)]);
   await db(`UPDATE hd_users SET last_login=now() WHERE id=$1`, [u.id]);
   SESSIONS.set(token, { name: u.name, email: u.email, role: u.role, user_id: u.id, exp });
+  await audit({ kind: "login", detail: `${u.email} signed in`, who: u.name, target: u.email });
   return { token, user: { name: u.name, email: u.email, role: u.role } };
 }
 async function logout(token) { SESSIONS.delete(String(token || "")); try { await db(`DELETE FROM hd_sessions WHERE token=$1`, [String(token || "")]); } catch (_) {} }
@@ -80,11 +81,12 @@ async function createUser({ name, email, password, role, by }) {
   if (!String(name || "").trim()) throw new Error("Enter a name.");
   if (String(password || "").length < 8) throw new Error("Password must be at least 8 characters.");
   const { salt, hash } = hashPassword(password);
-  try { const r = await db(`INSERT INTO hd_users (name, email, pass_salt, pass_hash, role, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, email, role, active, created_at`, [String(name).trim(), e, salt, hash, role === "admin" ? "admin" : "agent", by || null]); return r.rows[0]; }
+  try { const r = await db(`INSERT INTO hd_users (name, email, pass_salt, pass_hash, role, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, email, role, active, created_at`, [String(name).trim(), e, salt, hash, role === "admin" ? "admin" : "agent", by || null]); await audit({ kind: "user-create", detail: `${String(name).trim()} <${e}> as ${role === "admin" ? "admin" : "agent"}`, who: by, target: e }); return r.rows[0]; }
   catch (err) { if (/unique/i.test(err.message)) throw new Error("There is already a user with that email."); throw err; }
 }
-async function updateUser(id, { name, role, active, password }) {
+async function updateUser(id, { name, role, active, password, by }) {
   const u = (await db(`SELECT * FROM hd_users WHERE id=$1`, [id])).rows[0]; if (!u) throw new Error("user not found");
+  await audit({ kind: "user-update", detail: `${u.email}: ${[password != null ? "password reset" : null, name != null ? `name → ${name}` : null, role != null ? `role → ${role}` : null, active != null ? (active ? "reactivated" : "deactivated") : null].filter(Boolean).join(", ")}`, who: by || "system", target: u.email });
   if (password != null) { if (String(password).length < 8) throw new Error("Password must be at least 8 characters."); const { salt, hash } = hashPassword(password); await db(`UPDATE hd_users SET pass_salt=$2, pass_hash=$3 WHERE id=$1`, [id, salt, hash]); await db(`DELETE FROM hd_sessions WHERE user_id=$1`, [id]); for (const [t, s] of SESSIONS) if (s.user_id === Number(id)) SESSIONS.delete(t); }
   if (name != null) await db(`UPDATE hd_users SET name=$2 WHERE id=$1`, [id, String(name).trim()]);
   if (role != null) await db(`UPDATE hd_users SET role=$2 WHERE id=$1`, [id, role === "admin" ? "admin" : "agent"]);
@@ -161,6 +163,8 @@ async function migrate() {
     ts TIMESTAMPTZ DEFAULT now()
   )`);
   await db(`CREATE INDEX IF NOT EXISTS idx_hde_ticket ON hd_events(ticket_id, ts DESC)`);
+  await db(`CREATE INDEX IF NOT EXISTS idx_hde_ts ON hd_events(ts DESC)`);
+  await db(`ALTER TABLE hd_events ADD COLUMN IF NOT EXISTS target TEXT`);         // what was acted on when it isn't a ticket (order #, user, case)
   await db(`CREATE TABLE IF NOT EXISTS hd_sync (
     key TEXT PRIMARY KEY,
     cursor TEXT,
@@ -209,6 +213,7 @@ async function migrate() {
         if (!pk.includes("kind")) { await db(`ALTER TABLE hd_stuck DROP CONSTRAINT IF EXISTS hd_stuck_pkey`); await db(`ALTER TABLE hd_stuck ADD PRIMARY KEY (id, kind)`); } } catch (e) { console.error("hd_stuck pk:", e.message); }
   await db(`CREATE TABLE IF NOT EXISTS hd_files (id TEXT PRIMARY KEY, ticket_id BIGINT, name TEXT, content_type TEXT, data BYTEA, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS todo JSONB`);
+  try { await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS order_status JSONB`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS order_checked_at TIMESTAMPTZ`); } catch (_) {}
   try { await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS items JSONB`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS followup_sent_at TIMESTAMPTZ`); } catch (_) {}
   await db(`ALTER TABLE emily_actions ADD COLUMN IF NOT EXISTS files JSONB`);
   await db(`CREATE TABLE IF NOT EXISTS emily_actions (id TEXT PRIMARY KEY, kind TEXT, title TEXT, summary TEXT, ticket_id TEXT, input JSONB, status TEXT DEFAULT 'staged', result TEXT, decided_by TEXT, created_at TIMESTAMPTZ DEFAULT now(), decided_at TIMESTAMPTZ)`);
@@ -943,6 +948,12 @@ async function sendNewEmail({ mailbox, to, subject, text, who, tags, name }) {
             VALUES ($1,$2,$3,$4,true,false,'email',$5,$6,$7,$8,$9,$10,$11)`, [id, via, externalId, ourId, brand || "Agent", mailbox, [to], subject, String(text), who, at]);
   return { ok: true, ticket_id: id, via };
 }
+/* ---- Audit trail: one row per action — when, who (person or Emily), what, on which ticket/order. ---- */
+async function audit({ ticketId = null, kind, detail = "", who = "system", target = null }) {
+  try { await db(`INSERT INTO hd_events (ticket_id, kind, detail, user_name, target) VALUES ($1,$2,$3,$4,$5)`, [ticketId != null ? String(ticketId) : null, String(kind).slice(0, 60), String(detail || "").slice(0, 1000), String(who || "system").slice(0, 120), target ? String(target).slice(0, 120) : null]); }
+  catch (e) { console.error("audit:", e.message); }
+}
+
 async function addNote({ ticketId, text, who }) {
   await db(`INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,body_text,sent_by,at)
             VALUES ($1,'local',$2,true,true,'internal-note',$3,$4,$3,now())`, [ticketId, `local:${crypto.randomUUID()}`, who, String(text)]);
@@ -1044,5 +1055,5 @@ module.exports = {
   gmailConfigured, OAUTH_CLIENTS, clientForAddress, clientById, exchangeCode, accessTokenFor, gapi, gmailSend, pollMailbox, pollAll, storeGmailMessage, b64urlEncode, b64urlDecode, formEncode, GMAIL_SCOPES, OAUTH_REDIRECT,
   onInbound, emitInbound,
   sendReply, sendNewEmail, addNote, addTags, htmlify, stripQuoted,
-  attachmentToken, attachmentUrl, fetchAttachment, saveFile, getFile, fileToken, fileUrl,
+  attachmentToken, attachmentUrl, fetchAttachment, saveFile, getFile, fileToken, fileUrl, audit,
 };
