@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.13 — Oct 5, 2026
+- **Updates itself.** Each page knows which build it is; a minute after a new version deploys, open tabs reload on their own
+  (if you're mid-reply, a small "v4.13 is ready — click to reload" banner shows instead). The page and the service worker are
+  no longer cacheable, so a stale tab can't keep showing an old version.
+
 ## v4.12 — Oct 5, 2026
 - **Order and Order status columns** in every ticket list, like Shopify's order page: the order the conversation is
   about (#LBO11008) and its payment + fulfillment pills (Paid · Unfulfilled / Fulfilled / Refunded / Cancelled,

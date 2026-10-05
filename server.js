@@ -4,6 +4,7 @@
  */
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 const core = require("./core");
 const {
   db, pool, migrate, syncGet, userFromKey, USERS,
@@ -23,8 +24,11 @@ app.use(express.json({ limit: "2mb" }));
 const keyFrom = (req) => (req.query.key || (req.body && req.body.key) || (req.headers.authorization || "").replace(/^Bearer /i, "") || "").toString();
 const actorOf = (req) => userFromKey(keyFrom(req)) || "unknown";
 function guard(req, res) { if (!userFromKey(keyFrom(req))) { res.status(401).json({ error: "unauthorized" }); return false; } return true; }
-app.use(express.static(path.join(__dirname, "public"), { setHeaders: (res, p) => { if (p.endsWith("index.html")) res.setHeader("Cache-Control", "no-cache"); } }));
 const VERSION = require("./package.json").version;
+// index.html is served with the running version stamped in, and never cached, so a new deploy is picked up on the next load.
+const INDEX_HTML = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8").replace(/__VERSION__/g, VERSION);
+app.get(["/", "/index.html"], (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(INDEX_HTML); });
+app.use(express.static(path.join(__dirname, "public"), { index: false, setHeaders: (res, p) => { if (p.endsWith("sw.js")) res.setHeader("Cache-Control", "no-store"); } }));
 app.get("/health", (_q, r) => r.json({ ok: true, version: VERSION }));
 app.get("/api/version", (_q, r) => r.json({ version: VERSION, major: "v" + VERSION.split(".")[0] }));
 app.get("/api/role", (req, res) => { const s = core.sessionOf(keyFrom(req)); res.json({ ok: !!s, user: s ? s.name : null, role: s ? s.role : null, email: s ? s.email : null }); });
