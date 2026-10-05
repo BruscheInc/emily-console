@@ -188,6 +188,8 @@
   <button class="nav view" data-view="lbo" onclick="setView('lbo')"><span class="i">✉️</span>Outlet · all mail<span class="n" id="v-lbo"></span></button>
   <button class="nav view" data-view="lb" onclick="setView('lb')"><span class="i">✉️</span>Larkspur · all mail<span class="n" id="v-lb"></span></button>
   <button class="nav view" data-view="all" onclick="setView('all')"><span class="i">🗂</span>Everything<span class="n" id="v-all"></span></button>
+  <div class="navsec">Records</div>
+  <button class="nav view" data-view="activity" onclick="setView('activity')"><span class="i">🕘</span>Activity log</button>
   <div class="navsp"></div>
   <button class="nav" onclick="openSettings()"><span class="i">⚙︎</span>Settings</button>
   <a class="nav" href="#" onclick="signOut();return false"><span class="i">⎋</span>Sign out</a>
@@ -303,10 +305,24 @@ async function loadCounts(){try{
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Helpdesk`:"Helpdesk";
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
+function oosChips(t){
+  const c=t.oos; if(!c) return "";
+  const os=c.order_status||{}; const out=[];
+  if(os.error) out.push(`<span class="chip">order: ${esc(os.error).slice(0,40)}</span>`);
+  else if(os.cancelled) out.push('<span class="chip skip">order cancelled</span>');
+  else if(os.shipped) out.push(`<span class="chip sent" title="${esc(os.tracking||"")}">order shipped</span>`);
+  else out.push(`<span class="chip drafted">order open${os.shipstation?" · "+esc(String(os.shipstation).replace(/_/g," ")):""}</span>`);
+  if(os.edited) out.push('<span class="chip" style="background:rgba(36,81,200,.12);color:#2451c8">order edited</span>');
+  if(os.refunded>0) out.push(`<span class="chip" style="background:rgba(36,81,200,.12);color:#2451c8">refunded $${Number(os.refunded).toFixed(2)}</span>`);
+  const cs={offered:"waiting on customer",pending_approval:"queued to send",staged:"sending",sending:"sending",resolved:"resolved",bounced:"email bounced",already_handled:"already handled",needs_review:"needs review",dismissed:"dismissed"}[c.case_status]||c.case_status;
+  out.push(`<span class="chip ${c.case_status==="bounced"||c.case_status==="needs_review"?"skip":c.case_status==="resolved"||c.case_status==="already_handled"?"sent":""}" title="${esc(c.resolution||"")}">${esc(cs)}${c.followup_sent_at?" · followed up":""}</span>`);
+  return out.join("");
+}
 function chipsFor(t){
   const hide=new Set(["emily-drafted","emily-sent"]); const out=[];
+  if(VIEW==="oos"&&t.oos){ out.push(oosChips(t)); for(const g of (t.tags||[])){ if(hide.has(g)||g==="oos-offer"||g==="emily") continue; out.push(`<span class="chip">${esc(g)}</span>`); if(out.length>=6) break; } return out.join(""); }
   if(t.emily) out.push(`<span class="chip ${t.emily}">Emily: ${t.emily}</span>`);
   for(const g of (t.tags||[])){ if(hide.has(g)) continue; out.push(`<span class="chip">${esc(g)}</span>`); if(out.length>=4) break; }
   const extra=(t.tags||[]).filter(g=>!hide.has(g)).length-(out.length-(t.emily?1:0)); if(extra>0) out.push(`<span class="chip">+${extra}</span>`);
@@ -317,11 +333,12 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';_listSig="";}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
-  const isStuck=VIEW==="stuck"||VIEW==="undelivered";
+  const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
+  if(VIEW==="activity") return loadActivity(silent);
   if(isStuck) return loadStuck(silent);
   try{
     const d=await api(`/api/tickets?tab=${TAB}&view=${encodeURIComponent(VIEW)}&q=${encodeURIComponent($("q").value.trim())}&limit=${PAGE}&offset=${OFFSET}`);
@@ -478,7 +495,7 @@ function emilyRedraftPrompt(id){
 function actionsBlock(d){
   const acts=(d.emily_actions||[]).filter(a=>a.status==="staged"||(a.status==="applied"&&Date.now()-new Date(a.decided_at||a.created_at)<7*864e5)||a.status==="failed");
   if(!acts.length) return "";
-  const icon={shopify_propose_discount:"🏷️",shopify_propose_store_credit:"💳",shopify_propose_replacement:"🎁",shipstation_propose_change:"📦",shopify_propose_cancel:"🛑",shopify_propose_refund:"💸"};
+  const icon={shopify_propose_discount:"🏷️",shopify_propose_store_credit:"💳",shopify_propose_replacement:"🎁",shipstation_propose_change:"📦",shopify_propose_cancel:"🛑",shopify_propose_refund:"💸",shopify_propose_order_edit:"✏️"};
   return `<div class="acts-em"><div class="acts-h">Emily also proposed</div>${acts.map(a=>{
     const ic=icon[a.kind]||"⚙️";
     if(a.status==="staged") return `<label class="act st"><input type="checkbox" class="act-apply" value="${esc(a.id)}" checked><span class="t"><b>${ic} ${esc(a.title)}</b><small>${esc((a.summary||"").replace(/\s+/g," "))}</small><small class="hint">Ticked = applied when you approve &amp; send</small></span><span class="bt"><button class="btn sec xs" onclick="emilyAction('${esc(a.id)}','apply',${d.id})">Apply now</button><button class="btn sec xs" onclick="emilyAction('${esc(a.id)}','dismiss',${d.id})">Dismiss</button></span></label>`;
@@ -721,6 +738,32 @@ async function loadStuck(silent){
   }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load stuck packages.</div>'; }
 }
 async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify…"; try{ const r=await api("/api/stuck/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.scanned} orders — ${r.never_scanned} never scanned · ${r.undelivered} not delivered`); }catch(e){toast("Check failed",true);} loadStuck(); loadCounts(); }
+/* ---------- Activity log: every action, when, by whom ---------- */
+let ACT_F={who:"",kind:"",q:"",offset:0}, _actSig="";
+const KIND_LABEL={reply:"Replied",note:"Noted",status:"Status",assign:"Assigned",spam:"Spam",merge:"Merged",classify:"Classified","email-new":"New email","emily-draft":"Emily drafted","emily-skip":"Emily skipped","emily-approve":"Approved & sent","emily-edit":"Edited & sent","emily-skip":"Draft skipped","emily-redraft":"Redraft","emily-autosend":"Auto-sent","action-staged":"Proposed","action-applied":"Applied","action-dismissed":"Dismissed","action-apply":"Applied","action-dismiss":"Dismissed",todo:"To-do","order-update_address":"Address changed","order-cancel":"Order cancelled","order-refund":"Refunded","order-replacement":"Replacement","store-credit":"Store credit","shipment-contacted":"Shipment contacted","shipment-resolved":"Shipment resolved","shipment-ignored":"Shipment ignored","shipment-open":"Shipment reopened","shipment-email":"Shipment email","shipment-scan":"Shipment scan","offer-replacement":"Offered replacement","offer-credit":"Offered credit","oos-sent":"Out-of-stock email","oos-followup":"OOS follow-up","oos-skipped":"OOS skipped",login:"Signed in","user-create":"User added","user-update":"User changed","policy-edit":"Policy edited","emily-setting":"Setting changed","admin-dedupe":"Dedupe","admin-classify":"Re-filter"};
+async function loadActivity(silent){
+  const w=$("stuckwrap"); if(!silent){ w.innerHTML='<div class="empty">Loading…</div>'; _actSig=""; }
+  try{
+    const d=await api(`/api/activity?limit=100&offset=${ACT_F.offset}&who=${encodeURIComponent(ACT_F.who)}&kind=${encodeURIComponent(ACT_F.kind)}&q=${encodeURIComponent(ACT_F.q)}`);
+    const sig=JSON.stringify([ACT_F,d.total,d.items.slice(0,3).map(x=>x.id)]); if(silent&&sig===_actSig) return; _actSig=sig;
+    $("showing").textContent=d.total?`${d.offset+1}–${Math.min(d.offset+d.items.length,d.total)} of ${d.total.toLocaleString()}`:"";
+    const head=`<div class="stuckhead"><span>Every action in the Helpdesk — by a person, by Emily, or by a scheduled job — with the time it happened. Times are shown in your timezone.</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;flex-basis:100%;align-items:center">
+        <select id="act-who" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)" onchange="ACT_F.who=this.value;ACT_F.offset=0;loadActivity()"><option value="">Everyone</option>${(d.whos||[]).map(x=>`<option value="${esc(x.user_name)}" ${ACT_F.who===x.user_name?"selected":""}>${esc(x.user_name)} (${x.n})</option>`).join("")}</select>
+        <select id="act-kind" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)" onchange="ACT_F.kind=this.value;ACT_F.offset=0;loadActivity()"><option value="">All actions</option><option value="reply" ${ACT_F.kind==="reply"?"selected":""}>Replies</option><option value="emily" ${ACT_F.kind==="emily"?"selected":""}>Emily</option><option value="action" ${ACT_F.kind==="action"?"selected":""}>Proposed actions</option><option value="order" ${ACT_F.kind==="order"?"selected":""}>Order changes</option><option value="shipment" ${ACT_F.kind==="shipment"?"selected":""}>Shipments</option><option value="oos" ${ACT_F.kind==="oos"?"selected":""}>Out of stock</option><option value="user" ${ACT_F.kind==="user"?"selected":""}>Users</option><option value="login" ${ACT_F.kind==="login"?"selected":""}>Sign-ins</option><option value="policy" ${ACT_F.kind==="policy"?"selected":""}>Policies</option></select>
+        <input class="search" style="max-width:280px" placeholder="Search detail, order #, ticket #…" value="${esc(ACT_F.q)}" onkeydown="if(event.key==='Enter'){ACT_F.q=this.value;ACT_F.offset=0;loadActivity()}">
+        <span class="sp"></span><button class="btn sec xs" ${ACT_F.offset<=0?"disabled":""} onclick="ACT_F.offset=Math.max(0,ACT_F.offset-100);loadActivity()">‹ Newer</button><button class="btn sec xs" ${ACT_F.offset+100>=d.total?"disabled":""} onclick="ACT_F.offset+=100;loadActivity()">Older ›</button>
+      </div></div>`;
+    if(!d.items.length){ w.innerHTML=head+'<div class="empty">No activity matches.</div>'; return; }
+    w.innerHTML=head+`<table class="tickets"><thead><tr><th class="c-t" style="width:16%">When</th><th style="width:14%">Who</th><th style="width:16%">Action</th><th>Detail</th><th style="width:22%">Ticket / target</th></tr></thead><tbody>${d.items.map(x=>`<tr>
+      <td class="c-t"><b>${fmt(x.ts)}</b><div class="exc">${fmtDay(x.ts)}</div></td>
+      <td>${x.who==="Emily"?'<span class="chip drafted">✍️ Emily</span>':x.who==="system"?'<span class="chip">⚙️ scheduled</span>':`<b>${esc(x.who||"")}</b>`}</td>
+      <td><span class="chip">${esc(KIND_LABEL[x.kind]||x.kind)}</span></td>
+      <td style="white-space:pre-wrap;font-size:13px">${esc(x.detail||"")}</td>
+      <td>${x.ticket_id?`<a href="#" onclick="openTicket(${x.ticket_id});return false" style="color:var(--accent);font-weight:600;text-decoration:none">#${x.ticket_id}</a><div class="exc">${esc(x.subject||x.customer_email||"")}</div>`:x.target?`<span class="exc">${esc(x.target)}</span>`:""}</td></tr>`).join("")}</tbody></table>`;
+  }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load the activity log.</div>'; }
+}
+
 function stuckGo(id,ticketId){
   const sel=$("act-"+id); const v=sel&&sel.value; if(!v){toast("Pick an action first",true);return;}
   if(v==="ticket") return openTicket(ticketId);
@@ -846,6 +889,8 @@ function rail(d){
     </div>
     <h4>Tags</h4>
     <div class="railcard" style="padding:12px">${tags}</div>
+    <h4>History</h4>
+    <div class="railcard" style="padding:6px 12px;font-size:12.5px">${(d.events&&d.events.length)?d.events.slice(0,40).map(e=>`<div style="padding:6px 0;border-bottom:1px dashed var(--line)"><div><b>${esc(KIND_LABEL[e.kind]||e.kind)}</b> · ${esc(e.user_name||"")}</div><div style="color:var(--muted)">${fmt(e.ts)}${e.detail?" — "+esc(String(e.detail).slice(0,160)):""}</div></div>`).join(""):'<span style="color:var(--muted)">nothing yet</span>'}</div>
   </aside>`;
 }
 
