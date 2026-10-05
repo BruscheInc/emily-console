@@ -142,9 +142,12 @@
   .tagchip{background:rgba(20,30,50,.06);color:var(--muted);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
 
   .composer{flex:none;border-top:1px solid var(--line);padding:10px 12px;background:var(--panel2)}
-  .composer textarea{width:100%;min-height:64px;max-height:180px;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px;font-size:14px;resize:vertical}
+  .composer textarea{width:100%;min-height:170px;max-height:46vh;box-sizing:border-box;line-height:1.5;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px;font-size:14px;resize:vertical}
   .crow{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
-  .modetog{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .modetog{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:8px;width:max-content;max-width:100%}
+  .modetog button .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#2451c8;margin-left:6px;vertical-align:middle}
+  #emilypane{max-height:46vh;overflow-y:auto}
+  #emilypane #emilycard{margin:0}
   .modetog button{background:var(--panel);color:var(--muted);border:none;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
   .modetog button.on{background:rgba(59,110,245,.14);color:#2451c8}
   .empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:30px}
@@ -490,6 +493,11 @@ async function startImport(){
 
 
 /* ---------- Emily's draft on this ticket: approve / edit / skip / redraft from the app ---------- */
+function emilyStatusLine(d){
+  const e=d.emily_draft; if(!e||!e.outcome) return "";
+  return emilyCard(d);
+}
+function emilyPending(d){ return !!(d.emily_draft&&!d.emily_draft.outcome); }
 function emilyCard(d){
   const e=d.emily_draft; if(!e) return "";
   if(e.outcome){
@@ -944,24 +952,28 @@ async function openTicket(id){
       </div>
       <div class="tbody">
         <div class="conv">
-          ${emilyCard(d)}
+          ${emilyStatusLine(d)}
       <div class="msgs" id="msgs">${msgs||'<div class="empty">No messages.</div>'}</div>
           <div class="composer">
-            <div class="modetog"><button id="m-reply" class="on" onclick="setMode('reply')">Reply to customer</button><button id="m-note" onclick="setMode('note')">Internal note</button></div>
+            <div class="modetog"><button id="m-reply" class="on" onclick="setMode('reply')">Reply to customer</button><button id="m-note" onclick="setMode('note')">Internal note</button><button id="m-emily" onclick="setMode('emily')" ${emilyPending(d)?"":"disabled title=\"No draft waiting — use Ask Emily\""}>Emily's suggestion${emilyPending(d)?'<span class="dot"></span>':""}</button></div>
+            <div id="emilypane" class="hidden">${emilyPending(d)?emilyCard(d):""}</div>
+            <div id="replybox">
             <textarea id="composer" placeholder="Write a reply to ${esc(d.customer.name)}…"></textarea>
             <div class="crow"><div class="sub" style="color:var(--muted);font-size:12px" id="sendhint">Sends an email to ${esc(d.customer.email||"the customer")} from ${esc(d.brand)}.</div><div class="sp" style="flex:1"></div>
             <button class="btn" id="sendBtn" onclick="send(${id})">Send reply</button></div>
+            </div>
           </div>
         </div>
         ${rail(d)}
       </div>`;
-    MODE="reply"; const mb=$("msgs"); if(mb)mb.scrollTop=mb.scrollHeight;
+    setMode(emilyPending(d)?"emily":"reply"); const mb=$("msgs"); if(mb)mb.scrollTop=mb.scrollHeight;
     if(d.order_number) loadOrder(d.order_number); else if(d.orders&&d.orders.length) loadOrder(d.orders[0]); else if(ORDER&&$("orderpanel")){renderOrder();}
     loadCustomer(d.customer.email,(d.orders&&d.orders[0])||"");
   }catch(e){ th.innerHTML='<div class="empty">Couldn\'t load this ticket.</div>'; }
 }
 function closeThread(){document.body.classList.remove("viewing");CUR=null;loadList();}
-function setMode(m){MODE=m;$("m-reply").classList.toggle("on",m==="reply");$("m-note").classList.toggle("on",m==="note");
+function setMode(m){MODE=m;$("m-reply").classList.toggle("on",m==="reply");$("m-note").classList.toggle("on",m==="note");$("m-emily").classList.toggle("on",m==="emily");
+  $("emilypane").classList.toggle("hidden",m!=="emily");$("replybox").classList.toggle("hidden",m==="emily");
   $("sendBtn").textContent=m==="reply"?"Send reply":"Add note";$("composer").placeholder=m==="reply"?"Write a reply…":"Internal note (not sent to customer)…";
   $("sendhint").style.visibility=m==="reply"?"visible":"hidden";}
 async function send(id){
