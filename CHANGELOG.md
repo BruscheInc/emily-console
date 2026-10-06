@@ -3,6 +3,17 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.17 — Oct 6, 2026
+- **+ New ticket.** Start an email conversation with a customer from Helpdesk. Pick the store (Larkspur Baby or
+  Larkspur Baby Outlet) — that's the mailbox it's sent from, so the customer sees the right brand and their reply
+  lands back on this ticket. Optional customer name and order number.
+- **Draft with Emily.** Type what you want to say in your own words; Emily looks up the order and customer, writes
+  the professional email in the brand's voice (subject + message), and you review, edit and send. Everything is
+  logged in the Activity log (ticket-created, emily-compose).
+- **Replacement orders always carry a first and last name** on the shipping address (from the original order's
+  address, or the customer's name), so ShipStation no longer errors on them. If no name can be found, Emily
+  refuses to create the replacement and says why.
+
 ## v4.16 — Oct 5, 2026
 - **Order numbers link to Shopify.** In the ticket list, the Orders panel header, and the customer profile's order
   history, the order number opens that order in the Shopify admin in a new tab (↗). The list link appears once the

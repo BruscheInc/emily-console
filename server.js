@@ -210,6 +210,36 @@ app.get("/api/tickets", async (req, res) => {
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+/* ---- New ticket (outbound first): pick the store, Emily can draft from notes, send → ticket is created ---- */
+app.post("/api/emily/compose", async (req, res) => {
+  if (!guard(req, res)) return;
+  const { mailbox, to, name, order, subject, notes } = req.body || {};
+  if (!mailbox || !core.ACTIVE_MAILBOXES.includes(String(mailbox).toLowerCase())) return res.status(400).json({ error: "Pick a store first." });
+  if (!String(notes || "").trim()) return res.status(400).json({ error: "Tell Emily what the email should say." });
+  try {
+    const emily = require("./emily");
+    const j = await emily.composeEmail({ brand: core.brandForAddress(mailbox), mailbox: String(mailbox).toLowerCase(), to: String(to || "").trim(), name, order: String(order || "").trim(), subject, notes: String(notes).trim(), who: actorOf(req) });
+    res.json({ ok: true, ...j });
+  } catch (e) { res.status(500).json({ error: /credit balance/i.test(e.message) ? "Emily's AI account is out of credits — top up at console.anthropic.com." : e.message }); }
+});
+app.post("/api/ticket/new", async (req, res) => {
+  if (!guard(req, res)) return;
+  const { mailbox, to, name, order, subject, text } = req.body || {};
+  const box = String(mailbox || "").toLowerCase();
+  if (!core.ACTIVE_MAILBOXES.includes(box)) return res.status(400).json({ error: "Pick a store first." });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(to || "").trim())) return res.status(400).json({ error: "Enter a valid customer email." });
+  if (!String(subject || "").trim() || !String(text || "").trim()) return res.status(400).json({ error: "Subject and message are both needed." });
+  const who = actorOf(req);
+  try {
+    const r = await core.sendNewEmail({ mailbox: box, to: String(to).trim(), subject: String(subject).trim(), text: String(text), who, tags: ["agent-started"], name: String(name || "").trim() || undefined });
+    const id = r.ticket_id;
+    if (order) await core.setTicketOrder(id, `#${String(order).trim()}`).catch(() => {});
+    await core.audit({ ticketId: id, kind: "ticket-created", detail: `New conversation started with ${String(to).trim()} from ${core.brandForAddress(box)}${order ? ` about ${String(order).trim()}` : ""}`, who, target: String(to).trim() });
+    res.json({ ok: true, id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get("/api/counts", async (req, res) => {
   if (!guard(req, res)) return;
   try {

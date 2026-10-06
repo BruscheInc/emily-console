@@ -125,7 +125,7 @@ async function storeGraphQL(st, query, variables) {
 }
 const ORDER_QUERY = `query($q:String!){orders(first:3,query:$q,sortKey:CREATED_AT,reverse:true){edges{node{
   id name email createdAt displayFinancialStatus displayFulfillmentStatus
-  totalPriceSet{shopMoney{amount currencyCode}} shippingAddress{address1 city province zip country}
+  totalPriceSet{shopMoney{amount currencyCode}} shippingAddress{name firstName lastName address1 address2 city province provinceCode zip country countryCodeV2 phone} customer{displayName firstName lastName}
   lineItems(first:25){edges{node{title quantity sku variant{availableForSale}}}} fulfillments(first:5){status trackingInfo{number url company}}
 }}}}`;
 // Which store does an order-number PREFIX belong to? (LBO before LB — longest first.)
@@ -556,7 +556,15 @@ async function resolveVariantIdBySku(st, sku) {
   try { const d = await storeGraphQL(st, `query($q:String!){productVariants(first:1,query:$q){edges{node{id}}}}`, { q: `sku:${sku}` }); const e = d.productVariants && d.productVariants.edges && d.productVariants.edges[0]; return e ? e.node.id : null; }
   catch { return null; }
 }
+// "Mary Kratz" → {first:"Mary", last:"Kratz"}; a single word becomes both (ShipStation insists on a last name).
+function splitName(full) {
+  const parts = String(full || "").trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  if (!parts.length) return null;
+  if (parts.length === 1) return { first: parts[0], last: parts[0] };
+  return { first: parts[0], last: parts.slice(1).join(" ") };
+}
 async function createReplacementOrder(st, { email, shippingAddress, lineItems, origOrder, reason }) {
+  if (!shippingAddress || !shippingAddress.firstName || !shippingAddress.lastName) throw new Error("Replacement needs a recipient first AND last name on the shipping address (ShipStation rejects it otherwise).");
   const orig = origOrder ? String(origOrder).trim() : "";
   // The replacement order must record WHAT it replaces — put the original order number in the note AND tags.
   const noteLines = [`Package Protection replacement — no charge${orig ? ` — replaces original order ${orig}` : ""}`];
@@ -579,10 +587,15 @@ async function prepareReplacement(input) {
   const node = Array.isArray(found) ? found[0] : null;
   if (!node) return { note: `Couldn't find order "${input.order}" to base a replacement on. Confirm the number or checkout email.` };
   const st = storeByBrand(node.store); if (!st) return { error: `Couldn't map store "${node.store}".` };
-  const sa = input.address && input.address.street1 ? { address1: input.address.street1, address2: input.address.street2 || null, city: input.address.city, province: input.address.state, zip: input.address.postal_code, country: input.address.country || "US" }
-                                                    : (node.shippingAddress || {});
+  const onFile = node.shippingAddress || {};
+  const sa = input.address && input.address.street1 ? { name: input.address.name || onFile.name, address1: input.address.street1, address2: input.address.street2 || null, city: input.address.city, province: input.address.state, zip: input.address.postal_code, country: input.address.country || "US", phone: input.address.phone || onFile.phone }
+                                                    : onFile;
   if (!sa.address1 || !sa.city) return { error: `Order ${node.name} has no usable shipping address on file — can't build a replacement.` };
-  const shippingAddress = { address1: sa.address1, address2: sa.address2 || null, city: sa.city, province: sa.province, zip: sa.zip, country: sa.country || "US" };
+  // ShipStation rejects a shipment without a first AND last name, so the replacement must carry both. Take them
+  // from the address on file, else split the address name, else the customer's name, else refuse.
+  const who = splitName(sa.firstName && sa.lastName ? `${sa.firstName} ${sa.lastName}` : (sa.name || (node.customer && (node.customer.displayName || `${node.customer.firstName || ""} ${node.customer.lastName || ""}`)) || ""));
+  if (!who) return { error: `Order ${node.name} has no recipient name on its shipping address — add the customer's first and last name before creating a replacement (ShipStation needs both).` };
+  const shippingAddress = { firstName: who.first, lastName: who.last, address1: sa.address1, address2: sa.address2 || null, city: sa.city, province: sa.province, zip: sa.zip, country: sa.country || "US", phone: sa.phone || null };
   const srcItems = ((node.lineItems && node.lineItems.edges) || []).map((e) => e.node);
   let want = srcItems;
   if (Array.isArray(input.items) && input.items.length) {
@@ -600,7 +613,7 @@ async function prepareReplacement(input) {
   }
   const email = node.email || input.email;
   const itemsSummary = want.map((i) => `${i.quantity || 1}× ${i.title || i.sku}`).join(", ");
-  return { st, node, email, shippingAddress, lineItems, itemsSummary, shipTo: [shippingAddress.address1, shippingAddress.city, shippingAddress.province, shippingAddress.zip].filter(Boolean).join(", ") };
+  return { st, node, email, shippingAddress, lineItems, itemsSummary, shipTo: [`${shippingAddress.firstName} ${shippingAddress.lastName}`, shippingAddress.address1, shippingAddress.city, shippingAddress.province, shippingAddress.zip].filter(Boolean).join(", ") };
 }
 async function shopifyProposeReplacement(input) {
   const p = await prepareReplacement(input);
@@ -1086,6 +1099,47 @@ async function refreshOrderCache() {
       }
     } catch (e) { await db(`INSERT INTO hd_order_cache (order_name, error, checked_at) VALUES ($1,$2,now()) ON CONFLICT (order_name) DO UPDATE SET error=EXCLUDED.error, checked_at=now()`, [r.order_number, e.message.slice(0, 200)]).catch(() => {}); }
   }
+}
+
+/* ---- Compose a new outbound email (Helpdesk "New ticket" → Draft with Emily). The agent types rough notes;
+ * Emily looks up the order/customer if given and writes the professional version in the brand's voice. ---- */
+async function composeEmail({ brand, mailbox, to, name, order, subject, notes, who }) {
+  if (!anthropic) throw new Error("ANTHROPIC_API_KEY not set");
+  const rulesText = await core.policyText("rules", DEFAULT_RULES);
+  const ctx = [];
+  if (order) { try { const o = await orderDetail(order); if (o && o.id) ctx.push(`ORDER ${o.name} (${o.store}): placed ${o.created_at}, ${o.financial_status}/${o.fulfillment_status}${o.cancelled_at ? ", CANCELLED" : ""}${o.edited ? ", edited" : ""}; total $${o.total}; items: ${(o.items || []).map((i) => `${i.current_quantity != null ? i.current_quantity : i.quantity}× ${i.title}${i.variant ? " – " + i.variant : ""}`).join("; ")}${o.shipstation ? `; ShipStation: ${o.shipstation.shipstation_status || (o.shipstation.shipped ? "shipped" : "not shipped")}` : ""}`); else ctx.push(`ORDER ${order}: not found in Shopify.`); } catch (e) { ctx.push(`ORDER ${order}: lookup failed (${e.message})`); } }
+  if (to) { try { const h = await customerHistory(to); if (h && (h.note || h.shopify)) ctx.push(`CUSTOMER HISTORY: ${h.note || ""}${h.shopify ? ` · ${h.shopify.lifetime_orders} lifetime orders, $${h.shopify.lifetime_spent} spent` : ""}`.slice(0, 1200)); } catch (_) {} }
+  const prompt =
+    `A ${brand} support agent${who ? ` (${who})` : ""} is starting a NEW email conversation with a customer — there is no incoming message to answer. ` +
+    `Turn the agent's rough notes into the finished email the customer will receive.
+
+` +
+    `FROM: ${brand} <${mailbox}>
+TO: ${to}${name ? ` (${name})` : ""}
+${subject ? `SUBJECT THE AGENT SUGGESTED: ${subject}
+` : ""}${order ? `ORDER MENTIONED: ${order}
+` : ""}
+` +
+    `AGENT'S NOTES (what they want to tell the customer):
+${notes}
+
+` +
+    (ctx.length ? `LIVE CONTEXT:
+${ctx.join("\n")}
+
+` : "") +
+    `BRAND RULES:
+${rulesText}
+
+` +
+    `Write it warm, clear and professional, in ${brand}'s voice, addressed to the customer by first name if known. Keep everything the agent asked for, don't add promises the notes don't make, no discounts or prices unless the notes give them, and sign off as Emily, ${brand}. ` +
+    `Reply with ONLY a JSON object: {"subject": "...", "body": "..."} — body is plain text with blank lines between paragraphs.`;
+  const out = await agentLoop([{ role: "user", content: prompt }], 5);
+  let j = null; try { const m = String(out).match(/\{[\s\S]*\}/); j = m ? JSON.parse(m[0]) : null; } catch (_) { j = null; }
+  if (!j || !j.body) j = { subject: subject || `A note from ${brand}`, body: String(out).replace(/^```(?:json)?|```$/g, "").trim() };
+  if (!j.subject) j.subject = subject || `A note from ${brand}`;
+  await core.audit({ kind: "emily-compose", detail: `Drafted a new email to ${to}${order ? ` about ${order}` : ""}`, who: who || "Emily", target: to }).catch(() => {});
+  return j;
 }
 
 /* ---- Direct order actions from the Helpdesk app (a person is doing it, so no Slack approval) ---- */
@@ -2085,4 +2139,4 @@ async function start() {
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };
+module.exports = { composeEmail, __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache, prepareReplacement, createReplacementOrder }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };
