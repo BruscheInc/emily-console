@@ -134,6 +134,7 @@
   .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(520px,100%);max-height:90vh;overflow:auto;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
   .modal h3{margin:0 0 4px;font-size:17px}.modal .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
   .modal label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:10px 0 4px}
+  .modal input[type=text],.modal select{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);color:var(--ink)}
   .modal input[type=text],.modal input[type=number],.modal select,.modal textarea{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 10px;font-size:13.5px;font-family:inherit}
   .modal .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modal .grid3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}
   .modal .chk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;color:var(--ink);font-weight:500}
@@ -207,7 +208,7 @@
 <div class="mainarea">
   <div class="listcol" id="listcol">
     <div class="listhead">
-      <div class="lh1"><h1 id="viewtitle">LBO Tickets</h1><span class="showing" id="showing"></span><span class="sp"></span><button class="btn sec" onclick="loadList(true);loadCounts()">↻ Refresh</button></div>
+      <div class="lh1"><h1 id="viewtitle">LBO Tickets</h1><span class="showing" id="showing"></span><span class="sp"></span><button class="btn" onclick="newTicketModal()" title="Start a new email conversation with a customer">+ New ticket</button><button class="btn sec" onclick="loadList(true);loadCounts()">↻ Refresh</button></div>
       <div class="lh2">
         <div class="seg">
           <button class="tab on" data-tab="pending" onclick="setTab('pending')">Pending<span class="n" id="n-pending"></span></button>
@@ -354,6 +355,47 @@ async function checkVersion(first){
   }catch(e){}
 }
 setInterval(()=>checkVersion(false),60000);
+
+/* ---- New ticket: outbound-first conversation. Store picks the from-mailbox; Emily can draft from notes. ---- */
+let MAILBOXES=null;
+async function newTicketModal(){
+  if(!MAILBOXES){ try{ MAILBOXES=((await api("/api/mailboxes")).mailboxes||[]).filter(m=>!m.retired).map(m=>({...m,address:String(m.address).toLowerCase()})); }catch(e){ MAILBOXES=[]; } }
+  const def=VIEW==="lb_tickets"?"larkspurbaby.com":"outlet";
+  const opts=MAILBOXES.map(m=>`<option value="${esc(m.address)}" ${m.address.includes(def)?"selected":""} ${m.connected?"":"disabled"}>${esc(m.brand||m.address)} — ${esc(m.address)}${m.connected?"":" (not connected)"}</option>`).join("");
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box" style="width:min(720px,100%)"><h3>New ticket</h3><div class="sub">Start an email conversation with a customer. The store you pick is the mailbox it's sent from, and replies come back to this ticket.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px">
+      <div><label>Store (sends from)</label><select id="nt-box">${opts||'<option value="">No mailbox connected</option>'}</select></div>
+      <div><label>Customer email</label><input type="text" id="nt-to" placeholder="customer@example.com"></div>
+      <div><label>Customer name <span style="font-weight:400">(optional)</span></label><input type="text" id="nt-name" placeholder="Mary"></div>
+      <div><label>Order # <span style="font-weight:400">(optional — Emily will look it up)</span></label><input type="text" id="nt-order" placeholder="LBO10592"></div>
+    </div>
+    <div class="acts-em" style="margin-top:14px;border-color:var(--accent,#5aa0ff);background:rgba(90,160,255,.06)">
+      <div class="acts-h">✍️ Draft with Emily</div>
+      <textarea id="nt-notes" style="width:100%;box-sizing:border-box;min-height:70px;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13.5px" placeholder="Tell Emily what to say, in your own words. e.g. 'the sky blue 2T shorts are back in stock, shipping today with priority, arrives before the 12th'"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn sec" id="nt-draft" onclick="ntDraft()">Draft with Emily</button><span id="nt-draftmsg" style="font-size:12px;color:var(--muted)">She writes the subject and message below — review, edit, then send.</span></div>
+    </div>
+    <label>Subject</label><input type="text" id="nt-subject" placeholder="About your Larkspur Baby order">
+    <label>Message</label><textarea id="nt-text" style="width:100%;box-sizing:border-box;min-height:220px;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:14px;line-height:1.5" placeholder="Write the email, or let Emily draft it above…"></textarea>
+    <div class="foot"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" id="nt-send" onclick="ntSend()">Send &amp; create ticket</button></div></div>`;
+  document.body.appendChild(m); setTimeout(()=>$("nt-to").focus(),50);
+}
+function ntVals(){ return { mailbox:$("nt-box").value, to:$("nt-to").value.trim(), name:$("nt-name").value.trim(), order:$("nt-order").value.trim().replace(/^#/,""), subject:$("nt-subject").value.trim(), text:$("nt-text").value, notes:$("nt-notes").value.trim() }; }
+async function ntDraft(){
+  const v=ntVals(); if(!v.mailbox){toast("Pick a store first",true);return;} if(!v.notes){toast("Tell Emily what the email should say",true);$("nt-notes").focus();return;}
+  const b=$("nt-draft"); b.disabled=true; b.textContent="Emily is writing…"; $("nt-draftmsg").textContent=v.order?"Looking up the order and writing…":"Writing…";
+  try{ const r=await api("/api/emily/compose",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)});
+    if(r.error){toast(r.error,true);$("nt-draftmsg").textContent=r.error;} else { $("nt-subject").value=r.subject||v.subject; $("nt-text").value=r.body||""; $("nt-draftmsg").textContent="Draft ready — read it over, edit anything, then send."; toast("Emily drafted it"); }
+  }catch(e){toast("Emily couldn't draft that",true);} b.disabled=false; b.textContent="Draft with Emily";
+}
+async function ntSend(){
+  const v=ntVals(); if(!v.mailbox){toast("Pick a store first",true);return;} if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.to)){toast("Enter a valid customer email",true);$("nt-to").focus();return;} if(!v.subject||!v.text.trim()){toast("Subject and message are both needed",true);return;}
+  const b=$("nt-send"); b.disabled=true; b.textContent="Sending…";
+  try{ const r=await api("/api/ticket/new",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)});
+    if(r.error){toast(r.error,true);b.disabled=false;b.textContent="Send & create ticket";return;}
+    toast("Sent ✓ — ticket created"); closeModal(); loadCounts(); loadList(true); openTicket(r.id);
+  }catch(e){toast("Couldn't send",true);b.disabled=false;b.textContent="Send & create ticket";}
+}
 
 function chipsFor(t){
   const hide=new Set(["emily-drafted","emily-sent"]); const out=[];
