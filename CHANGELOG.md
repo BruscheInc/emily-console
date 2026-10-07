@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22.4 — Oct 7, 2026
+- **Test mode works with return labels.** ShipStation doesn't offer test *return* labels ("Test return labels are
+  not supported"), so test mode now buys a real label and voids it straight away — no charge, and the PDF still
+  opens so the whole flow can be checked. Test returns are skipped by the tracking check, so they are never
+  refunded automatically.
+- When a label can't be created, the real reason now goes to the Activity log and the CS Slack channel (customers
+  still see the friendly message).
+
 ## v4.22.3 — Oct 7, 2026
 - **Moving around the returns portal:** a Back button on every step after the first, a Start over button, a
   "Start another return" button on the last page, and "← Back to Larkspur Baby / Outlet" under the card.

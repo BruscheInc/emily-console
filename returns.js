@@ -212,7 +212,7 @@ const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !=
 async function buyLabel(s, from, weightOz, rma) {
   const shipment = { service_code: s.service_code, ship_from: clean(from), ship_to: clean({ ...s.return_address, address_residential_indicator: "no" }), packages: [{ weight: { value: Math.max(1, Math.round(weightOz)), unit: "ounce" } }] };
   if (s.carrier_id) shipment.carrier_id = s.carrier_id;
-  const l = await ss("POST", "/v2/labels", { is_return_label: true, rma_number: rma, charge_event: "carrier_default", test_label: s.test_labels ? true : undefined, label_format: "pdf", label_layout: "4x6", label_download_type: "url", shipment });
+  const l = await ss("POST", "/v2/labels", { is_return_label: true, rma_number: rma, charge_event: "carrier_default", label_format: "pdf", label_layout: "4x6", label_download_type: "url", shipment });
   return { labelId: l.label_id, trackingNumber: l.tracking_number, labelUrl: (l.label_download && (l.label_download.pdf || l.label_download.href)) || null, cost: l.shipment_cost ? l.shipment_cost.amount : null, carrier: l.carrier_code };
 }
 async function track(labelId) { const t = await ss("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`); return { code: t.status_code || "UN", text: t.status_description || "" }; }
@@ -358,9 +358,16 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   catch (err) {
     await gql(st, CANCEL, { id: sret.id }).catch(() => {});
     console.error("return label failed:", err.message);
+    // Leave a trace staff can see (Activity log + Slack) — the customer only gets a friendly message.
+    await core.audit({ kind: "return-label-failed", detail: `${order.name}: ${err.message}`, who: who || "customer (portal)" }).catch(() => {});
+    core.slackPost(`⚠️ Return label failed for ${order.name} (${STORE_DEFS[key].name}): ${err.message}`).catch(() => {});
     throw httpError(502, source === "portal" ? "We couldn't create your shipping label. Please check your address, or email us and we'll help." : `Label failed: ${err.message}`);
   }
   const turl = trackingUrl(label.carrier, label.trackingNumber);
+  // ShipStation has no test return labels, so test mode buys a real one and voids it straight away (no charge).
+  // The PDF still opens, so the whole flow can be checked end to end.
+  let testVoided = null;
+  if (s.test_labels) { try { testVoided = await voidLabel(label.labelId); } catch (e) { testVoided = false; console.error("test label void:", e.message); } }
   const rec = await putRec({
     id: crypto.randomUUID(), store: key, rma, status: "label_created", source, created_by: who || null, ticket_id: ticketId || null,
     order_id: order.id, order_name: order.name, customer_id: order.customer ? order.customer.id : null, email: order.email, customer_name: from.name,
@@ -368,7 +375,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     label_id: label.labelId, label_src: label.labelUrl, label_cost: label.cost, tracking_number: label.trackingNumber, tracking_url: turl, tracking_code: "NY",
     est_subtotal: round2(chosen.reduce((t, c) => t + c.unitPrice * c.quantity, 0)), test_label: !!s.test_labels,
     items: chosen.map((c) => ({ fli: c.fulfillmentLineItemId, line_item_id: c.lineItemId, title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unit_price: c.unitPrice, reason: c.reasonName, note: c.note })),
-  }, `Return ${sret.name} created (${source}${who ? " · " + who : ""}); ${label.carrier || ""} label ${label.trackingNumber}${label.cost != null ? ` ($${label.cost})` : ""}${s.test_labels ? " — TEST LABEL" : ""}`);
+  }, `Return ${sret.name} created (${source}${who ? " · " + who : ""}); ${label.carrier || ""} label ${label.trackingNumber}${label.cost != null ? ` ($${label.cost})` : ""}${s.test_labels ? (testVoided ? " — TEST MODE: label voided right away, no charge" : " — TEST MODE: label could NOT be voided — void it in ShipStation") : ""}`);
 
   // c) Hand the label to Shopify → Shopify emails it to the customer.
   try {
@@ -494,7 +501,7 @@ async function checkOne(rec) {
 let polling = false;
 async function poll() {
   if (polling || !SS_KEY) return; polling = true;
-  try { for (const rec of await list({ status: "open" })) { if (rec.status === "delivered") continue; try { await checkOne(rec); } catch (e) { console.error(`return ${rec.rma}:`, e.message); } } }
+  try { for (const rec of await list({ status: "open" })) { if (rec.status === "delivered" || rec.test_label) continue; try { await checkOne(rec); } catch (e) { console.error(`return ${rec.rma}:`, e.message); } } }
   finally { polling = false; }
 }
 
@@ -524,7 +531,7 @@ async function init() {
   setTimeout(() => poll().catch(() => {}), 30e3); setInterval(() => poll().catch(() => {}), mins * 60e3);
   const s = await settings();
   const p = setupProblems(s);
-  console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST labels" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
+  console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (labels voided right away)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
 module.exports = { init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
