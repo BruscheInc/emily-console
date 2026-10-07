@@ -66,6 +66,25 @@
   td.empty{text-align:center;color:var(--muted);padding:40px}
   .stuckhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 22px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
   .stuckhead .seg{margin-left:auto}
+  /* ---- returns command center ---- */
+  .rc{padding:16px 22px;border-bottom:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;gap:12px}
+  .rc-portals{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .rc-portal,.rc-quick{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden}
+  .rc-portal:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#2a78d6}.rc-portal.lbo:before{background:#eb6834}
+  .rc-pt{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .rc-pn{font-weight:800;font-size:15px}.rc-pu{font-size:12.5px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+  .rc-pill{font-size:11.5px;font-weight:700;border-radius:20px;padding:3px 9px;white-space:nowrap}.rc-pill.on{background:#e3f4ea;color:#157a42}.rc-pill.off{background:#fdf1dc;color:#9a6212}
+  .rc-pa{display:flex;gap:8px;flex-wrap:wrap}.rc-pa .btn,.rc-quick .btn{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+  .rc-quick{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start}.rc-quick .rc-pn{grid-column:1/-1}
+  .rc-warn{grid-column:1/-1;font-size:12.5px;font-weight:600;color:#9a6212;background:#fdf1dc;border-radius:8px;padding:6px 10px}
+  .rc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .rc-tile{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 14px;cursor:pointer;color:var(--ink);font:inherit}
+  .rc-tile:hover:not(:disabled){border-color:#2a78d6}.rc-tile.on{border-color:#2a78d6;box-shadow:0 0 0 2px rgba(42,120,214,.18)}.rc-tile:disabled{cursor:default}
+  .rc-tl{font-size:12px;font-weight:600;color:var(--muted)}.rc-tv{font-size:24px;font-weight:800;margin:2px 0;font-variant-numeric:tabular-nums}.rc-ts{font-size:11.5px;color:var(--muted)}
+  .rc-tile.bad .rc-tv{color:var(--bad)}
+  .rc-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.rc-bar .seg{overflow-x:auto;max-width:100%}
+  .rc-in{padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink)}.rc-q{flex:1;min-width:200px;max-width:360px}
+  @media (max-width:700px){.rc{padding:12px}.rc-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.rc-tv{font-size:20px}}
   /* ---- return analytics ---- */
   .ra-head .ra-sel,.ra-cust input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)}
   .ra-cust{display:flex;gap:6px;align-items:center}.ra-note{font-size:12px}
@@ -1018,18 +1037,38 @@ async function loadReturns(silent){
     const seg=(k,l,n)=>`<button class="tab ${RET_F.status===k?"on":""}" onclick="RET_F.status='${k}';loadReturns()">${l}<span class="n">${n||0}</span></button>`;
     const all=Object.values(c.by||{}).reduce((a,b)=>a+b,0);
     $("showing").textContent=`${d.returns.length} return${d.returns.length===1?"":"s"}`;
-    let h=`<div class="stuckhead">
-      ${Object.values(d.stores).map(x=>`<a class="btn xs" href="${esc(d.portal_links[x.key])}" target="_blank" rel="noopener" style="text-decoration:none">${esc(x.prefix)} return portal ↗</a>`).join("")}
-      <span>${s.portal_live?'<b style="color:#158048">Live — Emily sends customers here</b>':'<b style="color:#b7791f">Not live — Emily still sends Loop links</b>'}${s.test_labels?' · <b style="color:#b7791f">TEST labels</b>':""}</span>
-      <span>Refunded ${money(c.refunded)} · label spend ${money(c.labels)} · fees kept ${money(c.fees)}</span>
-      <select onchange="RET_F.store=this.value;loadReturns()" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${RET_F.store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
-      <input type="text" placeholder="Search order, RMA, email" value="${esc(RET_F.q)}" onkeydown="if(event.key==='Enter'){RET_F.q=this.value.trim();loadReturns()}" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);width:180px">
-      <button class="btn sec xs" onclick="retPoll(this)">↻ Check tracking</button>
-      <a class="btn sec xs" href="/api/returns.csv?key=${encodeURIComponent(KEY)}" style="text-decoration:none">Export CSV</a>
-      ${d.admin?`<button class="btn sec xs" onclick="retSettings()">⚙︎ Settings</button>`:""}
-      <a class="btn sec xs" href="/returns-studio" target="_blank" rel="noopener" style="text-decoration:none">🎨 Customize portal</a>
-      ${(d.problems||[]).length?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Setup: ${d.problems.map(esc).join(" · ")}</span>`:""}
-      <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}</div></div>`;
+    const host=(u)=>String(u||"").replace(/^https?:\/\//,"");
+    const portalCard=(x)=>{ const u=d.portal_links[x.key]; return `<div class="rc-portal ${x.key}">
+        <div class="rc-pt"><div><div class="rc-pn">${esc(x.name)}</div><div class="rc-pu">${esc(host(u))}</div></div>
+          <span class="rc-pill ${s.portal_live?"on":"off"}">${s.portal_live?"● Live":"● Not live"}</span></div>
+        <div class="rc-pa"><a class="btn" href="${esc(u)}" target="_blank" rel="noopener">Open portal ↗</a>
+          <button class="btn sec" onclick="navigator.clipboard.writeText('${esc(u)}').then(()=>toast('Link copied'))">Copy link</button>
+          <a class="btn sec" href="/returns-studio?store=${x.key}" target="_blank" rel="noopener">🎨 Customize</a></div></div>`; };
+    const tile=(k,label,val,sub,cls)=>`<button class="rc-tile ${cls||""} ${k!==null&&RET_F.status===k?"on":""}" ${k===null?"disabled":`onclick="RET_F.status='${k}';loadReturns()"`}><div class="rc-tl">${label}</div><div class="rc-tv">${val}</div><div class="rc-ts">${sub}</div></button>`;
+    let h=`<div class="rc">
+      <div class="rc-portals">${Object.values(d.stores).map(portalCard).join("")}
+        <div class="rc-quick"><div class="rc-pn">Quick actions</div>
+          <button class="btn sec" onclick="setView('returns_analytics')">📊 Return analytics</button>
+          <button class="btn sec" onclick="retPoll(this)">↻ Check tracking</button>
+          <a class="btn sec" href="/api/returns.csv?key=${encodeURIComponent(KEY)}">⬇ Export CSV</a>
+          ${d.admin?`<button class="btn sec" onclick="retSettings()">⚙︎ Settings</button>`:""}
+          ${s.test_labels?`<div class="rc-warn">TEST labels on — no real labels are bought</div>`:""}
+          ${s.portal_live?"":`<div class="rc-warn">Not live — Emily still sends Loop links</div>`}</div></div>
+      ${(d.problems||[]).length?`<div class="rc-warn">⚠️ Setup: ${d.problems.map(esc).join(" · ")}</div>`:""}
+      <div class="rc-tiles">
+        ${tile("open","Open",c.open||0,"label made · on the way · arrived")}
+        ${tile("needs_attention","Needs attention",c.attention||0,c.attention?"check these now":"all clear",c.attention?"bad":"")}
+        ${tile("refunded","Refunded",c.by.refunded||0,money(c.refunded)+" back to customers")}
+        ${tile(null,"Label spend",money(c.labels),"fees kept "+money(c.fees))}
+        ${tile("cancelled","Cancelled",c.by.cancelled||0,"labels voided")}
+        ${tile("","All returns",all,"everything")}
+      </div>
+      <div class="rc-bar">
+        <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}</div>
+        <select onchange="RET_F.store=this.value;loadReturns()" class="rc-in"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${RET_F.store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
+        <input type="text" class="rc-in rc-q" placeholder="Search order, return #, email, name" value="${esc(RET_F.q)}" onkeydown="if(event.key==='Enter'){RET_F.q=this.value.trim();loadReturns()}">
+        ${RET_F.q?`<button class="btn sec xs" onclick="RET_F.q='';loadReturns()">Clear search</button>`:""}
+      </div></div>`;
     if(!d.returns.length){ w.innerHTML=h+'<div class="empty">No returns here.</div>'; return; }
     h+=`<table class="tickets stuck"><thead><tr><th class="c-t">Return</th><th>Customer</th><th>Items</th><th>Method</th><th>Status</th><th>Amount</th></tr></thead><tbody>`;
     for(const r of d.returns){

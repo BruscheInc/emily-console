@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.25.0
+- Returns screen redesigned as a command center: a card per portal (branded address, live status, Open portal / Copy link / Customize buttons), quick actions, clickable stat tiles (open, needs attention, refunded, label spend, cancelled, all), and a cleaner filter bar.
+
 ## 4.24.1
 - Returns: LB and LBO return portal buttons in the sidebar, on the Returns screen and on Return analytics.
 
