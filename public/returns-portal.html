@@ -580,7 +580,7 @@ function loadDemo() {
       { fulfillmentLineItemId: 'b', title: 'Muslin Swaddle Set', variant: 'One size · Oat', image: null, unit_price: 24, returnable_qty: 1, eligible: true },
       { fulfillmentLineItemId: 'c', title: 'Knit Bonnet', variant: '0-3M', image: null, unit_price: 8, returnable_qty: 1, eligible: false, why: 'Final sale' },
     ],
-    reasons: [{ id: 'r1', name: 'Too small' }, { id: 'r2', name: 'Too big' }, { id: 'r3', name: 'Changed my mind' }, { id: 'r4', name: 'Damaged' }],
+    reasons: (B.reasons || ['I received the wrong item', 'Item was damaged', "I didn't have a good experience", "Item didn't fit", 'I found something else I like more', "I didn't like the item"]).map((n, i) => ({ id: 'r' + (i + 1), name: n })),
     existing: [],
     options: { label_fee: CTX.fee, store_credit_enabled: CTX.credit_enabled, store_credit_bonus_pct: CTX.bonus, fee_on_store_credit: CTX.fee_on_credit },
   };

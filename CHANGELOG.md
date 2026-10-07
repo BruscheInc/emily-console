@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.22.10
+- Returns: customers now pick from six reasons only (wrong item, damaged, bad experience, didn't fit, found something else, didn't like it). The list is editable in Returns → Settings. Each maps to Shopify's closest standard reason, and the exact wording is saved as the return's reason note.
+
 ## v4.22.9 — Oct 7, 2026
 - Each return's history now says whether it was linked to the original ShipStation order (and which), or why not
   (no tracking number on the order, no ShipStation label with that tracking number, lookup error). Same detail in the log.

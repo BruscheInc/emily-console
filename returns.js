@@ -56,7 +56,9 @@ const DEFAULTS = {
   auto_refund: true,
   final_sale_tags: "final-sale, final sale, no-returns",
   carrier_id: "",
-  ss_store: { lb: "", lbo: "" },   // ShipStation store each brand's returns are filed under (empty = match by name)
+  ss_store: { lb: "", lbo: "" },
+  // The reasons customers pick from (Returns → Settings). Each is matched to Shopify's closest standard reason.
+  reasons: ["I received the wrong item", "Item was damaged", "I didn't have a good experience", "Item didn't fit", "I found something else I like more", "I didn't like the item"],   // ShipStation store each brand's returns are filed under (empty = match by name)
   service_code: "usps_ground_advantage",
   default_item_oz: 8,
   packaging_oz: 4,
@@ -76,6 +78,7 @@ async function saveSettings(patch, who) {
   const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
   for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
+  if (patch.reasons !== undefined) { next.reasons = (Array.isArray(patch.reasons) ? patch.reasons : String(patch.reasons).split("\n")).map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 20); if (!next.reasons.length) next.reasons = DEFAULTS.reasons; }
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('returns', $1, $2, now())
             ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_by=EXCLUDED.updated_by, updated_at=now()`, [JSON.stringify(next), who || null]);
   await core.audit({ kind: "returns-settings", detail: "Returns settings changed", who: who || "system" });
@@ -188,9 +191,28 @@ async function reasons(st) {
   const c = reasonCache.get(st.domain);
   if (c && c.at > Date.now() - 6 * 3600e3) return c.list;
   const d = await gql(st, REASONS);
-  const list = d.returnReasonDefinitions.nodes.filter((r) => !r.deleted).map((r) => ({ id: r.id, name: r.name }));
-  reasonCache.set(st.domain, { at: Date.now(), list });
-  return list;
+  const lib = d.returnReasonDefinitions.nodes.filter((r) => !r.deleted).map((r) => ({ sid: r.id, name: r.name, handle: r.handle || "" }));
+  reasonCache.set(st.domain, { at: Date.now(), list: lib });
+  return portalReasons(lib, await settings());
+}
+// Our short list → Shopify's closest standard reason (Shopify requires one). The exact wording the customer
+// picked is also saved as the return's reason note, so nothing is lost in the mapping.
+const REASON_RULES = [
+  [/wrong|incorrect|different item/i, /wrong|incorrect/i],
+  [/damag|defect|broken|torn|stain/i, /damag/i, /defect/i],
+  [/fit|size|small|big|large|tight|loose/i, /fit|size/i, /too.?small/i, /too.?big/i],
+  [/found something|something else|better|cheaper|changed.*mind/i, /changed.?mind/i, /unwanted|no.?longer/i],
+  [/didn.?t like|don.?t like|style|look|color|colour|quality/i, /style/i, /unwanted/i, /not.?as/i],
+  [/experience|service|late|slow|arriv/i, /\bother\b/i, /experience|service/i],
+];
+function mapReason(label, lib) {
+  const name = (r) => `${r.handle} ${r.name}`;
+  for (const [mine, ...prefs] of REASON_RULES) if (mine.test(label)) for (const t of prefs) { const hit = lib.find((r) => t.test(name(r))); if (hit) return hit; }
+  return lib.find((r) => /other/i.test(name(r))) || lib.find((r) => /unwanted/i.test(name(r))) || lib[0];
+}
+function portalReasons(lib, s) {
+  const labels = (Array.isArray(s.reasons) && s.reasons.length ? s.reasons : DEFAULTS.reasons).map((x) => String(x).trim()).filter(Boolean).slice(0, 20);
+  return labels.map((label, i) => { const m = mapReason(label, lib) || {}; return { id: `r${i}`, name: label, sid: m.sid, shopify_name: m.name }; });
 }
 function eligibility(item, s, key) {
   const finalTags = String(s.final_sale_tags || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -433,7 +455,8 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     if (!e.ok && !staffOverride) throw httpError(400, `${it.title}: ${e.why}`);
     const reason = rs.find((r) => r.id === l.reasonId);
     if (!reason) throw httpError(400, `Pick a reason for ${it.title}.`);
-    chosen.push({ ...it, quantity: qty, reasonId: reason.id, reasonName: reason.name, note: String(l.note || "").slice(0, 255) });
+    if (!reason.sid) throw httpError(500, "Return reasons aren't set up in Shopify.");
+    chosen.push({ ...it, quantity: qty, reasonId: reason.id, reasonSid: reason.sid, reasonName: reason.name, note: String(l.note || "").slice(0, 255) });
   }
   if (!chosen.length) throw httpError(400, "Pick at least one item to return.");
 
@@ -448,7 +471,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   if (!from.address_line1 || !from.postal_code) throw httpError(400, "We need your address for the label.");
 
   // a) Shopify return
-  const cr = await gql(st, RETURN_CREATE, { input: { orderId: order.id, returnLineItems: chosen.map((c) => ({ fulfillmentLineItemId: c.fulfillmentLineItemId, quantity: c.quantity, returnReasonDefinitionId: c.reasonId, returnReasonNote: c.note })) } });
+  const cr = await gql(st, RETURN_CREATE, { input: { orderId: order.id, returnLineItems: chosen.map((c) => ({ fulfillmentLineItemId: c.fulfillmentLineItemId, quantity: c.quantity, returnReasonDefinitionId: c.reasonSid, returnReasonNote: (c.reasonName + (c.note ? " — " + c.note : "")).slice(0, 255) })) } });
   userErrors(cr.returnCreate, "Shopify couldn't create the return");
   const sret = cr.returnCreate.return;
   const seq = (await db(`SELECT nextval('hd_return_seq') n`)).rows[0].n;
@@ -505,7 +528,7 @@ async function createForTicket({ orderName, lines, refundMethod, ticketId, who, 
   if (!order) throw httpError(404, `Order ${orderName} not found.`);
   // Lines may name items by title/sku (from Emily) — map to fulfillment line items.
   const items = await returnableItems(st, order.id), rs = await reasons(st);
-  const pickReason = (txt) => rs.find((r) => r.id === txt) || rs.find((r) => r.name.toLowerCase() === String(txt || "").toLowerCase()) || rs.find((r) => /other/i.test(r.name)) || rs[0];
+  const pickReason = (txt) => { const t = String(txt || "").toLowerCase(); return rs.find((r) => r.id === txt) || rs.find((r) => r.name.toLowerCase() === t) || rs.find((r) => t && (r.name.toLowerCase().includes(t) || t.includes(r.name.toLowerCase()))) || rs.find((r) => REASON_RULES.some(([m]) => m.test(t) && m.test(r.name))) || rs[rs.length - 1]; };
   const mapped = lines.map((l) => {
     const it = l.fulfillmentLineItemId ? items.find((i) => i.fulfillmentLineItemId === l.fulfillmentLineItemId)
       : items.find((i) => (l.sku && i.sku === l.sku) || (l.title && i.title.toLowerCase().includes(String(l.title).toLowerCase())));
