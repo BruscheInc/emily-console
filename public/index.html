@@ -893,6 +893,7 @@ async function retSettings(){
     <label class="chk"><input type="checkbox" id="rs-auto" ${s.auto_refund?"checked":""}> Refund automatically when the package is delivered back</label>
     <label>Final-sale product tags (can't be returned)</label><input type="text" id="rs-tags" value="${esc(s.final_sale_tags)}">
     <label>ShipStation carrier &amp; service</label><select id="rs-svc"><option value="">Loading carriers…</option></select>
+    <div class="grid2"><div><label>ShipStation store for LB returns</label><select id="rs-sslb"><option value="">Match by name (LB)</option></select></div><div><label>ShipStation store for LBO returns</label><select id="rs-sslbo"><option value="">Match by name (LBO)</option></select></div></div>
     <div class="grid2"><div><label>Void unused labels after (days)</label><input type="number" id="rs-void" value="${s.void_unused_after_days}"></div><div><label>Default item weight (oz)</label><input type="number" id="rs-oz" value="${s.default_item_oz}"></div></div>
     <label>Returns ship to</label>
     <div class="grid2"><div><input type="text" id="ra-name" placeholder="Name" value="${esc(a.name)}"></div><div><input type="text" id="ra-co" placeholder="Company" value="${esc(a.company_name)}"></div></div>
@@ -903,12 +904,14 @@ async function retSettings(){
   document.body.appendChild(m);
   api("/api/returns/carriers").then(r=>{ const sel=$("rs-svc"); if(!sel)return; if(r.error||!r.carriers){ sel.innerHTML=`<option value="${esc(s.carrier_id)}|${esc(s.service_code)}">${esc(r.error||"Couldn't load carriers")}</option>`; return; }
     sel.innerHTML=r.carriers.map(c=>c.services.map(v=>`<option value="${esc(c.id)}|${esc(v.code)}" ${c.id===s.carrier_id&&v.code===s.service_code?"selected":""}>${esc(c.name)} — ${esc(v.name)}</option>`).join("")).join(""); }).catch(()=>{});
+  api("/api/returns/ss-stores").then(r=>{ for(const k of ["lb","lbo"]){ const sel=$("rs-ss"+k); if(!sel||!r.stores)continue; sel.innerHTML=`<option value="">Match by name (${k.toUpperCase()})</option>`+r.stores.map(x=>`<option value="${esc(x.id)}" ${String((s.ss_store||{})[k])===String(x.id)?"selected":""}>${esc(x.name)}${x.marketplace?" · "+esc(x.marketplace):""}</option>`).join(""); } }).catch(()=>{});
   $("rs-go").onclick=async()=>{
     const [carrier_id,service_code]=($("rs-svc").value||"|").split("|");
     const body={portal_live:$("rs-live").checked,test_labels:$("rs-test").checked,window_days:{lb:Number($("rs-wlb").value),lbo:Number($("rs-wlbo").value)},label_fee:Number($("rs-fee").value),store_credit_bonus_pct:Number($("rs-bonus").value),
       store_credit_enabled:$("rs-credit").checked,fee_on_store_credit:$("rs-feecredit").checked,auto_refund:$("rs-auto").checked,final_sale_tags:$("rs-tags").value,void_unused_after_days:Number($("rs-void").value),default_item_oz:Number($("rs-oz").value),
       return_address:{name:$("ra-name").value.trim(),company_name:$("ra-co").value.trim(),address_line1:$("ra-1").value.trim(),address_line2:$("ra-2").value.trim(),city_locality:$("ra-city").value.trim(),state_province:$("ra-st").value.trim().toUpperCase(),postal_code:$("ra-zip").value.trim(),phone:$("ra-ph").value.trim(),country_code:"US"}};
     if(carrier_id) { body.carrier_id=carrier_id; body.service_code=service_code; }
+    body.ss_store={lb:$("rs-sslb").value,lbo:$("rs-sslbo").value};
     if(body.portal_live&&!s.portal_live&&!confirm("Go live? Emily will start sending customers to the new portal instead of Loop."))return;
     try{ const r=await api("/api/returns/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error)throw new Error(r.error); toast("Saved"); closeModal(); loadReturns(); }catch(e){ toast(e.message,true); }
   };

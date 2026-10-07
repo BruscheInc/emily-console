@@ -727,6 +727,7 @@ app.post("/api/returns/create", async (req, res) => {
   } catch (e) { retErr(res, e); }
 });
 app.post("/api/returns/poll", async (req, res) => { if (!guard(req, res)) return; try { await R.poll(); res.json({ ok: true }); } catch (e) { retErr(res, e); } });
+app.get("/api/returns/ss-stores", async (req, res) => { if (!guard(req, res)) return; try { res.json({ stores: await R.ssStores() }); } catch (e) { retErr(res, e); } });
 app.get("/api/returns/carriers", async (req, res) => { if (!guard(req, res)) return; try { res.json({ carriers: await R.carriers() }); } catch (e) { retErr(res, e); } });
 app.put("/api/returns/settings", async (req, res) => {
   if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "admins only" });

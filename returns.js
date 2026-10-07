@@ -56,6 +56,7 @@ const DEFAULTS = {
   auto_refund: true,
   final_sale_tags: "final-sale, final sale, no-returns",
   carrier_id: "",
+  ss_store: { lb: "", lbo: "" },   // ShipStation store each brand's returns are filed under (empty = match by name)
   service_code: "usps_ground_advantage",
   default_item_oz: 8,
   packaging_oz: 4,
@@ -68,11 +69,11 @@ const DEFAULTS = {
 };
 async function settings() {
   const s = (await core.setting("returns", null)) || {};
-  return { ...DEFAULTS, ...s, window_days: { ...DEFAULTS.window_days, ...(s.window_days || {}) }, return_address: { ...DEFAULTS.return_address, ...(s.return_address || {}) } };
+  return { ...DEFAULTS, ...s, window_days: { ...DEFAULTS.window_days, ...(s.window_days || {}) }, ss_store: { ...DEFAULTS.ss_store, ...(s.ss_store || {}) }, return_address: { ...DEFAULTS.return_address, ...(s.return_address || {}) } };
 }
 async function saveSettings(patch, who) {
   const cur = await settings();
-  const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
+  const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
   for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('returns', $1, $2, now())
@@ -209,10 +210,56 @@ async function ss(method, p, body) {
   return j;
 }
 const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ""));
-async function buyLabel(s, from, weightOz, rma) {
-  const shipment = { service_code: s.service_code, ship_from: clean(from), ship_to: clean({ ...s.return_address, address_residential_indicator: "no" }), packages: [{ weight: { value: Math.max(1, Math.round(weightOz)), unit: "ounce" } }] };
+// ShipStation stores (v1 API — the only one that lists them). Used to file each return under its brand (LB / LBO).
+const SS1_AUTH = process.env.SHIPSTATION_API_KEY && process.env.SHIPSTATION_API_SECRET ? "Basic " + Buffer.from(`${process.env.SHIPSTATION_API_KEY}:${process.env.SHIPSTATION_API_SECRET}`).toString("base64") : null;
+let ssStoresCache = null;
+async function ssStores() {
+  if (ssStoresCache && ssStoresCache.at > Date.now() - 3600e3) return ssStoresCache.list;
+  if (!SS1_AUTH) return [];
+  const r = await fetch("https://ssapi.shipstation.com/stores?showInactive=false", { headers: { Authorization: SS1_AUTH } });
+  if (!r.ok) throw new Error(`ShipStation stores ${r.status}`);
+  const list = (await r.json()).map((x) => ({ id: String(x.storeId), name: x.storeName, marketplace: x.marketplaceName }));
+  ssStoresCache = { at: Date.now(), list };
+  return list;
+}
+async function storeIdFor(s, key) {
+  if (s.ss_store && s.ss_store[key]) return s.ss_store[key];
+  try {
+    const want = STORE_DEFS[key].prefix.toLowerCase(), name = STORE_DEFS[key].name.toLowerCase();
+    const st = (await ssStores()).find((x) => [want, name].includes(String(x.name || "").trim().toLowerCase()));
+    return st ? st.id : null;
+  } catch (e) { console.error("ShipStation stores:", e.message); return null; }
+}
+// meta: { key, orderName, email, items:[{title,variant,sku,quantity,unitPrice,weightOz}], reasons }
+async function buyLabel(s, from, weightOz, rma, meta = {}) {
+  const orderNo = String(meta.orderName || "").replace(/^#/, "");
+  const shipment = {
+    service_code: s.service_code,
+    ship_from: clean({ ...from, email: meta.email }),
+    ship_to: clean({ ...s.return_address, address_residential_indicator: "no" }),
+    packages: [{ weight: { value: Math.max(1, Math.round(weightOz)), unit: "ounce" } }],
+    // So the label is easy to find in ShipStation → Returns: order number, brand store, customer email, items, tag.
+    shipment_number: orderNo || rma,
+    external_shipment_id: rma,
+    external_order_id: orderNo || undefined,
+    order_source_code: "shopify",
+    tags: [{ name: "Return" }],
+    internal_notes: `Return ${rma} for ${meta.orderName || ""}${meta.reasons ? " — " + meta.reasons : ""}`.slice(0, 500),
+    items: (meta.items || []).map((i) => clean({ name: [i.title, i.variant].filter(Boolean).join(" — ").slice(0, 200), quantity: i.quantity, sku: i.sku || undefined, external_order_id: orderNo || undefined, order_source_code: "shopify", unit_price: i.unitPrice != null ? { currency: "usd", amount: i.unitPrice } : undefined, weight: { value: Math.max(1, Math.round(i.weightOz || Number(s.default_item_oz) || 8)), unit: "ounce" } })),
+  };
   if (s.carrier_id) shipment.carrier_id = s.carrier_id;
-  const l = await ss("POST", "/v2/labels", { is_return_label: true, rma_number: rma, charge_event: "carrier_default", label_format: "pdf", label_layout: "4x6", label_download_type: "url", shipment });
+  const storeId = meta.key ? await storeIdFor(s, meta.key) : null;
+  if (storeId) shipment.store_id = storeId;
+  const body = { is_return_label: true, rma_number: rma, charge_event: "carrier_default", label_format: "pdf", label_layout: "4x6", label_download_type: "url", shipment };
+  let l;
+  try { l = await ss("POST", "/v2/labels", body); }
+  catch (e) {
+    // Never lose a return over the filing details: retry with only the essentials.
+    if (!/^ShipStation 4\d\d/.test(e.message)) throw e;
+    console.error("label with filing details failed, retrying plain:", e.message);
+    for (const k of ["store_id", "items", "tags", "order_source_code", "external_order_id", "internal_notes"]) delete shipment[k];
+    l = await ss("POST", "/v2/labels", body);
+  }
   return { labelId: l.label_id, trackingNumber: l.tracking_number, labelUrl: (l.label_download && (l.label_download.pdf || l.label_download.href)) || null, cost: l.shipment_cost ? l.shipment_cost.amount : null, carrier: l.carrier_code };
 }
 async function track(labelId) { const t = await ss("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`); return { code: t.status_code || "UN", text: t.status_description || "" }; }
@@ -354,7 +401,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   // b) ShipStation label
   const weight = Number(s.packaging_oz) + chosen.reduce((w, c) => w + (c.weightOz || Number(s.default_item_oz)) * c.quantity, 0);
   let label;
-  try { label = await buyLabel(s, from, weight, rma); }
+  try { label = await buyLabel(s, from, weight, rma, { key, orderName: order.name, email: order.email, items: chosen.map((c) => ({ title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unitPrice: c.unitPrice, weightOz: c.weightOz })), reasons: chosen.map((c) => c.reasonName).join(", ") }); }
   catch (err) {
     await gql(st, CANCEL, { id: sret.id }).catch(() => {});
     console.error("return label failed:", err.message);
@@ -534,4 +581,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (labels voided right away)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

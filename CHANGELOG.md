@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22.5 — Oct 7, 2026
+- **Return labels are filed properly in ShipStation → Returns:** under the brand's store (LB / LBO in the left
+  list), with the Shopify order number in the Order # column (instead of "SEAuto-…"), the customer's email, the
+  items being returned (name, size, SKU, price), a "Return" tag, and an internal note with the RMA and reasons.
+  The store is matched by name automatically; it can be picked by hand in Returns → Settings.
+- If ShipStation ever rejects those filing details, the label is retried with just the essentials, so a return is
+  never lost over them.
+
 ## v4.22.4 — Oct 7, 2026
 - **Test mode works with return labels.** ShipStation doesn't offer test *return* labels ("Test return labels are
   not supported"), so test mode now buys a real label and voids it straight away — no charge, and the PDF still
