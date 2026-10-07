@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.23.0
+- Returns: branded portal addresses — returns.larkspurbaby.com and returns.larkspurbabyoutlet.com open that store's portal directly and show nothing else from the Helpdesk. New Settings switch "Use branded links" makes Emily and the Helpdesk use them once DNS is live.
+
 ## 4.22.10
 - Returns: customers now pick from six reasons only (wrong item, damaged, bad experience, didn't fit, found something else, didn't like it). The list is editable in Returns → Settings. Each maps to Shopify's closest standard reason, and the exact wording is saved as the return's reason note.
 

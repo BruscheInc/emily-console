@@ -27,6 +27,18 @@ function guard(req, res) { if (!userFromKey(keyFrom(req))) { res.status(401).jso
 const VERSION = require("./package.json").version;
 // index.html is served with the running version stamped in, and never cached, so a new deploy is picked up on the next load.
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8").replace(/__VERSION__/g, VERSION);
+// Branded portal domains (returns.larkspurbaby.com, returns.larkspurbabyoutlet.com) show only that store's portal —
+// never the Helpdesk. "/" is the portal; anything outside the portal's own paths goes back to "/".
+app.use((req, res, next) => {
+  const d = R.storeForHost(String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().split(":")[0]);
+  if (!d) return next();
+  const p = req.path;
+  if (p === "/" || p === "/index.html") { req.url = `/returns/${d.key}` + (req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""); return next(); }
+  if (p === `/returns/${d.key}` && !req.query.preview) return res.redirect(301, "/");
+  if (p === "/robots.txt") return res.type("text").send("User-agent: *\nAllow: /\n");
+  if (p.startsWith("/returns/label/") || p.startsWith("/returns/asset/") || p.startsWith("/api/returns/public/") || p === `/returns/${d.key}`) return next();
+  return res.redirect(302, "/");
+});
 app.get(["/", "/index.html"], (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(INDEX_HTML); });
 app.use(express.static(path.join(__dirname, "public"), { index: false, setHeaders: (res, p) => { if (p.endsWith("sw.js")) res.setHeader("Cache-Control", "no-store"); } }));
 app.get("/health", (_q, r) => r.json({ ok: true, version: VERSION }));
@@ -707,7 +719,7 @@ app.post("/api/returns/public/submit", async (req, res) => { try { res.json(awai
 // Staff
 app.get("/api/returns", async (req, res) => {
   if (!guard(req, res)) return;
-  try { const s = await R.settings(); res.json({ returns: await R.list({ status: req.query.status || "", store: req.query.store || "", q: req.query.q || "" }), counts: await R.counts(), settings: s, problems: R.setupProblems(s), stores: R.STORE_DEFS, portal_base: (process.env.PUBLIC_URL || "").replace(/\/$/, "") + "/returns/", admin: isAdmin(req) }); }
+  try { const s = await R.settings(); res.json({ returns: await R.list({ status: req.query.status || "", store: req.query.store || "", q: req.query.q || "" }), counts: await R.counts(), settings: s, problems: R.setupProblems(s), stores: R.STORE_DEFS, portal_links: Object.fromEntries(Object.keys(R.STORE_DEFS).map((k) => [k, R.portalUrl(k, s)])), branded_hosts: Object.fromEntries(Object.values(R.STORE_DEFS).map((d) => [d.key, d.host])), admin: isAdmin(req) }); }
   catch (e) { retErr(res, e); }
 });
 app.get("/api/returns.csv", async (req, res) => {

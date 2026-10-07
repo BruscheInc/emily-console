@@ -843,7 +843,7 @@ async function loadReturns(silent){
     const all=Object.values(c.by||{}).reduce((a,b)=>a+b,0);
     $("showing").textContent=`${d.returns.length} return${d.returns.length===1?"":"s"}`;
     let h=`<div class="stuckhead">
-      <span>Portal: ${Object.values(d.stores).map(x=>`<a href="${esc(d.portal_base+x.key)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(x.name)} ↗</a>`).join(" · ")}
+      <span>Portal: ${Object.values(d.stores).map(x=>`<a href="${esc(d.portal_links[x.key])}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(x.name)} ↗</a>`).join(" · ")}
         · ${s.portal_live?'<b style="color:#158048">Live — Emily sends customers here</b>':'<b style="color:#b7791f">Not live — Emily still sends Loop links</b>'}${s.test_labels?' · <b style="color:#b7791f">TEST labels</b>':""}</span>
       <span>Refunded ${money(c.refunded)} · label spend ${money(c.labels)} · fees kept ${money(c.fees)}</span>
       <select onchange="RET_F.store=this.value;loadReturns()" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${RET_F.store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
@@ -885,6 +885,7 @@ async function retSettings(){
   const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
   m.innerHTML=`<div class="box"><h3>Returns settings</h3><div class="sub">Changes apply right away. Portal: ${esc(RET_D.portal_base)}lb and …/lbo</div>
     <label class="chk"><input type="checkbox" id="rs-live" ${s.portal_live?"checked":""}> Portal is live — Emily sends customers here instead of Loop</label>
+    <label class="chk"><input type="checkbox" id="rs-branded" ${s.branded_links?"checked":""}> Use branded links (${esc(Object.values(RET_D.branded_hosts||{}).join(" / "))}) — turn on once the DNS records are added</label>
     <label class="chk"><input type="checkbox" id="rs-test" ${s.test_labels?"checked":""}> Test mode — no label is bought and nothing is charged: you get the price quote and a sample label, and the customer isn't emailed. Turn off to go live.</label>
     <div class="grid2"><div><label>Return window LB (days)</label><input type="number" id="rs-wlb" value="${s.window_days.lb}"></div><div><label>Return window LBO (days)</label><input type="number" id="rs-wlbo" value="${s.window_days.lbo}"></div></div>
     <div class="grid2"><div><label>Label fee ($, taken off the refund)</label><input type="number" step="0.01" id="rs-fee" value="${s.label_fee}"></div><div><label>Store credit bonus (%)</label><input type="number" id="rs-bonus" value="${s.store_credit_bonus_pct}"></div></div>
@@ -908,7 +909,7 @@ async function retSettings(){
   api("/api/returns/ss-stores").then(r=>{ for(const k of ["lb","lbo"]){ const sel=$("rs-ss"+k); if(!sel||!r.stores)continue; sel.innerHTML=`<option value="">Match by name (${k.toUpperCase()})</option>`+r.stores.map(x=>`<option value="${esc(x.id)}" ${String((s.ss_store||{})[k])===String(x.id)?"selected":""}>${esc(x.name)}${x.marketplace?" · "+esc(x.marketplace):""}</option>`).join(""); } }).catch(()=>{});
   $("rs-go").onclick=async()=>{
     const [carrier_id,service_code]=($("rs-svc").value||"|").split("|");
-    const body={portal_live:$("rs-live").checked,test_labels:$("rs-test").checked,window_days:{lb:Number($("rs-wlb").value),lbo:Number($("rs-wlbo").value)},label_fee:Number($("rs-fee").value),store_credit_bonus_pct:Number($("rs-bonus").value),
+    const body={portal_live:$("rs-live").checked,branded_links:$("rs-branded").checked,test_labels:$("rs-test").checked,window_days:{lb:Number($("rs-wlb").value),lbo:Number($("rs-wlbo").value)},label_fee:Number($("rs-fee").value),store_credit_bonus_pct:Number($("rs-bonus").value),
       store_credit_enabled:$("rs-credit").checked,fee_on_store_credit:$("rs-feecredit").checked,auto_refund:$("rs-auto").checked,final_sale_tags:$("rs-tags").value,void_unused_after_days:Number($("rs-void").value),default_item_oz:Number($("rs-oz").value),
       return_address:{name:$("ra-name").value.trim(),company_name:$("ra-co").value.trim(),address_line1:$("ra-1").value.trim(),address_line2:$("ra-2").value.trim(),city_locality:$("ra-city").value.trim(),state_province:$("ra-st").value.trim().toUpperCase(),postal_code:$("ra-zip").value.trim(),phone:$("ra-ph").value.trim(),country_code:"US"}};
     if(carrier_id) { body.carrier_id=carrier_id; body.service_code=service_code; }

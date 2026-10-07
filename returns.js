@@ -28,9 +28,12 @@ function httpError(status, message) { const e = new Error(message); e.status = s
 
 /* ---------------- stores ---------------- */
 const STORE_DEFS = {
-  lb: { key: "lb", prefix: "LB", name: "Larkspur Baby", support: core.BRAND_MAILBOX.larkspur, shopUrl: "https://larkspurbaby.com" },
-  lbo: { key: "lbo", prefix: "LBO", name: "Larkspur Baby Outlet", support: core.BRAND_MAILBOX.outlet, shopUrl: "https://larkspurbabyoutlet.com" },
+  lb: { key: "lb", prefix: "LB", name: "Larkspur Baby", support: core.BRAND_MAILBOX.larkspur, shopUrl: "https://larkspurbaby.com", host: process.env.RETURNS_HOST_LB || "returns.larkspurbaby.com" },
+  lbo: { key: "lbo", prefix: "LBO", name: "Larkspur Baby Outlet", support: core.BRAND_MAILBOX.outlet, shopUrl: "https://larkspurbabyoutlet.com", host: process.env.RETURNS_HOST_LBO || "returns.larkspurbabyoutlet.com" },
 };
+// Customer-facing portal address: the branded domain once "branded_links" is on (after DNS is live), otherwise the Railway path.
+const portalUrl = (key, s) => (s && s.branded_links && STORE_DEFS[key].host) ? `https://${STORE_DEFS[key].host}` : `${PUBLIC_URL()}/returns/${key}`;
+const storeForHost = (h) => Object.values(STORE_DEFS).find((d) => d.host && d.host === String(h || "").toLowerCase()) || null;
 function shopFor(key) {
   const def = STORE_DEFS[key];
   if (!def) throw httpError(404, "Unknown store");
@@ -48,6 +51,7 @@ function keyForOrderName(name) {
 /* ---------------- settings (editable in Helpdesk → Returns → Settings) ---------------- */
 const DEFAULTS = {
   portal_live: false,              // when on, Emily sends customers to this portal instead of Loop
+  branded_links: false,            // when on, links use returns.larkspurbaby.com / returns.larkspurbabyoutlet.com (turn on once DNS is live)
   window_days: { lb: 7, lbo: 7 },
   label_fee: 7.95,
   store_credit_enabled: true,
@@ -640,7 +644,7 @@ async function portalRule() {
   const s = await settings();
   if (!s.portal_live) return "";
   return `\n\nRETURNS PORTAL (this overrides any Loop links anywhere above — Loop is retired): send customers to our own returns portal, picked by order prefix (LBO before LB): ` +
-    `LBO = Larkspur Baby Outlet → ${PUBLIC_URL()}/returns/lbo ; LB = Larkspur Baby → ${PUBLIC_URL()}/returns/lb . ` +
+    `LBO = Larkspur Baby Outlet → ${portalUrl("lbo", s)} ; LB = Larkspur Baby → ${portalUrl("lb", s)} . ` +
     `In the portal they enter the order number + email, pick items, and get a prepaid label instantly. Return window ${s.window_days.lb} days (LB) / ${s.window_days.lbo} days (LBO) from delivery. ` +
     `A $${Number(s.label_fee).toFixed(2)} return-label fee is deducted from the refund${s.fee_on_store_credit ? "" : " (waived if they choose store credit)"}. ` +
     (s.store_credit_enabled ? `They can choose a refund to the original payment, or store credit with a ${s.store_credit_bonus_pct}% bonus. ` : "") +
@@ -658,4 +662,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
