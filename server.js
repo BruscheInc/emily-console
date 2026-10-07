@@ -604,11 +604,86 @@ const lookupHits = new Map();   // ip -> timestamps (portal lookups: 10 per 10 m
 function tooMany(ip) { const now = Date.now(); const l = (lookupHits.get(ip) || []).filter((t) => now - t < 600e3); l.push(now); lookupHits.set(ip, l); return l.length > 10; }
 // Public: customer portal
 app.get("/returns", (_q, r) => r.type("html").send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Returns</title><body style="font:16px system-ui;background:#faf7f2;display:grid;place-items:center;min-height:90vh;margin:0"><div style="text-align:center"><h2 style="font-weight:500">Start a return</h2>${Object.values(R.STORE_DEFS).map((d) => `<p><a style="color:#4b6b5a" href="/returns/${d.key}">${escH(d.name)}</a></p>`).join("")}</div>`));
-app.get("/returns/:store", (req, res, next) => {
+const PT = require("./returns-theme");
+const STUDIO_HTML = fs.readFileSync(path.join(__dirname, "public", "returns-studio.html"), "utf8");
+const jsonForScript = (o) => JSON.stringify(o).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+async function portalCtx(key) {
+  const d = R.STORE_DEFS[key], s = await R.settings();
+  return { name: d.name, support: d.support, prefix: d.prefix, shop_url: d.shopUrl, days: s.window_days[key], fee: Number(s.label_fee), bonus: Number(s.store_credit_bonus_pct), credit_enabled: !!s.store_credit_enabled, fee_on_credit: !!s.fee_on_store_credit };
+}
+app.get("/returns/:store", async (req, res, next) => {
   const d = R.STORE_DEFS[req.params.store]; if (!d) return next();
-  res.setHeader("Cache-Control", "no-store");
-  res.type("html").send(RETURNS_HTML.replace("__STORE_JSON__", JSON.stringify({ key: d.key, name: d.name, support: d.support, shopUrl: d.shopUrl }).replace(/</g, "\\u003c")).replace(/__STORE_NAME__/g, escH(d.name)));
+  try {
+    const preview = !!req.query.preview && PT.checkPreview(d.key, req.query.preview);
+    const theme = preview ? await PT.draft(d.key) : await PT.published(d.key);
+    const ctx = await portalCtx(d.key);
+    const tk = (x) => String(x || "").replace(/\{(\w+)\}/g, (m, k) => ({ store: ctx.name, support: ctx.support, days: ctx.days }[k] ?? m));
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    // One pass with a function: "$'" or "__BOOT_JSON__" inside the copy can't corrupt the page.
+    const vals = {
+      TITLE: escH(tk(theme.meta.title)), DESCRIPTION: escH(tk(theme.meta.description)),
+      ROBOTS: theme.meta.noindex || preview ? '<meta name="robots" content="noindex">' : "",
+      FAVICON: escH(theme.meta.favicon || "data:,"),
+      BOOT_JSON: jsonForScript({ store: d.key, ctx, theme, preview, fonts: PT.FONT_WEIGHTS }),
+    };
+    res.type("html").send(RETURNS_HTML.replace(/__(TITLE|DESCRIPTION|ROBOTS|FAVICON|BOOT_JSON)__/g, (m, k) => vals[k]));
+  } catch (e) { console.error("portal render:", e.message); res.status(500).send("The returns page is unavailable right now. Please try again shortly."); }
 });
+app.get("/returns/asset/:id/:name?", async (req, res) => {
+  try {
+    const a = await PT.getAsset(req.params.id); if (!a) return res.status(404).send("Not found");
+    res.setHeader("Content-Type", a.content_type); res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    if (a.content_type === "image/svg+xml") res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.send(a.data);
+  } catch (e) { res.status(500).send("error"); }
+});
+/* ---- Portal Studio (customize the look of each portal) ---- */
+app.get("/returns-studio", (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(STUDIO_HTML.replace(/__VERSION__/g, VERSION)); });
+const studioStore = (req, res) => { const k = req.params.store; if (!R.STORE_DEFS[k]) { res.status(404).json({ error: "unknown store" }); return null; } return k; };
+const studioGuard = (req, res) => { if (!guard(req, res)) return false; if (!isAdmin(req)) { res.status(403).json({ error: "Only admins can change the portal look." }); return false; } return true; };
+app.get("/api/portal/meta", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const stores = {}; for (const k of Object.keys(R.STORE_DEFS)) stores[k] = { ...R.STORE_DEFS[k], ctx: await portalCtx(k) };
+    res.json({ stores, fonts: PT.FONTS, font_weights: PT.FONT_WEIGHTS, enums: PT.ENUMS, ranges: PT.RANGES, admin: isAdmin(req), user: actorOf(req) }); }
+  catch (e) { retErr(res, e); }
+});
+app.get("/api/portal/:store/theme", async (req, res) => {
+  if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { res.json({ ...(await PT.state(k)), preview_token: PT.previewToken(k), ctx: await portalCtx(k) }); } catch (e) { retErr(res, e); }
+});
+app.get("/api/portal/:store/version/:id", async (req, res) => {
+  if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { const t = await PT.versionTheme(k, Number(req.params.id)); if (!t) return res.status(404).json({ error: "not found" }); res.json({ theme: t }); } catch (e) { retErr(res, e); }
+});
+app.put("/api/portal/:store/draft", async (req, res) => {
+  if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { const t = await PT.saveDraft(k, (req.body || {}).theme, actorOf(req)); res.json({ ok: true, theme: t, saved_at: new Date().toISOString() }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/portal/:store/publish", async (req, res) => {
+  if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { if ((req.body || {}).theme) await PT.saveDraft(k, req.body.theme, actorOf(req)); await PT.publish(k, (req.body || {}).note, actorOf(req)); res.json({ ok: true, ...(await PT.state(k)) }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/portal/:store/discard", async (req, res) => {
+  if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { await PT.discard(k); res.json({ ok: true, ...(await PT.state(k)) }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/portal/:store/restore/:id", async (req, res) => {
+  if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { await PT.restore(k, Number(req.params.id), actorOf(req)); res.json({ ok: true, ...(await PT.state(k)) }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/portal/:store/import-loop", async (req, res) => {
+  if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { res.json({ ok: true, patch: await PT.importFromLoop(k) }); } catch (e) { res.status(502).json({ error: e.message }); }
+});
+app.get("/api/portal/assets", async (req, res) => { if (!guard(req, res)) return; try { res.json({ assets: await PT.listAssets() }); } catch (e) { retErr(res, e); } });
+app.post("/api/portal/assets", express.raw({ type: () => true, limit: "11mb" }), async (req, res) => {
+  if (!studioGuard(req, res)) return;
+  try { res.json(await PT.saveAsset({ store: String(req.query.store || ""), name: String(req.query.name || ""), type: req.headers["content-type"], buffer: req.body, who: actorOf(req) })); }
+  catch (e) { retErr(res, e); }
+});
+app.delete("/api/portal/assets/:id", async (req, res) => { if (!studioGuard(req, res)) return; try { await PT.deleteAsset(req.params.id); res.json({ ok: true }); } catch (e) { retErr(res, e); } });
 app.get("/returns/label/:id/:tok", async (req, res) => {
   try {
     if (req.params.tok !== R.labelToken(req.params.id)) return res.status(404).send("Not found");
@@ -684,6 +759,7 @@ const PORT = process.env.PORT || 8080;
     console.log(`📬 Gmail polling every ${every / 1000}s`);
   }
   try { await R.init(); } catch (e) { console.error("Returns failed to start:", e.message); }
+  try { await PT.init(); } catch (e) { console.error("Portal theme failed to start:", e.message); }
   // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
   try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
 })();

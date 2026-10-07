@@ -3,6 +3,24 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22 — Oct 7, 2026
+- **Portal Studio** (Returns → 🎨 Customize portal, or `/returns-studio`). Edit how each returns portal looks, with a
+  live preview on desktop, tablet and phone, for every page (find order, items, refund, label):
+  - Logo (upload, size for desktop and phone, inside the card / above it / in a top bar), tab icon.
+  - Background: color, gradient or photo, a separate phone photo, focus point, fit, tint, blur.
+  - Layout: centered, left, right or split screen; card width, padding, corners, shadow, border, see-through glass,
+    full-screen card on phones, progress steps.
+  - Colors for everything, with a readability check on each pair. 39 fonts, weights, sizes for desktop and phone,
+    letter spacing, capitals. Button and field styles. Product photo size, prices, variants.
+  - Top bar, announcement bar, footer text and links, every line of wording (with {store}, {order}, {days}…),
+    browser tab title and search settings, custom CSS.
+  - Quick styles, click-anything-in-the-preview to edit it, undo/redo, image library, autosaved drafts,
+    publish with a change list, version history with preview and restore, re-import from Loop, copy from the
+    other store, export/import.
+- Both portals start with the look Loop had: same logo, favicon, background photo (LB), colors, Roboto font and the
+  lookup-page text.
+- Only admins can change the look; agents can view the studio.
+
 ## v4.21 — Oct 7, 2026
 - **Returns, built in (replaces Loop).** Customers start a return at `/returns/lb` or `/returns/lbo`: order number +
   email, pick items and a reason, choose a refund to their card or store credit with a 15% bonus, and get a prepaid

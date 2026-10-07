@@ -2,317 +2,583 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Returns · __STORE_NAME__</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__TITLE__</title>
+<meta name="description" content="__DESCRIPTION__">
+__ROBOTS__
+<link rel="icon" href="__FAVICON__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script>window.__BOOT__ = __BOOT_JSON__;</script>
 <style>
-  :root {
-    --accent: #4b6b5a;
-    --bg: #faf7f2;
-    --card: #ffffff;
-    --ink: #2b2a28;
-    --muted: #6f6a62;
-    --line: #e8e2d8;
-    --soft: #f2ede4;
-    --bad: #a5432f;
-    --radius: 14px;
-  }
-  * { box-sizing: border-box; }
-  a { color: var(--accent); }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Inter, system-ui, sans-serif; }
-  header { padding: 28px 16px 8px; text-align: center; }
-  header img { max-height: 48px; max-width: 220px; }
-  header .brand { font-family: Fraunces, Georgia, serif; font-size: 26px; font-weight: 600; }
-  main { max-width: 640px; margin: 0 auto; padding: 8px 16px 64px; }
-  h1 { font-family: Fraunces, Georgia, serif; font-weight: 500; font-size: 30px; line-height: 1.2; margin: 18px 0 6px; }
-  h2 { font-size: 15px; font-weight: 600; margin: 28px 0 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-  p.lead { color: var(--muted); margin: 0 0 22px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
-  label.f { display: block; font-size: 14px; font-weight: 500; margin: 0 0 6px; }
-  input[type=text], input[type=email], select, textarea {
-    width: 100%; font: inherit; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink);
-  }
-  input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
-  .row { margin-bottom: 16px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  button.primary {
-    width: 100%; padding: 14px 18px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font: 600 16px Inter, sans-serif; cursor: pointer;
-  }
-  button.primary:disabled { opacity: .5; cursor: default; }
-  button.link { background: none; border: 0; color: var(--accent); font: 500 14px Inter, sans-serif; cursor: pointer; padding: 0; text-decoration: underline; }
-  .err { color: var(--bad); background: #fbeee9; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
-  .muted { color: var(--muted); font-size: 14px; }
-  .item { display: grid; grid-template-columns: 64px 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }
-  .item:first-child { border-top: 0; padding-top: 0; }
-  .item img, .item .ph { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; background: var(--soft); }
-  .item .t { font-weight: 600; }
-  .item .v { color: var(--muted); font-size: 14px; }
-  .item.off { opacity: .55; }
-  .pick { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-  .pick input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); }
-  .detail { margin-top: 12px; display: grid; gap: 10px; }
-  .detail .grid { display: grid; grid-template-columns: 90px 1fr; gap: 10px; }
-  .tag { display: inline-block; font-size: 12px; background: var(--soft); border-radius: 999px; padding: 2px 10px; color: var(--muted); }
-  .opt { display: block; border: 1.5px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; cursor: pointer; background: #fff; }
-  .opt.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
-  .opt input { display: none; }
-  .opt .top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
-  .opt .amt { font-weight: 600; font-size: 18px; white-space: nowrap; }
-  .opt .badge { background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 9px; margin-left: 6px; }
-  .sumline { display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); padding: 3px 0; }
-  .sumline.total { color: var(--ink); font-weight: 600; font-size: 16px; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
-  .done { text-align: center; }
-  .done .check { width: 64px; height: 64px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; margin: 10px auto 6px; font-size: 32px; }
-  .steps { text-align: left; margin: 18px 0 0; padding-left: 20px; }
-  .steps li { margin-bottom: 8px; }
-  .existing { background: var(--soft); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; font-size: 14px; }
-  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 0 16px 40px; }
-  .hidden { display: none !important; }
-  .spin { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: s 0.7s linear infinite; vertical-align: -3px; margin-right: 8px; }
-  @keyframes s { to { transform: rotate(360deg); } }
-  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } h1 { font-size: 26px; } }
+/* Every look-and-feel value comes from the theme (Helpdesk → Returns → Customize portal) as a CSS variable.
+   Paired sizes have a desktop (-d) and mobile (-m) value; the active one is picked below 768px. */
+:root{
+  --h1:var(--h1-d);--h2:var(--h2-d);--fs:var(--body-d);--small:var(--small-d);--logo-h:var(--logo-h-d);
+  --card-pad:var(--card-pad-d);--page-pad:var(--page-pad-d);--btn-h:var(--btn-h-d);--bg-img:var(--bg-img-d);
+}
+@media (max-width:767px){:root{
+  --h1:var(--h1-m);--h2:var(--h2-m);--fs:var(--body-m);--small:var(--small-m);--logo-h:var(--logo-h-m);
+  --card-pad:var(--card-pad-m);--page-pad:var(--page-pad-m);--btn-h:var(--btn-h-m);--bg-img:var(--bg-img-m);
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{position:relative;margin:0;min-height:100vh;min-height:100dvh;font-family:var(--body-font);font-weight:var(--body-weight);font-size:var(--fs);line-height:var(--lh);color:var(--text);background:var(--bg-color);-webkit-font-smoothing:antialiased}
+a{color:var(--link)}
+h1,h2,h3{font-family:var(--heading-font);color:var(--heading);font-weight:var(--heading-weight);letter-spacing:var(--heading-tracking);text-transform:var(--heading-case)}
+h1{font-size:var(--h1);line-height:1.2;margin:0 0 8px}
+h2.label{font-size:var(--h2);font-weight:700;margin:28px 0 10px;color:var(--muted);text-transform:var(--label-case);letter-spacing:.06em;font-family:var(--body-font)}
+.hidden{display:none!important}
+
+/* background layers */
+.bg{position:fixed;inset:0;z-index:0;overflow:hidden;background:var(--bg-color)}
+body.bg-scroll .bg{position:absolute;min-height:100%}
+body.mode-gradient .bg{background:linear-gradient(var(--grad-angle),var(--grad-from),var(--grad-to))}
+.bg-img{position:absolute;inset:calc(var(--bg-blur) * -2);background-image:var(--bg-img);background-position:var(--focal);background-size:var(--bg-fit);background-repeat:no-repeat;filter:blur(var(--bg-blur))}
+body.fit-repeat .bg-img{background-repeat:repeat;background-size:auto}
+body:not(.mode-image) .bg-img{display:none}
+.bg-ov{position:absolute;inset:0;background:var(--ov)}
+
+/* announcement + header */
+.announce{position:relative;z-index:3;background:var(--ann-bg);color:var(--ann-color);text-align:center;font-size:var(--small);padding:9px 16px}
+.announce a{color:inherit;font-weight:600}
+.topbar{position:relative;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px var(--page-pad);background:var(--hdr-bg);color:var(--hdr-text)}
+body.hdr-border .topbar{border-bottom:1px solid var(--border)}
+body.hdr-sticky .topbar{position:sticky;top:0}
+.topbar a{color:inherit;text-decoration:none;font-size:var(--small);font-weight:600}
+.topbar .brandname{font-family:var(--heading-font);font-weight:var(--heading-weight);font-size:calc(var(--fs) * 1.15)}
+
+/* page layout */
+.page{position:relative;z-index:1;min-height:calc(100vh - var(--chrome-h, 0px));display:flex;padding:var(--page-pad)}
+body.valign-center .page{align-items:center}
+body.valign-top .page{align-items:flex-start}
+body.lay-center .page{justify-content:center}
+body.lay-left .page{justify-content:flex-start}
+body.lay-right .page{justify-content:flex-end}
+.shell{width:100%;max-width:var(--card-w);display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card-bg);border:var(--card-border) solid var(--border);border-radius:var(--radius);padding:var(--card-pad);box-shadow:var(--shadow);backdrop-filter:blur(var(--glass));-webkit-backdrop-filter:blur(var(--glass))}
+
+/* split layout: image on one side, form on the other */
+body.lay-split .bg{display:none}
+body.lay-split .page{padding:0;align-items:stretch}
+.media{display:none}
+body.lay-split .media{display:block;position:sticky;top:0;height:100vh;flex:0 0 var(--split-w);overflow:hidden;background:var(--bg-color)}
+body.lay-split.mode-gradient .media{background:linear-gradient(var(--grad-angle),var(--grad-from),var(--grad-to))}
+body.lay-split .media .bg-img{display:block}
+body.lay-split:not(.mode-image) .media .bg-img{display:none}
+body.lay-split.split-right .page{flex-direction:row-reverse}
+body.lay-split .formside{flex:1;display:flex;justify-content:center;padding:var(--page-pad);background:var(--card-bg)}
+body.lay-split.valign-center .formside{align-items:center}
+body.lay-split .card{background:transparent;border:0;box-shadow:none;padding:0;backdrop-filter:none}
+body:not(.lay-split) .formside{display:contents}
+
+@media (max-width:767px){
+  body.lay-left .page,body.lay-right .page{justify-content:center}
+  body.card-full-m .page{padding:0;align-items:stretch}
+  body.card-full-m .card{border-radius:0;border-left:0;border-right:0;min-height:100%}
+  body.card-full-m .foot,body.card-full-m .pagelogo{padding:0 16px}
+  body.lay-split .page{flex-direction:column!important}
+  body.lay-split .media{position:relative;height:200px;flex:0 0 auto;width:100%}
+}
+
+/* logo */
+.logo{display:block;height:var(--logo-h);width:auto;max-width:100%;object-fit:contain}
+.logowrap{display:flex;justify-content:var(--logo-justify);margin-bottom:20px}
+.logowrap a{display:inline-flex}
+.pagelogo{display:flex;justify-content:var(--logo-justify)}
+.storename{font-family:var(--heading-font);font-weight:var(--heading-weight);color:var(--heading);font-size:calc(var(--h1) * .8)}
+
+/* step indicator */
+.steps{display:flex;gap:6px;list-style:none;margin:0 0 22px;padding:0;counter-reset:s}
+.steps li{flex:1;font-size:calc(var(--small) * .92);color:var(--muted);counter-increment:s;display:flex;flex-direction:column;gap:6px}
+.steps li::before{content:"";height:4px;border-radius:4px;background:var(--border)}
+.steps li.past::before,.steps li.on::before{background:var(--primary)}
+.steps li.on{color:var(--heading);font-weight:600}
+@media (max-width:420px){.steps li span{display:none}}
+
+/* text */
+.lead{color:var(--muted);margin:0 0 22px}
+.muted{color:var(--muted);font-size:var(--small)}
+.rich a{color:var(--link)}
+
+/* forms */
+label.f{display:block;font-size:var(--small);font-weight:600;margin:0 0 6px}
+.help{font-size:calc(var(--small) * .92);color:var(--muted);margin-top:5px}
+.row{margin-bottom:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input[type=text],input[type=email],input[type=tel],select,textarea{width:100%;font:inherit;font-size:max(16px,var(--fs));color:var(--input-text);background:var(--input-bg);border:var(--in-bw) solid var(--input-border);border-radius:var(--in-radius);padding:0 14px;min-height:var(--in-h);outline:none;transition:border-color .15s,box-shadow .15s}
+textarea{padding:12px 14px;min-height:72px;resize:vertical}
+select{padding-right:34px;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+body.in-filled input,body.in-filled select,body.in-filled textarea{background-color:var(--soft);border-color:transparent}
+body.in-underline input,body.in-underline select,body.in-underline textarea{border-width:0 0 var(--in-bw) 0;border-radius:0;background-color:transparent;padding-left:2px}
+input:focus,select:focus,textarea:focus{border-color:var(--focus);box-shadow:0 0 0 3px var(--focus-ring)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:var(--btn-h);padding:0 26px;border-radius:var(--btn-radius);font:inherit;font-size:var(--btn-fs);font-weight:var(--btn-weight);text-transform:var(--btn-case);letter-spacing:var(--btn-tracking);cursor:pointer;text-decoration:none;border:2px solid var(--primary);background:var(--primary);color:var(--on-primary);transition:filter .15s,transform .05s}
+.btn:hover{filter:brightness(.92)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.5;cursor:default;filter:none}
+body.btn-outline .btn{background:transparent;color:var(--primary)}
+body.btn-soft .btn{background:var(--soft);border-color:var(--soft);color:var(--primary)}
+body.btn-full .btn.main{width:100%}
+body.btn-shadow .btn{box-shadow:0 6px 16px -6px var(--primary)}
+.linkbtn{background:none;border:0;padding:0;font:inherit;font-size:var(--small);color:var(--link);text-decoration:underline;cursor:pointer}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* messages */
+.err{color:var(--error);background:var(--error-bg);border-radius:var(--in-radius);padding:10px 14px;margin-bottom:16px;font-size:var(--small)}
+.note{background:var(--soft);border-radius:var(--in-radius);padding:12px 14px;margin-bottom:10px;font-size:var(--small)}
+
+/* items */
+.item{display:grid;grid-template-columns:var(--img-col) 1fr;gap:14px;padding:16px 0;border-top:1px solid var(--border)}
+.item:first-child{border-top:0;padding-top:0}
+body.noimg .item{grid-template-columns:1fr}
+body.noimg .item .thumb{display:none}
+.thumb{width:var(--img-size);height:var(--img-size);border-radius:var(--img-radius);object-fit:cover;background:var(--soft);display:grid;place-items:center;color:var(--muted);font-weight:700;font-size:calc(var(--img-size) * .3)}
+.item .t{font-weight:600;color:var(--heading)}
+.item .v{color:var(--muted);font-size:var(--small)}
+.item.off{opacity:.55}
+.pick{display:flex;align-items:center;gap:10px;margin-top:8px;cursor:pointer;font-size:var(--small)}
+.pick input{width:20px;height:20px;accent-color:var(--primary);margin:0}
+.detail{margin-top:12px;display:grid;gap:10px}
+.detail .g{display:grid;grid-template-columns:92px 1fr;gap:10px}
+.tag{display:inline-block;font-size:calc(var(--small) * .9);background:var(--soft);border-radius:999px;padding:2px 10px;color:var(--muted);margin-top:6px}
+
+/* refund options */
+.opt{display:block;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:12px;cursor:pointer;background:var(--input-bg)}
+.opt.sel{border-color:var(--primary);box-shadow:0 0 0 3px var(--focus-ring)}
+.opt input{position:absolute;opacity:0;pointer-events:none}
+.opt .top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.opt .amt{font-weight:700;font-size:calc(var(--fs) * 1.12);white-space:nowrap;color:var(--heading)}
+.badge{background:var(--badge-bg);color:var(--badge-text);font-size:calc(var(--small) * .85);font-weight:700;border-radius:999px;padding:2px 9px;margin-left:6px;white-space:nowrap}
+.box{border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px 18px;background:var(--input-bg)}
+.sum{display:flex;justify-content:space-between;gap:10px;font-size:var(--small);color:var(--muted);padding:3px 0}
+.sum.total{color:var(--heading);font-weight:700;font-size:var(--fs);border-top:1px solid var(--border);margin-top:8px;padding-top:10px}
+
+/* done */
+.done{text-align:center}
+.check{width:64px;height:64px;border-radius:50%;background:var(--success);color:#fff;display:grid;place-items:center;margin:4px auto 12px;font-size:30px}
+.done ol{text-align:left;margin:20px 0 0;padding-left:20px}
+.done ol li{margin-bottom:8px}
+
+/* footer */
+.foot{text-align:center;color:var(--page-text);font-size:var(--small)}
+.foot a{color:inherit}
+.foot .links{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 16px;margin-top:6px}
+body.lay-split .foot{color:var(--muted)}
+
+/* preview helpers (studio only) */
+.previewflag{position:fixed;left:12px;bottom:12px;z-index:9;background:#111827;color:#fff;font:600 12px system-ui;padding:6px 10px;border-radius:8px;opacity:.85}
+body.picking [data-sec]{cursor:pointer}
+body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
+.flash{outline:3px solid #3b6ef5!important;outline-offset:4px;transition:outline-color .6s}
+@media (max-width:480px){.grid2{grid-template-columns:1fr}}
 </style>
+<style id="customcss"></style>
 </head>
 <body>
-<header id="hdr"></header>
-<main>
-  <!-- Step 1: lookup -->
-  <section id="s1">
-    <h1>Start a return</h1>
-    <p class="lead">Enter your order number and the email you used at checkout.</p>
-    <div class="card">
-      <div id="e1" class="err hidden"></div>
-      <form id="f1">
-        <div class="row"><label class="f" for="on">Order number</label><input id="on" type="text" placeholder="e.g. 8425" required autocomplete="off"></div>
-        <div class="row"><label class="f" for="em">Email</label><input id="em" type="email" placeholder="you@example.com" required autocomplete="email"></div>
-        <button class="primary" type="submit" id="b1">Find my order</button>
-      </form>
-    </div>
-    <p class="muted" id="policy" style="margin-top:18px"></p>
-  </section>
+<div class="bg" data-sec="background"><div class="bg-img"></div><div class="bg-ov"></div></div>
+<div class="announce hidden" id="announce" data-sec="announce"></div>
+<header class="topbar hidden" id="topbar" data-sec="header"><div id="hdrBrand"></div><a id="hdrLink" href="#"></a></header>
+<div class="page" id="page">
+  <div class="media" data-sec="background"><div class="bg-img"></div><div class="bg-ov"></div></div>
+  <div class="formside">
+  <main class="shell">
+    <div class="pagelogo hidden" id="pagelogo" data-sec="brand"></div>
+    <div class="card" data-sec="layout">
+      <div class="logowrap hidden" id="cardlogo" data-sec="brand"></div>
+      <ol class="steps" id="steps" data-sec="layout"></ol>
 
-  <!-- Step 2: items -->
-  <section id="s2" class="hidden">
-    <h1 id="ordTitle"></h1>
-    <p class="lead">Select the items you'd like to return. <button class="link" onclick="go(1)">Not your order?</button></p>
-    <div id="existing"></div>
-    <div class="card"><div id="e2" class="err hidden"></div><div id="items"></div></div>
-    <div style="margin-top:20px"><button class="primary" id="b2" disabled onclick="toStep3()">Continue</button></div>
-  </section>
+      <section id="s1">
+        <h1 id="t_lookup_title" data-sec="type"></h1>
+        <div class="lead rich" id="t_lookup_sub"></div>
+        <div id="e1" class="err hidden"></div>
+        <form id="f1" novalidate>
+          <div class="row"><label class="f" for="on" id="t_order_label"></label><input id="on" type="text" autocomplete="off" required data-sec="inputs"><div class="help" id="t_order_help"></div></div>
+          <div class="row"><label class="f" for="em" id="t_email_label"></label><input id="em" type="email" autocomplete="email" required data-sec="inputs"></div>
+          <button class="btn main" type="submit" id="b1" data-sec="buttons"></button>
+        </form>
+        <p class="muted rich" id="t_policy" style="margin:18px 0 0"></p>
+      </section>
 
-  <!-- Step 3: refund method + address -->
-  <section id="s3" class="hidden">
-    <h1>How would you like your refund?</h1>
-    <p class="lead">Your refund is issued as soon as the package is delivered back to us. <button class="link" onclick="go(2)">Back</button></p>
-    <div id="opts"></div>
-    <h2>Return label is from</h2>
-    <div class="card">
-      <div id="addrView"></div>
-      <button class="link" id="editAddr" style="margin-top:8px">Edit address</button>
-      <div id="addrForm" class="hidden" style="margin-top:14px">
-        <div class="row"><label class="f">Full name</label><input id="a_name" type="text"></div>
-        <div class="row"><label class="f">Address</label><input id="a_1" type="text"></div>
-        <div class="row"><label class="f">Apt, suite (optional)</label><input id="a_2" type="text"></div>
-        <div class="grid2 row"><div><label class="f">City</label><input id="a_city" type="text"></div><div><label class="f">State</label><input id="a_state" type="text" maxlength="2" placeholder="TX"></div></div>
-        <div class="grid2 row"><div><label class="f">ZIP</label><input id="a_zip" type="text"></div><div><label class="f">Phone</label><input id="a_phone" type="text"></div></div>
-      </div>
-    </div>
-    <h2>Summary</h2>
-    <div class="card" id="summary"></div>
-    <div id="e3" class="err hidden" style="margin-top:16px"></div>
-    <div style="margin-top:20px"><button class="primary" id="b3" onclick="submitReturn()">Get my return label</button></div>
-    <p class="muted" style="text-align:center;margin-top:10px">Final refund includes tax and may vary slightly from this estimate.</p>
-  </section>
+      <section id="s2" class="hidden">
+        <h1 id="ordTitle"></h1>
+        <p class="lead"><span id="t_items_sub"></span> <button class="linkbtn" onclick="go(1)" id="t_not_your_order"></button></p>
+        <div id="existing"></div>
+        <div id="e2" class="err hidden"></div>
+        <div id="items" data-sec="items"></div>
+        <div style="margin-top:22px"><button class="btn main" id="b2" disabled onclick="toStep3()" data-sec="buttons"></button></div>
+      </section>
 
-  <!-- Step 4: done -->
-  <section id="s4" class="hidden">
-    <div class="card done">
-      <div class="check">✓</div>
-      <h1 style="margin-top:6px">Your return is ready</h1>
-      <p class="lead" id="doneLead"></p>
-      <a id="labelBtn" class="primary" style="display:block;text-decoration:none;padding:14px;border-radius:999px;background:var(--accent);color:#fff;font-weight:600" target="_blank" rel="noopener">Download return label</a>
-      <p class="muted" style="margin-top:12px">Tracking: <a id="trk" target="_blank" rel="noopener"></a></p>
-      <ol class="steps">
-        <li>Print the label and tape it to your package. Cover or remove any old labels.</li>
-        <li>Pack the items in their original packaging if you can.</li>
-        <li>Drop it off at the post office (or hand it to your carrier) within 28 days. We also emailed you the label.</li>
-        <li id="refundStep"></li>
-      </ol>
+      <section id="s3" class="hidden">
+        <h1 id="t_refund_title"></h1>
+        <p class="lead"><span id="t_refund_sub"></span> <button class="linkbtn" onclick="go(2)" id="t_back"></button></p>
+        <div id="opts"></div>
+        <h2 class="label" id="t_address_title"></h2>
+        <div class="box">
+          <div id="addrView"></div>
+          <button class="linkbtn" id="editAddr" style="margin-top:8px"></button>
+          <div id="addrForm" class="hidden" style="margin-top:14px">
+            <div class="row"><label class="f">Full name</label><input id="a_name" type="text" autocomplete="name"></div>
+            <div class="row"><label class="f">Address</label><input id="a_1" type="text" autocomplete="address-line1"></div>
+            <div class="row"><label class="f">Apt, suite (optional)</label><input id="a_2" type="text" autocomplete="address-line2"></div>
+            <div class="grid2 row"><div><label class="f">City</label><input id="a_city" type="text" autocomplete="address-level2"></div><div><label class="f">State</label><input id="a_state" type="text" maxlength="2" placeholder="TX" autocomplete="address-level1"></div></div>
+            <div class="grid2"><div><label class="f">ZIP</label><input id="a_zip" type="text" inputmode="numeric" autocomplete="postal-code"></div><div><label class="f">Phone</label><input id="a_phone" type="tel" autocomplete="tel"></div></div>
+          </div>
+        </div>
+        <h2 class="label" id="t_summary_title"></h2>
+        <div class="box" id="summary"></div>
+        <div id="e3" class="err hidden" style="margin-top:16px"></div>
+        <div style="margin-top:22px"><button class="btn main" id="b3" onclick="submitReturn()" data-sec="buttons"></button></div>
+        <p class="muted" style="text-align:center;margin:10px 0 0" id="t_estimate_note"></p>
+      </section>
+
+      <section id="s4" class="hidden done">
+        <div class="check">✓</div>
+        <h1 id="t_done_title"></h1>
+        <p class="lead" id="doneSub"></p>
+        <a id="labelBtn" class="btn main" target="_blank" rel="noopener" data-sec="buttons"></a>
+        <p class="muted" style="margin-top:12px"><span id="t_tracking"></span>: <a id="trk" target="_blank" rel="noopener"></a></p>
+        <ol id="doneSteps"></ol>
+      </section>
     </div>
-  </section>
-</main>
-<footer id="ftr"></footer>
+    <footer class="foot" id="foot" data-sec="footer"></footer>
+  </main>
+  </div>
+</div>
 
 <script>
-const STORE = __STORE_JSON__;
-let S = {}; // lookup result
-let method = 'original';
-let addr = null;
+const B = window.__BOOT__;          // { store, ctx, theme, preview }
+let T = B.theme;                    // the active theme (published, or the draft in preview)
+const CTX = B.ctx;                  // { name, support, prefix, shop_url, days, fee, bonus, credit_enabled, fee_on_credit }
+let S = {}, method = 'original', addr = null, STEP = 1, PICK = false;
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const money = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const SERIF = ['Playfair Display','Lora','Merriweather','Cormorant Garamond','Libre Baskerville','EB Garamond','Fraunces','DM Serif Display','Crimson Pro','Josefin Slab','Abril Fatface'];
+const SCRIPT = ['Amatic SC','Caveat','Dancing Script','Pacifico'];
+const fontStack = (f) => f === 'System' ? 'system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif' : `"${f}",${SERIF.includes(f) ? 'Georgia,serif' : SCRIPT.includes(f) ? 'cursive' : 'system-ui,-apple-system,"Segoe UI",sans-serif'}`;
 
-$('hdr').innerHTML = `<a href="${esc(STORE.shopUrl || '#')}" style="color:inherit;text-decoration:none"><div class="brand">${esc(STORE.name)}</div></a>`;
-$('policy').textContent = 'Items must be unworn, unwashed, and returned with tags and original packaging. Sale items are final. Original shipping is not refunded.';
-$('ftr').innerHTML = STORE.support ? `Questions? Email <a href="mailto:${esc(STORE.support)}">${esc(STORE.support)}</a>` : '';
-
-function go(n) {
-  for (let i = 1; i <= 4; i++) $('s' + i).classList.toggle('hidden', i !== n);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+/* ---------- copy: tokens + light formatting (**bold**, *italic*, [text](url), new lines) ---------- */
+function tok(s, extra) {
+  const v = { store: CTX.name, support: CTX.support, prefix: CTX.prefix, days: CTX.days, fee: money(CTX.fee || 0), bonus: CTX.bonus, ...(extra || {}) };
+  return String(s == null ? '' : s).replace(/\{(\w+)\}/g, (m, k) => (v[k] != null ? v[k] : m));
 }
-function showErr(id, msg) { const e = $(id); e.textContent = msg; e.classList.toggle('hidden', !msg); }
-function busy(btn, on, text) { btn.disabled = on; btn.innerHTML = on ? '<span class="spin"></span>Please wait…' : text; }
+function rich(s, extra, noLinks) {
+  let h = esc(tok(s, extra));
+  const links = [];
+  // [text](url) first, parked as placeholders so the email auto-linker can't nest a link inside a link
+  h = h.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:|\/(?!\/))[^)\s]+)\)/g, (m, t, u) => { links.push(noLinks ? t : `<a href="${u}" target="_blank" rel="noopener">${t}</a>`); return `\u0000${links.length - 1}\u0000`; });
+  if (!noLinks) h = h.replace(/(^|[\s(>])([\w.+-]+@(?:[\w-]+\.)+\w+)/g, '$1<a href="mailto:$2">$2</a>');
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+  h = h.replace(/\u0000(\d+)\u0000/g, (m, i) => links[Number(i)]);
+  return h.replace(/\n/g, '<br>');
+}
+const C = (k, extra) => tok(T.copy[k], extra);
 
+/* ---------- theme → page ---------- */
+function rgba(hex, a) {
+  let h = String(hex || '#000').replace('#', '');
+  if (h.length === 3) h = h.split('').map((x) => x + x).join('');
+  const n = parseInt(h.slice(0, 6), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+const SHADOWS = { none: 'none', soft: '0 10px 30px -12px rgba(16,24,40,.18)', medium: '0 16px 40px -14px rgba(16,24,40,.28)', strong: '0 24px 60px -16px rgba(16,24,40,.45)' };
+const imgUrl = (u) => (u ? `url("${String(u).replace(/"/g, '%22')}")` : 'none');
+function applyTheme(t) {
+  T = t;
+  const r = document.documentElement.style, set = (k, v) => r.setProperty(k, String(v));
+  const c = t.colors, ty = t.type, L = t.layout, bg = t.background, bt = t.buttons, inp = t.inputs, it = t.items;
+  // colors
+  set('--primary', c.primary); set('--on-primary', c.on_primary); set('--heading', c.heading); set('--text', c.text); set('--muted', c.muted); set('--link', c.link);
+  set('--border', c.border); set('--soft', c.soft); set('--input-bg', c.input_bg); set('--input-text', c.input_text); set('--input-border', c.input_border);
+  set('--focus', c.focus); set('--focus-ring', rgba(c.focus, 0.18)); set('--error', c.error); set('--error-bg', c.error_bg); set('--success', c.success);
+  set('--badge-bg', c.badge_bg); set('--badge-text', c.badge_text); set('--page-text', c.page_text);
+  set('--card-bg', rgba(c.card, L.card_opacity / 100));
+  // type
+  set('--heading-font', fontStack(ty.heading_font)); set('--body-font', fontStack(ty.body_font)); set('--heading-weight', ty.heading_weight); set('--body-weight', ty.body_weight);
+  set('--h1-d', ty.h1_d + 'px'); set('--h1-m', ty.h1_m + 'px'); set('--h2-d', ty.h2_d + 'px'); set('--h2-m', ty.h2_m + 'px');
+  set('--body-d', ty.body_d + 'px'); set('--body-m', ty.body_m + 'px'); set('--small-d', ty.small_d + 'px'); set('--small-m', ty.small_m + 'px');
+  set('--lh', ty.line_height); set('--heading-tracking', ty.heading_tracking / 100 + 'em'); set('--heading-case', ty.heading_case); set('--label-case', ty.label_case);
+  // layout
+  set('--card-w', (L.style === 'split' ? 520 : L.card_w_d) + 'px'); set('--card-pad-d', L.card_pad_d + 'px'); set('--card-pad-m', L.card_pad_m + 'px');
+  set('--page-pad-d', L.page_pad_d + 'px'); set('--page-pad-m', L.page_pad_m + 'px'); set('--radius', L.radius + 'px'); set('--radius-sm', Math.min(L.radius, 14) + 'px');
+  set('--shadow', SHADOWS[L.shadow] || 'none'); set('--card-border', L.border_w + 'px'); set('--glass', L.glass_blur + 'px'); set('--split-w', L.split_w + '%');
+  // background
+  set('--bg-color', bg.color); set('--grad-from', bg.grad_from); set('--grad-to', bg.grad_to); set('--grad-angle', bg.grad_angle + 'deg');
+  set('--bg-img-d', imgUrl(bg.image_d)); set('--bg-img-m', imgUrl(bg.image_m || bg.image_d)); set('--focal', `${bg.focal_x}% ${bg.focal_y}%`);
+  set('--bg-fit', bg.fit === 'contain' ? 'contain' : 'cover'); set('--bg-blur', bg.blur + 'px'); set('--ov', rgba(bg.overlay, bg.overlay_opacity / 100));
+  // brand
+  set('--logo-h-d', t.brand.logo_h_d + 'px'); set('--logo-h-m', t.brand.logo_h_m + 'px'); set('--logo-justify', t.brand.logo_align === 'left' ? 'flex-start' : 'center');
+  // buttons / inputs / items
+  set('--btn-h-d', bt.height_d + 'px'); set('--btn-h-m', bt.height_m + 'px'); set('--btn-radius', bt.radius + 'px'); set('--btn-fs', bt.font_size + 'px');
+  set('--btn-weight', bt.weight); set('--btn-case', bt.case); set('--btn-tracking', bt.tracking / 100 + 'em');
+  set('--in-radius', inp.radius + 'px'); set('--in-h', inp.height + 'px'); set('--in-bw', inp.border_w + 'px');
+  set('--img-size', it.image_size + 'px'); set('--img-col', it.image_size + 'px'); set('--img-radius', it.image_radius + 'px');
+  // header / announcement
+  set('--hdr-bg', t.header.bg); set('--hdr-text', t.header.text); set('--ann-bg', t.announce.bg); set('--ann-color', t.announce.color);
+
+  // body classes (layout switches)
+  const cls = ['lay-' + L.style, 'valign-' + L.valign, 'mode-' + bg.mode, 'fit-' + bg.fit, bg.attach === 'scroll' ? 'bg-scroll' : 'bg-fixed',
+    'btn-' + bt.style, 'in-' + inp.style, 'logo-' + t.brand.logo_place];
+  if (bt.full_width) cls.push('btn-full'); if (bt.shadow) cls.push('btn-shadow');
+  if (L.card_full_m) cls.push('card-full-m'); if (!it.show_images) cls.push('noimg');
+  if (t.header.show) cls.push('hdr-on'); if (t.header.sticky) cls.push('hdr-sticky'); if (t.header.border) cls.push('hdr-border');
+  if (L.style === 'split') cls.push('split-' + (L.split_side || 'left'));
+  if (PICK) cls.push('picking');
+  document.body.className = cls.join(' ');
+
+  // fonts
+  // one stylesheet per family, with only the weights that family has (Google rejects unknown weights)
+  [...new Set([ty.heading_font, ty.body_font])].filter((f) => f !== 'System').forEach(loadFont);
+  $('customcss').textContent = t.advanced.css || '';
+  renderChrome();
+  renderCopy();
+  if (S.items) { renderItems(); if (STEP === 3) renderOpts(); }
+  if (STEP === 4 && S.done) renderDone();
+}
+
+const FONT_LINKS = {};
+function loadFont(f) {
+  if (FONT_LINKS[f]) return;
+  const l = document.createElement('link'); l.rel = 'stylesheet';
+  l.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(f).replace(/%20/g, '+') + ':wght@' + ((B.fonts && B.fonts[f]) || '400;700') + '&display=swap';
+  document.head.appendChild(l); FONT_LINKS[f] = l;
+}
+function logoHtml() {
+  const b = T.brand;
+  const inner = b.logo ? `<img class="logo" src="${esc(b.logo)}" alt="${esc(tok(b.logo_alt))}">` : `<span class="storename">${esc(CTX.name)}</span>`;
+  const name = b.logo && b.show_name ? `<span class="storename" style="margin-left:10px">${esc(CTX.name)}</span>` : '';
+  return b.logo_link ? `<a href="${esc(b.logo_link)}" style="align-items:center;text-decoration:none">${inner}${name}</a>` : `<span style="display:inline-flex;align-items:center">${inner}${name}</span>`;
+}
+function renderChrome() {
+  const place = T.brand.logo_place;
+  $('cardlogo').classList.toggle('hidden', place !== 'card'); $('cardlogo').innerHTML = place === 'card' ? logoHtml() : '';
+  $('pagelogo').classList.toggle('hidden', place !== 'page'); $('pagelogo').innerHTML = place === 'page' ? logoHtml() : '';
+  const hdrOn = T.header.show || place === 'header';
+  $('topbar').classList.toggle('hidden', !hdrOn);
+  $('hdrBrand').innerHTML = place === 'header' ? logoHtml() : `<span class="brandname">${esc(CTX.name)}</span>`;
+  const link = T.header.show_link && (T.brand.logo_link || CTX.shop_url);
+  $('hdrLink').classList.toggle('hidden', !link); $('hdrLink').href = link || '#'; $('hdrLink').textContent = T.header.link_label || '';
+  const a = T.announce;
+  $('announce').classList.toggle('hidden', !(a.on && a.text));
+  $('announce').innerHTML = a.on && a.text ? (a.link ? `<a href="${esc(a.link)}">${rich(a.text, null, true)}</a>` : rich(a.text)) : '';
+  const f = T.footer;
+  $('foot').classList.toggle('hidden', !f.show);
+  $('foot').innerHTML = f.show ? `<div class="rich">${rich(f.text)}</div>${f.links.length ? `<div class="links">${f.links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')}</div>` : ''}` : '';
+  // steps
+  $('steps').classList.toggle('hidden', !T.layout.steps);
+  $('steps').innerHTML = [1, 2, 3, 4].map((n) => `<li class="${n < STEP ? 'past' : n === STEP ? 'on' : ''}"><span>${esc(C('step' + n))}</span></li>`).join('');
+  // chrome height so a centered card centers in what's left of the screen
+  const h = ($('announce').offsetHeight || 0) + (hdrOn ? $('topbar').offsetHeight || 0 : 0);
+  document.documentElement.style.setProperty('--chrome-h', h + 'px');
+}
+function renderCopy() {
+  const txt = (id, k) => { const el = $('t_' + id); if (el) el.textContent = C(k || id); };
+  const html = (id, k) => { const el = $('t_' + id); if (el) el.innerHTML = rich(T.copy[k || id]); };
+  txt('lookup_title'); html('lookup_sub'); txt('order_label'); txt('order_help'); txt('email_label'); html('policy');
+  $('on').placeholder = C('order_placeholder'); $('em').placeholder = C('email_placeholder');
+  $('t_order_help').classList.toggle('hidden', !T.copy.order_help);
+  if (!$('b1').disabled) $('b1').textContent = C('lookup_button');
+  txt('items_sub'); txt('not_your_order'); if (!$('b2').dataset.busy) $('b2').textContent = C('continue');
+  txt('refund_title'); txt('refund_sub'); txt('back'); txt('address_title'); txt('summary_title'); txt('estimate_note');
+  $('editAddr').textContent = C('edit_address'); if (!$('b3').disabled) $('b3').textContent = C('submit');
+  txt('done_title'); txt('tracking'); $('labelBtn').textContent = C('download');
+  if (S.order) $('ordTitle').textContent = C('items_title', { order: S.order.name });
+  document.title = tok(T.meta.title);
+}
+
+/* ---------- flow ---------- */
+function go(n) {
+  STEP = n;
+  for (let i = 1; i <= 4; i++) $('s' + i).classList.toggle('hidden', i !== n);
+  renderChrome();
+  if (!B.preview) window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function showErr(id, msg) { const e = $(id); e.textContent = msg || ''; e.classList.toggle('hidden', !msg); }
+function busy(btn, on, label) { btn.disabled = on; btn.innerHTML = on ? '<span class="spin"></span>' : esc(label); }
 async function api(path, body) {
   const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || 'Something went wrong. Please try again.');
+  if (!r.ok) { const e = new Error(j.error || 'Something went wrong. Please try again.'); e.status = r.status; throw e; }
   return j;
 }
 
-// ---- Step 1
 $('f1').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (PICK) return;
   showErr('e1', '');
+  if (B.preview) { loadDemo(); go(2); return; }
+  if (!$('on').value.trim() || !$('em').value.trim()) { showErr('e1', C('not_found')); return; }
   busy($('b1'), true);
   try {
-    S = await api(`/api/returns/public/${STORE.key}/lookup`, { order_number: $('on').value, email: $('em').value });
-    addr = S.address ? { ...S.address } : null;
-    renderItems();
-    go(2);
-  } catch (err) { showErr('e1', err.message); }
-  busy($('b1'), false, 'Find my order');
+    S = await api(`/api/returns/public/${B.store}/lookup`, { order_number: $('on').value, email: $('em').value });
+    addr = S.address ? { ...S.address } : null; method = 'original';
+    renderItems(); go(2);
+  } catch (err) { showErr('e1', err.status === 404 ? C('not_found') : err.message); }
+  busy($('b1'), false, C('lookup_button'));
 });
 
-// ---- Step 2
+function statusText(s) { return { label_created: 'Label created, waiting for drop-off', in_transit: 'On its way back to us', delivered: 'Received, refund processing', refunded: 'Refunded', needs_attention: 'Being reviewed by our team', cancelled: 'Cancelled' }[s] || s; }
 function renderItems() {
-  $('ordTitle').textContent = `Order ${S.order.name}`;
-  $('existing').innerHTML = (S.existing || []).filter((r) => r.status !== 'cancelled').map((r) => `
-    <div class="existing"><strong>Return ${esc(r.rma)}</strong> · ${esc(statusText(r.status))}<br>
-    ${r.items.map((i) => esc(i.quantity + '× ' + i.title)).join(', ')}<br>
-    ${r.label_url && r.status !== 'refunded' ? `<a href="${esc(r.label_url)}" target="_blank" rel="noopener">Download label</a> · ` : ''}
-    <a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">Track package</a></div>`).join('');
-
-  const reasonOpts = '<option value="">Select a reason</option>' + S.reasons.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
-  const rows = S.items.map((it, i) => {
-    const qtyOpts = Array.from({ length: it.returnable_qty }, (_, k) => `<option>${k + 1}</option>`).join('');
-    const img = it.image ? `<img src="${esc(it.image)}" alt="">` : '<div class="ph"></div>';
-    const label = it.eligible ? '' : `<span class="tag">${esc(it.why || 'Already returned')}</span>`;
-    return `<div class="item ${it.eligible ? '' : 'off'}">${img}<div>
-      <div class="t">${esc(it.title)}</div>
-      <div class="v">${esc(it.variant || '')}${it.variant ? ' · ' : ''}${money(it.unit_price)}</div>
-      ${it.eligible ? `<label class="pick"><input type="checkbox" data-i="${i}" onchange="toggleItem(${i})"> Return this item</label>
-      <div class="detail hidden" id="d${i}">
-        <div class="grid"><select id="q${i}" aria-label="Quantity">${qtyOpts}</select><select id="r${i}" aria-label="Reason" onchange="validate2()">${reasonOpts}</select></div>
-        <textarea id="n${i}" rows="2" placeholder="Anything we should know? (optional)"></textarea>
-      </div>` : label}
+  $('ordTitle').textContent = C('items_title', { order: S.order.name });
+  const ex = (S.existing || []).filter((r) => r.status !== 'cancelled');
+  $('existing').innerHTML = ex.length ? `<h2 class="label" style="margin-top:0">${esc(C('existing_title'))}</h2>` + ex.map((r) => `<div class="note"><strong>${esc(r.rma)}</strong> · ${esc(statusText(r.status))}<br>${r.items.map((i) => esc(i.quantity + '× ' + i.title)).join(', ')}<br>${r.label_url && r.status !== 'refunded' ? `<a href="${esc(r.label_url)}" target="_blank" rel="noopener">${esc(C('download'))}</a> · ` : ''}<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(C('tracking'))}</a></div>`).join('') : '';
+  const prev = selectedLines();
+  const ropts = `<option value="">${esc(C('reason_placeholder'))}</option>` + S.reasons.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+  const it = T.items;
+  $('items').innerHTML = S.items.map((x, i) => {
+    const qty = Array.from({ length: Math.max(1, x.returnable_qty) }, (_, k) => `<option>${k + 1}</option>`).join('');
+    const thumb = x.image ? `<img class="thumb" src="${esc(x.image)}" alt="">` : `<div class="thumb">${esc((x.title || '?').slice(0, 1))}</div>`;
+    const meta = [it.show_variant && x.variant ? esc(x.variant) : '', it.show_price ? money(x.unit_price) : ''].filter(Boolean).join(' · ');
+    return `<div class="item ${x.eligible ? '' : 'off'}">${thumb}<div>
+      <div class="t">${esc(x.title)}</div>${meta ? `<div class="v">${meta}</div>` : ''}
+      ${x.eligible ? `<label class="pick"><input type="checkbox" data-i="${i}" onchange="toggleItem(${i})"> ${esc(C('return_this'))}</label>
+      <div class="detail hidden" id="d${i}"><div class="g"><select id="q${i}" aria-label="${esc(C('qty_label'))}">${qty}</select><select id="r${i}" onchange="validate2()" aria-label="Reason">${ropts}</select></div>
+      <textarea id="n${i}" rows="2" placeholder="${esc(C('note_placeholder'))}"></textarea></div>` : `<span class="tag">${esc(x.why || 'Not returnable')}</span>`}
     </div></div>`;
-  });
-  $('items').innerHTML = rows.join('') || '<p class="muted">There are no items on this order that can be returned.</p>';
+  }).join('') || `<p class="muted">${esc(C('none_returnable'))}</p>`;
+  for (const l of prev) {   // keep selections when the look changes in preview
+    const i = S.items.indexOf(l.it); if (i < 0) continue;
+    const cb = document.querySelector(`input[data-i="${i}"]`); if (!cb) continue;
+    cb.checked = true; $('d' + i).classList.remove('hidden'); $('q' + i).value = l.quantity; $('r' + i).value = l.reasonId; $('n' + i).value = l.note;
+  }
   validate2();
 }
-function toggleItem(i) {
-  const on = document.querySelector(`input[data-i="${i}"]`).checked;
-  $('d' + i).classList.toggle('hidden', !on);
-  validate2();
-}
+function toggleItem(i) { $('d' + i).classList.toggle('hidden', !document.querySelector(`input[data-i="${i}"]`).checked); validate2(); }
 function selectedLines() {
+  if (!S.items) return [];
   return S.items.map((it, i) => {
     const cb = document.querySelector(`input[data-i="${i}"]`);
     if (!cb || !cb.checked) return null;
     return { it, fulfillmentLineItemId: it.fulfillmentLineItemId, quantity: Number($('q' + i).value), reasonId: $('r' + i).value, note: $('n' + i).value };
   }).filter(Boolean);
 }
-function validate2() {
-  const lines = selectedLines();
-  $('b2').disabled = !lines.length || lines.some((l) => !l.reasonId);
-}
+function validate2() { const l = selectedLines(); $('b2').disabled = !l.length || l.some((x) => !x.reasonId); }
 
-// ---- Step 3
 function estimate() {
-  const lines = selectedLines();
-  const subtotal = lines.reduce((s, l) => s + l.it.unit_price * l.quantity, 0);
-  const o = S.options;
-  const refund = Math.max(0, subtotal - o.label_fee);
-  const creditBase = Math.max(0, subtotal - (o.fee_on_store_credit ? o.label_fee : 0));
-  const bonus = creditBase * o.store_credit_bonus_pct / 100;
-  return { subtotal, refund, creditBase, bonus, credit: creditBase + bonus };
+  const o = S.options, sub = selectedLines().reduce((s, l) => s + l.it.unit_price * l.quantity, 0);
+  const refund = Math.max(0, sub - o.label_fee), base = Math.max(0, sub - (o.fee_on_store_credit ? o.label_fee : 0)), bonus = base * o.store_credit_bonus_pct / 100;
+  return { sub, refund, bonus, credit: base + bonus };
 }
 function toStep3() {
-  if (S.international) { showErr('e2', 'Prepaid return labels are only available for US addresses. Please contact us for help with your return.'); return; }
-  renderOpts();
-  renderAddr();
-  go(3);
+  if (PICK) return;
+  if (S.international) { showErr('e2', C('intl')); return; }
+  renderOpts(); renderAddr(); go(3);
 }
 function renderOpts() {
-  const e = estimate();
-  const o = S.options;
-  let html = '';
-  if (o.store_credit_enabled) {
-    html += `<label class="opt ${method === 'store_credit' ? 'sel' : ''}"><input type="radio" name="m" value="store_credit" ${method === 'store_credit' ? 'checked' : ''} onchange="pick('store_credit')">
-      <div class="top"><div><strong>Store credit</strong><span class="badge">+${o.store_credit_bonus_pct}% bonus</span></div><div class="amt">${money(e.credit)}</div></div>
-      <div class="muted">Added to your ${esc(STORE.name)} account to use on your next order.</div></label>`;
-  }
-  html += `<label class="opt ${method === 'original' ? 'sel' : ''}"><input type="radio" name="m" value="original" ${method === 'original' ? 'checked' : ''} onchange="pick('original')">
-    <div class="top"><div><strong>Refund to original payment</strong></div><div class="amt">${money(e.refund)}</div></div>
-    <div class="muted">Back to the card you paid with. Banks usually take 5–10 business days.</div></label>`;
-  $('opts').innerHTML = html;
-  renderSummary();
+  const e = estimate(), o = S.options, b = { bonus: o.store_credit_bonus_pct };
+  let h = '';
+  if (o.store_credit_enabled) h += `<label class="opt ${method === 'store_credit' ? 'sel' : ''}"><input type="radio" name="m" ${method === 'store_credit' ? 'checked' : ''} onchange="pick('store_credit')">
+    <div class="top"><div><strong>${esc(C('credit_title', b))}</strong><span class="badge">${esc(C('credit_badge', b))}</span></div><div class="amt">${money(e.credit)}</div></div>
+    <div class="muted">${esc(C('credit_desc', b))}</div></label>`;
+  h += `<label class="opt ${method === 'original' ? 'sel' : ''}"><input type="radio" name="m" ${method === 'original' ? 'checked' : ''} onchange="pick('original')">
+    <div class="top"><div><strong>${esc(C('original_title'))}</strong></div><div class="amt">${money(e.refund)}</div></div>
+    <div class="muted">${esc(C('original_desc'))}</div></label>`;
+  $('opts').innerHTML = h;
+  const credit = method === 'store_credit', fee = credit && !o.fee_on_store_credit ? 0 : o.label_fee;
+  let s = selectedLines().map((l) => `<div class="sum"><span>${esc(l.quantity + '× ' + l.it.title)}</span><span>${money(l.it.unit_price * l.quantity)}</span></div>`).join('');
+  s += `<div class="sum"><span>${esc(C('fee_line'))}</span><span>${fee ? '−' + money(fee) : esc(C('fee_free'))}</span></div>`;
+  if (credit) s += `<div class="sum"><span>${esc(C('bonus_line', b))}</span><span>+${money(e.bonus)}</span></div>`;
+  s += `<div class="sum total"><span>${esc(C(credit ? 'total_credit' : 'total_refund'))}</span><span>${money(credit ? e.credit : e.refund)}</span></div>`;
+  $('summary').innerHTML = s;
 }
 function pick(m) { method = m; renderOpts(); }
-function renderSummary() {
-  const e = estimate();
-  const o = S.options;
-  const lines = selectedLines();
-  const credit = method === 'store_credit';
-  const fee = credit && !o.fee_on_store_credit ? 0 : o.label_fee;
-  let h = lines.map((l) => `<div class="sumline"><span>${esc(l.quantity + '× ' + l.it.title)}</span><span>${money(l.it.unit_price * l.quantity)}</span></div>`).join('');
-  h += `<div class="sumline"><span>Return shipping label</span><span>${fee ? '−' + money(fee) : 'Free'}</span></div>`;
-  if (credit) h += `<div class="sumline"><span>${o.store_credit_bonus_pct}% store credit bonus</span><span>+${money(e.bonus)}</span></div>`;
-  h += `<div class="sumline total"><span>Estimated ${credit ? 'store credit' : 'refund'}</span><span>${money(credit ? e.credit : e.refund)}</span></div>`;
-  $('summary').innerHTML = h;
-}
 function renderAddr() {
-  if (!addr) { $('addrView').innerHTML = '<span class="muted">No address on file. Please add one.</span>'; openAddr(); return; }
+  if (!addr) { $('addrView').innerHTML = ''; openAddr(); return; }
   $('addrView').innerHTML = `${esc(addr.name)}<br>${esc(addr.address1)}${addr.address2 ? ', ' + esc(addr.address2) : ''}<br>${esc(addr.city)}, ${esc(addr.state)} ${esc(addr.zip)}`;
 }
 function openAddr() {
   const a = addr || {};
-  $('a_name').value = a.name || ''; $('a_1').value = a.address1 || ''; $('a_2').value = a.address2 || '';
-  $('a_city').value = a.city || ''; $('a_state').value = a.state || ''; $('a_zip').value = a.zip || ''; $('a_phone').value = a.phone || '';
+  $('a_name').value = a.name || ''; $('a_1').value = a.address1 || ''; $('a_2').value = a.address2 || ''; $('a_city').value = a.city || '';
+  $('a_state').value = a.state || ''; $('a_zip').value = a.zip || ''; $('a_phone').value = a.phone || '';
   $('addrForm').classList.remove('hidden'); $('addrView').classList.add('hidden'); $('editAddr').classList.add('hidden');
 }
-$('editAddr').onclick = openAddr;
+$('editAddr').onclick = () => { if (!PICK) openAddr(); };
 function readAddr() {
   if ($('addrForm').classList.contains('hidden')) return addr;
-  return { name: $('a_name').value.trim(), address1: $('a_1').value.trim(), address2: $('a_2').value.trim(), city: $('a_city').value.trim(),
-    state: $('a_state').value.trim().toUpperCase(), zip: $('a_zip').value.trim(), phone: $('a_phone').value.trim(), country: 'US' };
+  return { name: $('a_name').value.trim(), address1: $('a_1').value.trim(), address2: $('a_2').value.trim(), city: $('a_city').value.trim(), state: $('a_state').value.trim().toUpperCase(), zip: $('a_zip').value.trim(), phone: $('a_phone').value.trim(), country: 'US' };
 }
-
 async function submitReturn() {
+  if (PICK) return;
   showErr('e3', '');
+  if (B.preview) { S.done = demoDone(); renderDone(); go(4); return; }
   const a = readAddr();
   if (!a || !a.address1 || !a.city || !a.state || !a.zip) { showErr('e3', 'Please complete your address.'); return; }
   busy($('b3'), true);
   try {
     const lines = selectedLines().map(({ it, ...l }) => l);
-    const r = await api('/api/returns/public/submit', { token: S.token, lines, refund_method: method, address: a });
-    $('doneLead').textContent = `Return ${r.rma} for order ${S.order.name}`;
-    $('labelBtn').href = r.label_url;
-    $('trk').href = r.tracking_url; $('trk').textContent = r.tracking_number;
-    $('refundStep').textContent = method === 'store_credit'
-      ? 'Your store credit is added as soon as the package is delivered to us.'
-      : 'Your refund is issued as soon as the package is delivered to us.';
-    go(4);
+    S.done = await api('/api/returns/public/submit', { token: S.token, lines, refund_method: method, address: a });
+    renderDone(); go(4);
   } catch (err) { showErr('e3', err.message); }
-  busy($('b3'), false, 'Get my return label');
+  busy($('b3'), false, C('submit'));
+}
+function renderDone() {
+  const r = S.done;
+  $('doneSub').textContent = C('done_sub', { rma: r.rma, order: S.order.name });
+  $('labelBtn').href = r.label_url; $('trk').href = r.tracking_url; $('trk').textContent = r.tracking_number;
+  const steps = String(T.copy.done_steps || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  steps.push(T.copy[method === 'store_credit' ? 'done_credit_note' : 'done_refund_note']);
+  $('doneSteps').innerHTML = steps.filter(Boolean).map((s) => `<li class="rich">${rich(s)}</li>`).join('');
 }
 
-function statusText(s) {
-  return { label_created: 'Label created, waiting for drop-off', in_transit: 'On its way back to us', delivered: 'Received, refund processing', refunded: 'Refunded', needs_attention: 'Being reviewed by our team', cancelled: 'Cancelled' }[s] || s;
+/* ---------- preview (Portal Studio) ---------- */
+function loadDemo() {
+  const p = CTX.prefix || '';
+  S = {
+    token: 'demo', order: { name: '#' + p + '10423' }, international: false,
+    address: { name: 'Jane Doe', address1: '100 Main St', address2: '', city: 'Plano', state: 'TX', zip: '75024', phone: '', country: 'US' },
+    items: [
+      { fulfillmentLineItemId: 'a', title: 'Bamboo Zip Sleeper', variant: '3-6M · Sage', image: null, unit_price: 32.5, returnable_qty: 2, eligible: true },
+      { fulfillmentLineItemId: 'b', title: 'Muslin Swaddle Set', variant: 'One size · Oat', image: null, unit_price: 24, returnable_qty: 1, eligible: true },
+      { fulfillmentLineItemId: 'c', title: 'Knit Bonnet', variant: '0-3M', image: null, unit_price: 8, returnable_qty: 1, eligible: false, why: 'Final sale' },
+    ],
+    reasons: [{ id: 'r1', name: 'Too small' }, { id: 'r2', name: 'Too big' }, { id: 'r3', name: 'Changed my mind' }, { id: 'r4', name: 'Damaged' }],
+    existing: [],
+    options: { label_fee: CTX.fee, store_credit_enabled: CTX.credit_enabled, store_credit_bonus_pct: CTX.bonus, fee_on_store_credit: CTX.fee_on_credit },
+  };
+  addr = { ...S.address };
+  renderItems();
 }
+function demoDone() { return { rma: (CTX.prefix || 'R') + '-R1042', label_url: '#', tracking_url: '#', tracking_number: '9405 5000 0000 0000 0000 01' }; }
+function showStep(n) {
+  if (n >= 2 && !S.items) loadDemo();
+  if (n >= 2) { const cb = document.querySelector('input[data-i="0"]'); if (cb && !cb.checked) { cb.checked = true; $('d0').classList.remove('hidden'); $('r0').value = 'r1'; validate2(); } }
+  if (n === 3) { renderOpts(); renderAddr(); }
+  if (n === 4) { S.done = demoDone(); renderDone(); }
+  go(n);
+}
+const SEC_SEL = { brand: '.logowrap:not(.hidden), .pagelogo:not(.hidden), #topbar:not(.hidden)', background: '.bg, .media', layout: '.card', colors: '.card', type: 'h1', buttons: '.btn', inputs: 'input, select', items: '#items', header: '#topbar', announce: '#announce', footer: '#foot', copy: 'section:not(.hidden) h1', meta: null, advanced: null };
+function flash(sec) {
+  const sel = SEC_SEL[sec]; if (!sel) return;
+  document.querySelectorAll(sel).forEach((el) => { if (el.offsetParent === null && !el.classList.contains('bg')) return; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 900); });
+}
+if (B.preview) {
+  if (window.parent === window) { const f = document.createElement('div'); f.className = 'previewflag'; f.textContent = 'Draft preview — customers don’t see this yet'; document.body.appendChild(f); }
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin) return;
+    const m = e.data || {};
+    if (m.type === 'rp:theme') applyTheme(m.theme);
+    if (m.type === 'rp:step') showStep(m.step);
+    if (m.type === 'rp:flash') flash(m.sec);
+    if (m.type === 'rp:pick') { PICK = !!m.on; document.body.classList.toggle('picking', PICK); }
+  });
+  document.addEventListener('click', (e) => {
+    if (!PICK) return;
+    const el = e.target.closest('[data-sec]'); if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    let sec = el.dataset.sec;
+    if (e.target.closest('.btn')) sec = 'buttons'; else if (e.target.closest('h1')) sec = 'type'; else if (e.target.closest('input,select,textarea')) sec = 'inputs';
+    parent.postMessage({ type: 'rp:picked', sec }, location.origin);
+  }, true);
+  window.addEventListener('load', () => parent.postMessage({ type: 'rp:ready' }, location.origin));
+}
+
+applyTheme(T);
+go(1);
+window.addEventListener('resize', renderChrome);
 </script>
 </body>
 </html>

@@ -851,6 +851,7 @@ async function loadReturns(silent){
       <button class="btn sec xs" onclick="retPoll(this)">↻ Check tracking</button>
       <a class="btn sec xs" href="/api/returns.csv?key=${encodeURIComponent(KEY)}" style="text-decoration:none">Export CSV</a>
       ${d.admin?`<button class="btn sec xs" onclick="retSettings()">⚙︎ Settings</button>`:""}
+      <a class="btn sec xs" href="/returns-studio" target="_blank" rel="noopener" style="text-decoration:none">🎨 Customize portal</a>
       ${(d.problems||[]).length?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Setup: ${d.problems.map(esc).join(" · ")}</span>`:""}
       <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}</div></div>`;
     if(!d.returns.length){ w.innerHTML=h+'<div class="empty">No returns here.</div>'; return; }

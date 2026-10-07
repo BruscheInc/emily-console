@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal Studio · Helpdesk</title>
+<link rel="icon" href="/favicon-32.png">
+<style>
+:root{--bg:#eef1f6;--panel:#ffffff;--panel2:#f5f7fb;--line:#dde3ed;--ink:#1a2433;--muted:#667189;--accent:#3b6ef5;--accent-soft:#e8eefe;--ok:#158048;--warn:#b7791f;--bad:#d14343;--r:10px}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+/* top bar */
+.top{flex:none;height:58px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line);z-index:5}
+.top .back{color:var(--muted);text-decoration:none;font-weight:600;white-space:nowrap}
+.top .title{font-weight:800;font-size:15px;white-space:nowrap}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;padding:5px 11px;border-radius:7px;cursor:pointer;font-weight:600;color:var(--muted);white-space:nowrap}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(20,30,50,.14)}
+.seg button svg{width:16px;height:16px;vertical-align:-3px}
+.sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;text-decoration:none;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{filter:brightness(.95)}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.45;cursor:default}
+.ibtn{border:1px solid var(--line);background:var(--panel);border-radius:9px;width:34px;height:34px;display:inline-grid;place-items:center;cursor:pointer}
+.ibtn:disabled{opacity:.35;cursor:default}
+.ibtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.status{font-size:12px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.busy{background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.menu{position:relative}
+.menu .list{position:absolute;right:0;top:40px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(20,30,50,.18);padding:6px;min-width:260px;z-index:20}
+.menu .list button{display:flex;width:100%;text-align:left;gap:10px;border:0;background:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+.menu .list button:hover{background:var(--panel2)}
+.menu .list hr{border:0;border-top:1px solid var(--line);margin:5px 0}
+.menu .list small{display:block;color:var(--muted);font-size:11.5px}
+/* body */
+.main{flex:1;display:flex;min-height:0}
+.side{width:380px;flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.side .search{padding:12px 14px;border-bottom:1px solid var(--line)}
+.side .search input{width:100%;border:1px solid var(--line);border-radius:9px;padding:8px 11px;background:var(--panel2)}
+.ro{background:#fff6e5;color:#6b4a00;font-size:12.5px;padding:8px 14px;border-bottom:1px solid #f0d9a8}
+.sections{flex:1;overflow:auto;padding:6px 0 40px}
+.sec{border-bottom:1px solid var(--line)}
+.sec > .h{display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer;user-select:none}
+.sec > .h:hover{background:var(--panel2)}
+.sec > .h .ic{width:28px;height:28px;border-radius:8px;background:var(--panel2);display:grid;place-items:center;font-size:14px;flex:none}
+.sec > .h b{display:block;font-size:13.5px}
+.sec > .h small{display:block;color:var(--muted);font-size:11.5px;line-height:1.3}
+.sec > .h .chev{margin-left:auto;color:var(--muted);transition:transform .15s}
+.sec.open > .h .chev{transform:rotate(90deg)}
+.sec.open > .h{background:var(--panel2)}
+.sec .b{display:none;padding:6px 16px 18px}
+.sec.open .b{display:block}
+.sec.hit > .h{background:#fff8d6}
+.grp{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 4px}
+.f{padding:8px 0}
+.f > .lbl{display:flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;margin-bottom:6px}
+.f > .lbl .reset{margin-left:auto;border:0;background:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;visibility:hidden}
+.f.changed > .lbl .reset{visibility:visible}
+.f.changed > .lbl::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+.f .hint{color:var(--muted);font-size:11.5px;margin-top:5px;line-height:1.35}
+.f input[type=text],.f input[type=url],.f input[type=number],.f select,.f textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--panel)}
+.f textarea{resize:vertical;min-height:62px;line-height:1.4}
+.f textarea.code{font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;min-height:200px;tab-size:2}
+.f input:focus,.f select:focus,.f textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.f input:disabled,.f select:disabled,.f textarea:disabled{background:var(--panel2);color:var(--muted)}
+.rangebox{display:flex;align-items:center;gap:8px}
+.rangebox input[type=range]{flex:1;accent-color:var(--accent)}
+.rangebox input[type=number]{width:72px;text-align:right}
+.rangebox .u{color:var(--muted);font-size:12px;width:20px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pair .dev{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:3px 8px}
+.pair .dev.active{border-color:var(--accent);background:var(--accent-soft)}
+.pair .dev svg{width:15px;height:15px;color:var(--muted);flex:none}
+.pair .dev input{border:0!important;padding:4px 0!important;background:transparent!important;width:100%;text-align:right}
+.pair .dev .u{color:var(--muted);font-size:12px}
+.colorrow{display:flex;gap:8px;align-items:center}
+.colorrow .sw{position:relative;width:36px;height:34px;border-radius:8px;border:1px solid var(--line);overflow:hidden;flex:none;background-image:linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%);background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0}
+.colorrow .sw i{position:absolute;inset:0}
+.colorrow .sw input{position:absolute;inset:-8px;width:60px;height:60px;opacity:0;cursor:pointer}
+.colorrow input[type=text]{font-family:ui-monospace,Menlo,monospace;text-transform:uppercase}
+.palette{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.palette button{width:18px;height:18px;border-radius:5px;border:1px solid rgba(0,0,0,.15);cursor:pointer;padding:0}
+.cr{font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;white-space:nowrap}
+.cr.pass{background:#e4f3ea;color:var(--ok)}.cr.weak{background:#fff3dc;color:var(--warn)}.cr.fail{background:#fbe7e2;color:var(--bad)}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer}
+.toggle .sw2{position:relative;width:38px;height:22px;border-radius:999px;background:#cfd6e2;flex:none;transition:background .15s}
+.toggle .sw2::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+.toggle input{display:none}
+.toggle input:checked + .sw2{background:var(--accent)}
+.toggle input:checked + .sw2::after{left:19px}
+.toggle span.t{font-weight:600;font-size:12.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 10px;cursor:pointer;font-weight:600;font-size:12.5px}
+.chips button.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.img{display:flex;gap:10px;align-items:flex-start}
+.thumb{position:relative;width:118px;height:82px;border-radius:9px;border:1px dashed #c3ccda;flex:none;overflow:hidden;cursor:pointer;background-color:#fff;background-image:linear-gradient(45deg,#eef1f6 25%,transparent 25%),linear-gradient(-45deg,#eef1f6 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eef1f6 75%),linear-gradient(-45deg,transparent 75%,#eef1f6 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0;display:grid;place-items:center;color:var(--muted);font-size:11.5px;text-align:center}
+.thumb img{max-width:100%;max-height:100%;object-fit:contain}
+.thumb.cover img{width:100%;height:100%;object-fit:cover}
+.thumb.drag{border-color:var(--accent);background:var(--accent-soft)}
+.thumb .focal{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 2px var(--accent),0 2px 6px rgba(0,0,0,.4);pointer-events:none}
+.img .acts{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.img .acts .row{display:flex;gap:6px;flex-wrap:wrap}
+.img .acts .meta{font-size:11px;color:var(--muted);word-break:break-all}
+.small{font-size:12px;padding:5px 9px}
+.links .lk{display:grid;grid-template-columns:1fr 1.3fr 28px;gap:6px;margin-bottom:6px}
+.links .lk input{min-width:0}
+.tokens{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.tokens code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:0 5px;font-size:11px;cursor:pointer}
+/* preview */
+.stage{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+.stagebar{flex:none;display:flex;align-items:center;gap:10px;padding:10px 16px;flex-wrap:wrap}
+.canvas{flex:1;position:relative;overflow:hidden;min-height:0}
+.frame{position:absolute;top:0;left:50%;transform-origin:top center;background:#fff;box-shadow:0 20px 60px -20px rgba(20,30,50,.35),0 0 0 1px rgba(20,30,50,.08);border-radius:10px;overflow:hidden;transition:width .25s}
+.frame.mobile{border-radius:34px;box-shadow:0 0 0 10px #1b2230,0 0 0 11px #3a4456,0 30px 70px -20px rgba(20,30,50,.5)}
+.frame iframe{border:0;width:100%;height:100%;display:block;background:#fff}
+.zoom{font-size:12px;color:var(--muted)}
+.a11y{font-size:12px;cursor:pointer}
+.loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted)}
+/* modals */
+.modal{position:fixed;inset:0;z-index:50;background:rgba(10,16,28,.5);display:flex;align-items:center;justify-content:center;padding:20px}
+.modal .box{background:var(--panel);border-radius:16px;width:min(640px,100%);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.modal .box.wide{width:min(900px,100%)}
+.modal .hd{padding:18px 20px 6px}
+.modal .hd h3{margin:0;font-size:17px}
+.modal .hd p{margin:4px 0 0;color:var(--muted);font-size:12.5px}
+.modal .bd{padding:10px 20px;overflow:auto}
+.modal .ft{padding:14px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--line)}
+.modal textarea,.modal input[type=text]{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.vlist .v{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.vlist .v b{display:block}
+.vlist .v small{color:var(--muted)}
+.vlist .v .sp{flex:1}
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.lib .a{border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;position:relative;background:var(--panel2)}
+.lib .a:hover{border-color:var(--accent)}
+.lib .a .im{height:96px;display:grid;place-items:center;background-image:linear-gradient(45deg,#eef1f6 25%,transparent 25%),linear-gradient(-45deg,#eef1f6 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eef1f6 75%),linear-gradient(-45deg,transparent 75%,#eef1f6 75%);background-size:12px 12px;background-color:#fff}
+.lib .a .im img{max-width:100%;max-height:100%;object-fit:contain}
+.lib .a .nm{font-size:11px;padding:5px 7px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib .a .del{position:absolute;top:4px;right:4px;border:0;background:rgba(255,255,255,.9);border-radius:6px;cursor:pointer;padding:2px 6px;color:var(--bad);display:none}
+.lib .a:hover .del{display:block}
+.diff{font-size:12.5px;margin:0;padding-left:18px;max-height:220px;overflow:auto}
+.diff li{margin:3px 0}
+.chk{display:flex;align-items:center;gap:8px;margin:8px 0;cursor:pointer}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.preset{border:1px solid var(--line);border-radius:10px;padding:8px;cursor:pointer;background:var(--panel)}
+.preset:hover{border-color:var(--accent)}
+.preset .pv{height:52px;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:6px}
+.preset .pv i{display:block;width:44px;height:28px;border-radius:5px}
+.preset b{font-size:12px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a2433;color:#fff;padding:10px 16px;border-radius:10px;opacity:0;transition:all .2s;z-index:60;font-weight:600;max-width:80vw}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.toast.bad{background:var(--bad)}
+.gate{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:70}
+.gate .box{background:var(--panel);padding:28px;border-radius:16px;box-shadow:0 20px 60px rgba(20,30,50,.15);width:min(380px,92vw);text-align:center}
+@media (max-width:980px){
+  body{overflow:auto}
+  .main{flex-direction:column}
+  .side{width:100%;border-right:0;max-height:none}
+  .stage{min-height:80vh}
+  .top{height:auto;flex-wrap:wrap;padding:10px}
+}
+</style>
+</head>
+<body>
+<div class="gate hidden" id="gate"><div class="box"><h3>Sign in to Helpdesk first</h3><p style="color:var(--muted)">Portal Studio uses your Helpdesk login.</p><a class="btn pri" href="/">Open Helpdesk</a></div></div>
+
+<div class="top">
+  <a class="back" href="/" title="Back to Helpdesk">← Helpdesk</a>
+  <span class="title">Portal Studio</span>
+  <div class="seg" id="storeSeg"></div>
+  <span class="status" id="status"><span class="dot"></span><span>Loading…</span></span>
+  <span class="sp"></span>
+  <button class="ibtn" id="undo" title="Undo (⌘Z)" disabled>↶</button>
+  <button class="ibtn" id="redo" title="Redo (⇧⌘Z)" disabled>↷</button>
+  <button class="ibtn on" id="pickBtn" title="Click to edit: click anything in the preview to jump to its settings">⌖</button>
+  <a class="btn" id="openPreview" target="_blank" rel="noopener" title="Open the draft in a new tab">Open preview ↗</a>
+  <div class="menu" id="moreMenu">
+    <button class="btn" id="moreBtn">More ▾</button>
+    <div class="list hidden" id="moreList">
+      <button data-act="history">🕘 <span>Version history<small>See and restore earlier published looks</small></span></button>
+      <button data-act="loop">⤓ <span>Re-import from Loop<small>Pull the logo, background, colors and fonts Loop shows today</small></span></button>
+      <button data-act="copy">⇄ <span>Copy from the other store<small>Use the other portal's look as a starting point</small></span></button>
+      <button data-act="library">🖼 <span>Image library<small>Every uploaded image</small></span></button>
+      <hr>
+      <button data-act="export">⬇ <span>Export look (.json)<small>Back up or move this design</small></span></button>
+      <button data-act="import">⬆ <span>Import look (.json)</span></button>
+      <hr>
+      <button data-act="discard">✖ <span>Discard draft changes<small>Go back to what customers see now</small></span></button>
+      <button data-act="reset">↺ <span>Reset to the original look<small>The look Loop had when we switched</small></span></button>
+    </div>
+  </div>
+  <button class="btn pri" id="publishBtn" disabled>Publish</button>
+</div>
+
+<div class="main">
+  <aside class="side">
+    <div class="ro hidden" id="roNote">You can look around, but only admins can change the portal.</div>
+    <div class="search"><input type="text" id="search" placeholder="Search settings — e.g. logo, button, font, mobile"></div>
+    <div class="sections" id="sections"></div>
+  </aside>
+  <section class="stage">
+    <div class="stagebar">
+      <div class="seg" id="deviceSeg"></div>
+      <div class="seg" id="stepSeg"></div>
+      <span class="sp"></span>
+      <span class="a11y" id="a11y"></span>
+      <span class="zoom" id="zoom"></span>
+    </div>
+    <div class="canvas" id="canvas"><div class="frame" id="frame"><iframe id="pv" title="Portal preview"></iframe></div><div class="loading" id="pvLoading">Loading preview…</div></div>
+  </section>
+</div>
+<input type="file" id="fileIn" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/avif,image/x-icon,.ico" class="hidden">
+<input type="file" id="jsonIn" accept="application/json,.json" class="hidden">
+<div class="toast" id="toast"></div>
+
+<script>
+/* ======================================================================================
+   Portal Studio — edit the look of each returns portal. Changes save to a draft as you go;
+   customers only see them after Publish. Every publish is versioned and can be restored.
+   ====================================================================================== */
+const KEY = (() => { try { return localStorage.getItem('ec_key') || ''; } catch (e) { return ''; } })();
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const get = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
+const setp = (o, p, v) => { const ks = p.split('.'); let a = o; ks.slice(0, -1).forEach((k) => (a = a[k])); a[ks[ks.length - 1]] = v; };
+function toast(m, bad) { const t = $('toast'); t.textContent = m; t.className = 'toast show' + (bad ? ' bad' : ''); clearTimeout(t._t); t._t = setTimeout(() => (t.className = 'toast'), 2800); }
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + KEY } });
+  if (r.status === 401) { $('gate').classList.remove('hidden'); throw new Error('Not signed in'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Request failed (' + r.status + ')');
+  return j;
+}
+const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+
+/* ---------------- icons ---------------- */
+const IC = {
+  desktop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  tablet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M11 18h2"/></svg>',
+  mobile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>',
+};
+
+/* ---------------- the editor's field map (what you can change, grouped as you'd look for it) ---------------- */
+// type: color | text | textarea | rich | number | range | pair | select | chips | toggle | image | font | links | css
+// step: which portal page to show in the preview while editing that field
+const SECTIONS = [
+  { id: 'quick', icon: '✨', title: 'Quick styles', desc: 'One-click starting points you can then fine-tune', fields: [{ type: 'presets' }] },
+  { id: 'brand', icon: '🏷', title: 'Logo & brand', desc: 'Logo, size on desktop and mobile, where it sits', fields: [
+    { p: 'brand.logo', type: 'image', label: 'Logo', kind: 'logo', hint: 'PNG or SVG with a transparent background looks best. Wide logos: about 600×200.' },
+    { p: 'brand.logo_alt', type: 'text', label: 'Logo description (for screen readers)' },
+    { pair: ['brand.logo_h_d', 'brand.logo_h_m'], type: 'pair', label: 'Logo height', unit: 'px', min: 16, max: 200 },
+    { p: 'brand.logo_place', type: 'chips', label: 'Where the logo sits', options: [['card', 'Inside the card'], ['page', 'Above the card'], ['header', 'In a top bar']] },
+    { p: 'brand.logo_align', type: 'chips', label: 'Alignment', options: [['center', 'Center'], ['left', 'Left']] },
+    { p: 'brand.show_name', type: 'toggle', label: 'Show the store name next to the logo' },
+    { p: 'brand.logo_link', type: 'text', label: 'Logo links to', hint: 'Usually your store home page. Leave empty for no link.' },
+  ] },
+  { id: 'background', icon: '🖼', title: 'Background', desc: 'Color, gradient or photo — separate photo for phones', fields: [
+    { p: 'background.mode', type: 'chips', label: 'Background type', options: [['color', 'Solid color'], ['gradient', 'Gradient'], ['image', 'Photo']] },
+    { p: 'background.color', type: 'color', label: 'Background color', hint: 'Also shows while the photo loads.' },
+    { p: 'background.grad_from', type: 'color', label: 'Gradient start', show: (t) => t.background.mode === 'gradient' },
+    { p: 'background.grad_to', type: 'color', label: 'Gradient end', show: (t) => t.background.mode === 'gradient' },
+    { p: 'background.grad_angle', type: 'range', label: 'Gradient angle', unit: '°', min: 0, max: 360, show: (t) => t.background.mode === 'gradient' },
+    { p: 'background.image_d', type: 'image', label: 'Desktop photo', kind: 'background', focal: true, hint: 'Click the thumbnail to set the focus point — it stays in view when the screen crops the photo. About 2400×1500.', show: (t) => t.background.mode === 'image' },
+    { p: 'background.image_m', type: 'image', label: 'Phone photo (optional)', kind: 'background', focal: true, hint: 'A tall photo for phones (about 1200×2000). Empty = use the desktop photo.', show: (t) => t.background.mode === 'image' },
+    { p: 'background.fit', type: 'chips', label: 'Photo fit', options: [['cover', 'Fill the screen'], ['contain', 'Show whole photo'], ['repeat', 'Tile']], show: (t) => t.background.mode === 'image' },
+    { p: 'background.attach', type: 'chips', label: 'When scrolling', options: [['fixed', 'Background stays put'], ['scroll', 'Scrolls with page']] },
+    { p: 'background.overlay', type: 'color', label: 'Tint color', hint: 'Darken or lighten a busy photo so the card stands out.' },
+    { p: 'background.overlay_opacity', type: 'range', label: 'Tint strength', unit: '%', min: 0, max: 95 },
+    { p: 'background.blur', type: 'range', label: 'Blur the photo', unit: 'px', min: 0, max: 30, show: (t) => t.background.mode === 'image' },
+  ] },
+  { id: 'layout', icon: '▭', title: 'Layout & card', desc: 'Card position and size, split screen, corners, shadow, padding', fields: [
+    { p: 'layout.style', type: 'chips', label: 'Layout', options: [['center', 'Centered card'], ['left', 'Card on the left'], ['right', 'Card on the right'], ['split', 'Split screen']] },
+    { p: 'layout.split_side', type: 'chips', label: 'Photo side', options: [['left', 'Photo left'], ['right', 'Photo right']], show: (t) => t.layout.style === 'split', hint: 'On phones the photo becomes a banner on top.' },
+    { p: 'layout.split_w', type: 'range', label: 'Photo width', unit: '%', min: 30, max: 70, show: (t) => t.layout.style === 'split' },
+    { p: 'layout.valign', type: 'chips', label: 'Vertical position', options: [['center', 'Middle of the screen'], ['top', 'Top']] },
+    { p: 'layout.card_w_d', type: 'range', label: 'Card width (desktop)', unit: 'px', min: 360, max: 1100, show: (t) => t.layout.style !== 'split' },
+    { pair: ['layout.card_pad_d', 'layout.card_pad_m'], type: 'pair', label: 'Space inside the card', unit: 'px', min: 8, max: 96 },
+    { pair: ['layout.page_pad_d', 'layout.page_pad_m'], type: 'pair', label: 'Space around the card', unit: 'px', min: 0, max: 160 },
+    { p: 'layout.card_full_m', type: 'toggle', label: 'Card fills the whole phone screen', hint: 'No margins or rounded corners on phones.' },
+    { p: 'layout.radius', type: 'range', label: 'Corner roundness', unit: 'px', min: 0, max: 40 },
+    { p: 'layout.shadow', type: 'chips', label: 'Shadow', options: [['none', 'None'], ['soft', 'Soft'], ['medium', 'Medium'], ['strong', 'Strong']] },
+    { p: 'layout.border_w', type: 'range', label: 'Card border', unit: 'px', min: 0, max: 6 },
+    { p: 'layout.card_opacity', type: 'range', label: 'Card see-through', unit: '%', min: 0, max: 100, hint: '100% = solid. Lower it with a photo background for a glass look.' },
+    { p: 'layout.glass_blur', type: 'range', label: 'Frosted glass blur', unit: 'px', min: 0, max: 40, hint: 'Blurs what is behind a see-through card.' },
+    { p: 'layout.steps', type: 'toggle', label: 'Show the progress steps (1 · 2 · 3 · 4)' },
+  ] },
+  { id: 'colors', icon: '🎨', title: 'Colors', desc: 'Brand color, text, card, fields, messages — with readability checks', fields: [
+    { grp: 'Brand' },
+    { p: 'colors.primary', type: 'color', label: 'Brand / button color', contrast: ['colors.on_primary'] },
+    { p: 'colors.on_primary', type: 'color', label: 'Button text', contrast: ['colors.primary'] },
+    { p: 'colors.badge_bg', type: 'color', label: 'Badge background (the "+15% bonus" tag)', contrast: ['colors.badge_text'] },
+    { p: 'colors.badge_text', type: 'color', label: 'Badge text', contrast: ['colors.badge_bg'] },
+    { grp: 'Text' },
+    { p: 'colors.heading', type: 'color', label: 'Headings', contrast: ['colors.card'] },
+    { p: 'colors.text', type: 'color', label: 'Body text', contrast: ['colors.card'] },
+    { p: 'colors.muted', type: 'color', label: 'Secondary text', contrast: ['colors.card'] },
+    { p: 'colors.link', type: 'color', label: 'Links', contrast: ['colors.card'] },
+    { p: 'colors.page_text', type: 'color', label: 'Text on the background (footer)', contrast: ['background.color'] },
+    { grp: 'Card & fields' },
+    { p: 'colors.card', type: 'color', label: 'Card background' },
+    { p: 'colors.border', type: 'color', label: 'Lines & borders' },
+    { p: 'colors.soft', type: 'color', label: 'Soft fill (notes, tags, filled fields)' },
+    { p: 'colors.input_bg', type: 'color', label: 'Field background' },
+    { p: 'colors.input_text', type: 'color', label: 'Field text', contrast: ['colors.input_bg'] },
+    { p: 'colors.input_border', type: 'color', label: 'Field border' },
+    { p: 'colors.focus', type: 'color', label: 'Selected / focus ring' },
+    { grp: 'Messages' },
+    { p: 'colors.error', type: 'color', label: 'Error text', contrast: ['colors.error_bg'] },
+    { p: 'colors.error_bg', type: 'color', label: 'Error background' },
+    { p: 'colors.success', type: 'color', label: 'Success check mark' },
+  ] },
+  { id: 'type', icon: 'Aa', title: 'Fonts & text size', desc: 'Fonts, weights, desktop and mobile sizes', fields: [
+    { p: 'type.heading_font', type: 'font', label: 'Heading font' },
+    { p: 'type.body_font', type: 'font', label: 'Body font' },
+    { p: 'type.heading_weight', type: 'select', label: 'Heading weight', options: [[300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semibold'], [700, 'Bold'], [800, 'Extra bold'], [900, 'Black']] },
+    { p: 'type.body_weight', type: 'select', label: 'Body weight', options: [[300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semibold']] },
+    { pair: ['type.h1_d', 'type.h1_m'], type: 'pair', label: 'Page title size', unit: 'px', min: 14, max: 80 },
+    { pair: ['type.body_d', 'type.body_m'], type: 'pair', label: 'Body text size', unit: 'px', min: 12, max: 24 },
+    { pair: ['type.small_d', 'type.small_m'], type: 'pair', label: 'Small text size', unit: 'px', min: 10, max: 20 },
+    { pair: ['type.h2_d', 'type.h2_m'], type: 'pair', label: 'Section label size', unit: 'px', min: 10, max: 32 },
+    { p: 'type.line_height', type: 'range', label: 'Line spacing', unit: '×', min: 1, max: 2.2, step: 0.05 },
+    { p: 'type.heading_tracking', type: 'range', label: 'Heading letter spacing', unit: '', min: -3, max: 10, step: 0.5 },
+    { p: 'type.heading_case', type: 'chips', label: 'Heading capitals', options: [['none', 'As typed'], ['uppercase', 'ALL CAPS'], ['capitalize', 'Title Case']] },
+    { p: 'type.label_case', type: 'chips', label: 'Section labels', options: [['uppercase', 'ALL CAPS'], ['none', 'As typed']] },
+  ] },
+  { id: 'buttons', icon: '⏺', title: 'Buttons', desc: 'Style, shape, height on desktop and mobile', fields: [
+    { p: 'buttons.style', type: 'chips', label: 'Style', options: [['filled', 'Filled'], ['outline', 'Outline'], ['soft', 'Soft']] },
+    { p: 'buttons.radius', type: 'range', label: 'Corner roundness', unit: 'px', min: 0, max: 40, hint: 'Slide all the way right for a pill shape.', pill: true },
+    { pair: ['buttons.height_d', 'buttons.height_m'], type: 'pair', label: 'Button height', unit: 'px', min: 32, max: 80 },
+    { p: 'buttons.font_size', type: 'range', label: 'Text size', unit: 'px', min: 11, max: 26 },
+    { p: 'buttons.weight', type: 'select', label: 'Text weight', options: [[400, 'Regular'], [500, 'Medium'], [600, 'Semibold'], [700, 'Bold'], [800, 'Extra bold']] },
+    { p: 'buttons.case', type: 'chips', label: 'Capitals', options: [['none', 'As typed'], ['uppercase', 'ALL CAPS']] },
+    { p: 'buttons.tracking', type: 'range', label: 'Letter spacing', unit: '', min: -2, max: 10, step: 0.5 },
+    { p: 'buttons.full_width', type: 'toggle', label: 'Full-width buttons' },
+    { p: 'buttons.shadow', type: 'toggle', label: 'Glow under buttons' },
+  ] },
+  { id: 'inputs', icon: '⌨', title: 'Form fields', desc: 'Text boxes and drop-downs', fields: [
+    { p: 'inputs.style', type: 'chips', label: 'Style', options: [['outlined', 'Outlined'], ['filled', 'Filled'], ['underline', 'Underline']] },
+    { p: 'inputs.radius', type: 'range', label: 'Corner roundness', unit: 'px', min: 0, max: 40 },
+    { p: 'inputs.height', type: 'range', label: 'Height', unit: 'px', min: 32, max: 72 },
+    { p: 'inputs.border_w', type: 'range', label: 'Border thickness', unit: 'px', min: 0, max: 4 },
+  ] },
+  { id: 'items', icon: '👕', title: 'Product list', desc: 'How the items on the order look', step: 2, fields: [
+    { p: 'items.show_images', type: 'toggle', label: 'Show product photos' },
+    { p: 'items.image_size', type: 'range', label: 'Photo size', unit: 'px', min: 32, max: 160 },
+    { p: 'items.image_radius', type: 'range', label: 'Photo roundness', unit: 'px', min: 0, max: 80 },
+    { p: 'items.show_variant', type: 'toggle', label: 'Show size / color' },
+    { p: 'items.show_price', type: 'toggle', label: 'Show price' },
+  ] },
+  { id: 'header', icon: '▔', title: 'Top bar', desc: 'Optional bar across the top with a link back to the shop', fields: [
+    { p: 'header.show', type: 'toggle', label: 'Show the top bar', hint: 'Always on when the logo is set to "In a top bar".' },
+    { p: 'header.bg', type: 'color', label: 'Bar color', contrast: ['header.text'] },
+    { p: 'header.text', type: 'color', label: 'Bar text', contrast: ['header.bg'] },
+    { p: 'header.border', type: 'toggle', label: 'Line under the bar' },
+    { p: 'header.sticky', type: 'toggle', label: 'Stays at the top when scrolling' },
+    { p: 'header.show_link', type: 'toggle', label: 'Show a link back to the shop' },
+    { p: 'header.link_label', type: 'text', label: 'Link text' },
+  ] },
+  { id: 'announce', icon: '📣', title: 'Announcement bar', desc: 'A message strip across the very top', fields: [
+    { p: 'announce.on', type: 'toggle', label: 'Show announcement' },
+    { p: 'announce.text', type: 'rich', label: 'Message', hint: 'e.g. Holiday returns: anything bought Nov 15 – Dec 24 can be returned until Jan 15.' },
+    { p: 'announce.link', type: 'text', label: 'Link (optional)' },
+    { p: 'announce.bg', type: 'color', label: 'Background', contrast: ['announce.color'] },
+    { p: 'announce.color', type: 'color', label: 'Text', contrast: ['announce.bg'] },
+  ] },
+  { id: 'copy', icon: '✎', title: 'Wording', desc: 'Every line customers read, page by page', fields: [
+    { tokens: true },
+    { grp: '1 · Find your order', step: 1 },
+    { p: 'copy.lookup_title', type: 'text', label: 'Title', step: 1 },
+    { p: 'copy.lookup_sub', type: 'rich', label: 'Text under the title', step: 1 },
+    { p: 'copy.order_label', type: 'text', label: 'Order number label', step: 1 },
+    { p: 'copy.order_placeholder', type: 'text', label: 'Order number example', step: 1 },
+    { p: 'copy.order_help', type: 'text', label: 'Help under the order number', step: 1, hint: 'Leave empty to hide.' },
+    { p: 'copy.email_label', type: 'text', label: 'Email label', step: 1 },
+    { p: 'copy.email_placeholder', type: 'text', label: 'Email example', step: 1 },
+    { p: 'copy.lookup_button', type: 'text', label: 'Button', step: 1 },
+    { p: 'copy.policy', type: 'rich', label: 'Policy note under the form', step: 1 },
+    { p: 'copy.not_found', type: 'textarea', label: 'When the order isn’t found', step: 1 },
+    { grp: '2 · Choose items', step: 2 },
+    { p: 'copy.items_title', type: 'text', label: 'Title', step: 2 },
+    { p: 'copy.items_sub', type: 'text', label: 'Text under the title', step: 2 },
+    { p: 'copy.not_your_order', type: 'text', label: '"Not your order" link', step: 2 },
+    { p: 'copy.return_this', type: 'text', label: 'Checkbox', step: 2 },
+    { p: 'copy.reason_placeholder', type: 'text', label: 'Reason drop-down', step: 2 },
+    { p: 'copy.note_placeholder', type: 'text', label: 'Note box', step: 2 },
+    { p: 'copy.existing_title', type: 'text', label: 'Earlier returns heading', step: 2 },
+    { p: 'copy.none_returnable', type: 'text', label: 'Nothing can be returned', step: 2 },
+    { p: 'copy.continue', type: 'text', label: 'Button', step: 2 },
+    { grp: '3 · Refund choice', step: 3 },
+    { p: 'copy.refund_title', type: 'text', label: 'Title', step: 3 },
+    { p: 'copy.refund_sub', type: 'text', label: 'Text under the title', step: 3 },
+    { p: 'copy.back', type: 'text', label: 'Back link', step: 3 },
+    { p: 'copy.credit_title', type: 'text', label: 'Store credit option', step: 3 },
+    { p: 'copy.credit_badge', type: 'text', label: 'Store credit badge', step: 3 },
+    { p: 'copy.credit_desc', type: 'textarea', label: 'Store credit description', step: 3 },
+    { p: 'copy.original_title', type: 'text', label: 'Refund option', step: 3 },
+    { p: 'copy.original_desc', type: 'textarea', label: 'Refund description', step: 3 },
+    { p: 'copy.address_title', type: 'text', label: 'Address heading', step: 3 },
+    { p: 'copy.edit_address', type: 'text', label: 'Edit address link', step: 3 },
+    { p: 'copy.summary_title', type: 'text', label: 'Summary heading', step: 3 },
+    { p: 'copy.fee_line', type: 'text', label: 'Label fee line', step: 3 },
+    { p: 'copy.fee_free', type: 'text', label: 'When the label is free', step: 3 },
+    { p: 'copy.bonus_line', type: 'text', label: 'Bonus line', step: 3 },
+    { p: 'copy.total_credit', type: 'text', label: 'Store credit total', step: 3 },
+    { p: 'copy.total_refund', type: 'text', label: 'Refund total', step: 3 },
+    { p: 'copy.submit', type: 'text', label: 'Button', step: 3 },
+    { p: 'copy.estimate_note', type: 'textarea', label: 'Note under the button', step: 3 },
+    { p: 'copy.intl', type: 'textarea', label: 'Non-US address message', step: 3 },
+    { grp: '4 · Label ready', step: 4 },
+    { p: 'copy.done_title', type: 'text', label: 'Title', step: 4 },
+    { p: 'copy.done_sub', type: 'text', label: 'Text under the title', step: 4 },
+    { p: 'copy.download', type: 'text', label: 'Download button', step: 4 },
+    { p: 'copy.tracking', type: 'text', label: 'Tracking label', step: 4 },
+    { p: 'copy.done_steps', type: 'rich', label: 'Instructions (one per line)', step: 4, rows: 4 },
+    { p: 'copy.done_credit_note', type: 'textarea', label: 'Last line — store credit', step: 4 },
+    { p: 'copy.done_refund_note', type: 'textarea', label: 'Last line — refund', step: 4 },
+    { grp: 'Progress steps' },
+    { p: 'copy.step1', type: 'text', label: 'Step 1' }, { p: 'copy.step2', type: 'text', label: 'Step 2' },
+    { p: 'copy.step3', type: 'text', label: 'Step 3' }, { p: 'copy.step4', type: 'text', label: 'Step 4' },
+  ] },
+  { id: 'footer', icon: '▁', title: 'Footer', desc: 'Contact line and links under the card', fields: [
+    { p: 'footer.show', type: 'toggle', label: 'Show the footer' },
+    { p: 'footer.text', type: 'rich', label: 'Footer text' },
+    { p: 'footer.links', type: 'links', label: 'Links', hint: 'Up to 8 — e.g. Return policy, FAQ, Size guide, Contact us.' },
+  ] },
+  { id: 'meta', icon: '🔖', title: 'Browser tab & search', desc: 'Tab title, icon, search engine settings', fields: [
+    { p: 'meta.title', type: 'text', label: 'Browser tab title' },
+    { p: 'meta.favicon', type: 'image', label: 'Tab icon (favicon)', kind: 'favicon', hint: 'Square PNG, 64×64 or bigger.' },
+    { p: 'meta.description', type: 'textarea', label: 'Description (shown in Google and link previews)' },
+    { p: 'meta.noindex', type: 'toggle', label: 'Hide from Google search', hint: 'Recommended — customers reach it from your emails and site.' },
+  ] },
+  { id: 'advanced', icon: '</>', title: 'Custom CSS', desc: 'For anything the controls above don’t cover', fields: [
+    { p: 'advanced.css', type: 'css', label: 'CSS', hint: 'Useful hooks: .card, .btn, h1, .item, .opt, .foot, .announce, .topbar, body.lay-split. Mobile: @media (max-width:767px) { … }' },
+  ] },
+];
+const LABELS = {}; // path → human label (for the publish summary and search)
+SECTIONS.forEach((s) => s.fields.forEach((f) => { if (f.p) LABELS[f.p] = `${s.title} → ${f.label}`; if (f.pair) { LABELS[f.pair[0]] = `${s.title} → ${f.label} (desktop)`; LABELS[f.pair[1]] = `${s.title} → ${f.label} (mobile)`; } }));
+
+const PRESETS = [
+  { name: 'Original (Loop)', note: 'What customers saw on Loop', patch: (d) => d },
+  { name: 'Clean white', bg: '#FFFFFF', card: '#FFFFFF', ink: '#111827', patch: (d, t) => ({ ...t, background: { ...t.background, mode: 'color', color: '#F7F7F8' }, colors: { ...t.colors, card: '#FFFFFF', border: '#E5E7EB', soft: '#F3F4F6', heading: '#111827', text: '#1F2937', muted: '#6B7280', page_text: '#4B5563' }, layout: { ...t.layout, shadow: 'soft', radius: 16, border_w: 1, card_opacity: 100 }, type: { ...t.type, heading_font: 'Inter', body_font: 'Inter' } }) },
+  { name: 'Soft linen', bg: '#F4EFE8', card: '#FFFDF9', ink: '#3D3229', patch: (d, t) => ({ ...t, background: { ...t.background, mode: 'color', color: '#F4EFE8' }, colors: { ...t.colors, primary: '#6B5B4B', on_primary: '#FFFFFF', badge_bg: '#6B5B4B', heading: '#3D3229', text: '#4A3F35', muted: '#76695C', link: '#6B5B4B', card: '#FFFDF9', border: '#E8DFD3', soft: '#F4EFE8', input_border: '#DDD2C4', focus: '#6B5B4B', page_text: '#6B5B4B' }, type: { ...t.type, heading_font: 'Cormorant Garamond', body_font: 'Nunito Sans', heading_weight: 600, h1_d: 38, h1_m: 30 }, buttons: { ...t.buttons, radius: 999 }, layout: { ...t.layout, radius: 22, shadow: 'soft' } }) },
+  { name: 'Photo + glass', bg: '#9BA7B5', card: 'rgba(255,255,255,.7)', ink: '#1F2937', patch: (d, t) => ({ ...t, background: { ...t.background, mode: t.background.image_d ? 'image' : d.background.image_d ? 'image' : t.background.mode, image_d: t.background.image_d || d.background.image_d, overlay: '#000000', overlay_opacity: 15 }, layout: { ...t.layout, card_opacity: 78, glass_blur: 16, shadow: 'strong', border_w: 0, radius: 22 } }) },
+  { name: 'Split screen', bg: '#D7CFC4', card: '#FFFFFF', ink: '#242F3F', patch: (d, t) => ({ ...t, background: { ...t.background, mode: t.background.image_d || d.background.image_d ? 'image' : 'gradient', image_d: t.background.image_d || d.background.image_d }, layout: { ...t.layout, style: 'split', split_side: 'left', split_w: 50, valign: 'center' }, brand: { ...t.brand, logo_align: 'left' } }) },
+  { name: 'Midnight', bg: '#0F172A', card: '#111C33', ink: '#F8FAFC', patch: (d, t) => ({ ...t, background: { ...t.background, mode: 'gradient', grad_from: '#0F172A', grad_to: '#1E293B', grad_angle: 160 }, colors: { ...t.colors, primary: '#F5C77E', on_primary: '#1A1206', badge_bg: '#F5C77E', badge_text: '#1A1206', heading: '#F8FAFC', text: '#E2E8F0', muted: '#94A3B8', link: '#F5C77E', card: '#111C33', border: '#22304D', soft: '#1A2742', input_bg: '#0F1A30', input_text: '#F8FAFC', input_border: '#2B3A5C', focus: '#F5C77E', page_text: '#94A3B8', error_bg: '#3B1D1D', error: '#FCA5A5' }, layout: { ...t.layout, shadow: 'strong', border_w: 1 } }) },
+];
+
+/* ---------------- state ---------------- */
+let META = null, STORE = null, ST = null;     // ST = server state for this store: { draft, published, defaults, history, ... }
+let T = null;                                  // working theme (= draft)
+let UNDO = [], REDO = [], lastSnap = null, snapTimer = null;
+let DEVICE = 'desktop', STEP = 1, PICK = true, PV_READY = false, OPEN = new Set(['brand']);
+let saveTimer = null, saving = false, savedAt = null, saveErr = null, readOnly = false;
+const DEVICES = { desktop: { w: 1280, label: 'Desktop', icon: IC.desktop }, tablet: { w: 834, label: 'Tablet', icon: IC.tablet }, mobile: { w: 390, label: 'Phone', icon: IC.mobile } };
+
+/* ---------------- boot ---------------- */
+(async function boot() {
+  if (!KEY) { $('gate').classList.remove('hidden'); return; }
+  try { META = await api('/api/portal/meta'); } catch (e) { if (!/signed/.test(e.message)) toast(e.message, true); return; }
+  readOnly = !META.admin;
+  $('roNote').classList.toggle('hidden', !readOnly);
+  const want = new URLSearchParams(location.search).get('store');
+  const keys = Object.keys(META.stores);
+  STORE = keys.includes(want) ? want : (localStorage.getItem('ps_store') || keys[0]);
+  if (!keys.includes(STORE)) STORE = keys[0];
+  $('storeSeg').innerHTML = keys.map((k) => `<button data-k="${k}">${esc(META.stores[k].name)}</button>`).join('');
+  $('storeSeg').onclick = (e) => { const b = e.target.closest('button'); if (b && b.dataset.k !== STORE) switchStore(b.dataset.k); };
+  $('deviceSeg').innerHTML = Object.entries(DEVICES).map(([k, d]) => `<button data-d="${k}" title="${d.label} (${d.w}px)">${d.icon} ${d.label}</button>`).join('');
+  $('deviceSeg').onclick = (e) => { const b = e.target.closest('button'); if (b) { DEVICE = b.dataset.d; layoutFrame(); renderPairsActive(); paintSegs(); } };
+  $('stepSeg').innerHTML = ['Find order', 'Items', 'Refund', 'Label'].map((l, i) => `<button data-s="${i + 1}">${i + 1} · ${l}</button>`).join('');
+  $('stepSeg').onclick = (e) => { const b = e.target.closest('button'); if (b) setStep(Number(b.dataset.s)); };
+  await loadStore(STORE);
+  window.addEventListener('resize', layoutFrame);
+})();
+
+async function switchStore(k) {
+  if (saveTimer) await saveNow(); else if (savePromise) await savePromise.catch(() => {});
+  await loadStore(k);
+}
+async function loadStore(k) {
+  STORE = k; try { localStorage.setItem('ps_store', k); } catch (e) {}
+  history.replaceState(null, '', '?store=' + k);
+  ST = await api(`/api/portal/${k}/theme`);
+  T = clone(ST.draft); UNDO = []; REDO = []; lastSnap = JSON.stringify(T);
+  savedAt = ST.draft_saved_at; saveErr = null;
+  PV_READY = false; $('pvLoading').classList.remove('hidden');
+  const src = `/returns/${k}?preview=${encodeURIComponent(ST.preview_token)}`;
+  $('pv').src = src; $('openPreview').href = src;
+  paintSegs(); renderSections(); layoutFrame(); paintStatus(); paintUndo();
+}
+function paintSegs() {
+  document.querySelectorAll('#storeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.k === STORE));
+  document.querySelectorAll('#deviceSeg button').forEach((b) => b.classList.toggle('on', b.dataset.d === DEVICE));
+  document.querySelectorAll('#stepSeg button').forEach((b) => b.classList.toggle('on', Number(b.dataset.s) === STEP));
+  $('pickBtn').classList.toggle('on', PICK);
+}
+
+/* ---------------- preview ---------------- */
+const pv = () => $('pv').contentWindow;
+function post(msg) { if (PV_READY) try { pv().postMessage(msg, location.origin); } catch (e) {} }
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin) return;
+  const m = e.data || {};
+  if (m.type === 'rp:ready') { PV_READY = true; $('pvLoading').classList.add('hidden'); post({ type: 'rp:theme', theme: T }); post({ type: 'rp:pick', on: PICK }); post({ type: 'rp:step', step: STEP }); }
+  if (m.type === 'rp:picked') openSection(m.sec, true);
+});
+function setStep(n) { STEP = n; paintSegs(); post({ type: 'rp:step', step: n }); }
+function layoutFrame() {
+  const cv = $('canvas'), fr = $('frame'), d = DEVICES[DEVICE];
+  const pad = DEVICE === 'mobile' ? 36 : 24, availW = cv.clientWidth - pad * 2, availH = cv.clientHeight - pad * 2;
+  const scale = Math.min(1, availW / d.w);
+  fr.className = 'frame ' + DEVICE;
+  fr.style.width = d.w + 'px';
+  fr.style.height = (DEVICE === 'mobile' ? Math.min(844, availH / scale) : availH / scale) + 'px';
+  fr.style.transform = `translateX(-50%) scale(${scale})`;
+  fr.style.top = pad + 'px';
+  $('zoom').textContent = `${d.w}px · ${Math.round(scale * 100)}%`;
+}
+
+/* ---------------- editing ---------------- */
+const URL_PATHS = new Set(['brand.logo_link', 'announce.link', 'brand.logo', 'background.image_d', 'background.image_m', 'meta.favicon']);
+function normalize(path, value) {
+  const r = META.ranges && META.ranges[path];
+  if (r && typeof value === 'number') value = Math.min(r[1], Math.max(r[0], value));
+  // "larkspurbaby.com/pages/returns" → "https://larkspurbaby.com/pages/returns" (the server only keeps http(s) links)
+  if (URL_PATHS.has(path) && typeof value === 'string') { const v = value.trim(); if (v && !/^(https?:\/\/|\/returns\/asset\/)/i.test(v) && /^[\w-]+(\.[\w-]+)+(\/|$)/.test(v)) value = 'https://' + v; }
+  return value;
+}
+const rng = (p, f) => (META.ranges && META.ranges[p]) || [f.min, f.max];
+function change(path, value, opts = {}) {
+  if (readOnly) return;
+  value = normalize(path, value);
+  if (JSON.stringify(get(T, path)) === JSON.stringify(value)) return;
+  setp(T, path, value);
+  afterChange(opts);
+  markField(path);
+}
+function afterChange(opts = {}) {
+  post({ type: 'rp:theme', theme: T });
+  // group rapid edits (dragging a slider, typing) into one undo step
+  clearTimeout(snapTimer);
+  snapTimer = setTimeout(() => { const now = JSON.stringify(T); if (now !== lastSnap) { UNDO.push(lastSnap); if (UNDO.length > 200) UNDO.shift(); REDO = []; lastSnap = now; paintUndo(); } }, 450);
+  queueSave();
+  paintA11y();
+  if (opts.rerender) renderSections();
+}
+function queueSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 900); paintStatus(); }
+let savePromise = null;
+function saveNow() {
+  clearTimeout(saveTimer); saveTimer = null;
+  if (readOnly) return Promise.resolve();
+  const run = async () => {
+    if (savePromise) await savePromise.catch(() => {});      // one save at a time, in order
+    saving = true; paintStatus();
+    const sent = JSON.stringify(T), store = STORE;
+    try {
+      const r = await api(`/api/portal/${store}/draft`, jsonOpts('PUT', { theme: JSON.parse(sent) }));
+      savedAt = r.saved_at; saveErr = null; ST.draft = r.theme;
+      // The server cleans values (limits, links). If it changed something and nothing was edited since, show what will really be saved.
+      if (store === STORE && JSON.stringify(T) === sent && JSON.stringify(r.theme) !== sent) {
+        const fixed = diffPaths(r.theme, T); T = clone(r.theme); lastSnap = JSON.stringify(T); post({ type: 'rp:theme', theme: T });
+        fixed.forEach((p) => document.querySelectorAll(`#sections [data-p="${p}"]`).forEach((el) => { if (document.activeElement !== el && el.type !== 'checkbox') el.value = get(T, p); }));
+        if (fixed.some((p) => p === 'footer.links')) renderSections();
+      }
+    } catch (e) { saveErr = e.message; toast('Couldn’t save: ' + e.message, true); }
+    saving = false; paintStatus();
+  };
+  savePromise = run().finally(() => { savePromise = null; });
+  return savePromise;
+}
+function dirtyVsPublished() { return JSON.stringify(T) !== JSON.stringify(ST.published); }
+function paintStatus() {
+  const s = $('status'), dirty = dirtyVsPublished();
+  let dot = 'ok', text = 'Published — customers see this';
+  if (saving || saveTimer) { dot = 'busy'; text = 'Saving draft…'; }
+  else if (saveErr) { dot = 'warn'; text = 'Not saved — ' + saveErr; }
+  else if (dirty) { dot = 'warn'; text = `Draft saved${savedAt ? ' ' + new Date(savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''} · not published yet`; }
+  s.innerHTML = `<span class="dot ${dot}"></span><span>${esc(text)}</span>`;
+  $('publishBtn').disabled = readOnly || !dirty;
+}
+function paintUndo() { $('undo').disabled = !UNDO.length || readOnly; $('redo').disabled = !REDO.length || readOnly; }
+function flushSnap() { clearTimeout(snapTimer); const now = JSON.stringify(T); if (now !== lastSnap) { UNDO.push(lastSnap); REDO = []; lastSnap = now; } }
+function undo() { flushSnap(); if (!UNDO.length) return; REDO.push(JSON.stringify(T)); T = JSON.parse(UNDO.pop()); lastSnap = JSON.stringify(T); post({ type: 'rp:theme', theme: T }); renderSections(); queueSave(); paintUndo(); }
+function redo() { flushSnap(); if (!REDO.length) return; UNDO.push(JSON.stringify(T)); T = JSON.parse(REDO.pop()); lastSnap = JSON.stringify(T); post({ type: 'rp:theme', theme: T }); renderSections(); queueSave(); paintUndo(); }
+$('undo').onclick = undo; $('redo').onclick = redo;
+$('pickBtn').onclick = () => { PICK = !PICK; paintSegs(); post({ type: 'rp:pick', on: PICK }); toast(PICK ? 'Click anything in the preview to edit it' : 'Preview is clickable like the real page'); };
+document.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === 'z' && !e.target.matches('input[type=text],textarea')) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); saveNow(); }
+  if (e.key === 'Escape') closeModal();
+});
+window.addEventListener('beforeunload', (e) => { if (saveTimer || saving) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ---------------- side panel ---------------- */
+const fid = (p) => 'f_' + p.replace(/\./g, '__');
+function renderSections() {
+  const q = $('search').value.trim().toLowerCase();
+  const html = SECTIONS.map((s) => {
+    const fields = s.fields.filter((f) => !f.show || f.show(T));
+    const hit = q && (s.title.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q) || fields.some((f) => (f.label || f.grp || '').toLowerCase().includes(q) || String(f.hint || '').toLowerCase().includes(q)));
+    if (q && !hit) return '';
+    const open = OPEN.has(s.id) || !!q;
+    return `<div class="sec ${open ? 'open' : ''}" id="sec_${s.id}" data-id="${s.id}">
+      <div class="h" onclick="toggleSection('${s.id}')"><span class="ic">${s.icon}</span><span><b>${esc(s.title)}</b><small>${esc(s.desc)}</small></span><span class="chev">›</span></div>
+      <div class="b">${open ? fields.filter((f) => !q || !f.label || s.title.toLowerCase().includes(q) || (f.label || '').toLowerCase().includes(q) || String(f.hint || '').toLowerCase().includes(q) || f.grp).map((f) => fieldHtml(f, s)).join('') : ''}</div></div>`;
+  }).join('') || '<p style="padding:20px;color:var(--muted)">No settings match that search.</p>';
+  $('sections').innerHTML = html;
+  bindFields();
+  renderPairsActive();
+  paintA11y();
+}
+$('search').addEventListener('input', () => renderSections());
+function toggleSection(id) { OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); renderSections(); if (OPEN.has(id)) { focusSection(id); const el = $('sec_' + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }
+function focusSection(id) {
+  const s = SECTIONS.find((x) => x.id === id);
+  if (s && s.step) setStep(s.step);
+  post({ type: 'rp:flash', sec: id === 'quick' ? 'layout' : id });
+}
+function openSection(id, fromPreview) {
+  const map = { colors: 'colors' }; id = map[id] || id;
+  if (!SECTIONS.find((s) => s.id === id)) return;
+  OPEN.add(id); $('search').value = ''; renderSections();
+  const el = $('sec_' + id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('hit'); setTimeout(() => el.classList.remove('hit'), 1200); }
+  if (fromPreview) post({ type: 'rp:flash', sec: id });
+}
+const isChanged = (p) => ST && JSON.stringify(get(T, p)) !== JSON.stringify(get(ST.published, p));
+function markField(p) { const el = document.querySelector(`[data-path="${p}"]`); if (el) el.classList.toggle('changed', isChanged(p)); paintStatus(); }
+function resetBtn(p) { return `<button class="reset" title="Back to the published value" onclick="resetField('${p}')">↺ undo change</button>`; }
+function resetField(p) { change(p, clone(get(ST.published, p)), { rerender: true }); }
+const dis = () => (readOnly ? 'disabled' : '');
+
+function fieldHtml(f, s) {
+  if (f.grp) return `<div class="grp">${esc(f.grp)}</div>`;
+  if (f.tokens) return `<div class="f"><div class="hint">Use these and they fill in for each customer — click to copy:</div><div class="tokens">${['{store}', '{support}', '{order}', '{rma}', '{days}', '{fee}', '{bonus}', '{prefix}'].map((t) => `<code onclick="navigator.clipboard&&navigator.clipboard.writeText('${t}');toast('Copied ${t}')">${t}</code>`).join('')}</div><div class="hint">Formatting: **bold**, *italic*, [link text](https://…). Emails become links by themselves.</div></div>`;
+  if (f.type === 'presets') return `<div class="presets">${PRESETS.map((p, i) => `<div class="preset" onclick="applyPreset(${i})"><div class="pv" style="background:${p.bg || '#f3f0ea'}">${p.card ? `<i style="background:${p.card};box-shadow:0 2px 6px rgba(0,0,0,.12)"></i><i style="width:20px;height:8px;background:${p.ink}"></i>` : `<img src="${esc(ST.defaults.brand.logo)}" style="max-height:30px;max-width:80%" alt="">`}</div><b>${esc(p.name)}</b></div>`).join('')}</div><div class="hint">Presets change colors, fonts and layout — your logo, uploaded photos and wording are kept (switch Background type back to Photo any time). "Original" brings back the Loop look. Undo with ⌘Z.</div>`;
+  if (f.type === 'pair') {
+    const [pd, pm] = f.pair;
+    return `<div class="f ${isChanged(pd) || isChanged(pm) ? 'changed' : ''}" data-path="${pd}"><div class="lbl">${esc(f.label)}${resetBtn(pd)}</div>
+      <div class="pair"><label class="dev" data-dev="desktop" title="Desktop & tablet (${rng(pd, f).join('–')}${f.unit})">${IC.desktop}<input type="number" data-p="${pd}" min="${rng(pd, f)[0]}" max="${rng(pd, f)[1]}" value="${get(T, pd)}" ${dis()}><span class="u">${f.unit}</span></label>
+      <label class="dev" data-dev="mobile" title="Phones under 768px (${rng(pm, f).join('–')}${f.unit})">${IC.mobile}<input type="number" data-p="${pm}" min="${rng(pm, f)[0]}" max="${rng(pm, f)[1]}" value="${get(T, pm)}" ${dis()}><span class="u">${f.unit}</span></label></div>${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}</div>`;
+  }
+  const p = f.p, v = get(T, p), head = (extra = '') => `<div class="lbl">${esc(f.label)}${extra}${resetBtn(p)}</div>`, hint = f.hint ? `<div class="hint">${esc(f.hint)}</div>` : '';
+  const wrap = (inner, extra) => `<div class="f ${isChanged(p) ? 'changed' : ''}" data-path="${p}" ${f.step ? `data-step="${f.step}"` : ''}>${head(extra)}${inner}${hint}</div>`;
+  switch (f.type) {
+    case 'color': return wrap(`<div class="colorrow"><span class="sw"><i style="background:${esc(v)}"></i><input type="color" data-p="${p}" data-kind="color" value="${esc(String(v).slice(0, 7))}" ${dis()}></span><input type="text" data-p="${p}" data-kind="hex" value="${esc(v)}" maxlength="9" ${dis()}><span class="crwrap" data-cr="${p}"></span></div><div class="palette">${palette().map((c) => `<button title="${c}" style="background:${c}" onclick="change('${p}','${c}',{rerender:true})" ${dis()}></button>`).join('')}</div>`);
+    case 'text': return wrap(`<input type="text" data-p="${p}" value="${esc(v)}" ${dis()}>`);
+    case 'textarea': return wrap(`<textarea data-p="${p}" rows="${f.rows || 2}" ${dis()}>${esc(v)}</textarea>`);
+    case 'rich': return wrap(`<textarea data-p="${p}" rows="${f.rows || 3}" ${dis()}>${esc(v)}</textarea>`, ' <span style="color:var(--muted);font-weight:400;font-size:11px">· **bold** [link](url)</span>');
+    case 'css': return wrap(`<textarea class="code" data-p="${p}" spellcheck="false" ${dis()}>${esc(v)}</textarea>`);
+    case 'range': {
+      const pill = f.pill && v >= 999;
+      const [mn, mx] = f.pill ? [f.min, f.max] : rng(p, f);
+      return wrap(`<div class="rangebox"><input type="range" data-p="${p}" min="${mn}" max="${f.pill ? f.max + 1 : mx}" step="${f.step || 1}" value="${pill ? f.max + 1 : v}" ${dis()}><input type="number" data-p="${p}" data-num="1" min="${mn}" max="${f.pill ? 999 : mx}" step="${f.step || 1}" value="${v}" ${dis()}><span class="u">${f.unit}</span></div>`);
+    }
+    case 'select': return wrap(`<select data-p="${p}" data-numsel="${typeof f.options[0][0] === 'number' ? 1 : ''}" ${dis()}>${f.options.map(([k, l]) => `<option value="${k}" ${String(k) === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`);
+    case 'chips': return wrap(`<div class="chips">${f.options.map(([k, l]) => `<button class="${k === v ? 'on' : ''}" onclick="change('${p}','${k}',{rerender:true})" ${dis()}>${esc(l)}</button>`).join('')}</div>`);
+    case 'toggle': return `<div class="f ${isChanged(p) ? 'changed' : ''}" data-path="${p}"><label class="toggle"><span class="t">${esc(f.label)}</span><input type="checkbox" data-p="${p}" ${v ? 'checked' : ''} ${dis()}><span class="sw2"></span></label>${hint}</div>`;
+    case 'font': return wrap(`<select data-p="${p}" ${dis()}>${META.fonts.map((n) => `<option value="${esc(n)}" ${n === v ? 'selected' : ''} style="font-family:'${esc(n)}'">${esc(n === 'System' ? 'System (device default)' : n)}</option>`).join('')}</select><div class="hint" style="font-family:'${esc(v)}',system-ui;font-size:16px;color:var(--ink);margin-top:8px" id="fp_${fid(p)}">The quick brown fox — Start a return</div>`);
+    case 'image': return wrap(imageHtml(f, v));
+    case 'links': return wrap(`<div class="links" id="links_${fid(p)}">${(v || []).map((l, i) => `<div class="lk"><input type="text" placeholder="Label" value="${esc(l.label)}" oninput="linkEdit(${i},'label',this.value)" ${dis()}><input type="text" placeholder="https://…" value="${esc(l.url)}" oninput="linkEdit(${i},'url',this.value)" ${dis()}><button class="ibtn" style="width:28px;height:30px" onclick="linkDel(${i})" ${dis()}>✕</button></div>`).join('')}</div><button class="btn small" onclick="linkAdd()" ${(v || []).length >= 8 || readOnly ? 'disabled' : ''}>+ Add link</button>`);
+  }
+  return '';
+}
+function palette() {
+  const c = T.colors, set = new Set([c.primary, c.heading, c.text, c.muted, c.card, c.soft, c.border, T.background.color, '#FFFFFF', '#000000']);
+  return [...set].filter((x) => /^#/.test(x)).slice(0, 12);
+}
+function imageHtml(f, v) {
+  const p = f.p, cover = f.kind === 'background';
+  const fx = f.focal ? T.background.focal_x : 50, fy = f.focal ? T.background.focal_y : 50;
+  return `<div class="img"><div class="thumb ${cover ? 'cover' : ''}" data-img="${p}" title="${v ? (f.focal ? 'Click to set the focus point' : 'Drop a new image here') : 'Click or drop an image'}">${v ? `<img src="${esc(v)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'Can’t load this image'}))">${f.focal ? `<span class="focal" style="left:${fx}%;top:${fy}%"></span>` : ''}` : '<span>Click or drop<br>an image</span>'}</div>
+    <div class="acts"><div class="row"><button class="btn small" onclick="pickFile('${p}','${f.kind}')" ${dis()}>Upload</button><button class="btn small" onclick="openLibrary('${p}')" ${dis()}>Library</button>${v ? `<button class="btn small danger" onclick="change('${p}','',{rerender:true})" ${dis()}>Remove</button>` : ''}</div>
+    <input type="text" data-p="${p}" placeholder="…or paste an image link" value="${esc(v)}" ${dis()} style="font-size:12px">
+    <div class="meta" id="im_${fid(p)}"></div></div></div>`;
+}
+function bindFields() {
+  document.querySelectorAll('#sections [data-p]').forEach((el) => {
+    const p = el.dataset.p;
+    if (el.type === 'checkbox') el.onchange = () => change(p, el.checked, { rerender: true });
+    else if (el.dataset.kind === 'color') el.oninput = () => { change(p, el.value.toUpperCase()); syncColor(p); };
+    else if (el.dataset.kind === 'hex') el.oninput = () => { const x = el.value.trim(); if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(x)) { change(p, x.toUpperCase()); syncColor(p, el); } };
+    else if (el.type === 'range' || el.type === 'number') el.oninput = () => {
+      let n = Number(el.value); if (!Number.isFinite(n)) return;
+      const f = findField(p);
+      if (f && f.pill && el.type === 'range' && n > f.max) n = 999;
+      change(p, n);
+      document.querySelectorAll(`#sections [data-p="${p}"]`).forEach((o) => { if (o !== el) o.value = (o.type === 'range' && f && f.pill && n >= 999) ? f.max + 1 : get(T, p); });
+    };
+    if (el.type === 'number') el.addEventListener('blur', () => { el.value = get(T, p); });
+    else if (el.tagName === 'SELECT') el.onchange = () => { change(p, el.dataset.numsel ? Number(el.value) : el.value); if (p.endsWith('_font')) { const fp = $('fp_' + fid(p)); if (fp) fp.style.fontFamily = `'${el.value}',system-ui`; loadStudioFont(el.value); } };
+    else el.oninput = () => change(p, el.value);
+    el.addEventListener('focus', () => {
+      const w = el.closest('[data-step]'); if (w) setStep(Number(w.dataset.step));
+      const dev = el.closest('.dev'); if (dev) { const want = dev.dataset.dev === 'mobile' ? 'mobile' : (DEVICE === 'mobile' ? 'desktop' : DEVICE); if (want !== DEVICE) { DEVICE = want; layoutFrame(); renderPairsActive(); paintSegs(); } }
+    });
+  });
+  document.querySelectorAll('#sections .thumb[data-img]').forEach((th) => {
+    const p = th.dataset.img, f = findField(p);
+    th.onclick = (e) => {
+      if (readOnly) return;
+      if (f.focal && get(T, p)) { const r = th.getBoundingClientRect(); change('background.focal_x', Math.round(((e.clientX - r.left) / r.width) * 100)); change('background.focal_y', Math.round(((e.clientY - r.top) / r.height) * 100)); document.querySelectorAll('.thumb .focal').forEach((d) => { d.style.left = T.background.focal_x + '%'; d.style.top = T.background.focal_y + '%'; }); }
+      else pickFile(p, f.kind);
+    };
+    th.ondragover = (e) => { e.preventDefault(); th.classList.add('drag'); };
+    th.ondragleave = () => th.classList.remove('drag');
+    th.ondrop = (e) => { e.preventDefault(); th.classList.remove('drag'); const file = e.dataTransfer.files[0]; if (file && !readOnly) uploadFile(file, p, f.kind); };
+    const img = th.querySelector('img');
+    if (img) img.onload = () => { const m = $('im_' + fid(p)); if (m) m.textContent = `${img.naturalWidth}×${img.naturalHeight}px` + (f.kind === 'background' && img.naturalWidth < 1600 ? ' · small for a full-screen photo — it may look soft on big screens' : ''); };
+  });
+  document.querySelectorAll('#sections .sec.open').forEach((s) => s.querySelector('.h').addEventListener('mouseenter', () => {}, { once: true }));
+  paintContrast();
+}
+const findField = (p) => { for (const s of SECTIONS) for (const f of s.fields) if (f.p === p) return f; return null; };
+function syncColor(p, from) {
+  document.querySelectorAll(`#sections [data-p="${p}"]`).forEach((o) => { if (o === from) return; o.value = o.dataset.kind === 'color' ? get(T, p).slice(0, 7) : get(T, p); });
+  const sw = document.querySelector(`#sections [data-path="${p}"] .sw i`); if (sw) sw.style.background = get(T, p);
+  paintContrast();
+}
+function renderPairsActive() { document.querySelectorAll('.pair .dev').forEach((d) => d.classList.toggle('active', (DEVICE === 'mobile') === (d.dataset.dev === 'mobile'))); }
+function linkEdit(i, k, v) { const l = clone(T.footer.links); l[i][k] = v; change('footer.links', l); }
+function linkDel(i) { const l = clone(T.footer.links); l.splice(i, 1); change('footer.links', l, { rerender: true }); }
+function linkAdd() { const l = clone(T.footer.links || []); l.push({ label: '', url: '' }); setp(T, 'footer.links', l); renderSections(); }
+function applyPreset(i) {
+  if (readOnly) return;
+  const p = PRESETS[i];
+  // "Original" brings back Loop's logo, photo, colors, fonts and layout; wording, footer, tab title and CSS stay as edited.
+  T = i === 0 ? { ...clone(ST.defaults), copy: T.copy, footer: T.footer, announce: T.announce, meta: { ...ST.defaults.meta, title: T.meta.title, description: T.meta.description, noindex: T.meta.noindex }, advanced: T.advanced } : p.patch(ST.defaults, clone(T));
+  afterChange({ rerender: true }); toast(`Applied "${p.name}" — undo with ⌘Z`);
+}
+const loadedFonts = new Set();
+function loadStudioFont(name) {
+  if (!name || name === 'System' || loadedFonts.has(name)) return; loadedFonts.add(name);
+  const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(name).replace(/%20/g, '+') + ':wght@' + ((META.font_weights || {})[name] || '400') + '&display=swap'; document.head.appendChild(l);
+}
+
+/* ---------------- readability (WCAG contrast) ---------------- */
+function lum(hex) {
+  let h = String(hex || '').replace('#', ''); if (h.length === 3) h = h.split('').map((x) => x + x).join(''); h = h.slice(0, 6);
+  if (!/^[0-9a-f]{6}$/i.test(h)) return null;
+  const c = [0, 2, 4].map((i) => { const v = parseInt(h.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+function ratio(a, b) { const x = lum(a), y = lum(b); if (x == null || y == null) return null; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function crBadge(r) { if (r == null) return ''; const cls = r >= 4.5 ? 'pass' : r >= 3 ? 'weak' : 'fail'; const t = r >= 4.5 ? 'Easy to read' : r >= 3 ? 'OK for big text' : 'Hard to read'; return `<span class="cr ${cls}" title="Contrast ${r.toFixed(1)}:1 — 4.5 or more is easy to read for everyone">${r.toFixed(1)} · ${t}</span>`; }
+function paintContrast() {
+  document.querySelectorAll('#sections [data-cr]').forEach((el) => { const f = findField(el.dataset.cr); if (!f || !f.contrast) return; el.innerHTML = crBadge(ratio(get(T, f.p), get(T, f.contrast[0]))); });
+}
+function a11yIssues() {
+  const out = [], chk = (a, b, what) => { const r = ratio(get(T, a), get(T, b)); if (r != null && r < 4.5) out.push({ what, r, sec: a.split('.')[0] === 'colors' ? 'colors' : a.split('.')[0] }); };
+  chk('colors.heading', 'colors.card', 'Headings on the card'); chk('colors.text', 'colors.card', 'Body text on the card'); chk('colors.muted', 'colors.card', 'Secondary text on the card');
+  chk('colors.on_primary', 'colors.primary', 'Button text'); chk('colors.input_text', 'colors.input_bg', 'Text in fields');
+  if (T.header.show || T.brand.logo_place === 'header') chk('header.text', 'header.bg', 'Top bar text');
+  if (T.announce.on) chk('announce.color', 'announce.bg', 'Announcement text');
+  if (T.layout.card_opacity < 60 && T.background.mode === 'image') out.push({ what: 'Card is very see-through over a photo — text may be hard to read', sec: 'layout' });
+  if (!T.brand.logo_alt) out.push({ what: 'Logo has no description for screen readers', sec: 'brand' });
+  return out;
+}
+function paintA11y() {
+  const iss = a11yIssues(), el = $('a11y');
+  el.innerHTML = iss.length ? `<span class="cr weak">⚠ ${iss.length} readability ${iss.length === 1 ? 'issue' : 'issues'}</span>` : '<span class="cr pass">✓ Readable</span>';
+  el.onclick = () => iss.length && modal({ title: 'Readability check', sub: 'Contrast of 4.5:1 or more keeps text easy to read for everyone, including on phones in sunlight.', body: `<div class="vlist">${iss.map((x) => `<div class="v"><span><b>${esc(x.what)}</b>${x.r ? `<small>Contrast ${x.r.toFixed(1)}:1</small>` : ''}</span><span class="sp"></span><button class="btn small" onclick="closeModal();openSection('${x.sec}')">Fix</button></div>`).join('')}</div>`, buttons: [{ label: 'Close' }] });
+}
+
+/* ---------------- images ---------------- */
+let pickTarget = null;
+function pickFile(p, kind) { pickTarget = { p, kind }; $('fileIn').value = ''; $('fileIn').click(); }
+$('fileIn').onchange = () => { const f = $('fileIn').files[0]; if (f && pickTarget) uploadFile(f, pickTarget.p, pickTarget.kind); };
+// Big photos are resized in the browser before upload so the portal stays fast on phones.
+async function optimize(file, kind) {
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) return { blob: file, type: file.type, name: file.name };
+  const maxW = kind === 'background' ? 2560 : kind === 'favicon' ? 256 : 1200;
+  const bmp = await createImageBitmap(file).catch(() => null); if (!bmp) return { blob: file, type: file.type, name: file.name };
+  if (bmp.width <= maxW && file.size < 1.2 * 1024 * 1024) return { blob: file, type: file.type, name: file.name };
+  const scale = Math.min(1, maxW / bmp.width), w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  const keepAlpha = file.type === 'image/png' && kind !== 'background';
+  const type = keepAlpha ? 'image/webp' : 'image/jpeg';
+  const blob = await new Promise((r) => cv.toBlob(r, type, 0.86));
+  return { blob: blob || file, type: blob ? type : file.type, name: file.name.replace(/\.\w+$/, '') + (type === 'image/webp' ? '.webp' : '.jpg') };
+}
+async function uploadFile(file, p, kind) {
+  if (file.size > 25 * 1024 * 1024) return toast('That image is over 25 MB — please pick a smaller one.', true);
+  const m = $('im_' + fid(p)); if (m) m.textContent = 'Uploading…';
+  try {
+    const o = await optimize(file, kind);
+    if (o.blob.size > 10 * 1024 * 1024) throw new Error('Still over 10 MB after resizing — please use a smaller image.');
+    const r = await fetch(`/api/portal/assets?store=${STORE}&name=${encodeURIComponent(o.name)}`, { method: 'POST', headers: { 'Content-Type': o.type, Authorization: 'Bearer ' + KEY }, body: o.blob });
+    const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Upload failed');
+    change(p, j.url, { rerender: true });
+    toast(`Uploaded ${j.width ? j.width + '×' + j.height + ' · ' : ''}${Math.round(j.bytes / 1024)} KB`);
+  } catch (e) { toast(e.message, true); if (m) m.textContent = ''; }
+}
+async function openLibrary(p) {
+  let list = [];
+  try { list = (await api('/api/portal/assets')).assets; } catch (e) { return toast(e.message, true); }
+  const loop = [ST.defaults.brand.logo, ST.defaults.meta.favicon, ST.defaults.background.image_d].filter(Boolean).map((u) => ({ url: u, name: 'From Loop · ' + decodeURIComponent(u.split('/').pop().split('?')[0]), loop: true }));
+  const all = [...loop, ...list];
+  modal({ title: 'Image library', sub: p ? 'Pick an image to use.' : 'Every image uploaded for the portals.', wide: true,
+    body: all.length ? `<div class="lib">${all.map((a, i) => `<div class="a" ${p ? `onclick="useLib(${i})"` : ''}><div class="im"><img src="${esc(a.url)}" alt="" loading="lazy"></div><div class="nm" title="${esc(a.name)}">${esc(a.name)}${a.width ? ` · ${a.width}×${a.height}` : ''}</div>${a.id && !readOnly ? `<button class="del" onclick="event.stopPropagation();delAsset('${a.id}','${p || ''}')">Delete</button>` : ''}</div>`).join('')}</div>` : '<p style="color:var(--muted)">Nothing uploaded yet.</p>',
+    buttons: [{ label: 'Close' }] });
+  window._lib = { all, p };
+}
+function useLib(i) { const { all, p } = window._lib; closeModal(); change(p, all[i].url, { rerender: true }); }
+async function delAsset(id, p) {
+  const used = JSON.stringify([T, ST.published]).includes(id);
+  if (!confirm(used ? 'This image is used in a portal. Delete it anyway? It will disappear from the page.' : 'Delete this image?')) return;
+  try { await api('/api/portal/assets/' + id, { method: 'DELETE' }); closeModal(); openLibrary(p || null); } catch (e) { toast(e.message, true); }
+}
+
+/* ---------------- modal helper ---------------- */
+function modal({ title, sub, body, buttons = [], wide }) {
+  closeModal();
+  const m = document.createElement('div'); m.className = 'modal'; m.id = 'modal'; m.onclick = (e) => { if (e.target === m) closeModal(); };
+  m.innerHTML = `<div class="box ${wide ? 'wide' : ''}"><div class="hd"><h3>${esc(title)}</h3>${sub ? `<p>${esc(sub)}</p>` : ''}</div><div class="bd">${body}</div><div class="ft">${buttons.map((b, i) => `<button class="btn ${b.primary ? 'pri' : ''} ${b.danger ? 'danger' : ''}" data-i="${i}">${esc(b.label)}</button>`).join('')}</div></div>`;
+  document.body.appendChild(m);
+  m.querySelectorAll('.ft button').forEach((el) => (el.onclick = async () => { const b = buttons[Number(el.dataset.i)]; if (!b.onClick) return closeModal(); el.disabled = true; try { const keep = await b.onClick(); if (!keep) closeModal(); } catch (e) { toast(e.message, true); el.disabled = false; } }));
+}
+function closeModal() { const m = $('modal'); if (m) m.remove(); }
+
+/* ---------------- publish / history / menu actions ---------------- */
+function diffPaths(a, b, pre = '', out = []) {
+  for (const k of Object.keys(a || {})) {
+    const p = pre ? pre + '.' + k : k;
+    if (a[k] && typeof a[k] === 'object' && !Array.isArray(a[k])) diffPaths(a[k], (b || {})[k], p, out);
+    else if (JSON.stringify(a[k]) !== JSON.stringify((b || {})[k])) out.push(p);
+  }
+  return out;
+}
+$('publishBtn').onclick = () => {
+  const d = diffPaths(T, ST.published), iss = a11yIssues();
+  modal({ title: `Publish to ${META.stores[STORE].name}?`, sub: 'Customers see the new look right away. The current look is kept in Version history.',
+    body: `<p style="margin:0 0 6px;font-weight:600">${d.length} change${d.length === 1 ? '' : 's'}:</p><ul class="diff">${d.map((p) => `<li>${esc(LABELS[p] || p)}</li>`).join('')}</ul>
+      ${iss.length ? `<p style="color:var(--warn);margin:12px 0 0">⚠ ${iss.length} readability ${iss.length === 1 ? 'issue' : 'issues'} — see the check above the preview.</p>` : ''}
+      <label style="display:block;font-weight:600;margin:14px 0 6px">Note (optional)</label><input type="text" id="pubNote" placeholder="e.g. Fall background, bigger logo on phones">`,
+    buttons: [{ label: 'Cancel' }, { label: 'Publish', primary: true, onClick: async () => {
+      clearTimeout(saveTimer); saveTimer = null;
+      if (savePromise) await savePromise.catch(() => {});      // never let an older autosave land after the publish
+      const r = await api(`/api/portal/${STORE}/publish`, jsonOpts('POST', { theme: T, note: $('pubNote').value }));
+      ST = { ...ST, ...r }; T = clone(r.draft); lastSnap = JSON.stringify(T); savedAt = new Date().toISOString();
+      renderSections(); paintStatus(); toast('Published — customers see it now');
+    } }] });
+};
+$('moreBtn').onclick = (e) => { e.stopPropagation(); $('moreList').classList.toggle('hidden'); };
+document.addEventListener('click', () => $('moreList').classList.add('hidden'));
+$('moreList').onclick = (e) => { const b = e.target.closest('button[data-act]'); if (b) { $('moreList').classList.add('hidden'); ACTIONS[b.dataset.act](); } };
+const ACTIONS = {
+  history() {
+    const h = ST.history || [];
+    modal({ title: 'Version history', sub: 'Every publish is saved. Preview one in the editor, or restore it to the draft.',
+      body: h.length ? `<div class="vlist">${h.map((v, i) => `<div class="v"><span><b>${i === 0 ? 'Live now · ' : ''}${new Date(v.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</b><small>${esc(v.created_by || '')}${v.note ? ' — ' + esc(v.note) : ''}</small></span><span class="sp"></span><button class="btn small" onclick="peekVersion(${v.id})">Preview</button>${readOnly ? '' : `<button class="btn small" onclick="restoreVersion(${v.id})">Restore</button>`}</div>`).join('')}</div>` : '<p style="color:var(--muted)">Nothing published from the studio yet. The live look is the original one carried over from Loop.</p>',
+      buttons: [{ label: 'Close' }] });
+  },
+  async loop() {
+    if (readOnly) return;
+    try {
+      const { patch } = await api(`/api/portal/${STORE}/import-loop`, jsonOpts('POST'));
+      const rows = []; (function w(o, pre) { for (const k in o) { const p = pre ? pre + '.' + k : k; if (o[k] && typeof o[k] === 'object') w(o[k], p); else rows.push([p, o[k]]); } })(patch, '');
+      modal({ title: 'Import from Loop', sub: 'This is what Loop shows today. Apply it to your draft?', body: `<ul class="diff">${rows.map(([p, v]) => `<li>${esc(LABELS[p] || p)}: <code>${esc(String(v).slice(0, 80))}</code></li>`).join('')}</ul>`,
+        buttons: [{ label: 'Cancel' }, { label: 'Apply to draft', primary: true, onClick: () => { (function w(o, pre) { for (const k in o) { const p = pre ? pre + '.' + k : k; if (o[k] && typeof o[k] === 'object') w(o[k], p); else setp(T, p, o[k]); } })(patch, ''); afterChange({ rerender: true }); toast('Imported — undo with ⌘Z'); } }] });
+    } catch (e) { toast(e.message, true); }
+  },
+  async copy() {
+    if (readOnly) return;
+    const other = Object.keys(META.stores).find((k) => k !== STORE); if (!other) return;
+    const o = await api(`/api/portal/${other}/theme`);
+    modal({ title: `Copy from ${META.stores[other].name}`, sub: 'Choose what to bring over into this draft.',
+      body: `<label class="chk"><input type="checkbox" id="cpLook" checked> Look — colors, fonts, layout, buttons, fields, product list, top bar</label>
+        <label class="chk"><input type="checkbox" id="cpImg"> Images — logo, background photos, tab icon</label>
+        <label class="chk"><input type="checkbox" id="cpCopy"> Wording, footer and announcement</label>
+        <label class="chk"><input type="checkbox" id="cpCss"> Custom CSS</label>`,
+      buttons: [{ label: 'Cancel' }, { label: 'Copy into draft', primary: true, onClick: () => {
+        const s = o.draft;
+        if ($('cpLook').checked) for (const k of ['layout', 'colors', 'type', 'buttons', 'inputs', 'items', 'header']) T[k] = clone(s[k]);
+        if ($('cpLook').checked) { for (const k of ['mode', 'color', 'grad_from', 'grad_to', 'grad_angle', 'fit', 'attach', 'overlay', 'overlay_opacity', 'blur']) T.background[k] = s.background[k]; for (const k of ['logo_h_d', 'logo_h_m', 'logo_place', 'logo_align', 'show_name']) T.brand[k] = s.brand[k]; }
+        if ($('cpImg').checked) { T.brand.logo = s.brand.logo; T.background.image_d = s.background.image_d; T.background.image_m = s.background.image_m; T.background.focal_x = s.background.focal_x; T.background.focal_y = s.background.focal_y; T.meta.favicon = s.meta.favicon; }
+        if ($('cpCopy').checked) { T.copy = clone(s.copy); T.footer = clone(s.footer); T.announce = clone(s.announce); toast('Check links in the wording — they may point to the other store'); }
+        if ($('cpCss').checked) T.advanced = clone(s.advanced);
+        afterChange({ rerender: true });
+      } }] });
+  },
+  library() { openLibrary(null); },
+  export() {
+    const blob = new Blob([JSON.stringify({ store: STORE, exported_at: new Date().toISOString(), theme: T }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `returns-portal-${STORE}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(a.href);
+  },
+  import() { if (!readOnly) { $('jsonIn').value = ''; $('jsonIn').click(); } },
+  discard() {
+    if (readOnly) return;
+    modal({ title: 'Discard draft changes?', sub: 'The editor goes back to exactly what customers see now.', body: '', buttons: [{ label: 'Cancel' }, { label: 'Discard', danger: true, onClick: async () => { clearTimeout(saveTimer); saveTimer = null; if (savePromise) await savePromise.catch(() => {}); const r = await api(`/api/portal/${STORE}/discard`, jsonOpts('POST')); ST = { ...ST, ...r }; UNDO.push(JSON.stringify(T)); T = clone(r.draft); lastSnap = JSON.stringify(T); post({ type: 'rp:theme', theme: T }); renderSections(); paintStatus(); paintUndo(); } }] });
+  },
+  reset() {
+    if (readOnly) return;
+    modal({ title: 'Reset to the original look?', sub: 'Puts the draft back to the look carried over from Loop — logo, background, colors, fonts and default wording. Nothing changes for customers until you publish.', body: '', buttons: [{ label: 'Cancel' }, { label: 'Reset draft', danger: true, onClick: () => { T = clone(ST.defaults); afterChange({ rerender: true }); toast('Reset — undo with ⌘Z'); } }] });
+  },
+};
+$('jsonIn').onchange = async () => {
+  const f = $('jsonIn').files[0]; if (!f) return;
+  try { const j = JSON.parse(await f.text()); const t = j.theme || j; if (!t.colors || !t.layout) throw new Error('That file isn’t a portal look export.'); T = mergeTheme(ST.defaults, t); afterChange({ rerender: true }); toast('Imported into the draft — undo with ⌘Z'); }
+  catch (e) { toast(e.message, true); }
+};
+function mergeTheme(base, over) { const out = {}; for (const k of Object.keys(base)) { const b = base[k], o = over ? over[k] : undefined; out[k] = b && typeof b === 'object' && !Array.isArray(b) ? mergeTheme(b, o) : o !== undefined ? o : clone(b); } return out; }
+async function peekVersion(id) {
+  const { theme } = await api(`/api/portal/${STORE}/version/${id}`);
+  closeModal(); post({ type: 'rp:theme', theme });
+  modal({ title: 'Previewing an earlier version', sub: 'The preview shows that version. Your draft is untouched.', body: '', buttons: [{ label: 'Back to my draft', onClick: () => { post({ type: 'rp:theme', theme: T }); } }, { label: 'Restore this version', primary: true, onClick: () => restoreVersion(id, true) }] });
+  $('modal').style.alignItems = 'flex-end'; $('modal').style.background = 'transparent'; $('modal').style.pointerEvents = 'none'; $('modal').querySelector('.box').style.pointerEvents = 'auto';
+}
+async function restoreVersion(id, quiet) {
+  clearTimeout(saveTimer); saveTimer = null; if (savePromise) await savePromise.catch(() => {});
+  const r = await api(`/api/portal/${STORE}/restore/${id}`, jsonOpts('POST'));
+  UNDO.push(JSON.stringify(T)); ST = { ...ST, ...r }; T = clone(r.draft); lastSnap = JSON.stringify(T);
+  closeModal(); post({ type: 'rp:theme', theme: T }); renderSections(); paintStatus(); paintUndo();
+  toast('Restored into the draft — publish to make it live');
+}
+</script>
+</body>
+</html>

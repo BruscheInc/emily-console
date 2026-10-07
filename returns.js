@@ -19,7 +19,7 @@ const { db, pool } = core;
 const SHOP_VER = process.env.RETURNS_SHOPIFY_VERSION || "2026-07";
 const SS_KEY = process.env.SHIPSTATION_V2_KEY || "";
 const SS_BASE = "https://api.shipstation.com";
-const SECRET = process.env.RETURNS_SECRET || process.env.CONSOLE_KEY || process.env.ATTACHMENT_SECRET || "helpdesk-returns";
+const SECRET = process.env.RETURNS_SECRET || process.env.CONSOLE_KEY || process.env.ATTACHMENT_SECRET || crypto.randomBytes(32).toString("hex");
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
 
 const emily = () => require("./emily");   // lazy: emily.js also requires this file
