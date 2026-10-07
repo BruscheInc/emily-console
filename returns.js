@@ -230,6 +230,22 @@ async function storeIdFor(s, key) {
     return st ? st.id : null;
   } catch (e) { console.error("ShipStation stores:", e.message); return null; }
 }
+// The original (outbound) ShipStation label + shipment for an order, found by the tracking numbers on its Shopify fulfillments.
+async function findOutbound(numbers) {
+  for (const n of numbers.filter(Boolean).slice(0, 5)) {
+    try {
+      const j = await ss("GET", `/v2/labels?tracking_number=${encodeURIComponent(n)}&page_size=5`);
+      const lab = (j.labels || []).find((l) => String(l.tracking_number) === String(n) && !l.is_return_label && l.status !== "voided");
+      if (!lab) continue;
+      let sh = {};
+      try { sh = await ss("GET", `/v2/shipments/${encodeURIComponent(lab.shipment_id)}`); } catch (e) { console.error("outbound shipment:", e.message); }
+      const info = { label_id: lab.label_id, shipment_id: lab.shipment_id, store_id: sh.store_id || null, shipment_number: sh.shipment_number || null, external_order_id: sh.external_order_id || null };
+      console.log(`↩️  outbound for return: tracking ${n} → ${JSON.stringify(info)}`);
+      return info;
+    } catch (e) { console.error(`outbound lookup ${n}:`, e.message); }
+  }
+  return null;
+}
 // meta: { key, orderName, email, items:[{title,variant,sku,quantity,unitPrice,weightOz}], reasons }
 async function buyLabel(s, from, weightOz, rma, meta = {}) {
   const orderNo = String(meta.orderName || "").replace(/^#/, "");
@@ -251,9 +267,16 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
   // TEST MODE: buy nothing. ShipStation has no test return labels and some carriers won't void right away,
   // so we only get the price and hand back a sample label.
   if (meta.test) return { labelId: null, trackingNumber: `TEST-${rma}`, labelUrl: null, cost: await quoteLabel(s, shipment), carrier: "", test: true };
-  const storeId = meta.key ? await storeIdFor(s, meta.key) : null;
-  if (storeId) shipment.store_id = storeId;
+  // Tie the return to the ShipStation order it came from: find the original shipping label by its tracking
+  // number, then copy that shipment's store and order number and link the two labels (outbound_label_id).
+  // This is what makes the return show under the order in ShipStation instead of "store not active".
+  const out = await findOutbound(meta.tracking || []);
+  if (out && out.store_id) shipment.store_id = out.store_id;
+  else { const storeId = meta.key ? await storeIdFor(s, meta.key) : null; if (storeId) shipment.store_id = storeId; }
+  if (out && out.shipment_number) shipment.shipment_number = out.shipment_number;
+  if (out && out.external_order_id) shipment.external_order_id = out.external_order_id;
   const body = { is_return_label: true, rma_number: rma, charge_event: "carrier_default", label_format: "pdf", label_layout: "4x6", label_download_type: "url", shipment };
+  if (out && out.label_id) body.outbound_label_id = out.label_id;
   let l;
   try { l = await ss("POST", "/v2/labels", body); }
   catch (e) {
@@ -267,6 +290,7 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
       if (!/^ShipStation 4\d\d/.test(e2.message)) throw e2;
       console.error("label retry failed, retrying plain:", e2.message);
       for (const k of ["store_id", "tags", "order_source_code", "external_order_id", "internal_notes"]) delete shipment[k];
+      delete body.outbound_label_id;
       l = await ss("POST", "/v2/labels", body);
     }
   }
@@ -391,7 +415,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   const s = await settings(), st = shopFor(key);
   if (!Array.isArray(lines) || !lines.length) throw httpError(400, "Pick at least one item to return.");
   if (refundMethod !== "original" && !(refundMethod === "store_credit" && s.store_credit_enabled)) throw httpError(400, "Pick how you'd like your refund.");
-  const order = (await gql(st, `query O($id: ID!) { order(id: $id) { id name email cancelledAt currencyCode customer { id defaultAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } }
+  const order = (await gql(st, `query O($id: ID!) { order(id: $id) { id name email cancelledAt currencyCode fulfillments(first: 10) { trackingInfo { number company } } customer { id defaultAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } }
       shippingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } billingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } } }`, { id: orderId })).order;
   if (!order) throw httpError(404, "Order not found");
   const items = await returnableItems(st, order.id), rs = await reasons(st);
@@ -428,7 +452,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   // b) ShipStation label
   const weight = Number(s.packaging_oz) + chosen.reduce((w, c) => w + (c.weightOz || Number(s.default_item_oz)) * c.quantity, 0);
   let label;
-  try { label = await buyLabel(s, from, weight, rma, { test: !!s.test_labels, key, orderName: order.name, email: order.email, items: chosen.map((c) => ({ title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unitPrice: c.unitPrice, weightOz: c.weightOz })), reasons: chosen.map((c) => c.reasonName).join(", ") }); }
+  try { label = await buyLabel(s, from, weight, rma, { test: !!s.test_labels, key, tracking: (order.fulfillments || []).flatMap((f) => (f.trackingInfo || []).map((t) => t.number)), orderName: order.name, email: order.email, items: chosen.map((c) => ({ title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unitPrice: c.unitPrice, weightOz: c.weightOz })), reasons: chosen.map((c) => c.reasonName).join(", ") }); }
   catch (err) {
     await gql(st, CANCEL, { id: sret.id }).catch(() => {});
     console.error("return label failed:", err.message);

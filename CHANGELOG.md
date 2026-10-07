@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22.8 — Oct 7, 2026
+- **Return labels are tied to the original ShipStation order.** Helpdesk finds the order's original shipping
+  label by its tracking number, links the return label to it, and uses that shipment's store and order number —
+  the same way ShipStation's own returns are linked. This replaces matching the store by name, which ShipStation
+  didn't connect to the order ("store not active"). If the original label can't be found, it falls back as before.
+
 ## v4.22.7 — Oct 7, 2026
 - **Test mode no longer buys anything.** It gets ShipStation's price quote for the label, shows a clearly marked
   sample label, and doesn't email the customer. (Buying then voiding didn't work: ShipStation refused the void.)
