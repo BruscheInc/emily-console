@@ -245,7 +245,7 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
     order_source_code: "shopify",
     tags: [{ name: "Return" }],
     internal_notes: `Return ${rma} for ${meta.orderName || ""}${meta.reasons ? " — " + meta.reasons : ""}`.slice(0, 500),
-    items: (meta.items || []).map((i) => clean({ name: [i.title, i.variant].filter(Boolean).join(" — ").slice(0, 200), quantity: i.quantity, sku: i.sku || undefined, external_order_id: orderNo || undefined, order_source_code: "shopify", unit_price: i.unitPrice != null ? { currency: "usd", amount: i.unitPrice } : undefined, weight: { value: Math.max(1, Math.round(i.weightOz || Number(s.default_item_oz) || 8)), unit: "ounce" } })),
+    items: (meta.items || []).map((i) => clean({ name: [i.title, i.variant].filter(Boolean).join(" — ").slice(0, 200), quantity: i.quantity, sku: i.sku || undefined, external_order_id: orderNo || undefined, order_source_code: "shopify", unit_price: i.unitPrice != null ? Number(i.unitPrice) : undefined, weight: { value: Math.max(1, Math.round(i.weightOz || Number(s.default_item_oz) || 8)), unit: "ounce" } })),
   };
   if (s.carrier_id) shipment.carrier_id = s.carrier_id;
   const storeId = meta.key ? await storeIdFor(s, meta.key) : null;
@@ -256,9 +256,16 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
   catch (e) {
     // Never lose a return over the filing details: retry with only the essentials.
     if (!/^ShipStation 4\d\d/.test(e.message)) throw e;
-    console.error("label with filing details failed, retrying plain:", e.message);
-    for (const k of ["store_id", "items", "tags", "order_source_code", "external_order_id", "internal_notes"]) delete shipment[k];
-    l = await ss("POST", "/v2/labels", body);
+    // First drop only the item list (the most detailed part); keep the store, order number and tag so it stays filed.
+    console.error("label with filing details failed, retrying without items:", e.message);
+    delete shipment.items;
+    try { l = await ss("POST", "/v2/labels", body); }
+    catch (e2) {
+      if (!/^ShipStation 4\d\d/.test(e2.message)) throw e2;
+      console.error("label retry failed, retrying plain:", e2.message);
+      for (const k of ["store_id", "tags", "order_source_code", "external_order_id", "internal_notes"]) delete shipment[k];
+      l = await ss("POST", "/v2/labels", body);
+    }
   }
   return { labelId: l.label_id, trackingNumber: l.tracking_number, labelUrl: (l.label_download && (l.label_download.pdf || l.label_download.href)) || null, cost: l.shipment_cost ? l.shipment_cost.amount : null, carrier: l.carrier_code };
 }
