@@ -478,8 +478,11 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   const cr = await gql(st, RETURN_CREATE, { input: { orderId: order.id, returnLineItems: chosen.map((c) => ({ fulfillmentLineItemId: c.fulfillmentLineItemId, quantity: c.quantity, returnReasonDefinitionId: c.reasonSid, returnReasonNote: (c.reasonName + (c.note ? " — " + c.note : "")).slice(0, 255) })) } });
   userErrors(cr.returnCreate, "Shopify couldn't create the return");
   const sret = cr.returnCreate.return;
-  const seq = (await db(`SELECT nextval('hd_return_seq') n`)).rows[0].n;
-  const rma = `${STORE_DEFS[key].prefix}-R${seq}`;
+  // Return number = original order number + which return this is for that order: LB191494-R1, LB191494-R2, …
+  const base = String(order.name || "").replace(/^#/, "").trim() || `${STORE_DEFS[key].prefix}${(await db(`SELECT nextval('hd_return_seq') n`)).rows[0].n}`;
+  const taken = new Set((await db(`SELECT rma FROM hd_returns WHERE upper(rma) LIKE upper($1)`, [`${base}-R%`])).rows.map((x) => String(x.rma).toUpperCase()));
+  let n = 1; while (taken.has(`${base}-R${n}`.toUpperCase())) n++;
+  const rma = `${base}-R${n}`;
 
   // b) ShipStation label
   const weight = Number(s.packaging_oz) + chosen.reduce((w, c) => w + (c.weightOz || Number(s.default_item_oz)) * c.quantity, 0);

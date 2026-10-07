@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.23.1
+- Returns: return numbers now use the original order number plus a count — LB191494-R1, then LB191494-R2 if the same order is returned again. Replaces the running LB-R1001 style numbers.
+
 ## 4.23.0
 - Returns: branded portal addresses — returns.larkspurbaby.com and returns.larkspurbabyoutlet.com open that store's portal directly and show nothing else from the Helpdesk. New Settings switch "Use branded links" makes Emily and the Helpdesk use them once DNS is live.
 
