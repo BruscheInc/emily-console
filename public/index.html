@@ -588,7 +588,7 @@ function actionsBlock(d){
     const ic=icon[a.kind]||"⚙️";
     if(a.status==="staged") return `<label class="act st"><input type="checkbox" class="act-apply" value="${esc(a.id)}" checked><span class="t"><b>${ic} ${esc(a.title)}</b><small>${esc((a.summary||"").replace(/\s+/g," "))}</small><small class="hint">Ticked = applied when you approve &amp; send</small></span><span class="bt"><button class="btn sec xs" onclick="emilyAction('${esc(a.id)}','apply',${d.id})">Apply now</button><button class="btn sec xs" onclick="emilyAction('${esc(a.id)}','dismiss',${d.id})">Dismiss</button></span></label>`;
     if(a.status==="applied") return `<div class="act ok"><span class="t"><b>✅ ${esc(a.title)}</b><small>${esc(a.result||a.summary||"")}${a.decided_by?` · by ${esc(a.decided_by)}`:""}</small></span></div>`;
-    return `<div class="act bad"><span class="t"><b>⚠️ ${esc(a.title)} — failed</b><small>${esc(a.result||"")}</small></span></div>`;
+    return `<div class="act bad"><span class="t"><b>⚠️ ${esc(a.title)} — failed</b><small>${esc(a.result||"")}</small></span><span class="bt"><button class="btn sec xs" onclick="emilyAction('${esc(a.id)}','apply',${d.id})" title="Run it again — after fixing what went wrong">Try again</button><button class="btn sec xs" onclick="emilyAction('${esc(a.id)}','dismiss',${d.id})">Dismiss</button></span></div>`;
   }).join("")}</div>`;
 }
 // Promises in the draft that no tool will carry out — a person has to do them.
