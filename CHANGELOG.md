@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22.9 — Oct 7, 2026
+- Each return's history now says whether it was linked to the original ShipStation order (and which), or why not
+  (no tracking number on the order, no ShipStation label with that tracking number, lookup error). Same detail in the log.
+
 ## v4.22.8 — Oct 7, 2026
 - **Return labels are tied to the original ShipStation order.** Helpdesk finds the order's original shipping
   label by its tracking number, links the return label to it, and uses that shipment's store and order number —
