@@ -600,6 +600,9 @@ const R = require("./returns");
 const RETURNS_HTML = fs.readFileSync(path.join(__dirname, "public", "returns-portal.html"), "utf8");
 const escH = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const retErr = (res, e) => res.status(e.status || 500).json({ error: e.status ? e.message : (e.message || "Something went wrong") });
+// Customer-facing: never show Shopify/internal error text; log it and say something a shopper can act on.
+const PORTAL_SORRY = "We can't look up orders right now. Please try again in a little while, or email us and we'll start your return for you.";
+const portalErr = (res, e) => { if (e.status) return res.status(e.status).json({ error: e.message }); console.error("portal:", e.message); res.status(503).json({ error: PORTAL_SORRY }); };
 const lookupHits = new Map();   // ip -> timestamps (portal lookups: 10 per 10 minutes)
 function tooMany(ip) { const now = Date.now(); const l = (lookupHits.get(ip) || []).filter((t) => now - t < 600e3); l.push(now); lookupHits.set(ip, l); return l.length > 10; }
 // Public: customer portal
@@ -696,9 +699,9 @@ app.get("/returns/label/:id/:tok", async (req, res) => {
 });
 app.post("/api/returns/public/:store/lookup", async (req, res) => {
   if (tooMany(req.ip)) return res.status(429).json({ error: "Too many tries. Please wait a few minutes and try again." });
-  try { const b = req.body || {}; res.json(await R.lookup(req.params.store, String(b.order_number || ""), String(b.email || ""))); } catch (e) { retErr(res, e); }
+  try { const b = req.body || {}; res.json(await R.lookup(req.params.store, String(b.order_number || ""), String(b.email || ""))); } catch (e) { portalErr(res, e); }
 });
-app.post("/api/returns/public/submit", async (req, res) => { try { res.json(await R.submitPortal(req.body || {})); } catch (e) { retErr(res, e); } });
+app.post("/api/returns/public/submit", async (req, res) => { try { res.json(await R.submitPortal(req.body || {})); } catch (e) { portalErr(res, e); } });
 // Staff
 app.get("/api/returns", async (req, res) => {
   if (!guard(req, res)) return;

@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22.1 — Oct 7, 2026
+- The returns portal no longer shows raw Shopify errors to customers. They see a plain "we can't look up orders
+  right now — email us" message; the exact cause goes to the Helpdesk log.
+- Staff screens name every Shopify permission returns need when one is missing, and the boot log now checks them:
+  read_returns, write_returns, read_merchant_managed_fulfillment_orders, read_assigned_fulfillment_orders,
+  read_third_party_fulfillment_orders, read_store_credit_account_transactions, read_inventory (plus the order,
+  customer, product and store-credit scopes Emily already has).
+
 ## v4.22 — Oct 7, 2026
 - **Portal Studio** (Returns → 🎨 Customize portal, or `/returns-studio`). Edit how each returns portal looks, with a
   live preview on desktop, tablet and phone, for every page (find order, items, refund, label):

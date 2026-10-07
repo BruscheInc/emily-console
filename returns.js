@@ -97,12 +97,22 @@ async function gql(st, query, variables = {}) {
   });
   const j = await res.json();
   if (j.errors) {
-    const denied = (Array.isArray(j.errors) ? j.errors : []).map((e) => (e.message || "").match(/Requires `([a-z_]+)` access scope/)).find(Boolean);
-    if (denied) throw new Error(`${st.brand}: the Emily Shopify app needs the "${denied[1]}" permission for returns.`);
-    throw new Error(`${st.brand}: ${JSON.stringify(j.errors).slice(0, 300)}`);
+    const errs = Array.isArray(j.errors) ? j.errors : [{ message: String(j.errors) }];
+    console.error(`returns Shopify error (${st.brand}):`, JSON.stringify(errs).slice(0, 500));
+    const denied = errs.some((e) => /access denied|access scope/i.test(e.message || "") || (e.extensions && e.extensions.code === "ACCESS_DENIED"));
+    // Staff see the plain cause; the customer portal turns any of these into a friendly message (see `staff` below).
+    const err = new Error(denied
+      ? `${st.brand}: the Emily Shopify app is missing permissions returns need. Add these Admin API scopes to the app: ${RETURN_SCOPES.join(", ")} — then restart Helpdesk.`
+      : `${st.brand}: Shopify error — ${errs.map((e) => e.message).join("; ").slice(0, 200)}`);
+    err.staff = true;
+    throw err;
   }
   return j.data;
 }
+// Every Admin API scope the returns system uses (read + write).
+const RETURN_SCOPES = ["read_orders", "read_customers", "read_products", "read_inventory", "read_returns", "write_returns",
+  "read_merchant_managed_fulfillment_orders", "read_assigned_fulfillment_orders", "read_third_party_fulfillment_orders",
+  "read_store_credit_account_transactions", "write_store_credit_account_transactions"];
 function userErrors(payload, label) { const e = (payload && payload.userErrors) || []; if (e.length) throw new Error(`${label}: ${e.map((x) => x.message).join("; ")}`); }
 
 const ORDER_LOOKUP = `query OrderLookup($q: String!) { orders(first: 5, query: $q) { nodes {
