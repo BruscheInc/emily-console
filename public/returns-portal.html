@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Returns · __STORE_NAME__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --accent: #4b6b5a;
+    --bg: #faf7f2;
+    --card: #ffffff;
+    --ink: #2b2a28;
+    --muted: #6f6a62;
+    --line: #e8e2d8;
+    --soft: #f2ede4;
+    --bad: #a5432f;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  a { color: var(--accent); }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Inter, system-ui, sans-serif; }
+  header { padding: 28px 16px 8px; text-align: center; }
+  header img { max-height: 48px; max-width: 220px; }
+  header .brand { font-family: Fraunces, Georgia, serif; font-size: 26px; font-weight: 600; }
+  main { max-width: 640px; margin: 0 auto; padding: 8px 16px 64px; }
+  h1 { font-family: Fraunces, Georgia, serif; font-weight: 500; font-size: 30px; line-height: 1.2; margin: 18px 0 6px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 28px 0 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  p.lead { color: var(--muted); margin: 0 0 22px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  label.f { display: block; font-size: 14px; font-weight: 500; margin: 0 0 6px; }
+  input[type=text], input[type=email], select, textarea {
+    width: 100%; font: inherit; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink);
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
+  .row { margin-bottom: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  button.primary {
+    width: 100%; padding: 14px 18px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font: 600 16px Inter, sans-serif; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  button.link { background: none; border: 0; color: var(--accent); font: 500 14px Inter, sans-serif; cursor: pointer; padding: 0; text-decoration: underline; }
+  .err { color: var(--bad); background: #fbeee9; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .item { display: grid; grid-template-columns: 64px 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .item:first-child { border-top: 0; padding-top: 0; }
+  .item img, .item .ph { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; background: var(--soft); }
+  .item .t { font-weight: 600; }
+  .item .v { color: var(--muted); font-size: 14px; }
+  .item.off { opacity: .55; }
+  .pick { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .pick input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); }
+  .detail { margin-top: 12px; display: grid; gap: 10px; }
+  .detail .grid { display: grid; grid-template-columns: 90px 1fr; gap: 10px; }
+  .tag { display: inline-block; font-size: 12px; background: var(--soft); border-radius: 999px; padding: 2px 10px; color: var(--muted); }
+  .opt { display: block; border: 1.5px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; cursor: pointer; background: #fff; }
+  .opt.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+  .opt input { display: none; }
+  .opt .top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .opt .amt { font-weight: 600; font-size: 18px; white-space: nowrap; }
+  .opt .badge { background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 9px; margin-left: 6px; }
+  .sumline { display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); padding: 3px 0; }
+  .sumline.total { color: var(--ink); font-weight: 600; font-size: 16px; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
+  .done { text-align: center; }
+  .done .check { width: 64px; height: 64px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; margin: 10px auto 6px; font-size: 32px; }
+  .steps { text-align: left; margin: 18px 0 0; padding-left: 20px; }
+  .steps li { margin-bottom: 8px; }
+  .existing { background: var(--soft); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; font-size: 14px; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 0 16px 40px; }
+  .hidden { display: none !important; }
+  .spin { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: s 0.7s linear infinite; vertical-align: -3px; margin-right: 8px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } h1 { font-size: 26px; } }
+</style>
+</head>
+<body>
+<header id="hdr"></header>
+<main>
+  <!-- Step 1: lookup -->
+  <section id="s1">
+    <h1>Start a return</h1>
+    <p class="lead">Enter your order number and the email you used at checkout.</p>
+    <div class="card">
+      <div id="e1" class="err hidden"></div>
+      <form id="f1">
+        <div class="row"><label class="f" for="on">Order number</label><input id="on" type="text" placeholder="e.g. 8425" required autocomplete="off"></div>
+        <div class="row"><label class="f" for="em">Email</label><input id="em" type="email" placeholder="you@example.com" required autocomplete="email"></div>
+        <button class="primary" type="submit" id="b1">Find my order</button>
+      </form>
+    </div>
+    <p class="muted" id="policy" style="margin-top:18px"></p>
+  </section>
+
+  <!-- Step 2: items -->
+  <section id="s2" class="hidden">
+    <h1 id="ordTitle"></h1>
+    <p class="lead">Select the items you'd like to return. <button class="link" onclick="go(1)">Not your order?</button></p>
+    <div id="existing"></div>
+    <div class="card"><div id="e2" class="err hidden"></div><div id="items"></div></div>
+    <div style="margin-top:20px"><button class="primary" id="b2" disabled onclick="toStep3()">Continue</button></div>
+  </section>
+
+  <!-- Step 3: refund method + address -->
+  <section id="s3" class="hidden">
+    <h1>How would you like your refund?</h1>
+    <p class="lead">Your refund is issued as soon as the package is delivered back to us. <button class="link" onclick="go(2)">Back</button></p>
+    <div id="opts"></div>
+    <h2>Return label is from</h2>
+    <div class="card">
+      <div id="addrView"></div>
+      <button class="link" id="editAddr" style="margin-top:8px">Edit address</button>
+      <div id="addrForm" class="hidden" style="margin-top:14px">
+        <div class="row"><label class="f">Full name</label><input id="a_name" type="text"></div>
+        <div class="row"><label class="f">Address</label><input id="a_1" type="text"></div>
+        <div class="row"><label class="f">Apt, suite (optional)</label><input id="a_2" type="text"></div>
+        <div class="grid2 row"><div><label class="f">City</label><input id="a_city" type="text"></div><div><label class="f">State</label><input id="a_state" type="text" maxlength="2" placeholder="TX"></div></div>
+        <div class="grid2 row"><div><label class="f">ZIP</label><input id="a_zip" type="text"></div><div><label class="f">Phone</label><input id="a_phone" type="text"></div></div>
+      </div>
+    </div>
+    <h2>Summary</h2>
+    <div class="card" id="summary"></div>
+    <div id="e3" class="err hidden" style="margin-top:16px"></div>
+    <div style="margin-top:20px"><button class="primary" id="b3" onclick="submitReturn()">Get my return label</button></div>
+    <p class="muted" style="text-align:center;margin-top:10px">Final refund includes tax and may vary slightly from this estimate.</p>
+  </section>
+
+  <!-- Step 4: done -->
+  <section id="s4" class="hidden">
+    <div class="card done">
+      <div class="check">✓</div>
+      <h1 style="margin-top:6px">Your return is ready</h1>
+      <p class="lead" id="doneLead"></p>
+      <a id="labelBtn" class="primary" style="display:block;text-decoration:none;padding:14px;border-radius:999px;background:var(--accent);color:#fff;font-weight:600" target="_blank" rel="noopener">Download return label</a>
+      <p class="muted" style="margin-top:12px">Tracking: <a id="trk" target="_blank" rel="noopener"></a></p>
+      <ol class="steps">
+        <li>Print the label and tape it to your package. Cover or remove any old labels.</li>
+        <li>Pack the items in their original packaging if you can.</li>
+        <li>Drop it off at the post office (or hand it to your carrier) within 28 days. We also emailed you the label.</li>
+        <li id="refundStep"></li>
+      </ol>
+    </div>
+  </section>
+</main>
+<footer id="ftr"></footer>
+
+<script>
+const STORE = __STORE_JSON__;
+let S = {}; // lookup result
+let method = 'original';
+let addr = null;
+
+const $ = (id) => document.getElementById(id);
+const money = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+$('hdr').innerHTML = `<a href="${esc(STORE.shopUrl || '#')}" style="color:inherit;text-decoration:none"><div class="brand">${esc(STORE.name)}</div></a>`;
+$('policy').textContent = 'Items must be unworn, unwashed, and returned with tags and original packaging. Sale items are final. Original shipping is not refunded.';
+$('ftr').innerHTML = STORE.support ? `Questions? Email <a href="mailto:${esc(STORE.support)}">${esc(STORE.support)}</a>` : '';
+
+function go(n) {
+  for (let i = 1; i <= 4; i++) $('s' + i).classList.toggle('hidden', i !== n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function showErr(id, msg) { const e = $(id); e.textContent = msg; e.classList.toggle('hidden', !msg); }
+function busy(btn, on, text) { btn.disabled = on; btn.innerHTML = on ? '<span class="spin"></span>Please wait…' : text; }
+
+async function api(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Something went wrong. Please try again.');
+  return j;
+}
+
+// ---- Step 1
+$('f1').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  showErr('e1', '');
+  busy($('b1'), true);
+  try {
+    S = await api(`/api/returns/public/${STORE.key}/lookup`, { order_number: $('on').value, email: $('em').value });
+    addr = S.address ? { ...S.address } : null;
+    renderItems();
+    go(2);
+  } catch (err) { showErr('e1', err.message); }
+  busy($('b1'), false, 'Find my order');
+});
+
+// ---- Step 2
+function renderItems() {
+  $('ordTitle').textContent = `Order ${S.order.name}`;
+  $('existing').innerHTML = (S.existing || []).filter((r) => r.status !== 'cancelled').map((r) => `
+    <div class="existing"><strong>Return ${esc(r.rma)}</strong> · ${esc(statusText(r.status))}<br>
+    ${r.items.map((i) => esc(i.quantity + '× ' + i.title)).join(', ')}<br>
+    ${r.label_url && r.status !== 'refunded' ? `<a href="${esc(r.label_url)}" target="_blank" rel="noopener">Download label</a> · ` : ''}
+    <a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">Track package</a></div>`).join('');
+
+  const reasonOpts = '<option value="">Select a reason</option>' + S.reasons.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+  const rows = S.items.map((it, i) => {
+    const qtyOpts = Array.from({ length: it.returnable_qty }, (_, k) => `<option>${k + 1}</option>`).join('');
+    const img = it.image ? `<img src="${esc(it.image)}" alt="">` : '<div class="ph"></div>';
+    const label = it.eligible ? '' : `<span class="tag">${esc(it.why || 'Already returned')}</span>`;
+    return `<div class="item ${it.eligible ? '' : 'off'}">${img}<div>
+      <div class="t">${esc(it.title)}</div>
+      <div class="v">${esc(it.variant || '')}${it.variant ? ' · ' : ''}${money(it.unit_price)}</div>
+      ${it.eligible ? `<label class="pick"><input type="checkbox" data-i="${i}" onchange="toggleItem(${i})"> Return this item</label>
+      <div class="detail hidden" id="d${i}">
+        <div class="grid"><select id="q${i}" aria-label="Quantity">${qtyOpts}</select><select id="r${i}" aria-label="Reason" onchange="validate2()">${reasonOpts}</select></div>
+        <textarea id="n${i}" rows="2" placeholder="Anything we should know? (optional)"></textarea>
+      </div>` : label}
+    </div></div>`;
+  });
+  $('items').innerHTML = rows.join('') || '<p class="muted">There are no items on this order that can be returned.</p>';
+  validate2();
+}
+function toggleItem(i) {
+  const on = document.querySelector(`input[data-i="${i}"]`).checked;
+  $('d' + i).classList.toggle('hidden', !on);
+  validate2();
+}
+function selectedLines() {
+  return S.items.map((it, i) => {
+    const cb = document.querySelector(`input[data-i="${i}"]`);
+    if (!cb || !cb.checked) return null;
+    return { it, fulfillmentLineItemId: it.fulfillmentLineItemId, quantity: Number($('q' + i).value), reasonId: $('r' + i).value, note: $('n' + i).value };
+  }).filter(Boolean);
+}
+function validate2() {
+  const lines = selectedLines();
+  $('b2').disabled = !lines.length || lines.some((l) => !l.reasonId);
+}
+
+// ---- Step 3
+function estimate() {
+  const lines = selectedLines();
+  const subtotal = lines.reduce((s, l) => s + l.it.unit_price * l.quantity, 0);
+  const o = S.options;
+  const refund = Math.max(0, subtotal - o.label_fee);
+  const creditBase = Math.max(0, subtotal - (o.fee_on_store_credit ? o.label_fee : 0));
+  const bonus = creditBase * o.store_credit_bonus_pct / 100;
+  return { subtotal, refund, creditBase, bonus, credit: creditBase + bonus };
+}
+function toStep3() {
+  if (S.international) { showErr('e2', 'Prepaid return labels are only available for US addresses. Please contact us for help with your return.'); return; }
+  renderOpts();
+  renderAddr();
+  go(3);
+}
+function renderOpts() {
+  const e = estimate();
+  const o = S.options;
+  let html = '';
+  if (o.store_credit_enabled) {
+    html += `<label class="opt ${method === 'store_credit' ? 'sel' : ''}"><input type="radio" name="m" value="store_credit" ${method === 'store_credit' ? 'checked' : ''} onchange="pick('store_credit')">
+      <div class="top"><div><strong>Store credit</strong><span class="badge">+${o.store_credit_bonus_pct}% bonus</span></div><div class="amt">${money(e.credit)}</div></div>
+      <div class="muted">Added to your ${esc(STORE.name)} account to use on your next order.</div></label>`;
+  }
+  html += `<label class="opt ${method === 'original' ? 'sel' : ''}"><input type="radio" name="m" value="original" ${method === 'original' ? 'checked' : ''} onchange="pick('original')">
+    <div class="top"><div><strong>Refund to original payment</strong></div><div class="amt">${money(e.refund)}</div></div>
+    <div class="muted">Back to the card you paid with. Banks usually take 5–10 business days.</div></label>`;
+  $('opts').innerHTML = html;
+  renderSummary();
+}
+function pick(m) { method = m; renderOpts(); }
+function renderSummary() {
+  const e = estimate();
+  const o = S.options;
+  const lines = selectedLines();
+  const credit = method === 'store_credit';
+  const fee = credit && !o.fee_on_store_credit ? 0 : o.label_fee;
+  let h = lines.map((l) => `<div class="sumline"><span>${esc(l.quantity + '× ' + l.it.title)}</span><span>${money(l.it.unit_price * l.quantity)}</span></div>`).join('');
+  h += `<div class="sumline"><span>Return shipping label</span><span>${fee ? '−' + money(fee) : 'Free'}</span></div>`;
+  if (credit) h += `<div class="sumline"><span>${o.store_credit_bonus_pct}% store credit bonus</span><span>+${money(e.bonus)}</span></div>`;
+  h += `<div class="sumline total"><span>Estimated ${credit ? 'store credit' : 'refund'}</span><span>${money(credit ? e.credit : e.refund)}</span></div>`;
+  $('summary').innerHTML = h;
+}
+function renderAddr() {
+  if (!addr) { $('addrView').innerHTML = '<span class="muted">No address on file. Please add one.</span>'; openAddr(); return; }
+  $('addrView').innerHTML = `${esc(addr.name)}<br>${esc(addr.address1)}${addr.address2 ? ', ' + esc(addr.address2) : ''}<br>${esc(addr.city)}, ${esc(addr.state)} ${esc(addr.zip)}`;
+}
+function openAddr() {
+  const a = addr || {};
+  $('a_name').value = a.name || ''; $('a_1').value = a.address1 || ''; $('a_2').value = a.address2 || '';
+  $('a_city').value = a.city || ''; $('a_state').value = a.state || ''; $('a_zip').value = a.zip || ''; $('a_phone').value = a.phone || '';
+  $('addrForm').classList.remove('hidden'); $('addrView').classList.add('hidden'); $('editAddr').classList.add('hidden');
+}
+$('editAddr').onclick = openAddr;
+function readAddr() {
+  if ($('addrForm').classList.contains('hidden')) return addr;
+  return { name: $('a_name').value.trim(), address1: $('a_1').value.trim(), address2: $('a_2').value.trim(), city: $('a_city').value.trim(),
+    state: $('a_state').value.trim().toUpperCase(), zip: $('a_zip').value.trim(), phone: $('a_phone').value.trim(), country: 'US' };
+}
+
+async function submitReturn() {
+  showErr('e3', '');
+  const a = readAddr();
+  if (!a || !a.address1 || !a.city || !a.state || !a.zip) { showErr('e3', 'Please complete your address.'); return; }
+  busy($('b3'), true);
+  try {
+    const lines = selectedLines().map(({ it, ...l }) => l);
+    const r = await api('/api/returns/public/submit', { token: S.token, lines, refund_method: method, address: a });
+    $('doneLead').textContent = `Return ${r.rma} for order ${S.order.name}`;
+    $('labelBtn').href = r.label_url;
+    $('trk').href = r.tracking_url; $('trk').textContent = r.tracking_number;
+    $('refundStep').textContent = method === 'store_credit'
+      ? 'Your store credit is added as soon as the package is delivered to us.'
+      : 'Your refund is issued as soon as the package is delivered to us.';
+    go(4);
+  } catch (err) { showErr('e3', err.message); }
+  busy($('b3'), false, 'Get my return label');
+}
+
+function statusText(s) {
+  return { label_created: 'Label created, waiting for drop-off', in_transit: 'On its way back to us', delivered: 'Received, refund processing', refunded: 'Refunded', needs_attention: 'Being reviewed by our team', cancelled: 'Cancelled' }[s] || s;
+}
+</script>
+</body>
+</html>

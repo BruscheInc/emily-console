@@ -195,6 +195,7 @@
   <div class="navsec">Shipments</div>
   <button class="nav view" data-view="stuck" onclick="setView('stuck')"><span class="i">⏳</span>Never scanned<span class="n" id="v-stuck"></span></button>
   <button class="nav view" data-view="undelivered" onclick="setView('undelivered')"><span class="i">🚚</span>Not delivered 15+ days<span class="n" id="v-undelivered"></span></button>
+  <button class="nav view" data-view="returns" onclick="setView('returns')"><span class="i">↩️</span>Returns<span class="n" id="v-returns"></span></button>
   <div class="navsec">Mailboxes</div>
   <button class="nav view" data-view="lbo" onclick="setView('lbo')"><span class="i">✉️</span>Outlet · all mail<span class="n" id="v-lbo"></span></button>
   <button class="nav view" data-view="lb" onclick="setView('lb')"><span class="i">✉️</span>Larkspur · all mail<span class="n" id="v-lb"></span></button>
@@ -311,12 +312,12 @@ async function loadCounts(){try{
   const c=await api("/api/counts?view="+encodeURIComponent(VIEW));
   for(const k of ["pending","sent","closed","collabs","all"]){const el=$("n-"+k);if(el)el.textContent=c[k]!=null?c[k]:"";}
   for(const v of ["lb","lbo","lb_tickets","lbo_tickets","oos","all"]){const el=$("v-"+v);if(el)el.textContent=(c.views&&c.views[v])?c.views[v]:"";}
-  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||"";
+  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||"";
   // tab title carries the pending count, like a real inbox
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Helpdesk`:"Helpdesk";
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -410,12 +411,13 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';_listSig="";}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
-  const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity";
+  const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
   if(VIEW==="activity") return loadActivity(silent);
+  if(VIEW==="returns") return loadReturns(silent);
   if(isStuck) return loadStuck(silent);
   try{
     const d=await api(`/api/tickets?tab=${TAB}&view=${encodeURIComponent(VIEW)}&q=${encodeURIComponent($("q").value.trim())}&limit=${PAGE}&offset=${OFFSET}`);
@@ -675,6 +677,7 @@ function renderOrder(){
     <div class="acts">
       <button class="btn sec" ${o.can_change_address?"":"disabled"} onclick="orderModal('update_address')">📍 Update address</button>
       <button class="btn sec" onclick="orderModal('replacement')">🎁 Replacement</button>
+      <button class="btn sec" onclick="returnModal()">↩️ Start return</button>
       <button class="btn sec" ${o.can_refund?"":"disabled"} onclick="orderModal('refund')">💸 Refund</button>
       <button class="btn sec danger" ${o.can_cancel?"":"disabled"} onclick="orderModal('cancel')">🛑 Cancel order</button>
     </div>
@@ -826,6 +829,113 @@ async function loadStuck(silent){
   }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load stuck packages.</div>'; }
 }
 async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify…"; try{ const r=await api("/api/stuck/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.scanned} orders — ${r.never_scanned} never scanned · ${r.undelivered} not delivered`); }catch(e){toast("Check failed",true);} loadStuck(); loadCounts(); }
+/* ---------- Returns: our own portal (replaces Loop). Data from returns.js ---------- */
+let RET_F={status:"open",store:"",q:""}, RET_OPEN=new Set(), _retSig="", RET_D=null;
+const RET_LABEL={label_created:"Label created",in_transit:"On its way back",delivered:"Delivered",refunded:"Refunded",needs_attention:"Needs attention",cancelled:"Cancelled"};
+const RET_CHIP={label_created:"",in_transit:"drafted",delivered:"drafted",refunded:"sent",needs_attention:"skip",cancelled:""};
+async function loadReturns(silent){
+  const w=$("stuckwrap"); if(!silent){ w.innerHTML='<div class="empty">Loading returns…</div>'; _retSig=""; }
+  try{
+    const d=await api(`/api/returns?status=${encodeURIComponent(RET_F.status)}&store=${encodeURIComponent(RET_F.store)}&q=${encodeURIComponent(RET_F.q)}`);
+    const sig=JSON.stringify([RET_F,d.counts,d.returns.map(r=>[r.id,r.status,r.updated_at]),[...RET_OPEN]]); if(silent&&sig===_retSig)return; _retSig=sig; RET_D=d;
+    const c=d.counts||{by:{}}, s=d.settings;
+    const seg=(k,l,n)=>`<button class="tab ${RET_F.status===k?"on":""}" onclick="RET_F.status='${k}';loadReturns()">${l}<span class="n">${n||0}</span></button>`;
+    const all=Object.values(c.by||{}).reduce((a,b)=>a+b,0);
+    $("showing").textContent=`${d.returns.length} return${d.returns.length===1?"":"s"}`;
+    let h=`<div class="stuckhead">
+      <span>Portal: ${Object.values(d.stores).map(x=>`<a href="${esc(d.portal_base+x.key)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(x.name)} ↗</a>`).join(" · ")}
+        · ${s.portal_live?'<b style="color:#158048">Live — Emily sends customers here</b>':'<b style="color:#b7791f">Not live — Emily still sends Loop links</b>'}${s.test_labels?' · <b style="color:#b7791f">TEST labels</b>':""}</span>
+      <span>Refunded ${money(c.refunded)} · label spend ${money(c.labels)} · fees kept ${money(c.fees)}</span>
+      <select onchange="RET_F.store=this.value;loadReturns()" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${RET_F.store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
+      <input type="text" placeholder="Search order, RMA, email" value="${esc(RET_F.q)}" onkeydown="if(event.key==='Enter'){RET_F.q=this.value.trim();loadReturns()}" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);width:180px">
+      <button class="btn sec xs" onclick="retPoll(this)">↻ Check tracking</button>
+      <a class="btn sec xs" href="/api/returns.csv?key=${encodeURIComponent(KEY)}" style="text-decoration:none">Export CSV</a>
+      ${d.admin?`<button class="btn sec xs" onclick="retSettings()">⚙︎ Settings</button>`:""}
+      ${(d.problems||[]).length?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Setup: ${d.problems.map(esc).join(" · ")}</span>`:""}
+      <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}</div></div>`;
+    if(!d.returns.length){ w.innerHTML=h+'<div class="empty">No returns here.</div>'; return; }
+    h+=`<table class="tickets stuck"><thead><tr><th class="c-t">Return</th><th>Customer</th><th>Items</th><th>Method</th><th>Status</th><th>Amount</th></tr></thead><tbody>`;
+    for(const r of d.returns){
+      const n=r.items.reduce((a,i)=>a+i.quantity,0);
+      h+=`<tr class="row" onclick="RET_OPEN.has('${r.id}')?RET_OPEN.delete('${r.id}'):RET_OPEN.add('${r.id}');loadReturns(true)">
+        <td class="c-t" style="width:18%"><div class="subj">${esc(r.rma)}</div><div class="exc">${esc(r.order_name)} · ${fmtDay(r.created_at)}${r.source==="helpdesk"?" · by staff":""}</div></td>
+        <td style="width:20%">${esc(r.customer_name||"")}<div class="exc">${esc(r.email||"")}</div></td>
+        <td style="width:24%">${n} item${n===1?"":"s"}<div class="exc">${esc(r.items.map(i=>i.title).join(", "))}</div></td>
+        <td style="width:12%">${r.refund_method==="store_credit"?"Store credit":"Original payment"}</td>
+        <td style="width:14%"><span class="chip ${RET_CHIP[r.status]||""}">${esc(RET_LABEL[r.status]||r.status)}</span>${r.test_label?' <span class="chip">test</span>':""}</td>
+        <td style="width:12%">${r.status==="refunded"?money(r.refunded_amount):'<span class="exc" style="display:inline">~'+money(r.est_subtotal)+'</span>'}</td></tr>`;
+      if(RET_OPEN.has(r.id)){
+        const act=!["refunded","cancelled"].includes(r.status);
+        h+=`<tr><td colspan="6" style="background:var(--panel2);padding:14px 22px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:13px">
+          <div>${r.items.map(i=>`<div>${i.quantity}× ${esc(i.title)}${i.variant?` <span class="exc" style="display:inline">${esc(i.variant)}</span>`:""} · ${money(i.unit_price)} · <i>${esc(i.reason)}</i>${i.note?` — “${esc(i.note)}”`:""}</div>`).join("")}
+            <div style="margin-top:8px">Tracking <a href="${esc(r.tracking_url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(r.tracking_number)}</a>${r.tracking_text?" · "+esc(r.tracking_text):""} · label ${money(r.label_cost)}${r.label_emailed===false?' · <span style="color:#c0392b">Shopify did not email the label</span>':""}</div>
+            <div class="exc" style="display:block">Shopify return ${esc(r.shopify_return_name||"")}${r.ticket_id?` · <a href="#" onclick="event.stopPropagation();openTicket(${r.ticket_id});return false" style="color:var(--accent)">ticket ${r.ticket_id}</a>`:""}</div>
+            ${act?`<div class="stk-acts" style="margin-top:10px"><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','track',this)">Check tracking</button><button class="btn xs" onclick="event.stopPropagation();retAct('${r.id}','refund',this,'Refund now, before the package is back?')">Refund now</button><button class="btn sec xs danger" onclick="event.stopPropagation();retAct('${r.id}','cancel',this,'Cancel this return and void the label?')">Cancel return</button></div>`:""}</div>
+          <div><b>History</b>${(r.events||[]).slice().reverse().map(e=>`<div class="exc" style="display:block;white-space:normal">${fmt(e.at)} — ${esc(e.text)}</div>`).join("")}</div></div></td></tr>`;
+      }
+    }
+    w.innerHTML=h+"</tbody></table>";
+  }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load returns.</div>'; }
+}
+async function retAct(id,act,b,ask){ if(ask&&!confirm(ask))return; b.disabled=true; try{ const r=await api(`/api/returns/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error)throw new Error(r.error); toast(act==="refund"?"Refunded":act==="cancel"?"Return cancelled":"Tracking checked"); }catch(e){ toast(e.message,true); } loadReturns(true); loadCounts(); }
+async function retPoll(b){ b.disabled=true; b.textContent="Checking…"; try{ await api("/api/returns/poll",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); }catch(e){} loadReturns(); loadCounts(); }
+async function retSettings(){
+  const s=RET_D.settings, a=s.return_address; closeModal();
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box"><h3>Returns settings</h3><div class="sub">Changes apply right away. Portal: ${esc(RET_D.portal_base)}lb and …/lbo</div>
+    <label class="chk"><input type="checkbox" id="rs-live" ${s.portal_live?"checked":""}> Portal is live — Emily sends customers here instead of Loop</label>
+    <label class="chk"><input type="checkbox" id="rs-test" ${s.test_labels?"checked":""}> Test labels (no charge — turn off to go live)</label>
+    <div class="grid2"><div><label>Return window LB (days)</label><input type="number" id="rs-wlb" value="${s.window_days.lb}"></div><div><label>Return window LBO (days)</label><input type="number" id="rs-wlbo" value="${s.window_days.lbo}"></div></div>
+    <div class="grid2"><div><label>Label fee ($, taken off the refund)</label><input type="number" step="0.01" id="rs-fee" value="${s.label_fee}"></div><div><label>Store credit bonus (%)</label><input type="number" id="rs-bonus" value="${s.store_credit_bonus_pct}"></div></div>
+    <label class="chk"><input type="checkbox" id="rs-credit" ${s.store_credit_enabled?"checked":""}> Offer store credit</label>
+    <label class="chk"><input type="checkbox" id="rs-feecredit" ${s.fee_on_store_credit?"checked":""}> Charge the label fee on store credit too</label>
+    <label class="chk"><input type="checkbox" id="rs-auto" ${s.auto_refund?"checked":""}> Refund automatically when the package is delivered back</label>
+    <label>Final-sale product tags (can't be returned)</label><input type="text" id="rs-tags" value="${esc(s.final_sale_tags)}">
+    <label>ShipStation carrier &amp; service</label><select id="rs-svc"><option value="">Loading carriers…</option></select>
+    <div class="grid2"><div><label>Void unused labels after (days)</label><input type="number" id="rs-void" value="${s.void_unused_after_days}"></div><div><label>Default item weight (oz)</label><input type="number" id="rs-oz" value="${s.default_item_oz}"></div></div>
+    <label>Returns ship to</label>
+    <div class="grid2"><div><input type="text" id="ra-name" placeholder="Name" value="${esc(a.name)}"></div><div><input type="text" id="ra-co" placeholder="Company" value="${esc(a.company_name)}"></div></div>
+    <div class="grid2" style="margin-top:6px"><div><input type="text" id="ra-1" placeholder="Street" value="${esc(a.address_line1)}"></div><div><input type="text" id="ra-2" placeholder="Suite" value="${esc(a.address_line2||"")}"></div></div>
+    <div class="grid3" style="margin-top:6px"><div><input type="text" id="ra-city" placeholder="City" value="${esc(a.city_locality)}"></div><div><input type="text" id="ra-st" maxlength="2" placeholder="TX" value="${esc(a.state_province)}"></div><div><input type="text" id="ra-zip" placeholder="ZIP" value="${esc(a.postal_code)}"></div></div>
+    <div style="margin-top:6px"><input type="text" id="ra-ph" placeholder="Phone (required by carriers)" value="${esc(a.phone)}"></div>
+    <div class="foot"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" id="rs-go">Save</button></div></div>`;
+  document.body.appendChild(m);
+  api("/api/returns/carriers").then(r=>{ const sel=$("rs-svc"); if(!sel)return; if(r.error||!r.carriers){ sel.innerHTML=`<option value="${esc(s.carrier_id)}|${esc(s.service_code)}">${esc(r.error||"Couldn't load carriers")}</option>`; return; }
+    sel.innerHTML=r.carriers.map(c=>c.services.map(v=>`<option value="${esc(c.id)}|${esc(v.code)}" ${c.id===s.carrier_id&&v.code===s.service_code?"selected":""}>${esc(c.name)} — ${esc(v.name)}</option>`).join("")).join(""); }).catch(()=>{});
+  $("rs-go").onclick=async()=>{
+    const [carrier_id,service_code]=($("rs-svc").value||"|").split("|");
+    const body={portal_live:$("rs-live").checked,test_labels:$("rs-test").checked,window_days:{lb:Number($("rs-wlb").value),lbo:Number($("rs-wlbo").value)},label_fee:Number($("rs-fee").value),store_credit_bonus_pct:Number($("rs-bonus").value),
+      store_credit_enabled:$("rs-credit").checked,fee_on_store_credit:$("rs-feecredit").checked,auto_refund:$("rs-auto").checked,final_sale_tags:$("rs-tags").value,void_unused_after_days:Number($("rs-void").value),default_item_oz:Number($("rs-oz").value),
+      return_address:{name:$("ra-name").value.trim(),company_name:$("ra-co").value.trim(),address_line1:$("ra-1").value.trim(),address_line2:$("ra-2").value.trim(),city_locality:$("ra-city").value.trim(),state_province:$("ra-st").value.trim().toUpperCase(),postal_code:$("ra-zip").value.trim(),phone:$("ra-ph").value.trim(),country_code:"US"}};
+    if(carrier_id) { body.carrier_id=carrier_id; body.service_code=service_code; }
+    if(body.portal_live&&!s.portal_live&&!confirm("Go live? Emily will start sending customers to the new portal instead of Loop."))return;
+    try{ const r=await api("/api/returns/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error)throw new Error(r.error); toast("Saved"); closeModal(); loadReturns(); }catch(e){ toast(e.message,true); }
+  };
+}
+// From a ticket's order panel: build the return here, label PDF rides on the next reply.
+async function returnModal(){
+  const o=ORDER; if(!o)return; closeModal();
+  let p; try{ p=await api("/api/returns/order/"+encodeURIComponent(o.name)); if(p.error)throw new Error(p.error); }catch(e){ toast(e.message,true); return; }
+  const op=p.options, ropts=p.reasons.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("");
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box"><h3>Start a return</h3><div class="sub">${esc(p.order.name)} · prepaid ShipStation label · ${op.window_days}-day window · $${Number(op.label_fee).toFixed(2)} label fee off the refund</div>
+    ${(p.existing||[]).filter(r=>r.status!=="cancelled").map(r=>`<div class="warn" style="color:var(--ink);background:var(--panel2);border-color:var(--line)">Already has return ${esc(r.rma)} (${esc(RET_LABEL[r.status]||r.status)}): ${esc(r.items.map(i=>i.quantity+"× "+i.title).join(", "))}</div>`).join("")}
+    ${p.items.map((it,n)=>`<div style="border-top:1px solid var(--line);padding:8px 0;margin-top:6px"><label class="chk" style="margin-top:0"><input type="checkbox" id="rt-${n}" ${it.returnable_qty>0?"":"disabled"}> <span><b>${esc(it.title)}</b> <span style="color:var(--muted)">${esc(it.variant||"")} · ${money(it.unit_price)}</span>${it.eligible?"":` <span class="chip skip">${esc(it.why||"not returnable")}</span>`}</span></label>
+      <div class="grid3" style="grid-template-columns:70px 1fr"><select id="rtq-${n}">${Array.from({length:Math.max(1,it.returnable_qty)},(_,k)=>`<option>${k+1}</option>`).join("")}</select><select id="rtr-${n}">${ropts}</select></div></div>`).join("")||'<div class="empty">Nothing on this order can be returned (not shipped yet, or already returned).</div>'}
+    <label>Refund as</label><select id="rt-m"><option value="original">Refund to original payment (minus $${Number(op.label_fee).toFixed(2)} label fee)</option>${op.store_credit_enabled?`<option value="store_credit">Store credit + ${op.store_credit_bonus_pct}% bonus</option>`:""}</select>
+    ${p.items.some(i=>!i.eligible&&i.returnable_qty>0)?`<label class="chk"><input type="checkbox" id="rt-ov"> Override policy (allow items outside the window / final sale)</label>`:""}
+    <div style="color:var(--muted);font-size:12px;margin-top:10px">Creates the Shopify return, buys the label, emails it to the customer, and attaches the PDF to your next reply on this ticket. The refund goes out automatically once the package is delivered back.</div>
+    <div class="foot"><button class="btn sec" onclick="closeModal()">Back</button><button class="btn" id="rt-go">Create return + label</button></div></div>`;
+  document.body.appendChild(m);
+  $("rt-go").onclick=async()=>{
+    const lines=p.items.map((it,n)=>$("rt-"+n)&&$("rt-"+n).checked?{fulfillmentLineItemId:it.fulfillmentLineItemId,quantity:Number($("rtq-"+n).value),reasonId:$("rtr-"+n).value}:null).filter(Boolean);
+    if(!lines.length){toast("Pick at least one item.",true);return;}
+    const go=$("rt-go"); go.disabled=true; go.textContent="Buying label…";
+    try{ const r=await api("/api/returns/create",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({order:o.name,lines,refund_method:$("rt-m").value,ticket_id:CUR,override:!!($("rt-ov")&&$("rt-ov").checked)})});
+      if(r.error)throw new Error(r.error); toast(`Return ${r.record.rma} created${r.attached?" — label attached to your reply":""}`); closeModal(); if(CUR)openTicket(CUR); loadCounts(); }
+    catch(e){ toast(e.message,true); go.disabled=false; go.textContent="Create return + label"; }
+  };
+}
 /* ---------- Activity log: every action, when, by whom ---------- */
 let ACT_F={who:"",kind:"",q:"",offset:0}, _actSig="";
 const KIND_LABEL={reply:"Replied",note:"Noted",status:"Status",assign:"Assigned",spam:"Spam",merge:"Merged",classify:"Classified","email-new":"New email","emily-draft":"Emily drafted","emily-skip":"Emily skipped","emily-approve":"Approved & sent","emily-edit":"Edited & sent","emily-skip":"Draft skipped","emily-redraft":"Redraft","emily-autosend":"Auto-sent","action-staged":"Proposed","action-applied":"Applied","action-dismissed":"Dismissed","action-apply":"Applied","action-dismiss":"Dismissed",todo:"To-do","order-update_address":"Address changed","order-cancel":"Order cancelled","order-refund":"Refunded","order-replacement":"Replacement","store-credit":"Store credit","shipment-contacted":"Shipment contacted","shipment-resolved":"Shipment resolved","shipment-ignored":"Shipment ignored","shipment-open":"Shipment reopened","shipment-email":"Shipment email","shipment-scan":"Shipment scan","offer-replacement":"Offered replacement","offer-credit":"Offered credit","oos-sent":"Out-of-stock email","oos-followup":"OOS follow-up","oos-skipped":"OOS skipped",login:"Signed in","user-create":"User added","user-update":"User changed","policy-edit":"Policy edited","emily-setting":"Setting changed","admin-dedupe":"Dedupe","admin-classify":"Re-filter"};
