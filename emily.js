@@ -110,7 +110,10 @@ async function storeToken(st) {
   const j = await r.json();
   if (!j.access_token) throw new Error(`${st.brand} token: ${JSON.stringify(j).slice(0, 150)}`);
   st.tok = { token: j.access_token, exp: Date.now() + ((j.expires_in ? j.expires_in - 300 : 3600) * 1000) };
-  console.log(`🔑 ${st.brand} token scopes: ${j.scope || "(none returned)"}${/store_credit/i.test(j.scope || "") ? " · store-credit ✅" : " · store-credit ✖ NOT granted"}`);
+  const have = new Set(String(j.scope || "").split(",").map((x) => x.trim()));
+  const NEEDED = { write_order_edits: "order edits (replacement swaps on unshipped orders)", write_orders: "cancel / refund / address", write_draft_orders: "PP replacement orders", write_discounts: "discount codes", write_store_credit_account_transactions: "store credit", read_store_credit_accounts: "store credit balance on the profile", write_fulfillments: "fixing tracking in Shopify", read_customers: "customer profile", read_products: "stock checks", read_fulfillments: "tracking" };
+  const missing = Object.keys(NEEDED).filter((k) => !have.has(k) && !have.has(k.replace(/^read_/, "write_")));
+  console.log(`🔑 ${st.brand} token scopes: ${j.scope || "(none returned)"}${missing.length ? `\n   ⚠️  missing: ${missing.map((k) => `${k} → ${NEEDED[k]}`).join("; ")}` : " · all needed scopes granted ✅"}`);
   return st.tok.token;
 }
 async function storeGraphQL(st, query, variables) {
@@ -120,7 +123,12 @@ async function storeGraphQL(st, query, variables) {
     body: JSON.stringify({ query, variables }),
   });
   const j = await res.json();
-  if (j.errors) throw new Error(`${st.brand}: ${JSON.stringify(j.errors).slice(0, 200)}`);
+  if (j.errors) {
+    // A missing access scope reads as a plain sentence instead of a JSON dump: say which scope and where to add it.
+    const denied = j.errors.map((e) => (e.message || "").match(/Requires `([a-z_]+)` access scope/)).find(Boolean);
+    if (denied) throw new Error(`${st.brand}: the Emily Shopify app doesn't have the "${denied[1]}" permission yet. In Shopify admin → Settings → Apps and sales channels → Develop apps → the Emily app → Configuration → Admin API scopes, tick ${denied[1]}, save, then restart Helpdesk.`);
+    throw new Error(`${st.brand}: ${JSON.stringify(j.errors).slice(0, 200)}`);
+  }
   return j.data;
 }
 const ORDER_QUERY = `query($q:String!){orders(first:3,query:$q,sortKey:CREATED_AT,reverse:true){edges{node{

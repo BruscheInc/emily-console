@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.18 — Oct 7, 2026
+- A missing Shopify permission now reads as a plain sentence ("the Emily Shopify app doesn't have the
+  write_order_edits permission yet — add it in Shopify admin → … → Admin API scopes") instead of a JSON dump,
+  and the boot log lists every scope each store's app is missing and what it's for.
+
 ## v4.17 — Oct 6, 2026
 - **+ New ticket.** Start an email conversation with a customer from Helpdesk. Pick the store (Larkspur Baby or
   Larkspur Baby Outlet) — that's the mailbox it's sent from, so the customer sees the right brand and their reply
