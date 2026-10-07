@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22.2 — Oct 7, 2026
+- The return label "from" address fills in by itself from where the order shipped. Local-pickup orders (no shipping
+  address) use the billing address, then the customer's saved address. Customers can still edit it.
+
 ## v4.22.1 — Oct 7, 2026
 - The returns portal no longer shows raw Shopify errors to customers. They see a plain "we can't look up orders
   right now — email us" message; the exact cause goes to the Helpdesk log.

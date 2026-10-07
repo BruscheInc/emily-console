@@ -113,12 +113,21 @@ async function gql(st, query, variables = {}) {
 const RETURN_SCOPES = ["read_orders", "read_customers", "read_products", "read_inventory", "read_returns", "write_returns",
   "read_merchant_managed_fulfillment_orders", "read_assigned_fulfillment_orders", "read_third_party_fulfillment_orders",
   "read_store_credit_account_transactions", "write_store_credit_account_transactions"];
+// The label comes from where the order was shipped. Local-pickup orders have no shipping address,
+// so fall back to the billing address, then the customer's saved address.
+const hasStreet = (x) => x && x.address1 && x.zip;
+function labelAddress(o) {
+  const c = o.customer && o.customer.defaultAddress;
+  const a = [o.shippingAddress, o.billingAddress, c].find(hasStreet) || null;
+  if (a && !a.phone) a.phone = [o.shippingAddress, o.billingAddress, c].map((x) => x && x.phone).find(Boolean) || "";
+  return a;
+}
 function userErrors(payload, label) { const e = (payload && payload.userErrors) || []; if (e.length) throw new Error(`${label}: ${e.map((x) => x.message).join("; ")}`); }
 
 const ORDER_LOOKUP = `query OrderLookup($q: String!) { orders(first: 5, query: $q) { nodes {
   id name email createdAt cancelledAt currencyCode
-  customer { id firstName lastName defaultEmailAddress { emailAddress } }
-  shippingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } } } }`;
+  customer { id firstName lastName defaultEmailAddress { emailAddress } defaultAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } }
+  shippingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } billingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } } } }`;
 const RETURNABLE = `query Returnable($orderId: ID!) { returnableFulfillments(orderId: $orderId, first: 20) { nodes {
   id fulfillment { id createdAt deliveredAt }
   returnableFulfillmentLineItems(first: 100) { nodes { quantity fulfillmentLineItem { id lineItem {
@@ -273,7 +282,8 @@ async function prepare(key, order, s) {
   const st = shopFor(key);
   const [items, rs] = await Promise.all([returnableItems(st, order.id), reasons(st)]);
   const existing = (await db(`SELECT * FROM hd_returns WHERE order_name=$1 ORDER BY created_at DESC`, [order.name])).rows.map(rowToRec);
-  const a = order.shippingAddress;
+  const a = labelAddress(order);
+  if (!a) console.warn(`returns: ${order.name} has no shipping, billing or customer address (or the app can't read addresses)`);
   return {
     order: { name: order.name, created_at: order.createdAt, currency: order.currencyCode, email: order.email, customer_name: (a && a.name) || "" },
     address: a ? { name: a.name, address1: a.address1, address2: a.address2, city: a.city, state: a.provinceCode, zip: a.zip, country: a.countryCodeV2, phone: a.phone || "" } : null,
@@ -307,8 +317,8 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   const s = await settings(), st = shopFor(key);
   if (!Array.isArray(lines) || !lines.length) throw httpError(400, "Pick at least one item to return.");
   if (refundMethod !== "original" && !(refundMethod === "store_credit" && s.store_credit_enabled)) throw httpError(400, "Pick how you'd like your refund.");
-  const order = (await gql(st, `query O($id: ID!) { order(id: $id) { id name email cancelledAt currencyCode customer { id }
-      shippingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } } }`, { id: orderId })).order;
+  const order = (await gql(st, `query O($id: ID!) { order(id: $id) { id name email cancelledAt currencyCode customer { id defaultAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } }
+      shippingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } billingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } } }`, { id: orderId })).order;
   if (!order) throw httpError(404, "Order not found");
   const items = await returnableItems(st, order.id), rs = await reasons(st);
   const chosen = [];
@@ -324,7 +334,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   }
   if (!chosen.length) throw httpError(400, "Pick at least one item to return.");
 
-  const a = order.shippingAddress || {}, ad = address || {};
+  const a = labelAddress(order) || {}, ad = address || {};
   const country = ad.country || a.countryCodeV2 || "US";
   if (country !== "US") throw httpError(400, "Prepaid labels are only available for US addresses. Please email us and we'll help with your return.");
   const from = {
