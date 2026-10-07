@@ -429,6 +429,11 @@ async function listActions(ticketId) {
 async function applyAction(id, who, overrides = null) {
   const rec = (await db(`SELECT * FROM emily_actions WHERE id=$1`, [id])).rows[0];
   if (!rec) throw new Error("that action no longer exists");
+  if (rec.status === "failed" && RESTAGE[rec.kind]) {
+    // Try again after fixing whatever broke (a Shopify permission, say): put it back to staged and re-run from the saved input.
+    await db(`UPDATE emily_actions SET status='staged', result=NULL, decided_by=NULL, decided_at=NULL WHERE id=$1`, [id]);
+    rec.status = "staged"; pendingAct.delete(id);
+  }
   if (rec.status !== "staged") throw new Error(`that action was already ${rec.status}`);
   const p = overrides ? null : pendingAct.get(id);
   let result;

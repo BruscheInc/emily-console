@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.19 — Oct 7, 2026
+- **"Try again" on a failed action.** When one of Emily's proposed actions failed (a missing Shopify permission,
+  say), you can re-run it from the ticket once the cause is fixed, instead of asking her to redraft.
+
 ## v4.18 — Oct 7, 2026
 - A missing Shopify permission now reads as a plain sentence ("the Emily Shopify app doesn't have the
   write_order_edits permission yet — add it in Shopify admin → … → Admin API scopes") instead of a JSON dump,
