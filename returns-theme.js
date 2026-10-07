@@ -44,7 +44,7 @@ const FONT_WEIGHTS = {
 // The full schema. Anything not listed here is dropped on save, so this object IS the contract.
 const BASE = {
   meta: { title: "Returns · {store}", description: "Start a return for your {store} order.", favicon: "", noindex: true },
-  brand: { logo: "", logo_alt: "{store}", logo_link: "", logo_h_d: 64, logo_h_m: 48, logo_place: "card", logo_align: "center", show_name: false },
+  brand: { logo: "", logo_alt: "{store}", logo_link: "", logo_h_d: 64, logo_h_m: 48, logo_place: "card", logo_align: "center", show_name: false, logo_action: "start" },
   background: {
     mode: "color", color: "#FFFEFA", grad_from: "#FFFEFA", grad_to: "#EEF1F6", grad_angle: 160,
     image_d: "", image_m: "", focal_x: 50, focal_y: 50, fit: "cover", attach: "scroll",
@@ -70,7 +70,7 @@ const BASE = {
   items: { show_images: true, image_size: 64, image_radius: 10, show_price: true, show_variant: true },
   header: { show: false, bg: "#FFFFFF", text: "#242F3F", show_link: true, link_label: "Back to shop", border: true, sticky: false },
   announce: { on: false, text: "", link: "", bg: "#242F3F", color: "#FFFFFF" },
-  footer: { text: "Questions? Email {support}", links: [], show: true },
+  footer: { text: "Questions? Email {support}", links: [], show: true, show_shop_link: true },
   copy: {
     step1: "Find order", step2: "Choose items", step3: "Refund", step4: "Label",
     lookup_title: "Start a return",
@@ -82,6 +82,7 @@ const BASE = {
     return_this: "Return this item", qty_label: "Quantity", reason_placeholder: "Select a reason", note_placeholder: "Anything we should know? (optional)",
     continue: "Continue", existing_title: "Returns already started", none_returnable: "There are no items on this order that can be returned.",
     refund_title: "How would you like your refund?", refund_sub: "Your refund is issued as soon as your package is delivered back to us.", back: "Back",
+    nav_start_over: "Start over", another_return: "Start another return", nav_shop: "Back to {store}",
     credit_title: "Store credit", credit_badge: "+{bonus}% bonus", credit_desc: "Added to your {store} account to use on your next order.",
     original_title: "Refund to original payment", original_desc: "Back to the card you paid with. Banks usually take 5–10 business days.",
     address_title: "Return label is from", edit_address: "Edit address", summary_title: "Summary",
@@ -128,7 +129,7 @@ const defaultsFor = (store) => merge(BASE, SEEDS[store] || {});
 
 // Allowed values for every enum field.
 const ENUMS = {
-  "brand.logo_place": ["card", "page", "header"], "brand.logo_align": ["center", "left"],
+  "brand.logo_place": ["card", "page", "header"], "brand.logo_action": ["start", "shop", "none"], "brand.logo_align": ["center", "left"],
   "background.mode": ["color", "gradient", "image"], "background.fit": ["cover", "contain", "repeat"], "background.attach": ["scroll", "fixed"],
   "layout.style": ["center", "left", "right", "split"], "layout.split_side": ["left", "right"], "layout.valign": ["center", "top"], "layout.shadow": ["none", "soft", "medium", "strong"],
   "type.heading_case": ["none", "uppercase", "capitalize"], "type.label_case": ["none", "uppercase"],

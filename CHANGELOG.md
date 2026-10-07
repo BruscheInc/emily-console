@@ -3,6 +3,15 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22.3 — Oct 7, 2026
+- **Moving around the returns portal:** a Back button on every step after the first, a Start over button, a
+  "Start another return" button on the last page, and "← Back to Larkspur Baby / Outlet" under the card.
+  The phone's back gesture and the browser Back button now go back one step instead of leaving the page;
+  going back after a finished return starts a fresh one (no double returns).
+- **Clicking the logo starts over** instead of jumping to the store home page. Changeable in Portal Studio →
+  Logo & brand → "Clicking the logo" (starts over / goes to the shop / does nothing). All the new button
+  wording is editable under Wording → Navigation.
+
 ## v4.22.2 — Oct 7, 2026
 - The return label "from" address fills in by itself from where the order shipped. Local-pickup orders (no shipping
   address) use the billing address, then the customer's saved address. Customers can still edit it.

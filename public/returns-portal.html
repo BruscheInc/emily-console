@@ -122,6 +122,13 @@ body.btn-outline .btn{background:transparent;color:var(--primary)}
 body.btn-soft .btn{background:var(--soft);border-color:var(--soft);color:var(--primary)}
 body.btn-full .btn.main{width:100%}
 body.btn-shadow .btn{box-shadow:0 6px 16px -6px var(--primary)}
+.stepnav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px}
+.stepnav:empty{display:none}
+.btn2{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:calc(var(--btn-h) - 10px);padding:0 18px;border-radius:var(--btn-radius);border:1.5px solid var(--border);background:transparent;color:var(--heading);font:inherit;font-size:var(--small);font-weight:600;cursor:pointer;text-decoration:none}
+.btn2:hover{border-color:var(--primary)}
+.btn2.quiet{border-color:transparent;color:var(--muted);text-decoration:underline;padding:0 4px}
+.shoplink{display:inline-flex;align-items:center;gap:6px;margin-bottom:6px;font-weight:600;text-decoration:none}
+.logobtn{background:none;border:0;padding:0;cursor:pointer;display:inline-flex;align-items:center}
 .linkbtn{background:none;border:0;padding:0;font:inherit;font-size:var(--small);color:var(--link);text-decoration:underline;cursor:pointer}
 .spin{display:inline-block;width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -204,16 +211,17 @@ body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
 
       <section id="s2" class="hidden">
         <h1 id="ordTitle"></h1>
-        <p class="lead"><span id="t_items_sub"></span> <button class="linkbtn" onclick="go(1)" id="t_not_your_order"></button></p>
+        <p class="lead"><span id="t_items_sub"></span> <button class="linkbtn" onclick="startOver()" id="t_not_your_order"></button></p>
         <div id="existing"></div>
         <div id="e2" class="err hidden"></div>
         <div id="items" data-sec="items"></div>
         <div style="margin-top:22px"><button class="btn main" id="b2" disabled onclick="toStep3()" data-sec="buttons"></button></div>
+        <div class="stepnav"><button class="btn2" onclick="back()">← <span data-copy="back"></span></button><button class="btn2 quiet" onclick="startOver()" data-copy="nav_start_over"></button></div>
       </section>
 
       <section id="s3" class="hidden">
         <h1 id="t_refund_title"></h1>
-        <p class="lead"><span id="t_refund_sub"></span> <button class="linkbtn" onclick="go(2)" id="t_back"></button></p>
+        <p class="lead" id="t_refund_sub"></p>
         <div id="opts"></div>
         <h2 class="label" id="t_address_title"></h2>
         <div class="box">
@@ -232,6 +240,7 @@ body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
         <div id="e3" class="err hidden" style="margin-top:16px"></div>
         <div style="margin-top:22px"><button class="btn main" id="b3" onclick="submitReturn()" data-sec="buttons"></button></div>
         <p class="muted" style="text-align:center;margin:10px 0 0" id="t_estimate_note"></p>
+        <div class="stepnav"><button class="btn2" onclick="back()">← <span data-copy="back"></span></button><button class="btn2 quiet" onclick="startOver()" data-copy="nav_start_over"></button></div>
       </section>
 
       <section id="s4" class="hidden done">
@@ -241,6 +250,7 @@ body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
         <a id="labelBtn" class="btn main" target="_blank" rel="noopener" data-sec="buttons"></a>
         <p class="muted" style="margin-top:12px"><span id="t_tracking"></span>: <a id="trk" target="_blank" rel="noopener"></a></p>
         <ol id="doneSteps"></ol>
+        <div class="stepnav" style="justify-content:center"><button class="btn2" onclick="startOver()" data-copy="another_return"></button></div>
       </section>
     </div>
     <footer class="foot" id="foot" data-sec="footer"></footer>
@@ -351,7 +361,10 @@ function logoHtml() {
   const b = T.brand;
   const inner = b.logo ? `<img class="logo" src="${esc(b.logo)}" alt="${esc(tok(b.logo_alt))}">` : `<span class="storename">${esc(CTX.name)}</span>`;
   const name = b.logo && b.show_name ? `<span class="storename" style="margin-left:10px">${esc(CTX.name)}</span>` : '';
-  return b.logo_link ? `<a href="${esc(b.logo_link)}" style="align-items:center;text-decoration:none">${inner}${name}</a>` : `<span style="display:inline-flex;align-items:center">${inner}${name}</span>`;
+  const act = b.logo_action || 'start';
+  if (act === 'shop' && b.logo_link) return `<a href="${esc(b.logo_link)}" style="align-items:center;text-decoration:none">${inner}${name}</a>`;
+  if (act === 'start') return `<button type="button" class="logobtn" onclick="startOver()" title="${esc(C('nav_start_over'))}">${inner}${name}</button>`;
+  return `<span style="display:inline-flex;align-items:center">${inner}${name}</span>`;
 }
 function renderChrome() {
   const place = T.brand.logo_place;
@@ -367,7 +380,10 @@ function renderChrome() {
   $('announce').innerHTML = a.on && a.text ? (a.link ? `<a href="${esc(a.link)}">${rich(a.text, null, true)}</a>` : rich(a.text)) : '';
   const f = T.footer;
   $('foot').classList.toggle('hidden', !f.show);
-  $('foot').innerHTML = f.show ? `<div class="rich">${rich(f.text)}</div>${f.links.length ? `<div class="links">${f.links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')}</div>` : ''}` : '';
+  const shop = T.brand.logo_link || CTX.shop_url;
+  const shopLink = f.show_shop_link && shop ? `<div><a class="shoplink" href="${esc(shop)}">← ${esc(C('nav_shop'))}</a></div>` : '';
+  $('foot').classList.toggle('hidden', !f.show && !shopLink);
+  $('foot').innerHTML = shopLink + (f.show ? `<div class="rich">${rich(f.text)}</div>${f.links.length ? `<div class="links">${f.links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')}</div>` : ''}` : '');
   // steps
   $('steps').classList.toggle('hidden', !T.layout.steps);
   $('steps').innerHTML = [1, 2, 3, 4].map((n) => `<li class="${n < STEP ? 'past' : n === STEP ? 'on' : ''}"><span>${esc(C('step' + n))}</span></li>`).join('');
@@ -383,7 +399,8 @@ function renderCopy() {
   $('t_order_help').classList.toggle('hidden', !T.copy.order_help);
   if (!$('b1').disabled) $('b1').textContent = C('lookup_button');
   txt('items_sub'); txt('not_your_order'); if (!$('b2').dataset.busy) $('b2').textContent = C('continue');
-  txt('refund_title'); txt('refund_sub'); txt('back'); txt('address_title'); txt('summary_title'); txt('estimate_note');
+  document.querySelectorAll('[data-copy]').forEach((el) => { el.textContent = C(el.dataset.copy); });
+  txt('refund_title'); txt('refund_sub'); txt('address_title'); txt('summary_title'); txt('estimate_note');
   $('editAddr').textContent = C('edit_address'); if (!$('b3').disabled) $('b3').textContent = C('submit');
   txt('done_title'); txt('tracking'); $('labelBtn').textContent = C('download');
   if (S.order) $('ordTitle').textContent = C('items_title', { order: S.order.name });
@@ -391,12 +408,40 @@ function renderCopy() {
 }
 
 /* ---------- flow ---------- */
-function go(n) {
+// Each step is a browser history entry, so the phone's back gesture / browser Back moves one step back.
+function go(n, fromHistory) {
   STEP = n;
   for (let i = 1; i <= 4; i++) $('s' + i).classList.toggle('hidden', i !== n);
   renderChrome();
+  if (!B.preview && !fromHistory) {
+    const st = { rp: 1, step: n };
+    if (n === 1) history.replaceState(st, ''); else history.pushState(st, '');
+  }
   if (!B.preview) window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+function back() {
+  if (PICK) return;
+  if (!B.preview && history.state && history.state.rp && STEP > 1) history.back();
+  else go(Math.max(1, STEP - 1));
+}
+function startOver() {
+  if (PICK) return;
+  const keepEmail = $('em').value;
+  S = {}; method = 'original'; addr = null;
+  ['e1', 'e2', 'e3'].forEach((id) => showErr(id, ''));
+  $('on').value = ''; $('em').value = keepEmail;
+  $('items').innerHTML = ''; $('addrForm').classList.add('hidden'); $('addrView').classList.remove('hidden'); $('editAddr').classList.remove('hidden');
+  go(1);
+}
+window.addEventListener('popstate', (e) => {
+  if (B.preview || !e.state || !e.state.rp) return;
+  let n = e.state.step;
+  if (S.done) { startOver(); return; }              // a finished return can't be re-submitted by going back
+  if (n >= 2 && !S.items) n = 1;
+  if (n >= 3 && !selectedLines().length) n = 2;
+  if (n === 3) { renderOpts(); renderAddr(); }
+  go(n, true);
+});
 function showErr(id, msg) { const e = $(id); e.textContent = msg || ''; e.classList.toggle('hidden', !msg); }
 function busy(btn, on, label) { btn.disabled = on; btn.innerHTML = on ? '<span class="spin"></span>' : esc(label); }
 async function api(path, body) {
