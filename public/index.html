@@ -230,6 +230,8 @@
   <button class="nav view" data-view="undelivered" onclick="setView('undelivered')"><span class="i">🚚</span>Not delivered 15+ days<span class="n" id="v-undelivered"></span></button>
   <button class="nav view" data-view="returns" onclick="setView('returns')"><span class="i">↩️</span>Returns<span class="n" id="v-returns"></span></button>
   <button class="nav view" data-view="returns_analytics" onclick="setView('returns_analytics')"><span class="i">📊</span>Return analytics</button>
+  <a class="nav" href="https://returns.larkspurbaby.com" target="_blank" rel="noopener"><span class="i">🔗</span><span>LB return portal</span><span class="n">↗</span></a>
+  <a class="nav" href="https://returns.larkspurbabyoutlet.com" target="_blank" rel="noopener"><span class="i">🔗</span><span>LBO return portal</span><span class="n">↗</span></a>
   <div class="navsec">Mailboxes</div>
   <button class="nav view" data-view="lbo" onclick="setView('lbo')"><span class="i">✉️</span>Outlet · all mail<span class="n" id="v-lbo"></span></button>
   <button class="nav view" data-view="lb" onclick="setView('lb')"><span class="i">✉️</span>Larkspur · all mail<span class="n" id="v-lb"></span></button>
@@ -915,6 +917,8 @@ function renderAnalytics(){
     <select onchange="RA.store=this.value;loadAnalytics()" class="ra-sel"><option value="">Both stores</option><option value="lb" ${RA.store==="lb"?"selected":""}>Larkspur Baby</option><option value="lbo" ${RA.store==="lbo"?"selected":""}>Larkspur Baby Outlet</option></select>
     <span class="ra-note">Compared with the previous ${d.days===1?"day":d.days+" days"} (${prevLbl})</span>
     <span style="margin-left:auto;display:flex;gap:6px">
+      <a class="btn xs" href="https://returns.larkspurbaby.com" target="_blank" rel="noopener" style="text-decoration:none">LB return portal ↗</a>
+      <a class="btn xs" href="https://returns.larkspurbabyoutlet.com" target="_blank" rel="noopener" style="text-decoration:none">LBO return portal ↗</a>
       <button class="btn sec xs" onclick="raCsv()">Export CSV</button>
       <button class="btn sec xs" onclick="loadAnalytics(true)">↻ Refresh</button>
       ${ME&&ME.role==="admin"?`<button class="btn sec xs" onclick="raReset()" title="Start counting spend and analytics from now">Reset stats</button>`:""}
@@ -1015,8 +1019,8 @@ async function loadReturns(silent){
     const all=Object.values(c.by||{}).reduce((a,b)=>a+b,0);
     $("showing").textContent=`${d.returns.length} return${d.returns.length===1?"":"s"}`;
     let h=`<div class="stuckhead">
-      <span>Portal: ${Object.values(d.stores).map(x=>`<a href="${esc(d.portal_links[x.key])}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(x.name)} ↗</a>`).join(" · ")}
-        · ${s.portal_live?'<b style="color:#158048">Live — Emily sends customers here</b>':'<b style="color:#b7791f">Not live — Emily still sends Loop links</b>'}${s.test_labels?' · <b style="color:#b7791f">TEST labels</b>':""}</span>
+      ${Object.values(d.stores).map(x=>`<a class="btn xs" href="${esc(d.portal_links[x.key])}" target="_blank" rel="noopener" style="text-decoration:none">${esc(x.prefix)} return portal ↗</a>`).join("")}
+      <span>${s.portal_live?'<b style="color:#158048">Live — Emily sends customers here</b>':'<b style="color:#b7791f">Not live — Emily still sends Loop links</b>'}${s.test_labels?' · <b style="color:#b7791f">TEST labels</b>':""}</span>
       <span>Refunded ${money(c.refunded)} · label spend ${money(c.labels)} · fees kept ${money(c.fees)}</span>
       <select onchange="RET_F.store=this.value;loadReturns()" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${RET_F.store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
       <input type="text" placeholder="Search order, RMA, email" value="${esc(RET_F.q)}" onkeydown="if(event.key==='Enter'){RET_F.q=this.value.trim();loadReturns()}" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);width:180px">
