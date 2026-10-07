@@ -1062,10 +1062,10 @@ async function editOrder(o, { remove = [], add = [], reason, who, refundDifferen
   let net = Math.round((addedValue - removedValue) * 100) / 100;
   if (net > 0 && add.length) {
     let toDiscount = net;
-    for (const a of add) { if (toDiscount <= 0) break; const amt = Math.min(toDiscount, a._line); const d = await storeGraphQL(st, `mutation($id:ID!,$li:ID!,$disc:OrderEditAppliedDiscountInput!){ orderEditAddLineItemDiscount(id:$id, lineItemId:$li, discount:$disc){ userErrors{ field message } } }`, { id: cid, li: a._cl, disc: { fixedValue: { amount: amt.toFixed(2), currencyCode: cur }, description: reason ? `Replacement — ${reason}` : "Replacement (no charge)" } }); const ue = d.orderEditAddLineItemDiscount.userErrors; if (ue && ue.length) throw new Error("discount: " + ue.map((x) => x.message).join("; ")); toDiscount -= amt; }
+    for (const a of add) { if (toDiscount <= 0) break; const amt = Math.min(toDiscount, a._line); const d = await storeGraphQL(st, `mutation($id:ID!,$li:ID!,$disc:OrderEditAppliedDiscountInput!){ orderEditAddLineItemDiscount(id:$id, lineItemId:$li, discount:$disc){ userErrors{ field message } } }`, { id: cid, li: a._cl, disc: { fixedValue: { amount: amt.toFixed(2), currencyCode: cur }, description: String(reason ? `Replacement — ${reason}` : "Replacement (no charge)").slice(0, 250) } }); const ue = d.orderEditAddLineItemDiscount.userErrors; if (ue && ue.length) throw new Error("discount: " + ue.map((x) => x.message).join("; ")); toDiscount -= amt; }
     parts.push(`$${net.toFixed(2)} discounted so nothing extra is charged`); net = 0;
   }
-  const c = await storeGraphQL(st, `mutation($id:ID!,$note:String){ orderEditCommit(id:$id, notifyCustomer:false, staffNote:$note){ order{ id } userErrors{ field message } } }`, { id: cid, note: `${reason || "Item swap"} — by ${who || "Helpdesk"}` });
+  const c = await storeGraphQL(st, `mutation($id:ID!,$note:String){ orderEditCommit(id:$id, notifyCustomer:false, staffNote:$note){ order{ id } userErrors{ field message } } }`, { id: cid, note: `${reason || "Item swap"} — by ${who || "Helpdesk"}`.slice(0, 1000) });
   const ue = c.orderEditCommit.userErrors; if (ue && ue.length) throw new Error("commit: " + ue.map((x) => x.message).join("; "));
   let refundNote = null;
   if (net < 0 && refundDifference) {

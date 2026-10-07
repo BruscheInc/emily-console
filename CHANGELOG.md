@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.20 — Oct 7, 2026
+- Order edits no longer fail when Emily's reason is long: the discount label Shopify stores is capped at its
+  255-character limit (the full reason still goes in the order's staff note).
+
 ## v4.19 — Oct 7, 2026
 - **"Try again" on a failed action.** When one of Emily's proposed actions failed (a missing Shopify permission,
   say), you can re-run it from the ticket once the cause is fixed, instead of asking her to redraft.
