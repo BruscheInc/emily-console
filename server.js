@@ -260,7 +260,8 @@ app.get("/api/counts", async (req, res) => {
       views[v] = n.rows[0].n;
     }
     let stuck = { never_scanned: 0, undelivered: 0 }; try { stuck = await require("./emily").stuckCounts(); } catch (_) {}
-    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck });
+    let returns = null; try { const rc = await require("./returns").counts(); returns = { open: rc.open, attention: rc.attention }; } catch (_) {}
+    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 /* ---- one conversation ---- */
@@ -594,6 +595,78 @@ app.post("/api/mailbox/poll", async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ---------------- Returns (replaces Loop) — see returns.js ---------------- */
+const R = require("./returns");
+const RETURNS_HTML = fs.readFileSync(path.join(__dirname, "public", "returns-portal.html"), "utf8");
+const escH = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const retErr = (res, e) => res.status(e.status || 500).json({ error: e.status ? e.message : (e.message || "Something went wrong") });
+const lookupHits = new Map();   // ip -> timestamps (portal lookups: 10 per 10 minutes)
+function tooMany(ip) { const now = Date.now(); const l = (lookupHits.get(ip) || []).filter((t) => now - t < 600e3); l.push(now); lookupHits.set(ip, l); return l.length > 10; }
+// Public: customer portal
+app.get("/returns", (_q, r) => r.type("html").send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Returns</title><body style="font:16px system-ui;background:#faf7f2;display:grid;place-items:center;min-height:90vh;margin:0"><div style="text-align:center"><h2 style="font-weight:500">Start a return</h2>${Object.values(R.STORE_DEFS).map((d) => `<p><a style="color:#4b6b5a" href="/returns/${d.key}">${escH(d.name)}</a></p>`).join("")}</div>`));
+app.get("/returns/:store", (req, res, next) => {
+  const d = R.STORE_DEFS[req.params.store]; if (!d) return next();
+  res.setHeader("Cache-Control", "no-store");
+  res.type("html").send(RETURNS_HTML.replace("__STORE_JSON__", JSON.stringify({ key: d.key, name: d.name, support: d.support, shopUrl: d.shopUrl }).replace(/</g, "\\u003c")).replace(/__STORE_NAME__/g, escH(d.name)));
+});
+app.get("/returns/label/:id/:tok", async (req, res) => {
+  try {
+    if (req.params.tok !== R.labelToken(req.params.id)) return res.status(404).send("Not found");
+    const rec = await R.getRec(req.params.id); if (!rec || rec.status === "cancelled" || !rec.label_src) return res.status(404).send("This label is no longer available.");
+    const r = await fetch(rec.label_src, { headers: { "API-Key": process.env.SHIPSTATION_V2_KEY || "" } });
+    if (!r.ok) return res.redirect(rec.label_src);
+    res.setHeader("Content-Type", "application/pdf"); res.setHeader("Content-Disposition", `inline; filename="Return label ${rec.rma}.pdf"`);
+    res.send(Buffer.from(await r.arrayBuffer()));
+  } catch (e) { res.status(500).send("Couldn't load the label."); }
+});
+app.post("/api/returns/public/:store/lookup", async (req, res) => {
+  if (tooMany(req.ip)) return res.status(429).json({ error: "Too many tries. Please wait a few minutes and try again." });
+  try { const b = req.body || {}; res.json(await R.lookup(req.params.store, String(b.order_number || ""), String(b.email || ""))); } catch (e) { retErr(res, e); }
+});
+app.post("/api/returns/public/submit", async (req, res) => { try { res.json(await R.submitPortal(req.body || {})); } catch (e) { retErr(res, e); } });
+// Staff
+app.get("/api/returns", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const s = await R.settings(); res.json({ returns: await R.list({ status: req.query.status || "", store: req.query.store || "", q: req.query.q || "" }), counts: await R.counts(), settings: s, problems: R.setupProblems(s), stores: R.STORE_DEFS, portal_base: (process.env.PUBLIC_URL || "").replace(/\/$/, "") + "/returns/", admin: isAdmin(req) }); }
+  catch (e) { retErr(res, e); }
+});
+app.get("/api/returns.csv", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.setHeader("Content-Type", "text/csv"); res.setHeader("Content-Disposition", 'attachment; filename="returns.csv"'); res.send(R.csv(await R.list({ limit: 1000 }))); } catch (e) { retErr(res, e); }
+});
+app.get("/api/returns/order/:name", async (req, res) => { if (!guard(req, res)) return; try { res.json(await R.staffLookup(req.params.name)); } catch (e) { retErr(res, e); } });
+app.post("/api/returns/create", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const b = req.body || {}, who = actorOf(req), ticketId = b.ticket_id ? Number(b.ticket_id) : null;
+    const { rec, file } = await R.createForTicket({ orderName: b.order, lines: b.lines || [], refundMethod: b.refund_method, ticketId, who, staffOverride: !!b.override });
+    if (ticketId && file) {   // ride along on the next reply, same as an applied Emily action
+      await db(`INSERT INTO emily_actions (id,kind,title,summary,ticket_id,input,status,result,decided_by,decided_at,files) VALUES ($1,'return_manual',$2,$3,$4,$5,'applied',$6,$7,now(),$8)`,
+        ["act_" + crypto.randomUUID(), `Return + label — ${rec.order_name}`, `Return ${rec.rma}`, String(ticketId), JSON.stringify(b), `Return ${rec.rma} · label ${rec.tracking_number}`, who, JSON.stringify([{ ...file, sent: false }])]);
+      await addNote({ ticketId, text: `↩️ Return ${rec.rma} created by ${who} — ${rec.items.map((i) => `${i.quantity}× ${i.title}`).join(", ")} · label ${rec.tracking_number}${rec.test_label ? " (TEST label)" : ""}. The label PDF is attached to your next reply.`, who });
+    }
+    res.json({ ok: true, record: rec, attached: !!file });
+  } catch (e) { retErr(res, e); }
+});
+app.post("/api/returns/poll", async (req, res) => { if (!guard(req, res)) return; try { await R.poll(); res.json({ ok: true }); } catch (e) { retErr(res, e); } });
+app.get("/api/returns/carriers", async (req, res) => { if (!guard(req, res)) return; try { res.json({ carriers: await R.carriers() }); } catch (e) { retErr(res, e); } });
+app.put("/api/returns/settings", async (req, res) => {
+  if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "admins only" });
+  try { res.json({ settings: await R.saveSettings(req.body || {}, actorOf(req)) }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/returns/:id/:act", async (req, res) => {
+  if (!guard(req, res)) return;
+  const who = actorOf(req), act = req.params.act;
+  try {
+    const rec = await R.getRec(req.params.id); if (!rec) return res.status(404).json({ error: "not found" });
+    if (act === "refund") await R.refund(rec, { force: true, who });
+    else if (act === "track") await R.checkOne(rec);
+    else if (act === "cancel") await R.cancel(rec, `Cancelled by ${who}`, who);
+    else return res.status(400).json({ error: "unknown action" });
+    res.json({ ok: true, record: await R.getRec(rec.id) });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 const PORT = process.env.PORT || 8080;
 (async () => {
   if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); await core.loadSessions(); } catch (e) { console.error("migrate failed:", e.message); } }
@@ -610,6 +683,7 @@ const PORT = process.env.PORT || 8080;
     setTimeout(pollAll, 8000); setInterval(pollAll, every);
     console.log(`📬 Gmail polling every ${every / 1000}s`);
   }
+  try { await R.init(); } catch (e) { console.error("Returns failed to start:", e.message); }
   // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
   try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
 })();

@@ -76,7 +76,7 @@ async function applyPolicyPatches() {
   }
 }
 
-async function systemPrompt() { return SYSTEM_PROMPT_HEAD + (await core.policyText("playbook", skill)); }
+async function systemPrompt() { let extra = ""; try { extra = await require("./returns").portalRule(); } catch (_) {} return SYSTEM_PROMPT_HEAD + (await core.policyText("playbook", skill)) + extra; }
 
 let app = null;   // Slack (Bolt) — set in start() when tokens exist
 
@@ -111,7 +111,7 @@ async function storeToken(st) {
   if (!j.access_token) throw new Error(`${st.brand} token: ${JSON.stringify(j).slice(0, 150)}`);
   st.tok = { token: j.access_token, exp: Date.now() + ((j.expires_in ? j.expires_in - 300 : 3600) * 1000) };
   const have = new Set(String(j.scope || "").split(",").map((x) => x.trim()));
-  const NEEDED = { write_order_edits: "order edits (replacement swaps on unshipped orders)", write_orders: "cancel / refund / address", write_draft_orders: "PP replacement orders", write_discounts: "discount codes", write_store_credit_account_transactions: "store credit", read_store_credit_accounts: "store credit balance on the profile", write_fulfillments: "fixing tracking in Shopify", read_customers: "customer profile", read_products: "stock checks", read_fulfillments: "tracking" };
+  const NEEDED = { write_order_edits: "order edits (replacement swaps on unshipped orders)", write_orders: "cancel / refund / address", write_draft_orders: "PP replacement orders", write_discounts: "discount codes", write_store_credit_account_transactions: "store credit", read_store_credit_accounts: "store credit balance on the profile", write_fulfillments: "fixing tracking in Shopify", read_customers: "customer profile", read_products: "stock checks", read_fulfillments: "tracking", read_returns: "returns portal", write_returns: "returns portal (create returns, refund on delivery)" };
   const missing = Object.keys(NEEDED).filter((k) => !have.has(k) && !have.has(k.replace(/^read_/, "write_")));
   console.log(`🔑 ${st.brand} token scopes: ${j.scope || "(none returned)"}${missing.length ? `\n   ⚠️  missing: ${missing.map((k) => `${k} → ${NEEDED[k]}`).join("; ")}` : " · all needed scopes granted ✅"}`);
   return st.tok.token;
@@ -1364,6 +1364,25 @@ async function customerProfile(email, orderHint) {
   };
 }
 
+/* ---- Returns: stage a return + prepaid label (returns.js does the work on Apply) ---- */
+async function returnPropose(input) {
+  const order = String(input.order || "").trim();
+  const items = Array.isArray(input.items) ? input.items.filter((i) => i && (i.title || i.sku)) : [];
+  if (!order || !items.length) return { error: "Pass the order number and the items to return." };
+  const R = require("./returns");
+  let prep;
+  try { prep = await R.staffLookup(order); } catch (e) { return { error: e.message }; }
+  const method = input.refund_method === "store_credit" ? "store_credit" : "original";
+  const blocked = items.map((i) => prep.items.find((x) => (i.sku && x.sku === i.sku) || (i.title && x.title.toLowerCase().includes(String(i.title).toLowerCase())))).filter((x) => x && !x.eligible);
+  const summary = `↩️ Return ${items.map((i) => `${i.quantity || 1}× ${i.title || i.sku}${i.reason ? ` (${i.reason})` : ""}`).join(", ")} on ${prep.order.name} · ${method === "store_credit" ? "store credit + bonus" : "refund to original payment"}. Buys a prepaid ShipStation label and attaches it to the reply.${blocked.length ? ` ⚠️ Outside policy: ${blocked.map((b) => `${b.title} — ${b.why}`).join("; ")} (applying overrides it).` : ""}`;
+  await stageAction({ kind: "return_propose", input, title: `Return + label — ${prep.order.name}`, summary, ticketId: input.ticket_id,
+    exec: async () => {
+      const { rec, file } = await R.createForTicket({ orderName: order, lines: items, refundMethod: method, ticketId: input.ticket_id, who: "Emily (approved)", staffOverride: true });
+      return { ok: true, note: `Return ${rec.rma} created · label ${rec.tracking_number}${rec.test_label ? " (TEST label)" : ""}${file ? " · label PDF attached to the reply" : ""}`, files: file ? [file] : [] };
+    } });
+  return { ok: true, staged: true, note: `Staged a return with a prepaid label on ${prep.order.name} for approval.${blocked.length ? " Some items are outside the return policy — mention it to Jose in your escalation." : ""} In your reply say the prepaid return label is attached, how to drop it off, and that the refund is issued once the package is delivered back to us.` };
+}
+
 /* ---------------- Tools (read + approval-gated writes; used by DM + draft loop) ---------------- */
 const TOOLS = [
   { name: "shopify_lookup_order", description: "Look up a real Shopify order by order name (e.g. #LB189673, #LBO8425, #BB21953) or customer email. It reads the brand PREFIX (LBO/LB/BB, longest-first) to route to the right store and tries every name format (with/without # and the bare number), then falls back to all stores. Pass the order number EXACTLY as the customer wrote it, including the BB/LB/LBO letters. Each result includes which store it belongs to plus status, fulfillment, tracking, line items, shipping address.",
@@ -1388,6 +1407,8 @@ const TOOLS = [
     input_schema: { type: "object", properties: { order: { type: "string" }, brand: { type: "string" }, kind: { type: "string" }, value: { type: "number" }, code: { type: "string" }, min_subtotal: { type: "number" }, title: { type: "string" }, ticket_id: { type: "number" } }, required: ["kind"] } },
   { name: "shopify_propose_store_credit", description: "STAGE a NATIVE Shopify store-credit change on the customer's account for Jose's one-click approval (does NOT execute until he clicks Apply). action='credit' (default) ADDS real store credit to the account balance — NOT a code; it applies automatically at checkout when the customer is signed in with that email (Shopify auto-creates the account if needed). Use credit for any approved STORE-CREDIT resolution (Package Protection lost/stolen credit, goodwill credit, non-PP 50% good-faith credit). action='debit' REMOVES store credit from the account — use ONLY to correct an over-credit / duplicate credit (e.g. the same credit was applied twice); a debit is an internal correction, so do NOT email the customer about it. Pass amount (dollars) and the order number (preferred — routes the store and finds the customer) or brand + email; optional reason; ticket_id. For a credit, word your reply as account credit, never a code.",
     input_schema: { type: "object", properties: { action: { type: "string", description: "'credit' (add, default) or 'debit' (remove, to fix an over-credit)" }, order: { type: "string" }, brand: { type: "string" }, email: { type: "string" }, amount: { type: "number" }, reason: { type: "string" }, ticket_id: { type: "number" } }, required: ["amount"] } },
+  { name: "return_propose", description: "STAGE a return with a prepaid return label for Jose's one-click approval (nothing happens until it's applied). Use ONLY when the customer can't or won't use the returns portal themselves, or asks us to send them a label. On apply it creates the return in Shopify, buys the ShipStation label, and attaches the label PDF to your reply automatically. Pass the order number, items [{title or sku, quantity, reason}], refund_method ('original' or 'store_credit'), and ticket_id. In the reply, say the label is attached and the refund is issued once the package is delivered back to us — don't quote an amount.",
+    input_schema: { type: "object", properties: { order: { type: "string" }, items: { type: "array", items: { type: "object", properties: { title: { type: "string" }, sku: { type: "string" }, quantity: { type: "number" }, reason: { type: "string" } } } }, refund_method: { type: "string" }, ticket_id: { type: "number" } }, required: ["order", "items"] } },
   { name: "customer_history", description: "What we already know about THIS customer across every past ticket: previous conversations (subject, date, outcome), every store credit / replacement / discount already given, and how many goodwill credits they have received. CALL THIS before offering any goodwill credit, replacement, or refund, and whenever a customer says 'again', 'last time', 'second time', or references a previous order or issue. The non-PP 50% good-faith credit is ONE TIME per customer — if goodwill_credits_given is 1 or more, do NOT offer it again; escalate instead.",
     input_schema: { type: "object", properties: { email: { type: "string" } }, required: ["email"] } },
   { name: "helpdesk_recent_tickets", description: "List recent Helpdesk tickets (newest first): id, subject, customer, brand, status, whether the customer is waiting.",
@@ -1409,6 +1430,7 @@ async function runTool(name, input) {
     if (name === "shopify_propose_refund") return await shopifyProposeRefund(input);
     if (name === "shopify_propose_store_credit") return await shopifyProposeStoreCredit(input);
     if (name === "customer_history") return await customerHistory(input.email);
+    if (name === "return_propose") return await returnPropose(input);
     if (name === "helpdesk_recent_tickets") {
       const d = await db(`SELECT id, subject, brand, status, customer_email, last_message_at,
                                  (last_inbound_at IS NOT NULL AND (last_outbound_at IS NULL OR last_inbound_at > last_outbound_at)) AS customer_waiting
@@ -1556,7 +1578,7 @@ async function draftForTicket(t, force, guidance) {
     `{"category":"cs|spam|business|unclear","intent":"tracking|subscription|sizing_care|returns_info|policy_info|damage|lost|missing_items|cancel_or_address|discount|oos_reply|other",` +
     `"sentiment":"positive|neutral|upset","tags":["up to 3 short lowercase tags"],"escalate":true|false,` +
     `"escalate_reason":"short reason or empty","oos_choice":"replacement|credit|refund|none",` +
-    `"todo":["anything this reply PROMISES that no tool you called will actually do — e.g. 'send a manual return label for the 4 XL sleep sacks', 'ship the missing bonnet' — a person does these by hand; empty if none. Return labels and returns are ALWAYS a person's job: never call a tool for them, list them here. For refunds/credits/discounts/cancellations/address changes use the matching tool instead of promising."],` +
+    `"todo":["anything this reply PROMISES that no tool you called will actually do — e.g. 'send a manual return label for the 4 XL sleep sacks', 'ship the missing bonnet' — a person does these by hand; empty if none. Returns: send the returns portal link, or if we must make the label for them use return_propose — don't list returns here. For refunds/credits/discounts/cancellations/address changes use the matching tool instead of promising."],` +
     `"draft":"the full customer-ready reply if category is cs, else empty"}\n` +
     `intent = the ONE thing the customer needs. oos_choice = only when the customer is answering an out-of-stock options email; which option they picked. ` +
     `Escalate=true for refunds/discounts/credits, order edits/cancellations, angry/sensitive cases, or low confidence.`;
@@ -1979,7 +2001,7 @@ async function maybeRedraftCommand(text) {
 }
 const RESTAGE = { shipstation_propose_change: (i) => shipstationProposeChange(i), shopify_propose_replacement: (i) => shopifyProposeReplacement(i),
                   shopify_propose_discount: (i) => shopifyProposeDiscount(i), shopify_propose_store_credit: (i) => shopifyProposeStoreCredit(i),
-                  shopify_propose_cancel: (i) => shopifyProposeCancel(i), shopify_propose_refund: (i) => shopifyProposeRefund(i), shopify_propose_order_edit: (i) => shopifyProposeOrderEdit(i) };
+                  shopify_propose_cancel: (i) => shopifyProposeCancel(i), shopify_propose_refund: (i) => shopifyProposeRefund(i), shopify_propose_order_edit: (i) => shopifyProposeOrderEdit(i), return_propose: (i) => returnPropose(i) };
 function wireSlack() {
   app.message(async ({ message, say }) => {
     if (message.subtype || message.bot_id || message.channel_type !== "im") return;
@@ -2152,4 +2174,4 @@ async function start() {
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { composeEmail, __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache, prepareReplacement, createReplacementOrder }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };
+module.exports = { STORES, storeToken, storeForPrefix, composeEmail, __test: { propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache, prepareReplacement, createReplacementOrder }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };

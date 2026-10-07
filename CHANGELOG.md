@@ -3,6 +3,22 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.21 — Oct 7, 2026
+- **Returns, built in (replaces Loop).** Customers start a return at `/returns/lb` or `/returns/lbo`: order number +
+  email, pick items and a reason, choose a refund to their card or store credit with a 15% bonus, and get a prepaid
+  ShipStation label on the spot. Shopify emails them the label too. The flat label fee comes off the refund.
+- **Refunds go out by themselves.** Tracking is checked every hour. When the package is delivered back to us, the
+  refund (or store credit + bonus) is issued through Shopify's return, so it shows on the order. Labels never used are
+  voided after 28 days.
+- **Returns view** in the sidebar: every return from both stores, filters, history, Refund now / Cancel return,
+  label spend and fees kept, CSV export. **Settings** (admins) holds the window, fee, bonus, carrier, return address,
+  test-label switch and the go-live switch.
+- **↩️ Start return** on a ticket's order panel. Creates the return and label; the label PDF is attached to your next
+  reply. Emily can propose the same thing (return_propose) for approval when a customer can't use the portal.
+- Emily keeps sending Loop links until you turn **Portal is live** on in Returns → Settings.
+- Uses the existing SHIPSTATION_V2_KEY and the Emily Shopify apps. The apps need the **read_returns** and
+  **write_returns** scopes (the boot log lists them if missing).
+
 ## v4.20 — Oct 7, 2026
 - Order edits no longer fail when Emily's reason is long: the discount label Shopify stores is capped at its
   255-character limit (the full reason still goes in the order's staff note).
