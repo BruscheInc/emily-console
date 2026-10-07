@@ -722,6 +722,14 @@ app.get("/api/returns", async (req, res) => {
   try { const s = await R.settings(); res.json({ returns: await R.list({ status: req.query.status || "", store: req.query.store || "", q: req.query.q || "" }), counts: await R.counts(), settings: s, problems: R.setupProblems(s), stores: R.STORE_DEFS, portal_links: Object.fromEntries(Object.keys(R.STORE_DEFS).map((k) => [k, R.portalUrl(k, s)])), branded_hosts: Object.fromEntries(Object.values(R.STORE_DEFS).map((d) => [d.key, d.host])), admin: isAdmin(req) }); }
   catch (e) { retErr(res, e); }
 });
+app.get("/api/returns/analytics", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json(await R.analytics({ from: req.query.from, to: req.query.to, store: req.query.store })); } catch (e) { retErr(res, e); }
+});
+app.post("/api/returns/reset-stats", async (req, res) => {
+  if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "Only admins can reset return stats." });
+  try { res.json({ ok: true, since: await R.resetStats(actorOf(req)) }); } catch (e) { retErr(res, e); }
+});
 app.get("/api/returns.csv", async (req, res) => {
   if (!guard(req, res)) return;
   try { res.setHeader("Content-Type", "text/csv"); res.setHeader("Content-Disposition", 'attachment; filename="returns.csv"'); res.send(R.csv(await R.list({ limit: 1000 }))); } catch (e) { retErr(res, e); }

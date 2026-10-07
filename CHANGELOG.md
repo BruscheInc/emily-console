@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.24.0
+- Returns: new Return analytics dashboard (sidebar → Return analytics). Today / 7 days / 30 days / month to date / year to date / custom range, per store or both, each compared with the previous period. Shows returns, return rate (vs Shopify orders), value returned, refunds, store credit, label spend vs fees, days to refund, open returns; daily/weekly/monthly trend; reasons with change vs the prior period; fit problems by product and size; a product × reason grid; most-returned products; store, refund-choice and source splits; repeat returners; customer notes; and a filterable list of returns, with CSV export.
+- Returns: label spend, refunds and fees now only count real returns since the last stats reset (testing before Oct 7, 2026 is left out). Voided labels on cancelled returns no longer count toward spend. Admins can reset stats from the dashboard.
+
 ## 4.23.1
 - Returns: return numbers now use the original order number plus a count — LB191494-R1, then LB191494-R2 if the same order is returned again. Replaces the running LB-R1001 style numbers.
 

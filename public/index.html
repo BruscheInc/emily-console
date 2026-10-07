@@ -66,6 +66,39 @@
   td.empty{text-align:center;color:var(--muted);padding:40px}
   .stuckhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 22px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
   .stuckhead .seg{margin-left:auto}
+  /* ---- return analytics ---- */
+  .ra-head .ra-sel,.ra-cust input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)}
+  .ra-cust{display:flex;gap:6px;align-items:center}.ra-note{font-size:12px}
+  .ra{padding:16px 22px 30px;display:flex;flex-direction:column;gap:14px;background:var(--bg)}
+  .ra-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+  .ra-k{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+  .ra-kl{font-size:12px;color:var(--muted);font-weight:600}.ra-kv{font-size:24px;font-weight:800;letter-spacing:-.01em;margin:2px 0;font-variant-numeric:tabular-nums}
+  .ra-ks{font-size:12px;color:var(--muted);margin-top:3px}
+  .ra-dl{font-size:12px;font-weight:700;color:var(--muted)}.ra-dl span{font-weight:500}.ra-dl.bad{color:var(--bad)}.ra-dl.good{color:var(--in)}
+  .ra-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+  .ra-ch{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px;font-size:14px}
+  .ra-mut{color:var(--muted);font-size:12px;font-weight:500}
+  .ra-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+  .ra-grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+  .ra-scroll{overflow-x:auto}
+  .ra-ax{font-size:10.5px;fill:var(--muted)}.ra-base{stroke:var(--line);stroke-width:1}.ra-grid{stroke:var(--line);stroke-dasharray:3 4}
+  .ra-bar:hover path{fill:#1c5cab}
+  .ra-rr{padding:7px 8px;border-radius:8px;cursor:pointer}.ra-rr:hover{background:var(--panel2)}.ra-rr.on{background:#e8edf9}
+  .ra-rt{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+  .ra-track{height:8px;background:var(--panel2);border-radius:4px;margin:5px 0 3px;overflow:hidden}.ra-fill{height:100%;background:#2a78d6;border-radius:0 4px 4px 0}
+  .ra-rs{display:flex;gap:8px;align-items:center}
+  .ra-t{width:100%;border-collapse:collapse;font-size:13px}.ra-t th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .ra-t td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}.ra-t tbody tr{cursor:pointer}.ra-t tbody tr:hover{background:var(--panel2)}.ra-t tr.on{background:#e8edf9}
+  .ra-t .n{text-align:right;font-variant-numeric:tabular-nums}
+  .ra-hm{border-collapse:separate;border-spacing:2px;font-size:12.5px;width:100%}.ra-hm th{font-size:11.5px;color:var(--muted);font-weight:700;padding:4px 6px;text-align:center;min-width:86px}
+  .ra-hm tbody th{text-align:left;color:var(--ink);font-weight:600;cursor:pointer;min-width:160px}.ra-hm td{text-align:center;padding:7px 4px;border-radius:5px;cursor:pointer;font-variant-numeric:tabular-nums;border:1px solid var(--panel2)}
+  .ra-split{display:flex;gap:2px;height:14px;border-radius:7px;overflow:hidden;margin-bottom:8px}
+  .ra-lg{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0}.ra-lg i{width:10px;height:10px;border-radius:3px;flex:none}.ra-lg b{margin-left:auto}.ra-lg .ra-mut{width:38px;text-align:right}
+  .ra-com{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow:auto;font-size:13px}.ra-com>div{border-left:3px solid var(--line);padding-left:10px}
+  .ra-emp{color:var(--muted);font-size:13px;padding:14px 4px}
+  .ra-foot{font-size:12px;color:var(--muted)}
+  .ra-head .seg{max-width:100%;overflow-x:auto}
+  @media (max-width:700px){.ra{padding:12px}.ra-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ra-k{padding:10px}.ra-kv{font-size:19px}.ra-grid2{grid-template-columns:1fr}}
   table.stuck td.days b{font-size:14px}.days.hot b{color:#c0392b}.days.warm b{color:#b7791f}
   .stk-acts{display:flex;gap:5px;flex-wrap:wrap}
   .stk-note{color:var(--muted);font-size:12px;white-space:pre-wrap}
@@ -196,6 +229,7 @@
   <button class="nav view" data-view="stuck" onclick="setView('stuck')"><span class="i">⏳</span>Never scanned<span class="n" id="v-stuck"></span></button>
   <button class="nav view" data-view="undelivered" onclick="setView('undelivered')"><span class="i">🚚</span>Not delivered 15+ days<span class="n" id="v-undelivered"></span></button>
   <button class="nav view" data-view="returns" onclick="setView('returns')"><span class="i">↩️</span>Returns<span class="n" id="v-returns"></span></button>
+  <button class="nav view" data-view="returns_analytics" onclick="setView('returns_analytics')"><span class="i">📊</span>Return analytics</button>
   <div class="navsec">Mailboxes</div>
   <button class="nav view" data-view="lbo" onclick="setView('lbo')"><span class="i">✉️</span>Outlet · all mail<span class="n" id="v-lbo"></span></button>
   <button class="nav view" data-view="lb" onclick="setView('lb')"><span class="i">✉️</span>Larkspur · all mail<span class="n" id="v-lb"></span></button>
@@ -317,7 +351,7 @@ async function loadCounts(){try{
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Helpdesk`:"Helpdesk";
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",returns_analytics:"Return analytics",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -411,13 +445,14 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';_listSig="";}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
-  const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns";
+  const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="returns_analytics";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
   if(VIEW==="activity") return loadActivity(silent);
   if(VIEW==="returns") return loadReturns(silent);
+  if(VIEW==="returns_analytics"){ if(!silent||!RA.d) loadAnalytics(silent); return; }
   if(isStuck) return loadStuck(silent);
   try{
     const d=await api(`/api/tickets?tab=${TAB}&view=${encodeURIComponent(VIEW)}&q=${encodeURIComponent($("q").value.trim())}&limit=${PAGE}&offset=${OFFSET}`);
@@ -833,6 +868,143 @@ async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify
 let RET_F={status:"open",store:"",q:""}, RET_OPEN=new Set(), _retSig="", RET_D=null;
 const RET_LABEL={label_created:"Label created",in_transit:"On its way back",delivered:"Delivered",refunded:"Refunded",needs_attention:"Needs attention",cancelled:"Cancelled"};
 const RET_CHIP={label_created:"",in_transit:"drafted",delivered:"drafted",refunded:"sent",needs_attention:"skip",cancelled:""};
+/* ---------------- Return analytics ---------------- */
+let RA={preset:"30d",from:"",to:"",store:"",metric:"returns",reason:"",product:"",d:null};
+const RA_C={lb:"#2a78d6",lbo:"#eb6834",original:"#2a78d6",store_credit:"#eb6834",portal:"#2a78d6",staff:"#eb6834"};
+const RA_N={lb:"Larkspur Baby",lbo:"Larkspur Baby Outlet",original:"Refund to card",store_credit:"Store credit",portal:"Customer portal",staff:"Staff (Helpdesk)"};
+function raToday(){ return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()); }
+function raShift(day,n){ const d=new Date(day+"T12:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function raRange(){
+  const t=raToday();
+  switch(RA.preset){
+    case "today": return [t,t];
+    case "7d": return [raShift(t,-6),t];
+    case "30d": return [raShift(t,-29),t];
+    case "mtd": return [t.slice(0,8)+"01",t];
+    case "ytd": return [t.slice(0,5)+"01-01",t];
+    default: return [RA.from||raShift(t,-29),RA.to||t];
+  }
+}
+function raSet(p){ RA.preset=p; RA.reason=""; RA.product=""; loadAnalytics(); }
+function raDay(s,opt){ try{ return new Date(s+"T12:00:00Z").toLocaleDateString([],Object.assign({month:"short",day:"numeric",timeZone:"UTC"},opt||{})); }catch(e){ return s; } }
+function raNum(n){ return (Number(n)||0).toLocaleString(); }
+function raDelta(cur,prev,upIsBad,fmt){
+  if(prev==null||cur==null) return "";
+  if(!prev&&!cur) return `<span class="ra-dl">no change</span>`;
+  if(!prev) return `<span class="ra-dl">new vs. 0</span>`;
+  const pct=Math.round(((cur-prev)/Math.abs(prev))*100);
+  if(pct===0) return `<span class="ra-dl">same as before</span>`;
+  const bad=(pct>0)===!!upIsBad;
+  return `<span class="ra-dl ${bad?"bad":"good"}">${pct>0?"▲":"▼"} ${Math.abs(pct)}% <span>vs ${fmt?fmt(prev):raNum(prev)}</span></span>`;
+}
+async function loadAnalytics(silent){
+  const w=$("stuckwrap"); const [from,to]=raRange();
+  if(!silent) w.innerHTML='<div class="empty">Loading return analytics…</div>';
+  let d; try{ d=await api(`/api/returns/analytics?from=${from}&to=${to}&store=${encodeURIComponent(RA.store)}`); if(d.error) throw new Error(d.error); }
+  catch(e){ w.innerHTML=`<div class="empty">Couldn't load analytics${e.message&&e.message!=="401"?": "+esc(e.message):""}.</div>`; return; }
+  RA.d=d; renderAnalytics();
+}
+function renderAnalytics(){
+  const d=RA.d, w=$("stuckwrap"), s=d.summary, p=d.previous;
+  $("showing").textContent=`${raDay(d.from,{year:"numeric"})} – ${raDay(d.to,{year:"numeric"})}`;
+  const chip=(k,l)=>`<button class="tab ${RA.preset===k?"on":""}" onclick="raSet('${k}')">${l}</button>`;
+  const prevLbl=`${raDay(d.prev_from)} – ${raDay(d.prev_to)}`;
+  let h=`<div class="stuckhead ra-head">
+    <div class="seg">${chip("today","Today")}${chip("7d","7 days")}${chip("30d","30 days")}${chip("mtd","Month to date")}${chip("ytd","Year to date")}${chip("custom","Custom")}</div>
+    ${RA.preset==="custom"?`<span class="ra-cust"><input type="date" id="ra-from" value="${d.from}" max="${raToday()}"> to <input type="date" id="ra-to" value="${d.to}" max="${raToday()}"><button class="btn xs" onclick="RA.from=$('ra-from').value;RA.to=$('ra-to').value;loadAnalytics()">Apply</button></span>`:""}
+    <select onchange="RA.store=this.value;loadAnalytics()" class="ra-sel"><option value="">Both stores</option><option value="lb" ${RA.store==="lb"?"selected":""}>Larkspur Baby</option><option value="lbo" ${RA.store==="lbo"?"selected":""}>Larkspur Baby Outlet</option></select>
+    <span class="ra-note">Compared with the previous ${d.days===1?"day":d.days+" days"} (${prevLbl})</span>
+    <span style="margin-left:auto;display:flex;gap:6px">
+      <button class="btn sec xs" onclick="raCsv()">Export CSV</button>
+      <button class="btn sec xs" onclick="loadAnalytics(true)">↻ Refresh</button>
+      ${ME&&ME.role==="admin"?`<button class="btn sec xs" onclick="raReset()" title="Start counting spend and analytics from now">Reset stats</button>`:""}
+    </span></div><div class="ra">`;
+
+  // KPI tiles
+  const money2=(n)=>money(n);
+  const tile=(label,val,delta,sub)=>`<div class="ra-k"><div class="ra-kl">${label}</div><div class="ra-kv">${val}</div>${delta||""}${sub?`<div class="ra-ks">${sub}</div>`:""}</div>`;
+  h+=`<div class="ra-kpis">
+    ${tile("Returns",raNum(s.returns),raDelta(s.returns,p.returns,true),`${raNum(s.units)} item${s.units===1?"":"s"} · ${s.cancelled} cancelled`)}
+    ${tile("Return rate",s.return_rate==null?"—":s.return_rate+"%",s.return_rate==null?"":raDelta(s.return_rate,p.return_rate,true,(x)=>x+"%"),s.orders==null?esc(d.orders_error||""):`${raNum(s.returns)} of ${raNum(s.orders)} orders`)}
+    ${tile("Value returned",money2(s.value),raDelta(s.value,p.value,true,money2),`avg ${money2(s.avg_value)} per return`)}
+    ${tile("Refunded to card",money2(s.refunded),raDelta(s.refunded,p.refunded,true,money2),`${s.refunded_count} return${s.refunded_count===1?"":"s"} refunded`)}
+    ${tile("Store credit issued",money2(s.store_credit),"",`${s.credit_share}% chose store credit`)}
+    ${tile("Label spend",money2(s.label_spend),raDelta(s.label_spend,p.label_spend,true,money2),`fees kept ${money2(s.fees)} · net ${money2(s.net_shipping)}`)}
+    ${tile("Days to refund",s.avg_days_to_refund==null?"—":s.avg_days_to_refund,s.avg_days_to_refund==null||p.avg_days_to_refund==null?"":raDelta(s.avg_days_to_refund,p.avg_days_to_refund,true,(x)=>x+" days"),"label created → refunded")}
+    ${tile("Still open",raNum(s.open),"",`${s.in_transit} on the way back${s.attention?` · <b style="color:var(--bad)">${s.attention} need attention</b>`:""}`)}
+  </div>`;
+
+  // Trend
+  const T=d.trend, mk=RA.metric, vals=T.map(b=>mk==="value"?b.value:mk==="units"?b.units:b.returns), max=Math.max(1,...vals);
+  const W=Math.max(T.length*14,600), H=180, pad=28, bw=Math.max(2,Math.min(28,(W-pad)/T.length-3));
+  const step=Math.ceil(T.length/10), yTop=mk==="value"?money(max):raNum(max);
+  const bLbl=(b)=>d.unit==="day"?raDay(b.start):d.unit==="week"?"Week of "+raDay(b.start):new Date(b.start+"T12:00:00Z").toLocaleDateString([],{month:"short",year:"numeric",timeZone:"UTC"});
+  let bars="";
+  T.forEach((b,i)=>{ const v=vals[i], x=pad+i*((W-pad)/T.length)+((W-pad)/T.length-bw)/2, hh=v?Math.max(3,(v/max)*(H-30)):0, y=H-18-hh;
+    const tip=`${bLbl(b)}: ${mk==="value"?money(v):raNum(v)} ${mk==="value"?"returned":mk}${RA.store?"":` (LB ${b.lb||0} · LBO ${b.lbo||0} returns)`}`;
+    bars+=`<g class="ra-bar"><rect x="${x-((W-pad)/T.length-bw)/2}" y="0" width="${(W-pad)/T.length}" height="${H-18}" fill="transparent"><title>${esc(tip)}</title></rect>${hh?`<path d="M${x},${H-18} v${-(hh-Math.min(4,bw/2))} q0,-${Math.min(4,bw/2)} ${Math.min(4,bw/2)},-${Math.min(4,bw/2)} h${bw-2*Math.min(4,bw/2)} q${Math.min(4,bw/2)},0 ${Math.min(4,bw/2)},${Math.min(4,bw/2)} v${hh-Math.min(4,bw/2)} z" fill="#2a78d6"><title>${esc(tip)}</title></path>`:""}</g>`;
+    if(i%step===0) bars+=`<text x="${x+bw/2}" y="${H-4}" text-anchor="middle" class="ra-ax">${esc(d.unit==="month"?new Date(b.start+"T12:00:00Z").toLocaleDateString([],{month:"short",timeZone:"UTC"}):raDay(b.start))}</text>`; });
+  const mbtn=(k,l)=>`<button class="tab ${mk===k?"on":""}" onclick="RA.metric='${k}';renderAnalytics()">${l}</button>`;
+  h+=`<div class="ra-card ra-wide"><div class="ra-ch"><b>${d.unit==="day"?"Daily":d.unit==="week"?"Weekly":"Monthly"} returns</b><div class="seg">${mbtn("returns","Returns")}${mbtn("units","Items")}${mbtn("value","Value")}</div></div>
+    ${vals.some(Boolean)?`<div class="ra-scroll"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="min-width:${Math.min(W,900)}px"><line x1="${pad}" x2="${W}" y1="${H-18}" y2="${H-18}" class="ra-base"/><line x1="${pad}" x2="${W}" y1="12" y2="12" class="ra-grid"/><text x="2" y="16" class="ra-ax">${esc(yTop)}</text>${bars}</svg></div>`:`<div class="ra-emp">No returns in this range.</div>`}</div>`;
+
+  // Reasons
+  const rmax=Math.max(1,...d.reasons.map(r=>r.units));
+  h+=`<div class="ra-grid2"><div class="ra-card"><div class="ra-ch"><b>Why customers return</b><span class="ra-mut">by items · click a reason to filter</span></div>
+    ${d.reasons.map(r=>`<div class="ra-rr ${RA.reason===r.reason?"on":""}" onclick="RA.reason=RA.reason===${esc(JSON.stringify(r.reason))}?'':${esc(JSON.stringify(r.reason))};renderAnalytics()" title="${esc(r.returns+" returns · "+money(r.value))}">
+      <div class="ra-rt"><span>${esc(r.reason)}</span><span><b>${raNum(r.units)}</b> <span class="ra-mut">${r.share}%</span></span></div>
+      <div class="ra-track"><div class="ra-fill" style="width:${(r.units/rmax)*100}%"></div></div>
+      <div class="ra-mut ra-rs">${money(r.value)} · ${r.returns} return${r.returns===1?"":"s"} ${raDelta(r.units,r.prev_units,true)}</div></div>`).join("")||'<div class="ra-emp">No returns yet.</div>'}</div>`;
+
+  // Fit by product & size
+  const fmax=Math.max(1,...d.fit_sizes.map(f=>f.units));
+  h+=`<div class="ra-card"><div class="ra-ch"><b>Fit problems by product &amp; size</b><span class="ra-mut">items returned for fit</span></div>
+    ${d.fit_sizes.length?d.fit_sizes.map(f=>`<div class="ra-rr" onclick="RA.product=${esc(JSON.stringify(f.title))};RA.reason='';renderAnalytics()"><div class="ra-rt"><span>${esc(f.title)}${f.variant?` <span class="ra-mut">· ${esc(f.variant)}</span>`:""}</span><b>${f.units}</b></div><div class="ra-track"><div class="ra-fill" style="width:${(f.units/fmax)*100}%"></div></div></div>`).join(""):'<div class="ra-emp">No fit returns in this range.</div>'}</div></div>`;
+
+  // Reason × product heatmap
+  const reasonsCols=d.reasons.filter(r=>r.units).map(r=>r.reason), top=d.products.slice(0,10);
+  if(top.length&&reasonsCols.length){
+    const hmax=Math.max(1,...top.flatMap(pr=>reasonsCols.map(c=>pr.reasons[c]||0)));
+    h+=`<div class="ra-card ra-wide"><div class="ra-ch"><b>Which products return for which reason</b><span class="ra-mut">items · top ${top.length} products · darker = more</span></div><div class="ra-scroll"><table class="ra-hm"><thead><tr><th></th>${reasonsCols.map(c=>`<th>${esc(c)}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+      ${top.map(pr=>`<tr><th onclick="RA.product=${esc(JSON.stringify(pr.title))};RA.reason='';renderAnalytics()">${esc(pr.title)}</th>${reasonsCols.map(c=>{const v=pr.reasons[c]||0, a=v?0.12+0.88*(v/hmax):0; return `<td title="${esc(pr.title+" · "+c+": "+v)}" style="background:${v?`rgba(42,120,214,${a.toFixed(2)})`:"transparent"};color:${a>0.55?"#fff":"var(--ink)"}" onclick="RA.product=${esc(JSON.stringify(pr.title))};RA.reason=${esc(JSON.stringify(c))};renderAnalytics()">${v||""}</td>`;}).join("")}<td><b>${pr.units}</b></td></tr>`).join("")}
+    </tbody></table></div></div>`;
+  }
+
+  // Top products
+  h+=`<div class="ra-card ra-wide"><div class="ra-ch"><b>Most returned products</b><span class="ra-mut">${d.product_count} product${d.product_count===1?"":"s"} returned · click to filter</span></div>${d.products.length?`<div class="ra-scroll"><table class="ra-t"><thead><tr><th>Product</th><th class="n">Items</th><th class="n">Returns</th><th class="n">Value</th><th>Top reason</th><th>Sizes returned</th></tr></thead><tbody>
+    ${d.products.map(pr=>`<tr class="${RA.product===pr.title?"on":""}" onclick="RA.product=RA.product===${esc(JSON.stringify(pr.title))}?'':${esc(JSON.stringify(pr.title))};renderAnalytics()"><td>${esc(pr.title)}${pr.skus.length?`<div class="ra-mut">${esc(pr.skus.join(", "))}</div>`:""}</td><td class="n"><b>${pr.units}</b></td><td class="n">${pr.returns}</td><td class="n">${money(pr.value)}</td><td>${esc(pr.top_reason)} <span class="ra-mut">(${pr.top_reason_units} of ${pr.units})</span></td><td class="ra-mut">${pr.variants.map(v=>esc(v[0])+" ×"+v[1]).join(", ")}</td></tr>`).join("")}
+  </tbody></table></div>`:'<div class="ra-emp">No returns yet.</div>'}</div>`;
+
+  // Splits
+  const total=Object.values(d.by_store).reduce((a,b)=>a+b,0);
+  const split=(title,obj,keys)=>{ const t=keys.reduce((a,k)=>a+(obj[k]||0),0); return `<div class="ra-card"><div class="ra-ch"><b>${title}</b></div>${t?`<div class="ra-split">${keys.map(k=>obj[k]?`<div style="flex:${obj[k]};background:${RA_C[k]}" title="${esc(RA_N[k]+": "+obj[k])}"></div>`:"").join("")}</div>
+    ${keys.map(k=>`<div class="ra-lg"><i style="background:${RA_C[k]}"></i>${RA_N[k]}<b>${obj[k]||0}</b><span class="ra-mut">${t?Math.round(((obj[k]||0)/t)*100):0}%</span></div>`).join("")}`:'<div class="ra-emp">—</div>'}</div>`; };
+  h+=`<div class="ra-grid3">${RA.store?"":split("By store",d.by_store,["lb","lbo"])}${split("Refund choice",d.by_method,["original","store_credit"])}${split("Started from",d.by_source,["portal","staff"])}</div>`;
+
+  // Repeat returners + comments
+  h+=`<div class="ra-grid2"><div class="ra-card"><div class="ra-ch"><b>Customers with more than one return</b></div>${d.repeat.length?`<table class="ra-t"><thead><tr><th>Customer</th><th class="n">Returns</th><th class="n">Items</th><th class="n">Value</th></tr></thead><tbody>${d.repeat.map(c=>`<tr onclick="RET_F={status:'',store:'',q:${esc(JSON.stringify(c.email))}};setView('returns')"><td>${esc(c.name||"")}<div class="ra-mut">${esc(c.email)}</div></td><td class="n"><b>${c.returns}</b></td><td class="n">${c.units}</td><td class="n">${money(c.value)}</td></tr>`).join("")}</tbody></table>`:'<div class="ra-emp">No repeat returners in this range.</div>'}</div>
+    <div class="ra-card"><div class="ra-ch"><b>What customers said</b><span class="ra-mut">notes left with the return</span></div>${d.comments.length?`<div class="ra-com">${d.comments.filter(c=>(!RA.reason||c.reason===RA.reason)&&(!RA.product||c.title===RA.product)).map(c=>`<div><div>“${esc(c.note)}”</div><div class="ra-mut">${esc(c.title)}${c.variant?" · "+esc(c.variant):""} · ${esc(c.reason)} · ${esc(c.rma)} · ${fmtShort(c.at)}</div></div>`).join("")||'<div class="ra-emp">No notes match the filter.</div>'}</div>`:'<div class="ra-emp">No notes in this range.</div>'}</div></div>`;
+
+  // Returns in range (filtered)
+  const rows=d.list.filter(r=>r.status!=="cancelled"&&r.items.some(i=>(!RA.reason||i.reason===RA.reason)&&(!RA.product||i.title===RA.product)));
+  const filt=[RA.reason&&`reason “${esc(RA.reason)}”`,RA.product&&`product “${esc(RA.product)}”`].filter(Boolean).join(" and ");
+  h+=`<div class="ra-card ra-wide"><div class="ra-ch"><b>Returns in this range${filt?` — ${filt}`:""}</b>${filt?`<button class="btn sec xs" onclick="RA.reason='';RA.product='';renderAnalytics()">Clear filter</button>`:`<span class="ra-mut">${rows.length} return${rows.length===1?"":"s"}</span>`}</div>
+    ${rows.length?`<div class="ra-scroll"><table class="ra-t"><thead><tr><th>Return</th><th>Customer</th><th>Items &amp; reasons</th><th>Choice</th><th>Status</th><th class="n">Value</th></tr></thead><tbody>${rows.slice(0,200).map(r=>`<tr onclick="RET_F={status:'',store:'',q:${esc(JSON.stringify(r.rma))}};setView('returns')"><td><b>${esc(r.rma)}</b><div class="ra-mut">${esc(r.order)} · ${fmtShort(r.created_at)}</div></td><td>${esc(r.customer||"")}<div class="ra-mut">${esc(r.email||"")}</div></td><td>${r.items.map(i=>`<div>${i.quantity}× ${esc(i.title)}${i.variant?` <span class="ra-mut">${esc(i.variant)}</span>`:""} — <i>${esc(i.reason||"")}</i></div>`).join("")}</td><td>${r.method==="store_credit"?"Store credit":"Card"}</td><td><span class="chip ${RET_CHIP[r.status]||""}">${esc(RET_LABEL[r.status]||r.status)}</span></td><td class="n">${money(r.status==="refunded"?r.refunded:r.value)}</td></tr>`).join("")}</tbody></table>${rows.length>200?`<div class="ra-emp">Showing the latest 200 — narrow the range or export CSV for all.</div>`:""}</div>`:'<div class="ra-emp">No returns match.</div>'}</div>`;
+
+  h+=`<div class="ra-foot">Counting returns from ${fmtDay(d.stats_since)} on (test returns left out). Cancelled returns are excluded from totals; their labels were voided. Days are Central time.</div></div>`;
+  w.innerHTML=h;
+}
+function raCsv(){
+  const d=RA.d; if(!d) return;
+  const q=(v)=>`"${String(v==null?"":v).replace(/"/g,'""')}"`;
+  const lines=[["Return","Store","Order","Created","Customer","Email","Status","Choice","Product","Size","Qty","Reason","Note","Return value","Refunded","Label cost"].map(q).join(",")];
+  for(const r of d.list) for(const i of r.items) lines.push([r.rma,r.store.toUpperCase(),r.order,r.created_at,r.customer,r.email,r.status,r.method==="store_credit"?"Store credit":"Card",i.title,i.variant,i.quantity,i.reason,i.note,r.value,r.refunded,r.label_cost].map(q).join(","));
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([lines.join("\n")],{type:"text/csv"})); a.download=`returns_${d.from}_to_${d.to}${d.store?"_"+d.store:""}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+async function raReset(){
+  if(!confirm("Reset return stats? Label spend, refunds and all analytics will start counting from right now. Returns themselves are not deleted.")) return;
+  try{ const r=await api("/api/returns/reset-stats",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error) throw new Error(r.error); toast("Stats reset"); loadAnalytics(); }catch(e){ toast(e.message,true); }
+}
 async function loadReturns(silent){
   const w=$("stuckwrap"); if(!silent){ w.innerHTML='<div class="empty">Loading returns…</div>'; _retSig=""; }
   try{

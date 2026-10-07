@@ -51,7 +51,8 @@ function keyForOrderName(name) {
 /* ---------------- settings (editable in Helpdesk → Returns → Settings) ---------------- */
 const DEFAULTS = {
   portal_live: false,              // when on, Emily sends customers to this portal instead of Loop
-  branded_links: false,            // when on, links use returns.larkspurbaby.com / returns.larkspurbabyoutlet.com (turn on once DNS is live)
+  branded_links: false,
+  stats_since: "2026-10-07T23:10:00Z", // returns before this (testing) are left out of spend/analytics; "Reset stats" moves it            // when on, links use returns.larkspurbaby.com / returns.larkspurbabyoutlet.com (turn on once DNS is live)
   window_days: { lb: 7, lbo: 7 },
   label_fee: 7.95,
   store_credit_enabled: true,
@@ -384,10 +385,16 @@ async function list({ status, store, q, limit = 300 } = {}) {
   const r = await db(`SELECT * FROM hd_returns ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created_at DESC LIMIT $${args.length}`, args);
   return r.rows.map(rowToRec);
 }
+// Money totals only count real returns since the last stats reset; voided (cancelled) labels cost nothing.
+const STATS_WHERE = `created_at >= $1 AND COALESCE((data->>'test_label')::boolean, false) = false`;
 async function counts() {
-  const r = await db(`SELECT status, count(*)::int n, COALESCE(sum((data->>'refunded_amount')::numeric),0) refunded, COALESCE(sum((data->>'label_cost')::numeric),0) labels, COALESCE(sum((data->>'fee_charged')::numeric),0) fees FROM hd_returns GROUP BY status`);
-  const out = { by: {}, refunded: 0, labels: 0, fees: 0 };
-  for (const x of r.rows) { out.by[x.status] = x.n; out.refunded += Number(x.refunded); out.labels += Number(x.labels); out.fees += Number(x.fees); }
+  const s = await settings();
+  const by = await db(`SELECT status, count(*)::int n FROM hd_returns GROUP BY status`);
+  const m = await db(`SELECT COALESCE(sum((data->>'refunded_amount')::numeric),0) refunded,
+      COALESCE(sum(CASE WHEN status<>'cancelled' THEN (data->>'label_cost')::numeric END),0) labels, COALESCE(sum((data->>'fee_charged')::numeric),0) fees
+    FROM hd_returns WHERE ${STATS_WHERE}`, [s.stats_since]);
+  const out = { by: {}, refunded: Number(m.rows[0].refunded), labels: Number(m.rows[0].labels), fees: Number(m.rows[0].fees), since: s.stats_since };
+  for (const x of by.rows) out.by[x.status] = x.n;
   out.open = (out.by.label_created || 0) + (out.by.in_transit || 0) + (out.by.delivered || 0);
   out.attention = out.by.needs_attention || 0;
   return out;
@@ -642,6 +649,123 @@ function csv(rows) {
   return [head.map(q).join(","), ...rows.map((r) => [r.rma, r.store, r.order_name, r.customer_name, r.email, r.status, r.refund_method, r.items.map((i) => `${i.quantity}x ${i.title}${i.variant ? " (" + i.variant + ")" : ""}`).join("; "), r.items.map((i) => i.reason).join("; "), r.est_subtotal, r.refunded_amount, r.fee_charged, r.label_cost, r.tracking_number, r.source, r.created_at && new Date(r.created_at).toISOString(), r.refunded_at].map(q).join(","))].join("\n");
 }
 
+/* ---------------- analytics (Helpdesk → Return analytics) ---------------- */
+const TZ = "America/Chicago";
+const ORDERS_COUNT = `query OrdersCount($q: String!) { ordersCount(query: $q, limit: null) { count precision } }`;
+const ordersCache = new Map();   // "key|from|to" -> { at, n }
+async function ordersInRange(key, fromIso, toIso) {
+  const ck = `${key}|${fromIso}|${toIso}`, hit = ordersCache.get(ck);
+  if (hit && Date.now() - hit.at < 15 * 60e3) return hit.n;
+  const r = await gql(shopFor(key), ORDERS_COUNT, { q: `created_at:>='${fromIso}' created_at:<'${toIso}'` });
+  const n = Number(r.ordersCount && r.ordersCount.count) || 0;
+  ordersCache.set(ck, { at: Date.now(), n }); if (ordersCache.size > 500) ordersCache.clear();
+  return n;
+}
+const isoDay = (d) => d.toISOString().slice(0, 10);
+const addDays = (day, n) => { const d = new Date(day + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return isoDay(d); };
+const daysBetween = (a, b) => Math.round((new Date(b + "T12:00:00Z") - new Date(a + "T12:00:00Z")) / 864e5);
+const todayLocal = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const FIT_RE = /fit|size|small|big|large|tight|loose/i;
+
+function summarize(recs) {
+  const live = recs.filter((r) => r.status !== "cancelled");
+  const refunded = live.filter((r) => r.status === "refunded");
+  const sum = (a, f) => round2(a.reduce((t, r) => t + (Number(f(r)) || 0), 0));
+  const days = refunded.filter((r) => r.refunded_at).map((r) => (new Date(r.refunded_at) - new Date(r.created_at)) / 864e5);
+  const credit = live.filter((r) => r.refund_method === "store_credit").length;
+  const spend = sum(live, (r) => r.label_cost), fees = sum(live, (r) => r.fee_charged);
+  return {
+    returns: live.length, cancelled: recs.length - live.length, units: live.reduce((t, r) => t + r.items.reduce((u, i) => u + (Number(i.quantity) || 0), 0), 0),
+    value: sum(live, (r) => r.est_subtotal), refunded: sum(refunded, (r) => r.refund_method === "store_credit" ? 0 : r.refunded_amount),
+    store_credit: sum(refunded, (r) => r.refund_method === "store_credit" ? r.refunded_amount : 0),
+    label_spend: spend, fees, net_shipping: round2(spend - fees), avg_value: live.length ? round2(sum(live, (r) => r.est_subtotal) / live.length) : 0,
+    credit_share: live.length ? Math.round((credit / live.length) * 100) : 0, avg_days_to_refund: days.length ? Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10) / 10 : null,
+    open: live.filter((r) => ["label_created", "in_transit", "delivered"].includes(r.status)).length, attention: live.filter((r) => r.status === "needs_attention").length,
+    in_transit: live.filter((r) => r.status === "in_transit").length, refunded_count: refunded.length,
+  };
+}
+
+async function analytics({ from, to, store } = {}) {
+  const s = await settings();
+  const today = todayLocal();
+  to = /^\d{4}-\d{2}-\d{2}$/.test(to || "") ? to : today;
+  from = /^\d{4}-\d{2}-\d{2}$/.test(from || "") ? from : addDays(to, -29);
+  if (from > to) [from, to] = [to, from];
+  const len = daysBetween(from, to) + 1;
+  if (len > 3660) throw httpError(400, "Pick a range of 10 years or less");
+  const pFrom = addDays(from, -len), pTo = addDays(from, -1);
+  const args = [s.stats_since, pFrom, addDays(to, 1)];
+  let w = `${STATS_WHERE} AND created_at >= ($2::date::timestamp AT TIME ZONE '${TZ}') AND created_at < ($3::date::timestamp AT TIME ZONE '${TZ}')`;
+  if (store && STORE_DEFS[store]) { args.push(store); w += ` AND store=$${args.length}`; }
+  const rows = (await db(`SELECT *, to_char(created_at AT TIME ZONE '${TZ}', 'YYYY-MM-DD') AS local_day FROM hd_returns WHERE ${w} ORDER BY created_at`, args)).rows;
+  const all = rows.map((r) => ({ ...rowToRec(r), day: r.local_day }));
+  const cur = all.filter((r) => r.day >= from), prev = all.filter((r) => r.day < from);
+  const live = cur.filter((r) => r.status !== "cancelled"), prevLive = prev.filter((r) => r.status !== "cancelled");
+
+  // trend buckets: day (≤ 92 days), week (≤ 1 yr), month
+  const unit = len <= 92 ? "day" : len <= 366 ? "week" : "month";
+  const bucketOf = (day) => {
+    if (unit === "day") return day;
+    if (unit === "month") return day.slice(0, 7) + "-01";
+    const d = new Date(day + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return isoDay(d);   // Monday
+  };
+  const buckets = new Map();
+  for (let d = from; d <= to; d = addDays(d, 1)) { const b = bucketOf(d); if (!buckets.has(b)) buckets.set(b, { start: b < from ? from : b, end: d, returns: 0, units: 0, value: 0, lb: 0, lbo: 0 }); buckets.get(b).end = d; }
+  for (const r of live) { const b = buckets.get(bucketOf(r.day)); if (!b) continue; b.returns++; b[r.store] = (b[r.store] || 0) + 1; b.units += r.items.reduce((u, i) => u + (Number(i.quantity) || 0), 0); b.value = round2(b.value + (Number(r.est_subtotal) || 0)); }
+
+  // reasons (by units — one return can hold several items with different reasons)
+  const reasonTally = (recs) => { const m = new Map(); for (const r of recs) for (const i of r.items) { const k = i.reason || "No reason"; const x = m.get(k) || { reason: k, units: 0, value: 0, returns: new Set() }; x.units += Number(i.quantity) || 0; x.value = round2(x.value + (Number(i.unit_price) || 0) * (Number(i.quantity) || 0)); x.returns.add(r.id); m.set(k, x); } return m; };
+  const rc = reasonTally(live), rp = reasonTally(prevLive);
+  const totalUnits = [...rc.values()].reduce((t, x) => t + x.units, 0);
+  const order = (s.reasons || DEFAULTS.reasons);
+  const reasons = [...new Set([...order, ...rc.keys()])].map((k) => { const x = rc.get(k) || { units: 0, value: 0, returns: new Set() }; return { reason: k, units: x.units, value: x.value, returns: x.returns.size, share: totalUnits ? Math.round((x.units / totalUnits) * 1000) / 10 : 0, prev_units: (rp.get(k) || { units: 0 }).units }; })
+    .filter((x) => x.units || x.prev_units || order.includes(x.reason)).sort((a, b) => b.units - a.units);
+
+  // products + variants
+  const pm = new Map();
+  for (const r of live) for (const i of r.items) {
+    const k = i.title || "Unknown item"; const p = pm.get(k) || { title: k, units: 0, value: 0, returns: new Set(), reasons: {}, variants: {}, skus: new Set(), stores: new Set() };
+    const q = Number(i.quantity) || 0; p.units += q; p.value = round2(p.value + (Number(i.unit_price) || 0) * q); p.returns.add(r.id); p.stores.add(r.store);
+    const rs = i.reason || "No reason"; p.reasons[rs] = (p.reasons[rs] || 0) + q; if (i.variant) p.variants[i.variant] = (p.variants[i.variant] || 0) + q; if (i.sku) p.skus.add(i.sku); pm.set(k, p);
+  }
+  const products = [...pm.values()].map((p) => { const top = Object.entries(p.reasons).sort((a, b) => b[1] - a[1]); return { title: p.title, units: p.units, value: p.value, returns: p.returns.size, top_reason: top[0] ? top[0][0] : "", top_reason_units: top[0] ? top[0][1] : 0, reasons: p.reasons, variants: Object.entries(p.variants).sort((a, b) => b[1] - a[1]).slice(0, 6), skus: [...p.skus].slice(0, 5), stores: [...p.stores] }; })
+    .sort((a, b) => b.units - a.units || b.value - a.value);
+  const vm = new Map();
+  for (const r of live) for (const i of r.items) { if (!FIT_RE.test(i.reason || "")) continue; const k = `${i.title || "Unknown item"}\u0000${i.variant || ""}`; vm.set(k, (vm.get(k) || 0) + (Number(i.quantity) || 0)); }
+  const fit_sizes = [...vm.entries()].map(([k, units]) => { const [title, variant] = k.split("\u0000"); return { title, variant, units }; }).sort((a, b) => b.units - a.units).slice(0, 12);
+
+  // customers who returned more than once in the range
+  const cm = new Map();
+  for (const r of live) { const k = (r.email || "").toLowerCase(); if (!k) continue; const c = cm.get(k) || { email: r.email, name: r.customer_name, returns: 0, units: 0, value: 0, orders: new Set() }; c.returns++; c.units += r.items.reduce((u, i) => u + (Number(i.quantity) || 0), 0); c.value = round2(c.value + (Number(r.est_subtotal) || 0)); c.orders.add(r.order_name); cm.set(k, c); }
+  const repeat = [...cm.values()].filter((c) => c.returns > 1).map((c) => ({ ...c, orders: [...c.orders] })).sort((a, b) => b.returns - a.returns).slice(0, 15);
+
+  // what customers wrote
+  const comments = [];
+  for (const r of live.slice().reverse()) for (const i of r.items) if (i.note && String(i.note).trim()) comments.push({ at: r.created_at, rma: r.rma, id: r.id, order: r.order_name, title: i.title, variant: i.variant, reason: i.reason, note: String(i.note).slice(0, 400) });
+
+  // return rate (returns ÷ orders placed in the same range, from Shopify)
+  const keys = store && STORE_DEFS[store] ? [store] : Object.keys(STORE_DEFS);
+  const fromIso = (d) => { const p = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "longOffset" }).formatToParts(new Date(d + "T12:00:00Z")).find((x) => x.type === "timeZoneName").value.replace("GMT", "") || "+00:00"; return new Date(`${d}T00:00:00${p}`).toISOString(); };
+  let orders = null, prevOrders = null, ordersErr = null;
+  try {
+    const n = await Promise.all(keys.map((k) => Promise.all([ordersInRange(k, fromIso(from), fromIso(addDays(to, 1))), ordersInRange(k, fromIso(pFrom), fromIso(from))])));
+    orders = n.reduce((t, x) => t + x[0], 0); prevOrders = n.reduce((t, x) => t + x[1], 0);
+  } catch (e) { ordersErr = "Order counts unavailable from Shopify"; console.error("return analytics orders:", e.message); }
+  const rate = (ret, ord) => (ord ? Math.round((ret / ord) * 1000) / 10 : null);
+  const summary = summarize(cur), previous = summarize(prev);
+  summary.orders = orders; summary.return_rate = rate(summary.returns, orders); previous.orders = prevOrders; previous.return_rate = rate(previous.returns, prevOrders);
+
+  const split = (f) => { const m = {}; for (const r of live) { const k = f(r); m[k] = (m[k] || 0) + 1; } return m; };
+  return {
+    from, to, days: len, prev_from: pFrom, prev_to: pTo, store: store || "", unit, stats_since: s.stats_since, orders_error: ordersErr,
+    summary, previous, trend: [...buckets.values()], reasons, products: products.slice(0, 25), product_count: products.length, fit_sizes, repeat,
+    comments: comments.slice(0, 40), by_store: split((r) => r.store), by_method: split((r) => r.refund_method === "store_credit" ? "store_credit" : "original"), by_source: split((r) => r.source === "portal" ? "portal" : "staff"),
+    by_status: split((r) => r.status),
+    list: cur.slice().reverse().slice(0, 500).map((r) => ({ id: r.id, rma: r.rma, store: r.store, status: r.status, order: r.order_name, customer: r.customer_name, email: r.email, created_at: r.created_at, method: r.refund_method, value: r.est_subtotal, refunded: r.refunded_amount, label_cost: r.label_cost, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity, reason: i.reason, note: i.note })) })),
+  };
+}
+async function resetStats(who) { const s = await saveSettings({ stats_since: new Date().toISOString() }, who); return s.stats_since; }
+
 /* ---------------- what Emily tells customers ---------------- */
 async function portalRule() {
   const s = await settings();
@@ -665,4 +789,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
