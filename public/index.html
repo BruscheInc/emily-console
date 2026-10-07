@@ -885,7 +885,7 @@ async function retSettings(){
   const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
   m.innerHTML=`<div class="box"><h3>Returns settings</h3><div class="sub">Changes apply right away. Portal: ${esc(RET_D.portal_base)}lb and …/lbo</div>
     <label class="chk"><input type="checkbox" id="rs-live" ${s.portal_live?"checked":""}> Portal is live — Emily sends customers here instead of Loop</label>
-    <label class="chk"><input type="checkbox" id="rs-test" ${s.test_labels?"checked":""}> Test mode — each label is voided right away so it isn't charged, and test returns are never refunded automatically. Turn off to go live.</label>
+    <label class="chk"><input type="checkbox" id="rs-test" ${s.test_labels?"checked":""}> Test mode — no label is bought and nothing is charged: you get the price quote and a sample label, and the customer isn't emailed. Turn off to go live.</label>
     <div class="grid2"><div><label>Return window LB (days)</label><input type="number" id="rs-wlb" value="${s.window_days.lb}"></div><div><label>Return window LBO (days)</label><input type="number" id="rs-wlbo" value="${s.window_days.lbo}"></div></div>
     <div class="grid2"><div><label>Label fee ($, taken off the refund)</label><input type="number" step="0.01" id="rs-fee" value="${s.label_fee}"></div><div><label>Store credit bonus (%)</label><input type="number" id="rs-bonus" value="${s.store_credit_bonus_pct}"></div></div>
     <label class="chk"><input type="checkbox" id="rs-credit" ${s.store_credit_enabled?"checked":""}> Offer store credit</label>

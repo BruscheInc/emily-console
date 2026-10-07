@@ -248,6 +248,9 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
     items: (meta.items || []).map((i) => clean({ name: [i.title, i.variant].filter(Boolean).join(" — ").slice(0, 200), quantity: i.quantity, sku: i.sku || undefined, external_order_id: orderNo || undefined, order_source_code: "shopify", unit_price: i.unitPrice != null ? Number(i.unitPrice) : undefined, weight: { value: Math.max(1, Math.round(i.weightOz || Number(s.default_item_oz) || 8)), unit: "ounce" } })),
   };
   if (s.carrier_id) shipment.carrier_id = s.carrier_id;
+  // TEST MODE: buy nothing. ShipStation has no test return labels and some carriers won't void right away,
+  // so we only get the price and hand back a sample label.
+  if (meta.test) return { labelId: null, trackingNumber: `TEST-${rma}`, labelUrl: null, cost: await quoteLabel(s, shipment), carrier: "", test: true };
   const storeId = meta.key ? await storeIdFor(s, meta.key) : null;
   if (storeId) shipment.store_id = storeId;
   const body = { is_return_label: true, rma_number: rma, charge_event: "carrier_default", label_format: "pdf", label_layout: "4x6", label_download_type: "url", shipment };
@@ -270,7 +273,24 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
   return { labelId: l.label_id, trackingNumber: l.tracking_number, labelUrl: (l.label_download && (l.label_download.pdf || l.label_download.href)) || null, cost: l.shipment_cost ? l.shipment_cost.amount : null, carrier: l.carrier_code };
 }
 async function track(labelId) { const t = await ss("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`); return { code: t.status_code || "UN", text: t.status_description || "" }; }
-async function voidLabel(labelId) { const r = await ss("PUT", `/v2/labels/${encodeURIComponent(labelId)}/void`); return r.approved !== false; }
+// Returns { ok, message } — ShipStation answers 200 with approved:false and a reason when it refuses a void.
+async function voidLabel(labelId) {
+  const r = await ss("PUT", `/v2/labels/${encodeURIComponent(labelId)}/void`);
+  const ok = r.approved !== false;
+  if (!ok) console.error(`void refused for ${labelId}:`, r.message || JSON.stringify(r).slice(0, 200));
+  return { ok, message: r.message || "" };
+}
+// Price of a label without buying it (used by test mode).
+async function quoteLabel(s, shipment) {
+  if (!s.carrier_id) return null;
+  try {
+    const r = await ss("POST", "/v2/rates", { rate_options: { carrier_ids: [s.carrier_id], service_codes: [s.service_code] }, shipment: { ...shipment, carrier_id: undefined, service_code: undefined } });
+    const rate = ((r.rate_response && r.rate_response.rates) || []).find((x) => x.service_code === s.service_code) || ((r.rate_response && r.rate_response.rates) || [])[0];
+    if (!rate) return null;
+    const amt = (k) => Number((rate[k] && rate[k].amount) || 0);
+    return Math.round((amt("shipping_amount") + amt("other_amount") + amt("confirmation_amount") + amt("insurance_amount")) * 100) / 100;
+  } catch (e) { console.error("rate quote:", e.message); return null; }
+}
 async function carriers() {
   const j = await ss("GET", "/v2/carriers");
   return (j.carriers || []).map((c) => ({ id: c.carrier_id, name: c.friendly_name || c.carrier_code, services: (c.services || []).filter((x) => x.domestic !== false).map((x) => ({ code: x.service_code, name: x.name })) }));
@@ -408,7 +428,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   // b) ShipStation label
   const weight = Number(s.packaging_oz) + chosen.reduce((w, c) => w + (c.weightOz || Number(s.default_item_oz)) * c.quantity, 0);
   let label;
-  try { label = await buyLabel(s, from, weight, rma, { key, orderName: order.name, email: order.email, items: chosen.map((c) => ({ title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unitPrice: c.unitPrice, weightOz: c.weightOz })), reasons: chosen.map((c) => c.reasonName).join(", ") }); }
+  try { label = await buyLabel(s, from, weight, rma, { test: !!s.test_labels, key, orderName: order.name, email: order.email, items: chosen.map((c) => ({ title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unitPrice: c.unitPrice, weightOz: c.weightOz })), reasons: chosen.map((c) => c.reasonName).join(", ") }); }
   catch (err) {
     await gql(st, CANCEL, { id: sret.id }).catch(() => {});
     console.error("return label failed:", err.message);
@@ -417,11 +437,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     core.slackPost(`⚠️ Return label failed for ${order.name} (${STORE_DEFS[key].name}): ${err.message}`).catch(() => {});
     throw httpError(502, source === "portal" ? "We couldn't create your shipping label. Please check your address, or email us and we'll help." : `Label failed: ${err.message}`);
   }
-  const turl = trackingUrl(label.carrier, label.trackingNumber);
-  // ShipStation has no test return labels, so test mode buys a real one and voids it straight away (no charge).
-  // The PDF still opens, so the whole flow can be checked end to end.
-  let testVoided = null;
-  if (s.test_labels) { try { testVoided = await voidLabel(label.labelId); } catch (e) { testVoided = false; console.error("test label void:", e.message); } }
+  const turl = label.test ? "#" : trackingUrl(label.carrier, label.trackingNumber);
   const rec = await putRec({
     id: crypto.randomUUID(), store: key, rma, status: "label_created", source, created_by: who || null, ticket_id: ticketId || null,
     order_id: order.id, order_name: order.name, customer_id: order.customer ? order.customer.id : null, email: order.email, customer_name: from.name,
@@ -429,10 +445,10 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     label_id: label.labelId, label_src: label.labelUrl, label_cost: label.cost, tracking_number: label.trackingNumber, tracking_url: turl, tracking_code: "NY",
     est_subtotal: round2(chosen.reduce((t, c) => t + c.unitPrice * c.quantity, 0)), test_label: !!s.test_labels,
     items: chosen.map((c) => ({ fli: c.fulfillmentLineItemId, line_item_id: c.lineItemId, title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unit_price: c.unitPrice, reason: c.reasonName, note: c.note })),
-  }, `Return ${sret.name} created (${source}${who ? " · " + who : ""}); ${label.carrier || ""} label ${label.trackingNumber}${label.cost != null ? ` ($${label.cost})` : ""}${s.test_labels ? (testVoided ? " — TEST MODE: label voided right away, no charge" : " — TEST MODE: label could NOT be voided — void it in ShipStation") : ""}`);
+  }, `Return ${sret.name} created (${source}${who ? " · " + who : ""}); ${label.carrier || ""} label ${label.trackingNumber}${label.cost != null ? ` ($${label.cost}${label.test ? " quote" : ""})` : ""}${label.test ? " — TEST MODE: no label bought, nothing charged, customer not emailed" : ""}`);
 
-  // c) Hand the label to Shopify → Shopify emails it to the customer.
-  try {
+  // c) Hand the label to Shopify → Shopify emails it to the customer. (Not in test mode — no real label exists.)
+  if (!label.test) try {
     const det = await gql(st, RETURN_DETAIL, { id: sret.id });
     const rfo = det.return.reverseFulfillmentOrders.nodes[0];
     if (rfo) {
@@ -530,11 +546,12 @@ async function refund(rec, { force = false, who = "auto" } = {}) {
 /* ---------------- 4. cancel ---------------- */
 async function cancel(rec, why, who) {
   if (rec.status === "refunded") throw new Error("Already refunded");
-  let voided = false;
-  try { voided = await voidLabel(rec.label_id); } catch (e) { await update(rec.id, {}, "Label void failed: " + e.message); }
+  let voided = false, why2 = "";
+  if (!rec.label_id) { voided = true; why2 = " (test — no label was bought)"; }
+  else { try { const v = await voidLabel(rec.label_id); voided = v.ok; if (!v.ok) why2 = ` — ShipStation said: ${v.message || "void refused"}. Void it in ShipStation or ask ShipStation for a refund`; } catch (e) { why2 = ` — ${e.message}`; } }
   try { await gql(shopFor(rec.store), CANCEL, { id: rec.shopify_return_id }); } catch (e) { await update(rec.id, {}, "Shopify cancel failed: " + e.message); }
   await core.audit({ ticketId: rec.ticket_id || null, kind: "return-cancelled", detail: `${rec.rma} · ${why}`, who: who || "system", target: rec.id });
-  return update(rec.id, { status: "cancelled" }, `${why}. Label ${voided ? "voided" : "NOT voided"}.`);
+  return update(rec.id, { status: "cancelled", label_voided: voided }, `${why}. Label ${voided ? "voided" : "NOT voided"}${why2}.`);
 }
 
 /* ---------------- 5. tracking poller ---------------- */
@@ -585,7 +602,7 @@ async function init() {
   setTimeout(() => poll().catch(() => {}), 30e3); setInterval(() => poll().catch(() => {}), mins * 60e3);
   const s = await settings();
   const p = setupProblems(s);
-  console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (labels voided right away)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
+  console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
 module.exports = { ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

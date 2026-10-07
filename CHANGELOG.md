@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## v4.22.7 — Oct 7, 2026
+- **Test mode no longer buys anything.** It gets ShipStation's price quote for the label, shows a clearly marked
+  sample label, and doesn't email the customer. (Buying then voiding didn't work: ShipStation refused the void.)
+- When ShipStation refuses to void a label (Cancel return), the return's history now says why.
+
 ## v4.22.6 — Oct 7, 2026
 - Fixed: ShipStation rejected the item price format, so v4.22.5 labels fell back to "plain" (no store, no tag).
   Prices are now sent the way ShipStation expects, and if the item list is ever rejected only that part is
