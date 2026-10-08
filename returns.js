@@ -69,6 +69,12 @@ const DEFAULTS = {
   packaging_oz: 4,
   void_unused_after_days: 28,
   test_labels: true,
+  // Portal options beyond returns (edit order, defective, Package Protection, not delivered)
+  edit_window_minutes: 15,         // customers can edit an unshipped order for this long after placing it
+  claim_window_days: 30,           // defective / PP claims allowed this many days after the order shipped
+  pp_stall_days: 5,                // a PP "hasn't arrived" claim opens once tracking hasn't moved for this many days
+  delivered_wait_hours: 24,        // "marked delivered but not received" claims open this long after the delivery scan
+  pp_match: "package protection, shipping protection",   // line items whose title/SKU contains one of these are Package Protection
   return_address: {
     name: "Returns Dept", company_name: "Larkspur Baby", phone: "",
     address_line1: "701 E Plano Pkwy", address_line2: "Suite 103", city_locality: "Plano", state_province: "TX", postal_code: "75074", country_code: "US",
@@ -81,7 +87,7 @@ async function settings() {
 async function saveSettings(patch, who) {
   const cur = await settings();
   const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
-  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days"]) next[k] = Number(next[k]) || 0;
+  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
   if (patch.reasons !== undefined) { next.reasons = (Array.isArray(patch.reasons) ? patch.reasons : String(patch.reasons).split("\n")).map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 20); if (!next.reasons.length) next.reasons = DEFAULTS.reasons; }
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('returns', $1, $2, now())
@@ -218,6 +224,12 @@ function mapReason(label, lib) {
 function portalReasons(lib, s) {
   const labels = (Array.isArray(s.reasons) && s.reasons.length ? s.reasons : DEFAULTS.reasons).map((x) => String(x).trim()).filter(Boolean).slice(0, 20);
   return labels.map((label, i) => { const m = mapReason(label, lib) || {}; return { id: `r${i}`, name: label, sid: m.sid, shopify_name: m.name }; });
+}
+// Package Protection is a fee line, not a product — it can never be returned.
+function isPP(item, s) {
+  const words = String((s && s.pp_match) || DEFAULTS.pp_match).split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  const hay = `${item.title || ""} ${item.sku || ""}`.toLowerCase();
+  return words.some((w) => hay.includes(w));
 }
 function eligibility(item, s, key) {
   const finalTags = String(s.final_sale_tags || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -416,7 +428,8 @@ function verify(t) {
 /* ---------------- 1. look up an order ---------------- */
 async function prepare(key, order, s) {
   const st = shopFor(key);
-  const [items, rs] = await Promise.all([returnableItems(st, order.id), reasons(st)]);
+  const [items, rs, claimed] = await Promise.all([returnableItems(st, order.id), reasons(st), require("./claims").claimedQty(order.name).catch(() => ({}))]);
+  for (const i of items) if (claimed[i.lineItemId]) i.returnableQty = Math.max(0, i.returnableQty - claimed[i.lineItemId]);
   const existing = (await db(`SELECT * FROM hd_returns WHERE order_name=$1 ORDER BY created_at DESC`, [order.name])).rows.map(rowToRec);
   const a = labelAddress(order);
   if (!a) console.warn(`returns: ${order.name} has no shipping, billing or customer address (or the app can't read addresses)`);
@@ -424,7 +437,7 @@ async function prepare(key, order, s) {
     order: { name: order.name, created_at: order.createdAt, currency: order.currencyCode, email: order.email, customer_name: (a && a.name) || "" },
     address: a ? { name: a.name, address1: a.address1, address2: a.address2, city: a.city, state: a.provinceCode, zip: a.zip, country: a.countryCodeV2, phone: a.phone || "" } : null,
     international: !!(a && a.countryCodeV2 && a.countryCodeV2 !== "US"),
-    items: items.map((i) => { const e = eligibility(i, s, key); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
+    items: items.filter((i) => !isPP(i, s)).map((i) => { const e = eligibility(i, s, key); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
     reasons: rs,
     existing: existing.map(publicRec),
     options: { label_fee: s.label_fee, store_credit_enabled: s.store_credit_enabled, store_credit_bonus_pct: s.store_credit_bonus_pct, fee_on_store_credit: s.fee_on_store_credit, window_days: s.window_days[key] },
@@ -437,7 +450,8 @@ async function lookup(key, orderNumber, email) {
   const order = await findOrder(st, def, orderNumber, email);
   if (!order) throw httpError(404, "We couldn't find that order. Check the order number and the email you used at checkout.");
   if (order.cancelledAt) throw httpError(400, "This order was cancelled, so there's nothing to return.");
-  return { token: sign({ k: key, o: order.id, exp: Date.now() + 2 * 3600e3 }), ...(await prepare(key, order, s)) };
+  const [prep, menu] = await Promise.all([prepare(key, order, s), require("./claims").menu(key, order, s).catch((e) => { console.error("portal menu:", e.message); return null; })]);
+  return { token: sign({ k: key, o: order.id, n: order.name, e: String(email).trim().toLowerCase(), exp: Date.now() + 2 * 3600e3 }), ...prep, menu };
 }
 // Staff: look up any order by name (no email needed).
 async function staffLookup(orderName) {
@@ -457,10 +471,13 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
       shippingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } billingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } } }`, { id: orderId })).order;
   if (!order) throw httpError(404, "Order not found");
   const items = await returnableItems(st, order.id), rs = await reasons(st);
+  const claimed = await require("./claims").claimedQty(order.name).catch(() => ({}));
+  for (const i of items) if (claimed[i.lineItemId]) i.returnableQty = Math.max(0, i.returnableQty - claimed[i.lineItemId]);
   const chosen = [];
   for (const l of lines) {
     const it = items.find((i) => i.fulfillmentLineItemId === l.fulfillmentLineItemId), qty = Math.floor(Number(l.quantity));
     if (!it || !(qty >= 1)) continue;
+    if (isPP(it, s)) throw httpError(400, "Package Protection isn't returnable.");
     if (qty > it.returnableQty) throw httpError(400, `Only ${it.returnableQty} of ${it.title} can be returned.`);
     const e = eligibility(it, s, key);
     if (!e.ok && !staffOverride) throw httpError(400, `${it.title}: ${e.why}`);
@@ -789,4 +806,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

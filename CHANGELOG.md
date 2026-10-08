@@ -3,6 +3,16 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.26.0
+- Returns portal: after looking up an order, customers pick what they need — Edit my order, Start a return, Defective item, Package Protection claim, or Package not delivered. Options that don't apply are shown greyed out with the reason.
+- Package Protection is never returnable (hidden from the return list and refused by the server).
+- Edit my order: within 15 minutes of purchase and before it ships, customers change the shipping name/address, swap sizes (discount kept), change quantities, remove items, or add in-stock items. Extra cost → Shopify emails a pay link and the order is tagged portal-edit-unpaid; lower total → the difference is refunded. Logged in Claims → Order edits and Slack.
+- Defective item: pick items, describe the problem, upload photos (resized in the browser). AI reviews photos, timing and the customer's history (earlier claims, returns, credits, reused photos) and gives staff an approve / deny / needs-info opinion. Customer keeps the item. Options: replacement, store credit, or refund (refund only without Package Protection).
+- Package Protection claim: live tracking decides when a claim can be filed — "hasn't arrived" once tracking hasn't moved for 5 days, "marked delivered" 24 hours after the delivery scan; damaged (photos required) and missing items too. Replacement or store credit only. Covers just the items in the affected shipment.
+- Package not delivered without Package Protection: carrier claim steps and links, no credit. Emily's policy updated to match (the 50% goodwill credit now applies only to missing items).
+- New Helpdesk → Claims queue: photos, tracking, AI opinion, customer history; Approve (replacement order, store credit or refund, capped at the claim value, locked against double clicks), Deny, Ask customer, Re-run AI. Every claim opens a ticket and emails the customer at each step. Claimed items can't also be returned or claimed twice.
+- Settings: edit window, claim window, stall days, delivered-wait hours, and the Package Protection line-item match.
+
 ## 4.25.0
 - Returns screen redesigned as a command center: a card per portal (branded address, live status, Open portal / Copy link / Customize buttons), quick actions, clickable stat tiles (open, needs attention, refunded, label spend, cancelled, all), and a cleaner filter bar.
 

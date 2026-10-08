@@ -175,6 +175,60 @@ body.noimg .item .thumb{display:none}
 .foot .links{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 16px;margin-top:6px}
 body.lay-split .foot{color:var(--muted)}
 
+/* options menu */
+.mopts{display:grid;gap:10px}
+.mopt{display:grid;grid-template-columns:44px 1fr 18px;gap:14px;align-items:center;width:100%;text-align:left;font:inherit;color:var(--text);background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .05s}
+.mopt:hover:not(:disabled){border-color:var(--primary);box-shadow:0 0 0 3px var(--focus-ring)}
+.mopt:active:not(:disabled){transform:translateY(1px)}
+.mopt:disabled{cursor:default;opacity:.6}
+.mopt .ic{width:44px;height:44px;border-radius:12px;background:var(--soft);display:grid;place-items:center;color:var(--primary)}
+.mopt .ic svg{width:22px;height:22px}
+.mopt .mt{font-weight:700;color:var(--heading);display:block}
+.mopt .ms{display:block;color:var(--muted);font-size:var(--small);margin-top:2px}
+.mopt .why{display:inline-block;margin-top:6px;font-size:calc(var(--small) * .9);background:var(--soft);border-radius:999px;padding:2px 10px;color:var(--muted)}
+.mopt .chev{color:var(--muted)}
+/* edit + claims */
+.qty{display:inline-flex;align-items:center;border:1.5px solid var(--border);border-radius:999px;overflow:hidden}
+.qty button{width:36px;height:34px;border:0;background:transparent;font:inherit;font-size:18px;color:var(--heading);cursor:pointer}
+.qty button:disabled{opacity:.35;cursor:default}
+.qty span{min-width:28px;text-align:center;font-weight:700}
+.eline{display:grid;grid-template-columns:var(--img-col) 1fr;gap:14px;padding:14px 0;border-top:1px solid var(--border)}
+.eline:first-child{border-top:0;padding-top:0}
+body.noimg .eline{grid-template-columns:1fr}body.noimg .eline .thumb{display:none}
+.eline .ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
+.eline .ctl select{width:auto;min-width:140px;flex:1}
+.eline.gone .t{text-decoration:line-through;color:var(--muted)}
+.pill{display:inline-block;font-size:calc(var(--small) * .88);font-weight:700;border-radius:999px;padding:2px 10px;background:var(--soft);color:var(--muted)}
+.pill.warn{background:var(--error-bg);color:var(--error)}
+.pill.ok{background:var(--soft);color:var(--success)}
+.sres{display:grid;gap:8px;margin-top:10px}
+.sres .r{display:grid;grid-template-columns:48px 1fr;gap:12px;align-items:start;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--input-bg)}
+.sres .r img,.sres .r .ph{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--soft)}
+.sres .r .row2{display:flex;gap:8px;margin-top:8px}
+.sres .r select{min-height:38px}
+.btn.sm{min-height:38px;padding:0 16px;font-size:var(--small)}
+.timer{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--heading)}
+.photos{display:flex;flex-wrap:wrap;gap:10px}
+.photos .p{position:relative;width:84px;height:84px;border-radius:10px;overflow:hidden;background:var(--soft)}
+.photos .p img{width:100%;height:100%;object-fit:cover}
+.photos .p button{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:14px;line-height:1}
+.photos .p .up{position:absolute;inset:0;display:grid;place-items:center;background:rgba(255,255,255,.6)}
+.photos label.add{width:84px;height:84px;border-radius:10px;border:1.5px dashed var(--border);display:grid;place-items:center;text-align:center;font-size:calc(var(--small) * .9);color:var(--muted);cursor:pointer;padding:6px}
+.photos label.add:hover{border-color:var(--primary);color:var(--primary)}
+.trk{border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;background:var(--input-bg);margin-bottom:10px}
+.trk .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.trk .st{font-weight:700;color:var(--heading)}
+.trk .meta{color:var(--muted);font-size:var(--small);margin-top:4px}
+.choice{display:block;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:8px;cursor:pointer;background:var(--input-bg)}
+.choice.sel{border-color:var(--primary);box-shadow:0 0 0 3px var(--focus-ring)}
+.choice.dis{opacity:.55;cursor:default}
+.choice input{position:absolute;opacity:0;pointer-events:none}
+.choice .top{display:flex;justify-content:space-between;gap:10px}
+.choice strong{color:var(--heading)}
+.gate{background:var(--soft);border-radius:var(--in-radius);padding:12px 14px;font-size:var(--small);margin:4px 0 12px}
+.linkrow{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+.changes{margin:0;padding-left:20px;text-align:left}
+.changes li{margin-bottom:6px}
 /* preview helpers (studio only) */
 .previewflag{position:fixed;left:12px;bottom:12px;z-index:9;background:#111827;color:#fff;font:600 12px system-ui;padding:6px 10px;border-radius:8px;opacity:.85}
 body.picking [data-sec]{cursor:pointer}
@@ -251,6 +305,54 @@ body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
         <p class="muted" style="margin-top:12px"><span id="t_tracking"></span>: <a id="trk" target="_blank" rel="noopener"></a></p>
         <ol id="doneSteps"></ol>
         <div class="stepnav" style="justify-content:center"><button class="btn2" onclick="startOver()" data-copy="another_return"></button></div>
+      </section>
+
+      <section id="sMenu" class="hidden">
+        <h1 id="menuTitle"></h1>
+        <p class="lead"><span id="menuSub"></span> <button class="linkbtn" onclick="startOver()" data-copy="not_your_order"></button></p>
+        <div id="menuExisting"></div>
+        <div class="mopts" id="mopts" data-sec="items"></div>
+        <div class="stepnav"><button class="btn2" onclick="back()">← <span data-copy="back"></span></button></div>
+      </section>
+
+      <section id="sEdit" class="hidden">
+        <h1 id="editTitle">Edit your order</h1>
+        <p class="lead" id="editLead"></p>
+        <div id="eEditTop" class="err hidden"></div>
+        <h2 class="label" style="margin-top:0">Items</h2>
+        <div id="editLines"></div>
+        <h2 class="label">Add items</h2>
+        <input type="text" id="editQ" placeholder="Search products, e.g. sleeper" autocomplete="off">
+        <div class="sres" id="editRes"></div>
+        <div class="sres" id="editAdded"></div>
+        <h2 class="label">Shipping name &amp; address</h2>
+        <div class="box">
+          <div class="grid2 row"><div><label class="f">First name</label><input id="ed_first" type="text" autocomplete="given-name"></div><div><label class="f">Last name</label><input id="ed_last" type="text" autocomplete="family-name"></div></div>
+          <div class="row"><label class="f">Address</label><input id="ed_1" type="text" autocomplete="address-line1"></div>
+          <div class="row"><label class="f">Apt, suite (optional)</label><input id="ed_2" type="text" autocomplete="address-line2"></div>
+          <div class="grid2 row"><div><label class="f">City</label><input id="ed_city" type="text" autocomplete="address-level2"></div><div><label class="f">State</label><input id="ed_state" type="text" maxlength="2" autocomplete="address-level1"></div></div>
+          <div class="grid2"><div><label class="f">ZIP</label><input id="ed_zip" type="text" inputmode="numeric" autocomplete="postal-code"></div><div><label class="f">Phone</label><input id="ed_phone" type="tel" autocomplete="tel"></div></div>
+        </div>
+        <h2 class="label">Summary</h2>
+        <div class="box" id="editSum"></div>
+        <div id="eEdit" class="err hidden" style="margin-top:16px"></div>
+        <div style="margin-top:22px"><button class="btn main" id="bEdit" onclick="submitEdit()" data-sec="buttons">Save changes</button></div>
+        <div class="stepnav"><button class="btn2" onclick="back()">← <span data-copy="back"></span></button><button class="btn2 quiet" onclick="startOver()" data-copy="nav_start_over"></button></div>
+      </section>
+
+      <section id="sClaim" class="hidden">
+        <div id="claimBody"></div>
+        <div id="eClaim" class="err hidden" style="margin-top:16px"></div>
+        <div id="claimSubmitWrap" style="margin-top:22px"><button class="btn main" id="bClaim" onclick="submitClaim()" data-sec="buttons">Submit claim</button></div>
+        <div class="stepnav"><button class="btn2" onclick="back()">← <span data-copy="back"></span></button><button class="btn2 quiet" onclick="startOver()" data-copy="nav_start_over"></button></div>
+      </section>
+
+      <section id="sDone2" class="hidden done">
+        <div class="check">✓</div>
+        <h1 id="d2Title"></h1>
+        <p class="lead" id="d2Sub"></p>
+        <div id="d2Body"></div>
+        <div class="stepnav" style="justify-content:center"><button class="btn2" onclick="go('sMenu')">← Back to my order</button><button class="btn2 quiet" onclick="startOver()" data-copy="nav_start_over"></button></div>
       </section>
     </div>
     <footer class="foot" id="foot" data-sec="footer"></footer>
@@ -385,7 +487,7 @@ function renderChrome() {
   $('foot').classList.toggle('hidden', !f.show && !shopLink);
   $('foot').innerHTML = shopLink + (f.show ? `<div class="rich">${rich(f.text)}</div>${f.links.length ? `<div class="links">${f.links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')}</div>` : ''}` : '');
   // steps
-  $('steps').classList.toggle('hidden', !T.layout.steps);
+  $('steps').classList.toggle('hidden', !T.layout.steps || typeof STEP !== 'number');
   $('steps').innerHTML = [1, 2, 3, 4].map((n) => `<li class="${n < STEP ? 'past' : n === STEP ? 'on' : ''}"><span>${esc(C('step' + n))}</span></li>`).join('');
   // chrome height so a centered card centers in what's left of the screen
   const h = ($('announce').offsetHeight || 0) + (hdrOn ? $('topbar').offsetHeight || 0 : 0);
@@ -409,9 +511,12 @@ function renderCopy() {
 
 /* ---------- flow ---------- */
 // Each step is a browser history entry, so the phone's back gesture / browser Back moves one step back.
+const SECTIONS = ['s1', 'sMenu', 's2', 's3', 's4', 'sEdit', 'sClaim', 'sDone2'];
 function go(n, fromHistory) {
   STEP = n;
-  for (let i = 1; i <= 4; i++) $('s' + i).classList.toggle('hidden', i !== n);
+  const id = typeof n === 'number' ? 's' + n : n;
+  SECTIONS.forEach((x) => $(x).classList.toggle('hidden', x !== id));
+  if (id === 'sMenu' && S.order) renderMenu();
   renderChrome();
   if (!B.preview && !fromHistory) {
     const st = { rp: 1, step: n };
@@ -421,13 +526,14 @@ function go(n, fromHistory) {
 }
 function back() {
   if (PICK) return;
-  if (!B.preview && history.state && history.state.rp && STEP > 1) history.back();
-  else go(Math.max(1, STEP - 1));
+  if (!B.preview && history.state && history.state.rp && STEP !== 1) history.back();
+  else go(typeof STEP === 'number' ? (STEP === 2 ? 'sMenu' : Math.max(1, STEP - 1)) : (STEP === 'sMenu' ? 1 : 'sMenu'));
 }
 function startOver() {
   if (PICK) return;
   const keepEmail = $('em').value;
-  S = {}; method = 'original'; addr = null;
+  S = {}; method = 'original'; addr = null; ED = null; CL = null; PH = []; clearInterval(edTimer);
+  const me = $('menuErr'); if (me) me.remove();
   ['e1', 'e2', 'e3'].forEach((id) => showErr(id, ''));
   $('on').value = ''; $('em').value = keepEmail;
   $('items').innerHTML = ''; $('addrForm').classList.add('hidden'); $('addrView').classList.remove('hidden'); $('editAddr').classList.remove('hidden');
@@ -437,8 +543,12 @@ window.addEventListener('popstate', (e) => {
   if (B.preview || !e.state || !e.state.rp) return;
   let n = e.state.step;
   if (S.done) { startOver(); return; }              // a finished return can't be re-submitted by going back
-  if (n >= 2 && !S.items) n = 1;
-  if (n >= 3 && !selectedLines().length) n = 2;
+  if (STEP === 'sDone2') { S.done2 = null; go('sMenu'); return; }   // after an edit/claim, Back lands on the menu (fresh)
+  if (n !== 1 && !S.items) n = 1;
+  if (n === 'sEdit' && !ED) n = 'sMenu';
+  if ((n === 'sClaim' && !CL) || n === 'sDone2') n = 'sMenu';
+  if (n === 3 && !selectedLines().length) n = 2;
+  if (n === 'sMenu') { clearInterval(edTimer); ED = null; }
   if (n === 3) { renderOpts(); renderAddr(); }
   go(n, true);
 });
@@ -455,13 +565,13 @@ $('f1').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (PICK) return;
   showErr('e1', '');
-  if (B.preview) { loadDemo(); go(2); return; }
+  if (B.preview) { loadDemo(); go('sMenu'); return; }
   if (!$('on').value.trim() || !$('em').value.trim()) { showErr('e1', C('not_found')); return; }
   busy($('b1'), true);
   try {
     S = await api(`/api/returns/public/${B.store}/lookup`, { order_number: $('on').value, email: $('em').value });
     addr = S.address ? { ...S.address } : null; method = 'original';
-    renderItems(); go(2);
+    renderItems(); go('sMenu');
   } catch (err) { showErr('e1', err.status === 404 ? C('not_found') : err.message); }
   busy($('b1'), false, C('lookup_button'));
 });
@@ -569,6 +679,259 @@ function renderDone() {
   $('doneSteps').innerHTML = steps.filter(Boolean).map((s) => `<li class="rich">${rich(s)}</li>`).join('');
 }
 
+/* ---------- options menu (after the order is found) ---------- */
+const CX = (k, def, extra) => tok(T.copy[k] != null && T.copy[k] !== '' ? T.copy[k] : def, extra);
+const ICONS = {
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  return: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
+  defective: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+  pp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>',
+  nd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>',
+};
+const CHEV = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>';
+function renderMenu() {
+  $('menuTitle').textContent = CX('menu_title', 'How can we help?', { order: S.order.name });
+  $('menuSub').textContent = CX('menu_sub', 'Order {order}. Pick what you need.', { order: S.order.name });
+  const ex = (S.existing || []).filter((r) => r.status !== 'cancelled');
+  $('menuExisting').innerHTML = ex.length ? ex.map((r) => `<div class="note"><strong>${esc(r.rma)}</strong> · ${esc(statusText(r.status))}${r.label_url && r.status !== 'refunded' ? ` · <a href="${esc(r.label_url)}" target="_blank" rel="noopener">${esc(C('download'))}</a>` : ''}</div>`).join('') : '';
+  const m = S.menu || {}, canReturn = (S.items || []).some((i) => i.eligible);
+  const opt = (k, icon, title, sub, st) => `<button class="mopt" ${st && st.ok === false ? 'disabled' : ''} onclick="pickOption('${k}')"><span class="ic">${ICONS[icon]}</span><span><span class="mt">${esc(title)}</span><span class="ms">${esc(sub)}</span>${st && st.ok === false && st.why ? `<span class="why">${esc(st.why)}</span>` : ''}</span><span class="chev">${st && st.ok === false ? '' : CHEV}</span></button>`;
+  const editSt = m.edit || { ok: false, why: 'Not available' };
+  const items = [];
+  if (editSt.ok || !m.shipped) items.push(opt('edit', 'edit', CX('opt_edit_title', 'Edit my order'), CX('opt_edit_sub', 'Change the address, name or size, or add or remove items'), editSt));
+  items.push(opt('return', 'return', CX('opt_return_title', 'Start a return'), CX('opt_return_sub', 'Send items back for a refund or store credit'), canReturn ? { ok: true } : { ok: false, why: m.shipped === false ? 'Available once your order arrives' : (S.items || []).length ? 'Nothing on this order can be returned right now' : C('none_returnable') }));
+  items.push(opt('defective', 'defective', CX('opt_defect_title', 'Defective item'), CX('opt_defect_sub', 'Something arrived broken, torn or faulty'), m.defective));
+  items.push(opt('pp', 'pp', CX('opt_pp_title', 'Package Protection claim'), CX('opt_pp_sub', 'Lost, stuck, stolen, damaged or missing items'), m.pp));
+  items.push(opt('nd', 'nd', CX('opt_nd_title', 'Package not delivered'), CX('opt_nd_sub', "Tracking stopped, or it never showed up"), m.not_delivered));
+  $('mopts').innerHTML = items.join('');
+}
+function pickOption(k) {
+  if (PICK) return;
+  if (B.preview) { if (k === 'return') { renderItems(); go(2); } return; }
+  if (k === 'return') { renderItems(); go(2); return; }
+  if (k === 'edit') return openEdit();
+  if (k === 'defective') return openClaim('defective');
+  if (k === 'pp') return openClaim('pp');
+  if (k === 'nd') return openClaim('not_delivered');
+}
+async function busyMenu(on) { document.querySelectorAll('.mopt').forEach((b) => { b.style.pointerEvents = on ? 'none' : ''; }); document.body.style.cursor = on ? 'progress' : ''; }
+
+/* ---------- edit order ---------- */
+let ED = null, edTimer = null;
+async function openEdit() {
+  busyMenu(true);
+  try { ED = await api('/api/returns/public/edit/options', { token: S.token }); ED.adds = []; ED.changes = {}; }
+  catch (e) { busyMenu(false); alertMenu(e.message); return; }
+  busyMenu(false);
+  const a = ED.address;
+  $('ed_first').value = a.first_name; $('ed_last').value = a.last_name; $('ed_1').value = a.address1; $('ed_2').value = a.address2;
+  $('ed_city').value = a.city; $('ed_state').value = a.state; $('ed_zip').value = a.zip; $('ed_phone').value = a.phone;
+  $('editTitle').textContent = 'Edit order ' + S.order.name; $('editQ').value = ''; $('editRes').innerHTML = ''; showErr('eEdit', ''); showErr('eEditTop', '');
+  renderEdit(); tickEdit(); clearInterval(edTimer); edTimer = setInterval(tickEdit, 1000);
+  go('sEdit');
+}
+function alertMenu(msg) { let el = $('menuErr'); if (!el) { el = document.createElement('div'); el.id = 'menuErr'; el.className = 'err'; $('mopts').before(el); } el.textContent = msg; el.classList.remove('hidden'); }
+function tickEdit() {
+  if (!ED) return;
+  const left = Math.max(0, new Date(ED.until).getTime() - Date.now()), mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+  $('editLead').innerHTML = left > 0 ? `You can make changes for <span class="timer">⏱ ${mm}:${String(ss).padStart(2, '0')}</span> more. After that your order goes to packing.` : 'The time to change this order has run out. Please email ' + esc(CTX.support) + ' and we’ll try to help.';
+  if (left <= 0) { $('bEdit').disabled = true; clearInterval(edTimer); }
+}
+function edLine(id) { return ED.lines.find((l) => l.id === id); }
+function edState(l) { return ED.changes[l.id] || { quantity: l.quantity, variant_id: l.variant_id }; }
+function edSet(id, patch) { const l = edLine(id); ED.changes[id] = { ...edState(l), ...patch }; renderEdit(); }
+function renderEdit() {
+  $('editLines').innerHTML = ED.lines.map((l) => {
+    const st = edState(l), gone = st.quantity === 0;
+    const thumb = l.image ? `<img class="thumb" src="${esc(l.image)}" alt="">` : `<div class="thumb">${esc((l.title || '?').slice(0, 1))}</div>`;
+    const sizes = l.sizes.length > 1 ? `<select onchange="edSet('${l.id}',{variant_id:this.value})" aria-label="Size">${l.sizes.map((v) => `<option value="${esc(v.id)}" ${v.id === st.variant_id ? 'selected' : ''} ${!v.available && v.id !== l.variant_id ? 'disabled' : ''}>${esc(v.title)}${!v.available && v.id !== l.variant_id ? ' — sold out' : ''}${v.id !== l.variant_id && Math.abs(v.price - l.unit_price) > 0.009 && v.available ? ` (${money(v.price)})` : ''}</option>`).join('')}</select>` : '';
+    return `<div class="eline ${gone ? 'gone' : ''}">${thumb}<div><div class="t">${esc(l.title)}</div><div class="v muted">${[l.variant ? esc(l.variant) : '', money(l.unit_price)].filter(Boolean).join(' · ')}</div>
+      <div class="ctl">${sizes}<span class="qty"><button onclick="edSet('${l.id}',{quantity:${Math.max(0, st.quantity - 1)}})" ${st.quantity <= 0 ? 'disabled' : ''} aria-label="Less">−</button><span>${st.quantity}</span><button onclick="edSet('${l.id}',{quantity:${st.quantity + 1}})" ${st.quantity >= 10 ? 'disabled' : ''} aria-label="More">+</button></span>
+      ${gone ? '<span class="pill warn">Will be removed</span>' : st.variant_id !== l.variant_id ? '<span class="pill ok">New size</span>' : ''}</div></div></div>`;
+  }).join('') || '<p class="muted">Nothing on this order can be changed.</p>';
+  $('editAdded').innerHTML = ED.adds.map((a, i) => `<div class="r">${a.image ? `<img src="${esc(a.image)}" alt="">` : '<div class="ph"></div>'}<div><strong>${esc(a.title)}</strong><div class="muted">${esc(a.vtitle)} · ${money(a.price)}</div>
+    <div class="row2"><span class="qty"><button onclick="edAddQty(${i},-1)">−</button><span>${a.quantity}</span><button onclick="edAddQty(${i},1)" ${a.quantity >= 10 ? 'disabled' : ''}>+</button></span><span class="pill ok">Adding</span></div></div></div>`).join('');
+  renderEditSum();
+}
+function edDiff() {
+  let d = 0;
+  for (const l of ED.lines) { const st = edState(l); const v = l.sizes.find((x) => x.id === st.variant_id); const newPrice = st.variant_id === l.variant_id ? l.unit_price : (v ? v.price : l.unit_price); d += newPrice * st.quantity - l.unit_price * l.quantity; }
+  for (const a of ED.adds) d += a.price * a.quantity;
+  return Math.round(d * 100) / 100;
+}
+function edChanges() {
+  const out = [];
+  for (const l of ED.lines) { const st = edState(l); if (st.quantity === 0) out.push(`Remove ${l.title}`); else { if (st.variant_id !== l.variant_id) out.push(`${l.title}: ${l.variant || ''} → ${(l.sizes.find((v) => v.id === st.variant_id) || {}).title}`); if (st.quantity !== l.quantity) out.push(`${l.title}: quantity ${l.quantity} → ${st.quantity}`); } }
+  for (const a of ED.adds) out.push(`Add ${a.quantity}× ${a.title}${a.vtitle && a.vtitle !== 'Default Title' ? ` (${a.vtitle})` : ''}`);
+  return out;
+}
+function renderEditSum() {
+  const ch = edChanges(), d = edDiff();
+  let h = ch.length ? `<ul class="changes">${ch.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<div class="muted">No item changes yet. Address changes are saved too.</div>';
+  if (ch.length) h += `<div class="sum total"><span>${d > 0 ? 'Estimated amount due' : d < 0 ? 'Estimated refund' : 'Price change'}</span><span>${d === 0 ? 'None' : money(Math.abs(d))}</span></div>
+    <div class="muted" style="margin-top:6px">${d > 0 ? 'We’ll email you a secure link to pay the difference (plus any tax). Your order ships once it’s paid.' : d < 0 ? 'We’ll refund the difference to your original payment.' : ''}</div>`;
+  $('editSum').innerHTML = h;
+}
+function edAddQty(i, n) { const a = ED.adds[i]; a.quantity += n; if (a.quantity <= 0) ED.adds.splice(i, 1); renderEdit(); }
+let edSearchT = null;
+$('editQ').addEventListener('input', () => { clearTimeout(edSearchT); edSearchT = setTimeout(edSearch, 350); });
+async function edSearch() {
+  const q = $('editQ').value.trim(); if (q.length < 2) { $('editRes').innerHTML = ''; return; }
+  $('editRes').innerHTML = '<div class="muted">Searching…</div>';
+  try {
+    const r = await api('/api/returns/public/edit/search', { token: S.token, q }); ED.found = r.products;
+    $('editRes').innerHTML = r.products.length ? r.products.map((p, i) => `<div class="r">${p.image ? `<img src="${esc(p.image)}" alt="">` : '<div class="ph"></div>'}<div><strong>${esc(p.title)}</strong>
+      <div class="row2">${p.variants.length > 1 || p.variants[0].title !== 'Default Title' ? `<select id="edv${i}">${p.variants.map((v) => `<option value="${esc(v.id)}">${esc(v.title)} · ${money(v.price)}</option>`).join('')}</select>` : `<span class="muted" style="align-self:center">${money(p.variants[0].price)}</span>`}<button class="btn sm" onclick="edAdd(${i})">Add</button></div></div></div>`).join('') : '<div class="muted">No products found. Try another word.</div>';
+  } catch (e) { $('editRes').innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
+}
+function edAdd(i) {
+  const p = ED.found[i], sel = $('edv' + i), v = sel ? p.variants.find((x) => x.id === sel.value) : p.variants[0];
+  const ex = ED.adds.find((a) => a.variant_id === v.id); if (ex) ex.quantity += 1; else ED.adds.push({ variant_id: v.id, title: p.title, vtitle: v.title, price: v.price, image: p.image, quantity: 1 });
+  $('editRes').innerHTML = ''; $('editQ').value = ''; renderEdit();
+}
+async function submitEdit() {
+  showErr('eEdit', '');
+  const address = { first_name: $('ed_first').value.trim(), last_name: $('ed_last').value.trim(), address1: $('ed_1').value.trim(), address2: $('ed_2').value.trim(), city: $('ed_city').value.trim(), state: $('ed_state').value.trim().toUpperCase(), zip: $('ed_zip').value.trim(), phone: $('ed_phone').value.trim() };
+  if (!address.first_name || !address.last_name || !address.address1 || !address.city || !address.state || !address.zip) { showErr('eEdit', 'Please fill in the name and full address.'); return; }
+  const lines = ED.lines.map((l) => ({ id: l.id, ...edState(l) }));
+  busy($('bEdit'), true);
+  try {
+    const r = await api('/api/returns/public/edit/submit', { token: S.token, address, lines, adds: ED.adds.map((a) => ({ variant_id: a.variant_id, quantity: a.quantity })) });
+    clearInterval(edTimer); ED = null;
+    S.done2 = r;
+    $('d2Title').textContent = 'Your order is updated';
+    $('d2Sub').textContent = 'Order ' + S.order.name;
+    $('d2Body').innerHTML = `<ul class="changes">${r.changes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` +
+      (r.owed ? `<div class="note" style="margin-top:14px;text-align:left">We emailed you a secure link to pay the ${money(r.owed)} difference. Your order ships once it’s paid.</div>` : '') +
+      (r.refunded ? `<div class="note" style="margin-top:14px;text-align:left">We refunded ${money(r.refunded)} to your original payment. It can take 5–10 business days to show.</div>` : '') +
+      (r.refund_failed ? `<div class="note" style="margin-top:14px;text-align:left">You’re owed a refund for the difference. Our team will send it shortly.</div>` : '') +
+      (r.address_failed ? `<div class="err" style="margin-top:14px;text-align:left">We couldn’t save your new address. Our team has been told and will fix it before your order ships. If you don’t hear from us, email ${esc(r.support || CTX.support)}.</div>` : '');
+    go('sDone2');
+  } catch (e) { showErr('eEdit', e.message); }
+  busy($('bEdit'), false, 'Save changes');
+}
+
+/* ---------- claims: defective / Package Protection / not delivered ---------- */
+let CL = null, PH = [];
+const SUB = { not_arrived: "My package hasn't arrived", delivered_missing: "Marked delivered, but I didn't get it", damaged: 'My package arrived damaged', missing_items: 'Items are missing from my package' };
+const RES = { replacement: ['Replacement', 'We’ll send the same item(s) again, free'], store_credit: ['Store credit', 'Added to your {store} account'], refund: ['Refund', 'Back to your original payment'] };
+async function openClaim(type) {
+  busyMenu(true);
+  try { CL = await api('/api/returns/public/claim/start', { token: S.token, type }); }
+  catch (e) { busyMenu(false); alertMenu(e.message); return; }
+  busyMenu(false);
+  PH = []; CL.sel = {}; CL.res = null; CL.sub = null;
+  if (CL.type === 'pp' && type === 'not_delivered') CL.sub = (CL.shipments || []).some((s) => s.delivered) ? 'delivered_missing' : 'not_arrived';
+  showErr('eClaim', ''); renderClaim(); go('sClaim');
+}
+function trkHtml(list) {
+  return (list || []).map((t) => `<div class="trk"><div class="top"><span class="st">${esc(t.delivered ? 'Delivered' : t.status || 'In transit')}</span><a href="${esc(t.url || '#')}" target="_blank" rel="noopener">${esc(t.carrier)} · ${esc(t.number)}</a></div>
+    <div class="meta">${t.delivered && t.delivered_at ? 'Delivered ' + esc(new Date(t.delivered_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : t.last_event ? esc(t.last_event.desc || '') + (t.last_event.where ? ' · ' + esc(t.last_event.where) : '') + ' · ' + esc(new Date(t.last_update_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : 'Shipped ' + esc(new Date(t.shipped_at).toLocaleDateString([], { month: 'short', day: 'numeric' }))}</div></div>`).join('') || '<div class="note">We don’t have tracking for this order yet.</div>';
+}
+function claimItemsHtml(withQty) {
+  return CL.items.map((x) => {
+    const on = !!CL.sel[x.id], q = CL.sel[x.id] || 1;
+    const thumb = x.image ? `<img class="thumb" src="${esc(x.image)}" alt="">` : `<div class="thumb">${esc((x.title || '?').slice(0, 1))}</div>`;
+    return `<div class="item">${thumb}<div><div class="t">${esc(x.title)}</div><div class="v">${esc(x.variant || '')}${x.variant ? ' · ' : ''}${money(x.unit_price)}</div>
+      <label class="pick"><input type="checkbox" ${on ? 'checked' : ''} onchange="clSel('${x.id}', this.checked)"> This item</label>
+      ${on && withQty && x.max > 1 ? `<div class="ctl" style="margin-top:8px"><span class="qty"><button onclick="clQty('${x.id}',-1)" ${q <= 1 ? 'disabled' : ''}>−</button><span>${q}</span><button onclick="clQty('${x.id}',1)" ${q >= x.max ? 'disabled' : ''}>+</button></span></div>` : ''}</div></div>`;
+  }).join('');
+}
+function clSel(id, on) { if (on) CL.sel[id] = 1; else delete CL.sel[id]; renderClaim(); }
+function clQty(id, n) { const x = CL.items.find((i) => i.id === id); CL.sel[id] = Math.max(1, Math.min(x.max, (CL.sel[id] || 1) + n)); renderClaim(); }
+function clLines() {
+  if (CL.type === 'pp' && (CL.sub === 'not_arrived' || CL.sub === 'delivered_missing')) return ((CL.shipment_items && CL.shipment_items[CL.sub]) || CL.items.map((x) => ({ id: x.id, quantity: x.max }))).map((q) => ({ it: CL.items.find((x) => x.id === q.id), quantity: q.quantity })).filter((l) => l.it);
+  return Object.entries(CL.sel).map(([id, q]) => ({ it: CL.items.find((x) => x.id === id), quantity: q })).filter((l) => l.it);
+}
+function photosHtml(required) {
+  return `<h2 class="label">Photos${required ? '' : ' (optional)'}</h2><p class="muted" style="margin:-4px 0 10px">${required ? 'Clear photos of the problem help us approve your claim quickly. Add up to 6.' : 'Add photos if you have them.'}</p>
+    <div class="photos">${PH.map((p, i) => `<div class="p"><img src="${p.preview}" alt="">${p.id ? `<button onclick="rmPhoto(${i})" aria-label="Remove">×</button>` : '<div class="up"><span class="spin"></span></div>'}</div>`).join('')}
+    ${PH.length < 6 ? `<label class="add"><input type="file" accept="image/*" multiple style="display:none" onchange="addPhotos(this.files);this.value=''">＋<br>Add photo</label>` : ''}</div>`;
+}
+function resHtml(value) {
+  const oos = clLines().some((l) => !l.it.in_stock);
+  return `<h2 class="label">How should we make it right?</h2>` + CL.resolutions.map((r) => {
+    const dis = r === 'replacement' && oos, [t, d] = RES[r];
+    return `<label class="choice ${CL.res === r ? 'sel' : ''} ${dis ? 'dis' : ''}"><input type="radio" name="clres" ${dis ? 'disabled' : ''} ${CL.res === r ? 'checked' : ''} onchange="CL.res='${r}';renderClaim()">
+      <div class="top"><strong>${esc(t)}</strong>${r !== 'replacement' && value ? `<strong>${money(value)}</strong>` : ''}</div><div class="muted">${esc(dis ? 'Out of stock right now' : tok(d))}</div></label>`;
+  }).join('');
+}
+function renderClaim() {
+  const b = $('claimBody'); let h = '', canSubmit = true;
+  $('claimSubmitWrap').classList.remove('hidden');
+  if (CL.type === 'not_delivered') {
+    h = `<h1>Package not delivered</h1><p class="lead">Order ${esc(S.order.name)}</p>${trkHtml(CL.shipments)}
+      <div class="note" style="margin-top:12px">${rich(CX('nopp_text', "Your order didn't include Package Protection, so we aren't able to replace or refund a package that's lost, delayed or stolen in transit. The carrier can help, and your tracking number is your proof of shipment."))}</div>
+      <div class="linkrow">${(CL.carrier_links || []).map((l) => `<a class="btn2" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join('')}</div>
+      <h2 class="label">Before you file</h2><ol class="changes"><li>Check your mailbox, porch, garage and around your home.</li><li>Ask neighbors and anyone else at your address.</li><li>Carriers sometimes mark a package delivered up to a day early. Give it 24 hours.</li><li>Ask your local post office (for USPS) to check for it.</li></ol>`;
+    b.innerHTML = h; $('claimSubmitWrap').classList.add('hidden'); return;
+  }
+  if (CL.type === 'defective') {
+    const lines = clLines(), value = lines.reduce((t, l) => t + l.it.unit_price * l.quantity, 0);
+    h = `<h1>Report a defective item</h1><p class="lead">Order ${esc(S.order.name)}. Tell us which item has a problem and show us with a photo. You can keep the item.</p>
+      ${CL.open_claim ? `<div class="note">You already have a claim open on this order (${esc(CL.open_claim)}). We’ll email you about it soon.</div>` : ''}
+      <div id="clItems">${claimItemsHtml(true)}</div>
+      <h2 class="label">What’s wrong?</h2><textarea id="clDesc" rows="3" placeholder="e.g. The zipper came apart on the first wear">${esc(CL.desc || '')}</textarea>
+      ${photosHtml(true)}${lines.length ? resHtml(value) : ''}`;
+    canSubmit = lines.length > 0 && PH.length > 0 && PH.every((p) => p.id) && !!CL.res && !CL.open_claim;
+  } else {
+    const sub = CL.sub, gate = sub ? CL.gates[sub] : null;
+    h = `<h1>Package Protection claim</h1><p class="lead">Order ${esc(S.order.name)} is covered by Package Protection.</p>
+      ${CL.open_claim ? `<div class="note">You already have a claim open on this order (${esc(CL.open_claim)}). We’ll email you about it soon.</div>` : ''}
+      ${trkHtml(CL.shipments)}<h2 class="label">What happened?</h2>` +
+      Object.keys(SUB).map((k) => `<label class="choice ${sub === k ? 'sel' : ''}"><input type="radio" name="clsub" ${sub === k ? 'checked' : ''} onchange="CL.sub='${k}';CL.sel={};renderClaim()"><strong>${esc(SUB[k])}</strong></label>`).join('');
+    if (gate && !gate.ok) { h += `<div class="gate">${esc(gate.why)}</div>`; canSubmit = false; }
+    else if (sub) {
+      if (sub === 'damaged' || sub === 'missing_items') h += `<h2 class="label">${sub === 'damaged' ? 'Which items were damaged?' : 'Which items are missing?'}</h2>${claimItemsHtml(true)}`;
+      h += `<h2 class="label">Anything else we should know?${sub === 'damaged' ? '' : ' (optional)'}</h2><textarea id="clDesc" rows="3" placeholder="${sub === 'damaged' ? 'e.g. The box was crushed and the item inside is torn' : 'e.g. I checked with neighbors and the front office'}">${esc(CL.desc || '')}</textarea>`;
+      if (sub === 'damaged' || sub === 'missing_items') h += photosHtml(sub === 'damaged');
+      const lines = clLines(), value = lines.reduce((t, l) => t + l.it.unit_price * l.quantity, 0);
+      if (lines.length) h += resHtml(value);
+      canSubmit = lines.length > 0 && !!CL.res && (sub !== 'damaged' || (PH.length > 0)) && PH.every((p) => p.id);
+    } else canSubmit = false;
+    if (CL.open_claim) canSubmit = false;
+  }
+  b.innerHTML = h;
+  const d = $('clDesc'); if (d) d.addEventListener('input', () => { CL.desc = d.value; });
+  $('bClaim').disabled = !canSubmit;
+}
+function rmPhoto(i) { PH.splice(i, 1); renderClaim(); }
+function shrink(file) {
+  return new Promise((ok, bad) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => { const max = 1600, r = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.82)); };
+    img.onerror = () => { URL.revokeObjectURL(url); bad(new Error('That file isn’t a photo we can read. Try a JPG or PNG.')); };
+    img.src = url;
+  });
+}
+async function addPhotos(files) {
+  showErr('eClaim', '');
+  for (const f of [...files].slice(0, 6 - PH.length)) {
+    let data; try { data = await shrink(f); } catch (e) { showErr('eClaim', e.message); continue; }
+    const p = { preview: data, id: null }; PH.push(p); renderClaim();
+    try { const r = await api('/api/returns/public/claim/photo', { token: S.token, data }); p.id = r.id; }
+    catch (e) { PH.splice(PH.indexOf(p), 1); showErr('eClaim', e.message); }
+    renderClaim();
+  }
+}
+async function submitClaim() {
+  showErr('eClaim', '');
+  const lines = clLines().map((l) => ({ id: l.it.id, quantity: l.quantity }));
+  const desc = ($('clDesc') && $('clDesc').value) || '';
+  if (CL.type === 'defective' && desc.trim().length < 10) { showErr('eClaim', 'Please tell us a little about what’s wrong with the item.'); return; }
+  if (CL.type === 'pp' && CL.sub === 'damaged' && desc.trim().length < 5) { showErr('eClaim', 'Please tell us what was damaged.'); return; }
+  busy($('bClaim'), true);
+  try {
+    const r = await api('/api/returns/public/claim/submit', { token: S.token, type: CL.type, subtype: CL.sub, lines, description: desc, photo_ids: PH.map((p) => p.id), resolution: CL.res });
+    S.done2 = r; CL = null; PH = [];
+    $('d2Title').textContent = CX('claim_done_title', 'Claim submitted');
+    $('d2Sub').textContent = CX('claim_done_sub', 'Claim {number}. Our team reviews claims within 1 business day and will email {email} with the result.', { number: r.number, email: r.email || 'you' });
+    $('d2Body').innerHTML = `<div class="note" style="text-align:left">You asked for: <strong>${esc(RES[r.resolution][0])}</strong>${r.resolution !== 'replacement' ? ' · ' + money(r.value) : ''}. We sent a confirmation to your email. Reply to it any time to add photos or details.</div>`;
+    go('sDone2');
+  } catch (e) { showErr('eClaim', e.message); }
+  busy($('bClaim'), false, 'Submit claim');
+}
+
 /* ---------- preview (Portal Studio) ---------- */
 function loadDemo() {
   const p = CTX.prefix || '';
@@ -582,6 +945,7 @@ function loadDemo() {
     ],
     reasons: (B.reasons || ['I received the wrong item', 'Item was damaged', "I didn't have a good experience", "Item didn't fit", 'I found something else I like more', "I didn't like the item"]).map((n, i) => ({ id: 'r' + (i + 1), name: n })),
     existing: [],
+    menu: { shipped: true, has_pp: true, edit: { ok: false, why: 'Orders can be changed for 15 minutes after purchase' }, defective: { ok: true }, pp: { ok: true }, not_delivered: { ok: true } },
     options: { label_fee: CTX.fee, store_credit_enabled: CTX.credit_enabled, store_credit_bonus_pct: CTX.bonus, fee_on_store_credit: CTX.fee_on_credit },
   };
   addr = { ...S.address };

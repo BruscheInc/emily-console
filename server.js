@@ -273,7 +273,8 @@ app.get("/api/counts", async (req, res) => {
     }
     let stuck = { never_scanned: 0, undelivered: 0 }; try { stuck = await require("./emily").stuckCounts(); } catch (_) {}
     let returns = null; try { const rc = await require("./returns").counts(); returns = { open: rc.open, attention: rc.attention }; } catch (_) {}
-    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns });
+    let claims = null; try { claims = (await require("./claims").counts()).open || 0; } catch (_) {}
+    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns, claims });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 /* ---- one conversation ---- */
@@ -716,6 +717,36 @@ app.post("/api/returns/public/:store/lookup", async (req, res) => {
   try { const b = req.body || {}; res.json(await R.lookup(req.params.store, String(b.order_number || ""), String(b.email || ""))); } catch (e) { portalErr(res, e); }
 });
 app.post("/api/returns/public/submit", async (req, res) => { try { res.json(await R.submitPortal(req.body || {})); } catch (e) { portalErr(res, e); } });
+// Portal options beyond returns: edit order, defective, Package Protection, not delivered (claims.js)
+const CL = require("./claims");
+const pub = (fn) => async (req, res) => { try { res.json(await fn(req.body || {}, req)); } catch (e) { portalErr(res, e); } };
+app.post("/api/returns/public/edit/options", pub((b) => CL.editOptions(b.token)));
+app.post("/api/returns/public/edit/search", pub((b) => CL.editSearch(b.token, b.q)));
+app.post("/api/returns/public/edit/submit", pub((b) => CL.editSubmit(b.token, b)));
+app.post("/api/returns/public/claim/start", pub((b) => CL.claimStart(b.token, String(b.type || ""))));
+app.post("/api/returns/public/claim/photo", pub((b) => CL.savePhoto(b.token, b)));
+app.post("/api/returns/public/claim/submit", pub((b) => CL.claimSubmit(b.token, b)));
+// Staff: claims queue
+app.get("/api/claims", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json({ claims: await CL.list({ status: req.query.status == null ? "open" : String(req.query.status), q: String(req.query.q || "") }), counts: await CL.counts(), admin: isAdmin(req) }); } catch (e) { retErr(res, e); }
+});
+app.get("/api/claims/photo/:id", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const p = await CL.getPhoto(req.params.id); if (!p) return res.status(404).send("Not found"); res.setHeader("Content-Type", p.content_type); res.setHeader("Cache-Control", "private, max-age=86400"); res.setHeader("X-Content-Type-Options", "nosniff"); res.send(p.data); }
+  catch (e) { res.status(500).send("error"); }
+});
+app.post("/api/claims/:id/:act", async (req, res) => {
+  if (!guard(req, res)) return;
+  const who = actorOf(req), b = req.body || {};
+  try {
+    const act = req.params.act, id = req.params.id;
+    const out = act === "approve" ? await CL.approve(id, b, who) : act === "deny" ? await CL.deny(id, b, who) : act === "info" ? await CL.askInfo(id, b, who)
+      : act === "rerun" ? await CL.rerun(id) : act === "close" ? await CL.close(id, who) : null;
+    if (!out) return res.status(404).json({ error: "unknown action" });
+    res.json({ ok: true, claim: out });
+  } catch (e) { retErr(res, e); }
+});
 // Staff
 app.get("/api/returns", async (req, res) => {
   if (!guard(req, res)) return;
@@ -786,6 +817,7 @@ const PORT = process.env.PORT || 8080;
   }
   try { await R.init(); } catch (e) { console.error("Returns failed to start:", e.message); }
   try { await PT.init(); } catch (e) { console.error("Portal theme failed to start:", e.message); }
+  try { await CL.init(); } catch (e) { console.error("Claims failed to start:", e.message); }
   // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
   try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
 })();

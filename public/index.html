@@ -85,6 +85,18 @@
   .rc-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.rc-bar .seg{overflow-x:auto;max-width:100%}
   .rc-in{padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink)}.rc-q{flex:1;min-width:200px;max-width:360px}
   @media (max-width:700px){.rc{padding:12px}.rc-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.rc-tv{font-size:20px}}
+  /* ---- claims queue ---- */
+  .cl-list{padding:14px 22px 30px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+  .cl-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+  .cl-card.pend{border-left:4px solid #eb6834}
+  .cl-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;font-size:13.5px}
+  .cl-ai{font-size:11.5px;font-weight:700;border-radius:20px;padding:3px 9px;background:var(--panel2);color:var(--muted);white-space:nowrap}
+  .cl-body{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:13px}
+  .cl-k{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 3px}.cl-k:first-child{margin-top:0}
+  .cl-ph{display:flex;flex-wrap:wrap;gap:8px}.cl-ph img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+  .cl-ul{margin:6px 0;padding-left:18px}.cl-flags{display:flex;flex-direction:column;gap:3px;margin:6px 0;color:#9a6212;font-weight:600}
+  .cl-act{display:flex;flex-direction:column;gap:8px;margin-top:6px}.cl-msg{width:100%;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;background:var(--panel2);color:var(--ink)}
+  @media (max-width:800px){.cl-body{grid-template-columns:1fr}.cl-list{padding:10px}}
   /* ---- return analytics ---- */
   .ra-head .ra-sel,.ra-cust input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)}
   .ra-cust{display:flex;gap:6px;align-items:center}.ra-note{font-size:12px}
@@ -248,6 +260,7 @@
   <button class="nav view" data-view="stuck" onclick="setView('stuck')"><span class="i">⏳</span>Never scanned<span class="n" id="v-stuck"></span></button>
   <button class="nav view" data-view="undelivered" onclick="setView('undelivered')"><span class="i">🚚</span>Not delivered 15+ days<span class="n" id="v-undelivered"></span></button>
   <button class="nav view" data-view="returns" onclick="setView('returns')"><span class="i">↩️</span>Returns<span class="n" id="v-returns"></span></button>
+  <button class="nav view" data-view="claims" onclick="setView('claims')"><span class="i">🧾</span>Claims<span class="n" id="v-claims"></span></button>
   <button class="nav view" data-view="returns_analytics" onclick="setView('returns_analytics')"><span class="i">📊</span>Return analytics</button>
   <a class="nav" href="https://returns.larkspurbaby.com" target="_blank" rel="noopener"><span class="i">🔗</span><span>LB return portal</span><span class="n">↗</span></a>
   <a class="nav" href="https://returns.larkspurbabyoutlet.com" target="_blank" rel="noopener"><span class="i">🔗</span><span>LBO return portal</span><span class="n">↗</span></a>
@@ -367,12 +380,12 @@ async function loadCounts(){try{
   const c=await api("/api/counts?view="+encodeURIComponent(VIEW));
   for(const k of ["pending","sent","closed","collabs","all"]){const el=$("n-"+k);if(el)el.textContent=c[k]!=null?c[k]:"";}
   for(const v of ["lb","lbo","lb_tickets","lbo_tickets","oos","all"]){const el=$("v-"+v);if(el)el.textContent=(c.views&&c.views[v])?c.views[v]:"";}
-  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||"";
+  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||"";
   // tab title carries the pending count, like a real inbox
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Helpdesk`:"Helpdesk";
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",returns_analytics:"Return analytics",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -466,13 +479,14 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';_listSig="";}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
-  const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="returns_analytics";
+  const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
   if(VIEW==="activity") return loadActivity(silent);
   if(VIEW==="returns") return loadReturns(silent);
+  if(VIEW==="claims") return loadClaims(silent);
   if(VIEW==="returns_analytics"){ if(!silent||!RA.d) loadAnalytics(silent); return; }
   if(isStuck) return loadStuck(silent);
   try{
@@ -889,6 +903,74 @@ async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify
 let RET_F={status:"open",store:"",q:""}, RET_OPEN=new Set(), _retSig="", RET_D=null;
 const RET_LABEL={label_created:"Label created",in_transit:"On its way back",delivered:"Delivered",refunded:"Refunded",needs_attention:"Needs attention",cancelled:"Cancelled"};
 const RET_CHIP={label_created:"",in_transit:"drafted",delivered:"drafted",refunded:"sent",needs_attention:"skip",cancelled:""};
+/* ---------------- Claims (defective / Package Protection) ---------------- */
+let CLF={status:"open",q:""}, CL_D=null, CL_OPEN=new Set();
+const CL_TYPE={defective:"Defective item",pp:"Package Protection",not_delivered:"Not delivered (no PP)",edit:"Order edit"};
+const CL_SUB={not_arrived:"Hasn't arrived",delivered_missing:"Marked delivered, not received",damaged:"Arrived damaged",missing_items:"Items missing"};
+const CL_RES={replacement:"Replacement",store_credit:"Store credit",refund:"Refund"};
+const CL_ST={processing:["Working…","drafted"],pending:["Needs decision","drafted"],info_requested:["Waiting on customer","drafted"],approved:["Approved","sent"],denied:["Denied","skip"],closed:["Closed",""],info:["Shown carrier steps",""],done:["Done","sent"]};
+const CL_AI={approve:["AI: approve","#157a42","#e3f4ea"],deny:["AI: deny","#b42318","#fde8e8"],needs_info:["AI: needs info","#9a6212","#fdf1dc"],needs_review:["AI: review","#475467","#eef2f8"]};
+async function loadClaims(silent){
+  const w=$("stuckwrap");
+  if(silent&&[...document.querySelectorAll("#stuckwrap .cl-msg, #stuckwrap input")].some(x=>x===document.activeElement||(x.classList.contains("cl-msg")&&x.value.trim()&&x.value!==x.defaultValue))) return;   // you're mid-decision
+  if(!silent) w.innerHTML='<div class="empty">Loading claims…</div>';
+  let d; try{ d=await api(`/api/claims?status=${encodeURIComponent(CLF.status)}&q=${encodeURIComponent(CLF.q)}`); if(d.error) throw new Error(d.error); }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load claims.</div>'; return; }
+  CL_D=d; renderClaims();
+}
+function clPhotoUrl(id){ return `/api/claims/photo/${encodeURIComponent(id)}?key=${encodeURIComponent(KEY)}`; }
+function renderClaims(){
+  const d=CL_D, w=$("stuckwrap"), c=d.counts||{};
+  $("showing").textContent=`${d.claims.length} claim${d.claims.length===1?"":"s"}`;
+  const seg=(k,l,n)=>`<button class="tab ${CLF.status===k?"on":""}" onclick="CLF.status='${k}';loadClaims()">${l}${n!=null?`<span class="n">${n||0}</span>`:""}</button>`;
+  let h=`<div class="rc"><div class="rc-bar">
+    <div class="seg">${seg("open","Needs decision",c.open)}${seg("approved","Approved",c.approved)}${seg("denied","Denied",c.denied)}${seg("info","No PP (carrier steps)",c.info)}${seg("edits","Order edits",c.edits)}${seg("","All")}</div>
+    <input type="text" class="rc-in rc-q" placeholder="Search claim #, order, email" value="${esc(CLF.q)}" onkeydown="if(event.key==='Enter'){CLF.q=this.value.trim();loadClaims()}">
+    <button class="btn sec xs" onclick="loadClaims()">↻ Refresh</button></div>
+    <div class="ra-mut" style="font-size:12.5px">Customers file these in the returns portal. The AI reads the photos, tracking and the customer's history and gives a first opinion; nothing is issued until you approve.</div></div>`;
+  if(!d.claims.length){ w.innerHTML=h+'<div class="empty">Nothing here.</div>'; return; }
+  h+='<div class="cl-list">';
+  for(const x of d.claims){
+    const st=CL_ST[x.status]||[x.status,""], ai=x.ai&&CL_AI[x.ai.verdict], open=CL_OPEN.has(x.id)||x.status==="pending";
+    const items=(x.items||[]).map(i=>`${i.quantity}× ${esc(i.title)}${i.variant?` <span class="ra-mut">${esc(i.variant)}</span>`:""}`).join("<br>");
+    if(x.type==="edit"){ h+=`<div class="cl-card"><div class="cl-top"><div><b>${esc(x.order_name)}</b> · Order edit by customer <span class="ra-mut">${fmt(x.created_at)}</span></div><span class="chip sent">Done</span></div><div style="font-size:13px;margin-top:6px">${(x.changes||[]).map(esc).join("<br>")}${x.owed?`<br><b>Pay link sent for ${money(x.owed)}</b>`:""}${x.refunded>0?`<br><b>Refunded ${money(x.refunded)}</b>`:""}</div></div>`; continue; }
+    h+=`<div class="cl-card ${x.status==="pending"?"pend":""}">
+      <div class="cl-top" onclick="CL_OPEN.has('${x.id}')?CL_OPEN.delete('${x.id}'):CL_OPEN.add('${x.id}');renderClaims()" style="cursor:pointer">
+        <div><b>${esc(x.number)}</b> · ${esc(CL_TYPE[x.type]||x.type)}${x.subtype?` — ${esc(CL_SUB[x.subtype]||x.subtype)}`:""}<div class="ra-mut">${esc(x.customer_name||"")} · ${esc(x.email||"")} · ${esc(x.order_name)} · ${fmt(x.created_at)}</div></div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${ai?`<span class="cl-ai" style="color:${ai[1]};background:${ai[2]}">${ai[0]}${x.ai.confidence?` · ${Math.round(x.ai.confidence*100)}%`:""}</span>`:x.status==="pending"?'<span class="cl-ai">AI reviewing…</span>':""}<span class="chip ${st[1]}">${st[0]}</span></div></div>`;
+    if(open){
+      h+=`<div class="cl-body"><div>
+          <div class="cl-k">Items</div><div>${items||"—"}</div>
+          <div class="cl-k">Wants</div><div><b>${CL_RES[x.resolution]||x.resolution}</b> · value ${money(x.value)}${x.has_pp?' · <span class="chip">Has PP</span>':""}</div>
+          ${x.description?`<div class="cl-k">Customer says</div><div>“${esc(x.description)}”</div>`:""}
+          ${(x.tracking||[]).length?`<div class="cl-k">Tracking</div><div>${x.tracking.map(t=>`${esc(t.carrier)} <a href="${esc(t.url||"#")}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(t.number)}</a> · ${esc(t.delivered?"Delivered "+(t.delivered_at?fmtShort(t.delivered_at):""):t.status||"")}${t.last_event&&!t.delivered?` · last scan ${fmtShort(t.last_update_at)}`:""}`).join("<br>")}${x.gate&&x.gate.note?`<div class="ra-mut">${esc(x.gate.note)}${x.gate.rule?" · meets the auto-approve rule":""}</div>`:""}</div>`:""}
+          ${(x.photos||[]).length?`<div class="cl-k">Photos</div><div class="cl-ph">${x.photos.map(p=>`<a href="${clPhotoUrl(p)}" target="_blank" rel="noopener"><img src="${clPhotoUrl(p)}" alt="" loading="lazy"></a>`).join("")}</div>`:""}
+        </div><div>
+          <div class="cl-k">AI review</div>${x.ai?`<div><b>${esc(x.ai.summary||"")}</b></div>${(x.ai.reasons||[]).length?`<ul class="cl-ul">${x.ai.reasons.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}${(x.ai.flags||[]).length?`<div class="cl-flags">${x.ai.flags.map(f=>`<span>⚠ ${esc(f)}</span>`).join("")}</div>`:""}${x.ai.photo_findings?`<div class="ra-mut">Photos: ${esc(x.ai.photo_findings)}</div>`:""}${x.ai.ask_customer?`<div class="ra-mut">Suggested question: ${esc(x.ai.ask_customer)}</div>`:""}
+            ${x.ai.history?`<div class="cl-k">Customer history</div><div class="ra-mut">${x.ai.history.lifetime_orders!=null?`${x.ai.history.lifetime_orders} orders · ${money(x.ai.history.lifetime_spent||0)} spent · `:""}${x.ai.history.previous_claims.length} earlier claim${x.ai.history.previous_claims.length===1?"":"s"} · ${x.ai.history.previous_returns} return${x.ai.history.previous_returns===1?"":"s"}${x.ai.history.store_credits_given?` · ${x.ai.history.store_credits_given} credit(s) given before`:""}${x.ai.history.replacements_given?` · ${x.ai.history.replacements_given} replacement(s) before`:""}</div>`:""}`:'<div class="ra-mut">Not reviewed yet.</div>'}
+          ${["pending","info_requested"].includes(x.status)?`<div class="cl-act">
+            <div class="cl-k">Decision</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="clr_${x.id}" class="rc-in">${["replacement","store_credit","refund"].map(r=>`<option value="${r}" ${r===x.resolution?"selected":""}>${CL_RES[r]}${r==="refund"&&x.has_pp?" (order has PP)":""}</option>`).join("")}</select>
+              <input id="cla_${x.id}" class="rc-in" style="width:100px" type="number" step="0.01" min="0" value="${Number(x.value||0).toFixed(2)}" title="Amount for store credit or refund">
+              <button class="btn xs" onclick="clAct('${x.id}','approve',this)">✓ Approve</button></div>
+            <textarea id="clm_${x.id}" class="cl-msg" rows="2" placeholder="Message to the customer (for Deny or Ask)">${esc(x.ai&&x.ai.verdict==="needs_info"&&x.ai.ask_customer?x.ai.ask_customer:"")}</textarea>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec xs danger" onclick="clAct('${x.id}','deny',this)">✕ Deny</button><button class="btn sec xs" onclick="clAct('${x.id}','info',this)">? Ask customer</button><button class="btn sec xs" onclick="clAct('${x.id}','rerun',this)">↻ Re-run AI</button><button class="btn sec xs" onclick="clAct('${x.id}','close',this)">Close, no action</button>${x.ticket_id?`<button class="btn sec xs" onclick="openTicket(${x.ticket_id})">Open ticket</button>`:""}</div></div>`
+          :`${x.result?`<div class="cl-k">Result</div><div>${esc(x.result.note||"")}</div>`:""}${x.deny_message?`<div class="cl-k">Told the customer</div><div>${esc(x.deny_message)}</div>`:""}${x.ticket_id?`<div style="margin-top:8px"><button class="btn sec xs" onclick="openTicket(${x.ticket_id})">Open ticket</button></div>`:""}`}
+          <details style="margin-top:10px"><summary class="ra-mut" style="cursor:pointer">History</summary>${(x.events||[]).slice().reverse().map(e=>`<div class="ra-mut">${fmt(e.at)} — ${esc(e.text)}</div>`).join("")}</details>
+        </div></div>`;
+    }
+    h+='</div>';
+  }
+  w.innerHTML=h+'</div>';
+}
+async function clAct(id,act,b){
+  const body={};
+  if(act==="approve"){ const r=$("clr_"+id).value, a=$("cla_"+id).value; body.resolution=r; body.amount=a; if(!confirm(r==="replacement"?"Create a no-charge replacement order and email the customer?":`Issue ${r==="refund"?"a refund":"store credit"} of $${Number(a).toFixed(2)} and email the customer?`)) return; }
+  if(act==="deny"||act==="info"){ body.message=$("clm_"+id).value.trim(); if(!body.message){ toast("Write the message to the customer first",true); return; } if(act==="deny"&&!confirm("Deny this claim and email the customer?")) return; }
+  if(act==="close"&&!confirm("Close this claim without doing anything or emailing the customer?")) return;
+  b.disabled=true; const t=b.textContent; b.textContent="Working…";
+  try{ const r=await api(`/api/claims/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error) throw new Error(r.error); toast(act==="approve"?"Approved":act==="deny"?"Denied":act==="info"?"Question sent":act==="rerun"?"AI re-ran":"Closed"); loadClaims(true); loadCounts(); }
+  catch(e){ toast(e.message,true); b.disabled=false; b.textContent=t; }
+}
 /* ---------------- Return analytics ---------------- */
 let RA={preset:"30d",from:"",to:"",store:"",metric:"returns",reason:"",product:"",d:null};
 const RA_C={lb:"#2a78d6",lbo:"#eb6834",original:"#2a78d6",store_credit:"#eb6834",portal:"#2a78d6",staff:"#eb6834"};
@@ -1111,6 +1193,10 @@ async function retSettings(){
     <label>Final-sale product tags (can't be returned)</label><input type="text" id="rs-tags" value="${esc(s.final_sale_tags)}">
     <label>ShipStation carrier &amp; service</label><select id="rs-svc"><option value="">Loading carriers…</option></select>
     <div class="grid2"><div><label>ShipStation store for LB returns</label><select id="rs-sslb"><option value="">Match by name (LB)</option></select></div><div><label>ShipStation store for LBO returns</label><select id="rs-sslbo"><option value="">Match by name (LBO)</option></select></div></div>
+    <div style="font-weight:700;margin-top:14px">Edit order &amp; claims</div>
+    <div class="grid2"><div><label>Customers can edit an order for (minutes)</label><input type="number" id="rs-editmin" value="${s.edit_window_minutes}"></div><div><label>Claims open for (days after shipping)</label><input type="number" id="rs-claimdays" value="${s.claim_window_days}"></div></div>
+    <div class="grid2"><div><label>PP "hasn't arrived" opens after no tracking movement for (days)</label><input type="number" id="rs-stall" value="${s.pp_stall_days}"></div><div><label>"Marked delivered" claims open after (hours)</label><input type="number" id="rs-waith" value="${s.delivered_wait_hours}"></div></div>
+    <label>Package Protection line items contain (comma separated)</label><input type="text" id="rs-ppmatch" value="${esc(s.pp_match||"")}">
     <div class="grid2"><div><label>Void unused labels after (days)</label><input type="number" id="rs-void" value="${s.void_unused_after_days}"></div><div><label>Default item weight (oz)</label><input type="number" id="rs-oz" value="${s.default_item_oz}"></div></div>
     <label>Returns ship to</label>
     <div class="grid2"><div><input type="text" id="ra-name" placeholder="Name" value="${esc(a.name)}"></div><div><input type="text" id="ra-co" placeholder="Company" value="${esc(a.company_name)}"></div></div>
@@ -1130,6 +1216,7 @@ async function retSettings(){
     if(carrier_id) { body.carrier_id=carrier_id; body.service_code=service_code; }
     body.ss_store={lb:$("rs-sslb").value,lbo:$("rs-sslbo").value};
     body.reasons=$("rs-reasons").value.split("\n").map(x=>x.trim()).filter(Boolean);
+    body.edit_window_minutes=Number($("rs-editmin").value); body.claim_window_days=Number($("rs-claimdays").value); body.pp_stall_days=Number($("rs-stall").value); body.delivered_wait_hours=Number($("rs-waith").value); body.pp_match=$("rs-ppmatch").value;
     if(body.portal_live&&!s.portal_live&&!confirm("Go live? Emily will start sending customers to the new portal instead of Loop."))return;
     try{ const r=await api("/api/returns/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error)throw new Error(r.error); toast("Saved"); closeModal(); loadReturns(); }catch(e){ toast(e.message,true); }
   };
