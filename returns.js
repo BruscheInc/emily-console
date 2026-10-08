@@ -28,8 +28,8 @@ function httpError(status, message) { const e = new Error(message); e.status = s
 
 /* ---------------- stores ---------------- */
 const STORE_DEFS = {
-  lb: { key: "lb", prefix: "LB", name: "Larkspur Baby", support: core.BRAND_MAILBOX.larkspur, shopUrl: "https://larkspurbaby.com", host: process.env.RETURNS_HOST_LB || "returns.larkspurbaby.com" },
-  lbo: { key: "lbo", prefix: "LBO", name: "Larkspur Baby Outlet", support: core.BRAND_MAILBOX.outlet, shopUrl: "https://larkspurbabyoutlet.com", host: process.env.RETURNS_HOST_LBO || "returns.larkspurbabyoutlet.com" },
+  lb: { key: "lb", prefix: "LB", name: "Larkspur Baby", support: core.BRAND_MAILBOX.larkspur, shopUrl: "https://larkspurbaby.com", faqUrl: "https://larkspurbaby.com/pages/faqs", host: process.env.RETURNS_HOST_LB || "returns.larkspurbaby.com" },
+  lbo: { key: "lbo", prefix: "LBO", name: "Larkspur Baby Outlet", support: core.BRAND_MAILBOX.outlet, shopUrl: "https://larkspurbabyoutlet.com", faqUrl: "https://larkspurbabyoutlet.com/pages/faqs", host: process.env.RETURNS_HOST_LBO || "returns.larkspurbabyoutlet.com" },
 };
 // Customer-facing portal address: the branded domain once "branded_links" is on (after DNS is live), otherwise the Railway path.
 const portalUrl = (key, s) => (s && s.branded_links && STORE_DEFS[key].host) ? `https://${STORE_DEFS[key].host}` : `${PUBLIC_URL()}/returns/${key}`;
@@ -71,7 +71,8 @@ const DEFAULTS = {
   test_labels: true,
   // Portal options beyond returns (edit order, defective, Package Protection, not delivered)
   edit_window_minutes: 15,         // customers can edit an unshipped order for this long after placing it
-  claim_window_days: 30,           // defective / PP claims allowed this many days after the order shipped
+  claim_window_days: 30,           // defective and arrived-damaged claims: this many days after delivery
+  marked_delivered_window_days: 5, // "marked delivered, but I didn't get it": this many days after the delivery scan
   pp_stall_days: 5,                // (older rule, no longer used for opening claims)
   transit_claim_days: 14,          // "hasn't arrived" claims open this many days after shipping if tracking still isn't delivered
   auto_approve: true,              // approve claims automatically when every safety check passes
@@ -94,7 +95,7 @@ async function settings() {
 async function saveSettings(patch, who) {
   const cur = await settings();
   const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
-  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
+  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "marked_delivered_window_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
   if (patch.reasons !== undefined) { next.reasons = (Array.isArray(patch.reasons) ? patch.reasons : String(patch.reasons).split("\n")).map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 20); if (!next.reasons.length) next.reasons = DEFAULTS.reasons; }
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('returns', $1, $2, now())
@@ -244,11 +245,13 @@ function isPP(item, s) {
   const hay = `${item.title || ""} ${item.sku || ""}`.toLowerCase();
   return words.some((w) => hay.includes(w));
 }
-function eligibility(item, s, key) {
+function eligibility(item, s, key, deliveredAt) {
   const finalTags = String(s.final_sale_tags || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (item.tags.some((t) => finalTags.includes(t))) return { ok: false, why: "Final sale" };
   const days = s.window_days[key] || 7;
-  const deadline = new Date(new Date(item.deliveredAt || item.fulfilledAt).getTime() + days * 86400e3);
+  const from = item.deliveredAt || deliveredAt;   // the window runs from DELIVERY, never from shipping
+  if (!from) return { ok: false, why: "Available once your order is delivered" };
+  const deadline = new Date(new Date(from).getTime() + days * 86400e3);
   if (Date.now() > deadline.getTime()) return { ok: false, why: `Return window closed ${deadline.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` };
   return { ok: true, deadline: deadline.toISOString() };
 }
@@ -441,7 +444,7 @@ function verify(t) {
 /* ---------------- 1. look up an order ---------------- */
 async function prepare(key, order, s) {
   const st = shopFor(key);
-  const [items, rs, claimed] = await Promise.all([returnableItems(st, order.id), reasons(st), require("./claims").claimedQty(order.name).catch(() => ({}))]);
+  const [items, rs, claimed, deliveredAt] = await Promise.all([returnableItems(st, order.id), reasons(st), require("./claims").claimedQty(order.name).catch(() => ({})), require("./claims").deliveredAt(key, order.id).catch(() => null)]);
   for (const i of items) if (claimed[i.lineItemId]) i.returnableQty = Math.max(0, i.returnableQty - claimed[i.lineItemId]);
   const existing = (await db(`SELECT * FROM hd_returns WHERE order_name=$1 ORDER BY created_at DESC`, [order.name])).rows.map(rowToRec);
   const a = labelAddress(order);
@@ -450,7 +453,7 @@ async function prepare(key, order, s) {
     order: { name: order.name, created_at: order.createdAt, currency: order.currencyCode, email: order.email, customer_name: (a && a.name) || "" },
     address: a ? { name: a.name, address1: a.address1, address2: a.address2, city: a.city, state: a.provinceCode, zip: a.zip, country: a.countryCodeV2, phone: a.phone || "" } : null,
     international: !!(a && a.countryCodeV2 && a.countryCodeV2 !== "US"),
-    items: items.map((i) => { const pp = isPP(i, s); const e = pp ? { ok: false, why: "Package Protection isn't returnable" } : eligibility(i, s, key); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
+    items: items.map((i) => { const pp = isPP(i, s); const e = pp ? { ok: false, why: "Package Protection isn't returnable" } : eligibility(i, s, key, deliveredAt); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
     reasons: rs,
     existing: existing.map(publicRec),
     options: { label_fee: s.label_fee, store_credit_enabled: s.store_credit_enabled, store_credit_bonus_pct: s.store_credit_bonus_pct, fee_on_store_credit: s.fee_on_store_credit, window_days: s.window_days[key] },
@@ -486,13 +489,14 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   const items = await returnableItems(st, order.id), rs = await reasons(st);
   const claimed = await require("./claims").claimedQty(order.name).catch(() => ({}));
   for (const i of items) if (claimed[i.lineItemId]) i.returnableQty = Math.max(0, i.returnableQty - claimed[i.lineItemId]);
+  const deliveredAt = await require("./claims").deliveredAt(key, order.id).catch(() => null);
   const chosen = [];
   for (const l of lines) {
     const it = items.find((i) => i.fulfillmentLineItemId === l.fulfillmentLineItemId), qty = Math.floor(Number(l.quantity));
     if (!it || !(qty >= 1)) continue;
     if (isPP(it, s)) throw httpError(400, "Package Protection isn't returnable.");
     if (qty > it.returnableQty) throw httpError(400, `Only ${it.returnableQty} of ${it.title} can be returned.`);
-    const e = eligibility(it, s, key);
+    const e = eligibility(it, s, key, deliveredAt);
     if (!e.ok && !staffOverride) throw httpError(400, `${it.title}: ${e.why}`);
     const reason = rs.find((r) => r.id === l.reasonId);
     if (!reason) throw httpError(400, `Pick a reason for ${it.title}.`);
@@ -815,6 +819,7 @@ async function init() {
   try { await migrate(); } catch (e) { console.error("returns migrate:", e.message); return; }
   const mins = Number(process.env.RETURNS_POLL_MIN || 60);
   setTimeout(() => poll().catch(() => {}), 30e3); setInterval(() => poll().catch(() => {}), mins * 60e3);
+  try { if (!(await core.syncGet("returns_windows_v4_29"))) { await saveSettings({ window_days: { lb: 7, lbo: 7 }, claim_window_days: 30, marked_delivered_window_days: 5 }, "system (v4.29 windows)"); await core.syncSet("returns_windows_v4_29", "done", {}); console.log("↩️  Returns: windows set — returns 7 days, defects 30 days, marked-delivered 5 days (from delivery)"); } } catch (e) { console.error("returns windows:", e.message); }
   const s = await settings();
   const p = setupProblems(s);
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);

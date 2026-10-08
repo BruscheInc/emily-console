@@ -625,7 +625,7 @@ const STUDIO_HTML = fs.readFileSync(path.join(__dirname, "public", "returns-stud
 const jsonForScript = (o) => JSON.stringify(o).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 async function portalCtx(key) {
   const d = R.STORE_DEFS[key], s = await R.settings();
-  return { name: d.name, support: d.support, prefix: d.prefix, shop_url: d.shopUrl, days: s.window_days[key], fee: Number(s.label_fee), bonus: Number(s.store_credit_bonus_pct), credit_enabled: !!s.store_credit_enabled, fee_on_credit: !!s.fee_on_store_credit };
+  return { name: d.name, support: d.support, prefix: d.prefix, shop_url: d.shopUrl, faq_url: d.faqUrl, days: s.window_days[key], fee: Number(s.label_fee), bonus: Number(s.store_credit_bonus_pct), credit_enabled: !!s.store_credit_enabled, fee_on_credit: !!s.fee_on_store_credit };
 }
 app.get("/returns/:store", async (req, res, next) => {
   const d = R.STORE_DEFS[req.params.store]; if (!d) return next();

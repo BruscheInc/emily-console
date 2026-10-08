@@ -116,14 +116,21 @@ async function orderState(c) {
   let st;
   if (c.o.cancelledAt) st = { state: "cancelled", ship: [] };
   else if (!c.fulfillments.length && !["FULFILLED", "PARTIALLY_FULFILLED"].includes(fs)) st = { state: "unshipped", ship: [] };
-  else { const ship = await trackingFor(c); st = { state: ship.some((x) => x.delivered) || c.fulfillments.some((f) => f.delivered_at) ? "delivered" : "in_transit", ship }; }
+  else {
+    const ship = await trackingFor(c);
+    const delivered = ship.some((x) => x.delivered) || c.fulfillments.some((f) => f.delivered_at);
+    const dts = [...ship.filter((x) => x.delivered).map((x) => x.delivered_at || x.last_update_at), ...c.fulfillments.map((f) => f.delivered_at)].filter(Boolean).map((x) => Date.parse(x)).filter((x) => !isNaN(x));
+    st = { state: delivered ? "delivered" : "in_transit", ship, delivered_at: dts.length ? new Date(Math.min(...dts)).toISOString() : null };
+  }
   c._state = st; return st;
 }
 function menuFor(c, st) {
   const s = c.s, state = st.state, now = Date.now();
   const editUntil = new Date(new Date(c.o.createdAt).getTime() + s.edit_window_minutes * 60000);
-  const claimUntil = c.shipped_at ? new Date(new Date(c.shipped_at).getTime() + s.claim_window_days * 86400e3) : null;
-  const closed = claimUntil && now > claimUntil.getTime() ? { show: true, ok: false, why: `Claims are open for ${s.claim_window_days} days after shipping` } : null;
+  // windows run from the DELIVERY date
+  const dAt = st.delivered_at ? new Date(st.delivered_at).getTime() : null;
+  const past = (days) => dAt && now > dAt + days * 86400e3;
+  const closed = past(s.claim_window_days) ? { show: true, ok: false, why: `Defect claims are open for ${s.claim_window_days} days after delivery` } : null;
   const notYet = { show: true, ok: false, why: "Available once your order is delivered" };
   const hidden = { show: false, ok: false };
   const m = { state, has_pp: c.has_pp, shipped: state === "in_transit" || state === "delivered" };
@@ -132,7 +139,7 @@ function menuFor(c, st) {
     : { show: true, ok: true, cancel_ok: true, changes_ok: now < editUntil.getTime(), until: editUntil.toISOString() };
   m.return = state === "unshipped" || state === "cancelled" ? hidden : state === "in_transit" ? notYet : { show: true, ok: true };
   m.defective = state === "unshipped" || state === "cancelled" ? hidden : state === "in_transit" ? notYet : closed || { show: true, ok: true };
-  m.pp = state === "unshipped" || state === "cancelled" ? hidden : !c.has_pp ? { show: true, ok: false, why: "Your order doesn't include Package Protection" } : closed || { show: true, ok: true };
+  m.pp = state === "unshipped" || state === "cancelled" ? hidden : !c.has_pp ? { show: true, ok: false, why: "Your order doesn't include Package Protection" } : { show: true, ok: true };
   m.other = { show: true, ok: true };
   const shippedNo = { ok: false, why: "Your order hasn't shipped yet" };
   m.subs = {
@@ -141,9 +148,12 @@ function menuFor(c, st) {
     damaged: state === "delivered" ? { ok: true } : state === "in_transit" ? { ok: false, why: "Your package hasn't been delivered yet" } : shippedNo,
     something_else: { ok: true },
   };
+  if (state === "delivered" && past(s.marked_delivered_window_days)) m.subs.delivered_missing = { ok: false, why: `This has to be reported within ${s.marked_delivered_window_days} days of delivery` };
+  if (state === "delivered" && past(s.claim_window_days)) m.subs.damaged = { ok: false, why: `Damage has to be reported within ${s.claim_window_days} days of delivery` };
   if (state === "cancelled") for (const k of ["not_arrived", "delivered_missing", "damaged"]) m.subs[k] = { ok: false, why: "This order was cancelled" };
   return m;
 }
+async function deliveredAt(key, orderId) { const c = await loadOrder(key, orderId); return (await orderState(c)).delivered_at; }
 async function menu(key, order) { const c = await loadOrder(key, order.id); return menuFor(c, await orderState(c)); }
 function session(token) { const p = R().verify(token); return p; }
 
@@ -441,8 +451,8 @@ function subOptions(c, m, g, tab) {
     const st = m.subs[k];
     out[k] = !st.ok ? st : g && g[k] && !g[k].ok ? g[k] : { ok: true, wait: !!(g && g[k] && g[k].wait), why: g && g[k] && g[k].wait ? g[k].why : undefined, rule: !!(g && g[k] && g[k].rule), note: (g && g[k] && g[k].note) || "" };
   }
-  if (tab === "other" && c.has_pp && m.state === "delivered")
-    for (const k of ["not_arrived", "delivered_missing", "damaged"]) out[k] = { ok: false, why: "Use the Package Protection claim tab for this" };
+  if (tab === "other" && c.has_pp)
+    for (const k of ["not_arrived", "delivered_missing", "damaged"]) out[k] = { ok: false, why: "Your order has Package Protection — please use the Package Protection claim tab" };
   if (!c.has_pp && out.delivered_missing.ok) out.delivered_missing = { ok: true, carrier_only: true };   // no PP → carrier claim, shown as guidance
   return out;
 }
@@ -746,5 +756,5 @@ async function close(id, who) { const c = await getClaim(id); if (!c) throw http
 
 async function init() { try { await migrate(); } catch (e) { console.error("claims migrate:", e.message); } }
 
-module.exports = { claimedQty, init, menu, editOptions, editSearch, editSubmit, editCancel, claimStart, savePhoto, getPhoto, claimSubmit, list, counts, getClaim, approve, deny, askInfo, rerun, close, review,
+module.exports = { deliveredAt, claimedQty, init, menu, editOptions, editSearch, editSubmit, editCancel, claimStart, savePhoto, getPhoto, claimSubmit, list, counts, getClaim, approve, deny, askInfo, rerun, close, review,
   _t: { gates, menuFor, loadOrder, TYPE_LABEL, SUBTYPE_LABEL, RES_LABEL } };

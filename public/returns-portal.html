@@ -495,7 +495,9 @@ function renderChrome() {
   const shop = T.brand.logo_link || CTX.shop_url;
   const shopLink = f.show_shop_link && shop ? `<div><a class="shoplink" href="${esc(shop)}">← ${esc(C('nav_shop'))}</a></div>` : '';
   $('foot').classList.toggle('hidden', !f.show && !shopLink);
-  $('foot').innerHTML = shopLink + (f.show ? `<div class="rich">${rich(f.text)}</div>${f.links.length ? `<div class="links">${f.links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')}</div>` : ''}` : '');
+  const faq = CTX.faq_url ? `<div style="margin-bottom:6px"><a href="${esc(CTX.faq_url)}" target="_blank" rel="noopener">FAQs</a></div>` : '';
+  $('foot').classList.toggle('hidden', !f.show && !shopLink && !faq);
+  $('foot').innerHTML = shopLink + faq + (f.show ? `<div class="rich">${rich(f.text)}</div>${f.links.length ? `<div class="links">${f.links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')}</div>` : ''}` : '');
   // steps
   $('steps').classList.toggle('hidden', !T.layout.steps || typeof STEP !== 'number');
   $('steps').innerHTML = [1, 2, 3, 4].map((n) => `<li class="${n < STEP ? 'past' : n === STEP ? 'on' : ''}"><span>${esc(C('step' + n))}</span></li>`).join('');

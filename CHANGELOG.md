@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.29.0
+- Windows now run from the DELIVERY date (verified tracking, not the ship date): returns 7 days, defect and arrived-damaged claims 30 days, "marked delivered but I didn't get it" 5 days. Set once on deploy; adjustable in Returns → Settings.
+- The policy note at the bottom now reads 7 days (it uses the return window).
+- FAQs link at the bottom of each portal (larkspurbaby.com / larkspurbabyoutlet.com /pages/faqs).
+- Orders with Package Protection: the Other tab only offers "Something else" and points shipping problems to the Package Protection claim tab, whatever the order status.
+
 ## 4.28.1
 - Delivered orders with Package Protection: the Other tab offers only "Something else" (shipping problems go through the Package Protection tab).
 - "My package hasn't arrived" stays selectable while a package is in transit — including "Accepted" or not yet scanned. Before 14 days it shows the date the claim opens; from day 14 it's approved automatically. Needs at least one carrier source (ShipStation or USPS) to confirm it isn't delivered.

@@ -1199,7 +1199,8 @@ async function retSettings(){
     <label>ShipStation carrier &amp; service</label><select id="rs-svc"><option value="">Loading carriers…</option></select>
     <div class="grid2"><div><label>ShipStation store for LB returns</label><select id="rs-sslb"><option value="">Match by name (LB)</option></select></div><div><label>ShipStation store for LBO returns</label><select id="rs-sslbo"><option value="">Match by name (LBO)</option></select></div></div>
     <div style="font-weight:700;margin-top:14px">Edit order &amp; claims</div>
-    <div class="grid2"><div><label>Customers can edit an order for (minutes)</label><input type="number" id="rs-editmin" value="${s.edit_window_minutes}"></div><div><label>Claims open for (days after shipping)</label><input type="number" id="rs-claimdays" value="${s.claim_window_days}"></div></div>
+    <div class="grid2"><div><label>Customers can edit an order for (minutes)</label><input type="number" id="rs-editmin" value="${s.edit_window_minutes}"></div><div><label>Defect / damage claims open for (days after delivery)</label><input type="number" id="rs-claimdays" value="${s.claim_window_days}"></div></div>
+    <label>"Marked delivered, didn't get it" claims open for (days after delivery)</label><input type="number" id="rs-mdwin" value="${s.marked_delivered_window_days}">
     <div class="grid2"><div><label>"Hasn't arrived" claims open after shipping (days)</label><input type="number" id="rs-transit" value="${s.transit_claim_days}"></div><div><label>"Marked delivered" claims open after (hours)</label><input type="number" id="rs-waith" value="${s.delivered_wait_hours}"></div></div>
     <label>Package Protection line items contain (comma separated)</label><input type="text" id="rs-ppmatch" value="${esc(s.pp_match||"")}">
     <label class="chk"><input type="checkbox" id="rs-autoap" ${s.auto_approve?"checked":""}> Auto-approve claims when every check passes (otherwise they wait for you in Claims)</label>
@@ -1224,7 +1225,7 @@ async function retSettings(){
     if(carrier_id) { body.carrier_id=carrier_id; body.service_code=service_code; }
     body.ss_store={lb:$("rs-sslb").value,lbo:$("rs-sslbo").value};
     body.reasons=$("rs-reasons").value.split("\n").map(x=>x.trim()).filter(Boolean);
-    body.edit_window_minutes=Number($("rs-editmin").value); body.claim_window_days=Number($("rs-claimdays").value); body.transit_claim_days=Number($("rs-transit").value); body.delivered_wait_hours=Number($("rs-waith").value); body.pp_match=$("rs-ppmatch").value; body.auto_approve=$("rs-autoap").checked; body.auto_approve_max=Number($("rs-apmax").value); body.auto_approve_confidence=Number($("rs-apconf").value)/100; body.auto_approve_max_prior=Number($("rs-apprior").value);
+    body.edit_window_minutes=Number($("rs-editmin").value); body.claim_window_days=Number($("rs-claimdays").value); body.marked_delivered_window_days=Number($("rs-mdwin").value); body.transit_claim_days=Number($("rs-transit").value); body.delivered_wait_hours=Number($("rs-waith").value); body.pp_match=$("rs-ppmatch").value; body.auto_approve=$("rs-autoap").checked; body.auto_approve_max=Number($("rs-apmax").value); body.auto_approve_confidence=Number($("rs-apconf").value)/100; body.auto_approve_max_prior=Number($("rs-apprior").value);
     if(body.portal_live&&!s.portal_live&&!confirm("Go live? Emily will start sending customers to the new portal instead of Loop."))return;
     try{ const r=await api("/api/returns/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error)throw new Error(r.error); toast("Saved"); closeModal(); loadReturns(); }catch(e){ toast(e.message,true); }
   };
