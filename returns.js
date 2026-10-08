@@ -200,7 +200,7 @@ async function returnableItems(st, orderId) {
 const reasonCache = new Map();
 async function reasons(st) {
   const c = reasonCache.get(st.domain);
-  if (c && c.at > Date.now() - 6 * 3600e3) return c.list;
+  if (c && c.at > Date.now() - 6 * 3600e3) return portalReasons(c.list, await settings());   // cache holds Shopify's library; customers only ever see our list
   const d = await gql(st, REASONS);
   const lib = d.returnReasonDefinitions.nodes.filter((r) => !r.deleted).map((r) => ({ sid: r.id, name: r.name, handle: r.handle || "" }));
   reasonCache.set(st.domain, { at: Date.now(), list: lib });

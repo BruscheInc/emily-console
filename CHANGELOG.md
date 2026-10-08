@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.26.1
+- Returns portal fix: after the first lookup, the reason list showed Shopify's full library (with no ids), so Continue never enabled. Customers now always get the six reasons.
+
 ## 4.26.0
 - Returns portal: after looking up an order, customers pick what they need — Edit my order, Start a return, Defective item, Package Protection claim, or Package not delivered. Options that don't apply are shown greyed out with the reason.
 - Package Protection is never returnable (hidden from the return list and refused by the server).
