@@ -882,6 +882,8 @@ function renderClaim() {
     if (sub === 'something_else') {
       h += `<h2 class="label">Tell us what’s going on</h2><textarea id="clDesc" rows="4" placeholder="Write your message here">${esc(CL.desc || '')}</textarea>${photosHtml(false)}`;
       canSubmit = (CL.desc || '').trim().length >= 10 && PH.every((p) => p.id);
+    } else if (sub && o && o.ok && o.wait) {
+      h += `<div class="gate" style="margin-top:12px">${esc(o.why)}</div>`;
     } else if (sub && o && o.ok && o.carrier_only) {
       h += `<div class="note" style="margin-top:12px">${rich(CX('nopp_text', "Your order didn't include Package Protection, so we aren't able to replace or refund a package that the carrier marked delivered. Please file a claim with the carrier. Your tracking number is your proof of shipment."))}</div>
         <div class="linkrow">${(CL.carrier_links || []).map((l) => `<a class="btn2" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join('')}</div>

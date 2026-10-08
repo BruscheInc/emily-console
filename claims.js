@@ -347,7 +347,7 @@ async function uspsTrack(number) {
 function fromShopify(f) {
   const ev = f.events[0] || null;
   const delivered = !!f.delivered_at || /^DELIVERED$/i.test(f.status || "") || (ev && /^DELIVERED$/i.test(ev.status));
-  const known = delivered || !!ev || /IN_TRANSIT|OUT_FOR_DELIVERY|ATTEMPTED|READY_FOR_PICKUP|FAILURE|PICKED_UP/i.test(f.status || "");
+  const known = delivered || !!ev || !!f.status;
   return { ok: known, delivered, delivered_at: f.delivered_at || (delivered && ev ? ev.happenedAt : null), last_at: ev ? ev.happenedAt : null,
     desc: ev ? String(ev.status).replace(/_/g, " ").toLowerCase() : String(f.status || "").replace(/_/g, " ").toLowerCase(), where: ev ? [ev.city, ev.province].filter(Boolean).join(", ") : "",
     why: known ? null : "Shopify isn't following this tracking number" };
@@ -361,7 +361,7 @@ async function trackingFor(c) {
     const carrier = (guess && guess.name) || t.company || "the carrier", isUsps = /usps/i.test(carrier);
     const sources = { shopify: fromShopify(f) };
     try { const l = guess ? await K().ssV2Track(guess.v2, t.number) : null; if (!l) throw new Error("carrier not recognized");
-      sources.shipstation = { ok: !l.not_in_system, delivered: !!l.delivered, delivered_at: l.delivered_at || null, last_at: l.last_event ? l.last_event.at : null, desc: l.description || "", where: l.last_event ? l.last_event.where : "", why: l.not_in_system ? "carrier has no scans yet" : null }; }
+      sources.shipstation = { ok: true, accepted_only: !!l.accepted_only, not_scanned: !!l.not_in_system, delivered: !!l.delivered, delivered_at: l.delivered_at || null, last_at: l.last_event ? l.last_event.at : null, desc: l.description || "", where: l.last_event ? l.last_event.where : "", why: null }; }
     catch (e) { sources.shipstation = { ok: false, why: e.message }; console.error(`claims ShipStation tracking ${t.number}:`, e.message); }
     if (isUsps) {
       if (uspsConfigured()) { try { sources.usps = await uspsTrack(t.number); } catch (e) { sources.usps = { ok: false, why: e.message }; console.error(`claims USPS tracking ${t.number}:`, e.message); } }
@@ -373,6 +373,7 @@ async function trackingFor(c) {
     const answered = Object.entries(sources).filter(([, v]) => v.ok);
     const verified = req.every((k) => sources[k] && sources[k].ok) && answered.length >= 2;
     const delivered = answered.some(([, v]) => v.delivered);
+    const carrierAnswered = answered.some(([k]) => k !== "shopify");
     const carrierDelivered = answered.some(([k, v]) => k !== "shopify" && v.delivered);
     const ts = (k) => answered.map(([, v]) => v[k]).filter(Boolean).map((x) => Date.parse(x)).filter((x) => !isNaN(x));
     const lastMs = Math.max(new Date(f.at).getTime(), ...ts("last_at"), ...ts("delivered_at"));
@@ -381,7 +382,7 @@ async function trackingFor(c) {
     out.push({ fi, number: t.number, url: t.url, carrier, shipped_at: f.at, delivered, carrier_delivered: carrierDelivered,
       delivered_at: dMs.length ? new Date(Math.max(...dMs)).toISOString() : null, status: delivered ? "Delivered" : best.desc || "In transit",
       last_event: { at: new Date(lastMs).toISOString(), desc: best.desc, where: best.where }, last_update_at: new Date(lastMs).toISOString(),
-      verified, required: req, sources, agree: answered.every(([, v]) => v.delivered === delivered) });
+      verified, carrier_answered: carrierAnswered, required: req, sources, agree: answered.every(([, v]) => v.delivered === delivered) });
   }
   return out;
 }
@@ -397,13 +398,15 @@ function gates(c, ship) {
   if (tracked.some((x) => x.delivered)) {
     const d = tracked.find((x) => x.delivered);
     g.not_arrived = { ok: false, why: `Tracking shows your package was delivered${d.delivered_at ? ` on ${fmtDate(d.delivered_at)}` : ""}. If you can't find it, choose "My package was marked delivered, but I didn't get it".` };
-  } else if (tracked.some((x) => !x.verified)) g.not_arrived = { ok: false, why: UNVERIFIED };
+  } else if (tracked.some((x) => !x.carrier_answered)) g.not_arrived = { ok: false, why: UNVERIFIED };
   else {
+    // Days since shipping decide it — "Accepted" or no new scans still counts as not delivered.
     const shipped = Math.min(...tracked.map((x) => new Date(x.shipped_at).getTime()));
     const days = (now - shipped) / 86400e3, opens = new Date(shipped + s.transit_claim_days * 86400e3), x = tracked[0];
+    const answered = Object.entries(x.sources || {}).filter(([, v]) => v.ok).map(([k]) => k);
     g.not_arrived = days < s.transit_claim_days
-      ? { ok: false, why: `Your package is on its way. Last update ${fmtWhen(x.last_update_at)}${x.last_event && x.last_event.desc ? `: ${x.last_event.desc}` : ""}. If it still hasn't arrived by ${fmtDate(opens)}, come back and file your claim here.`, opens: opens.toISOString() }
-      : { ok: true, rule: true, note: `Shipped ${Math.floor(days)} days ago and not delivered (verified with ${srcList(x.required)}).` };
+      ? { ok: true, wait: true, why: `Your package is on its way${x.last_event && x.last_event.desc ? ` (latest status: ${x.last_event.desc}, ${fmtWhen(x.last_update_at)})` : ""}. If it still hasn't arrived by ${fmtDate(opens)}, come back here and file your claim — it will be approved automatically.`, opens: opens.toISOString() }
+      : { ok: true, rule: true, note: `Shipped ${Math.floor(days)} days ago and not delivered (checked with ${srcList(answered)}).` };
   }
   // "Marked delivered": a CARRIER source (ShipStation or USPS) must confirm delivery, all required sources answered, and the wait has passed.
   const dl = tracked.filter((x) => x.delivered);
@@ -432,12 +435,14 @@ function shipmentItems(c, ship, sub, avail) {
 }
 function resolutionsFor(type, c) { return type === "defective" ? ["replacement", "store_credit", ...(c.has_pp ? [] : ["refund"])] : type === "other" ? [] : ["replacement", "store_credit"]; }
 // What each "what happened" option looks like for this order: order state + tracking rules + Package Protection.
-function subOptions(c, m, g) {
+function subOptions(c, m, g, tab) {
   const out = {};
   for (const k of ["not_arrived", "delivered_missing", "damaged", "something_else"]) {
     const st = m.subs[k];
-    out[k] = !st.ok ? st : g && g[k] && !g[k].ok ? g[k] : { ok: true, rule: !!(g && g[k] && g[k].rule), note: (g && g[k] && g[k].note) || "" };
+    out[k] = !st.ok ? st : g && g[k] && !g[k].ok ? g[k] : { ok: true, wait: !!(g && g[k] && g[k].wait), why: g && g[k] && g[k].wait ? g[k].why : undefined, rule: !!(g && g[k] && g[k].rule), note: (g && g[k] && g[k].note) || "" };
   }
+  if (tab === "other" && c.has_pp && m.state === "delivered")
+    for (const k of ["not_arrived", "delivered_missing", "damaged"]) out[k] = { ok: false, why: "Use the Package Protection claim tab for this" };
   if (!c.has_pp && out.delivered_missing.ok) out.delivered_missing = { ok: true, carrier_only: true };   // no PP → carrier claim, shown as guidance
   return out;
 }
@@ -453,8 +458,8 @@ async function claimStart(token, type) {
   const ship = st.ship, g = st.state === "unshipped" ? null : gates(c, ship);
   const avail = claimItems(c, "pp", await claimedQty(c.o.name));
   const carrier = (ship.find((x) => x.number) || {}).carrier || "USPS";
-  return { type, state: st.state, has_pp: c.has_pp, shipments: ship, subs: subOptions(c, m, g), items: avail,
-    shipment_items: g ? { not_arrived: shipmentItems(c, ship, "not_arrived", avail).map((i) => ({ id: i.id, quantity: i.quantity })), delivered_missing: shipmentItems(c, ship, "delivered_missing", avail).map((i) => ({ id: i.id, quantity: i.quantity })) } : {},
+  return { type, state: st.state, has_pp: c.has_pp, shipments: ship, subs: subOptions(c, m, g, type), items: avail,
+    subs_tab: type, shipment_items: g ? { not_arrived: shipmentItems(c, ship, "not_arrived", avail).map((i) => ({ id: i.id, quantity: i.quantity })), delivered_missing: shipmentItems(c, ship, "delivered_missing", avail).map((i) => ({ id: i.id, quantity: i.quantity })) } : {},
     resolutions: resolutionsFor("pp", c), open_claim: open ? open.number : null, currency: c.currency,
     carrier_links: CARRIER_CLAIMS[/ups/i.test(carrier) ? "UPS" : /fedex/i.test(carrier) ? "FedEx" : "USPS"], carrier, support: c.def.support };
 }
@@ -493,8 +498,8 @@ async function claimSubmit(token, body) {
   if (type === "pp") {
     subtype = String(body.subtype || "");
     if (!["not_arrived", "delivered_missing", "damaged"].includes(subtype)) throw httpError(400, "Tell us what happened to the package.");
-    ship = st.ship; const opt = subOptions(c, m, gates(c, ship))[subtype];
-    if (!opt.ok) throw httpError(400, opt.why);
+    ship = st.ship; const opt = subOptions(c, m, gates(c, ship), body.type === "other" ? "other" : "pp")[subtype];
+    if (!opt.ok || opt.wait) throw httpError(400, opt.why);
     if (opt.carrier_only) throw httpError(400, "Your order didn't include Package Protection, so please file a claim with the carrier for a package marked delivered.");
     gate = opt;
   }
@@ -596,20 +601,24 @@ async function autoDecide(c) {
 async function historyFor(c) {
   const email = String(c.email || "").toLowerCase();
   const claims = (await db(`SELECT number, type, status, created_at, data->>'value' AS value FROM hd_claims WHERE lower(email)=$1 AND id<>$2 AND type IN ('defective','pp') ORDER BY created_at DESC LIMIT 20`, [email, c.id])).rows;
-  const returns = (await db(`SELECT count(*)::int n FROM hd_returns WHERE lower(email)=$1 AND status<>'cancelled'`, [email]).catch(() => ({ rows: [{ n: 0 }] }))).rows[0].n;
+  const retRows = (await db(`SELECT rma, order_name, status, created_at, data->'items' AS items FROM hd_returns WHERE lower(email)=$1 AND status<>'cancelled' ORDER BY created_at DESC LIMIT 20`, [email]).catch(() => ({ rows: [] }))).rows;
+  const returns = retRows.length;
+  const claimDetail = (await db(`SELECT number, type, status, created_at, data->>'subtype' AS subtype, data->>'description' AS description, data->'items' AS items, data->'ai'->>'verdict' AS ai FROM hd_claims WHERE lower(email)=$1 AND id<>$2 AND type IN ('defective','pp') ORDER BY created_at DESC LIMIT 10`, [email, c.id])).rows;
   let hist = null; try { hist = await K().customerHistory(email); } catch (_) {}
   const reused = c.photos && c.photos.length ? (await db(`SELECT DISTINCT p2.claim_id FROM hd_claim_photos p1 JOIN hd_claim_photos p2 ON p1.sha=p2.sha AND p2.claim_id IS NOT NULL AND p2.claim_id<>p1.claim_id WHERE p1.claim_id=$1`, [c.id])).rows.map((r) => r.claim_id) : [];
   return {
     previous_claims: claims.map((x) => ({ number: x.number, type: x.type, status: x.status, when: x.created_at, value: Number(x.value) || 0 })),
     previous_returns: returns, photos_reused_from_other_claims: reused.length,
+    past_returns: retRows.map((r) => ({ rma: r.rma, order: r.order_name, status: r.status, when: r.created_at, items: (r.items || []).map((i) => `${i.quantity}× ${i.title}${i.variant ? ` (${i.variant})` : ""} — reason: ${i.reason || "?"}${i.note ? ` — "${String(i.note).slice(0, 120)}"` : ""}`) })),
+    past_claims_detail: claimDetail.map((x) => ({ number: x.number, type: x.type, what: x.subtype || "defective", status: x.status, when: x.created_at, ai: x.ai, said: String(x.description || "").slice(0, 200), items: (x.items || []).map((i) => `${i.quantity}× ${i.title}${i.variant ? ` (${i.variant})` : ""}`) })),
     tickets: hist && hist.tickets ? hist.tickets.length : null, store_credits_given: hist ? hist.goodwill_credits_given : null, replacements_given: hist ? hist.replacements_given : null,
     lifetime_orders: hist && hist.shopify ? hist.shopify.lifetime_orders : null, lifetime_spent: hist && hist.shopify ? hist.shopify.lifetime_spent : null,
   };
 }
 const REVIEW_SYS = `You review customer claims for a baby clothing store (Larkspur Baby). Your verdict can approve a claim automatically, so be careful and honest; when unsure say needs_info.
 Claim types:
-- defective: the customer says an item has a manufacturing defect (holes, broken snaps/zippers, seams coming apart, misprints, stains from the factory). They keep the item. First decide whether the photos are GENUINE: real photos taken by the customer of the item they ordered (matching product, color/print), not stock or catalog images, not screenshots, not edited, not obviously from a different product. Then decide whether they show a real defect matching the description, rather than normal wear, washing damage, or misuse long after delivery. Approve only when both are clearly true.
-- pp / damaged ("My package arrived damaged"): photos must show transit damage to the package and/or the items. Same genuineness check.
+- defective: the customer says an item has a manufacturing defect (holes, broken snaps/zippers, seams coming apart, misprints, stains from the factory). They keep the item. First decide whether the photos are GENUINE: real photos taken by the customer of the item they ordered (matching product, color/print), not stock or catalog images, not screenshots, not edited, not obviously from a different product. Then decide whether they show a real defect matching the description, rather than normal wear, washing damage, or misuse long after delivery. Approve only when both are clearly true AND the customer's history is consistent: look at past_returns (how often they return, and with what reasons) and past_claims_detail (earlier defect/damage claims — same item or same story again is a red flag). A first or rare claim from a normal customer whose photos match the reason they gave should be approved.
+- pp / damaged ("My package arrived damaged"): photos must show transit damage to the package and/or the items, and must match what the customer says was damaged. Same genuineness check. Same history check (past_returns, past_claims_detail): approve when the photos match the reason and the history is normal.
 - pp / delivered_missing ("marked delivered but not received"): there is no photo proof, so decide from the facts: tracking (delivered scan, time since), the customer's history (earlier claims and how they ended, returns, store credits and replacements already given, number of orders and amount spent, how long they've been a customer), the claim value, and the customer's own words. A first claim from a customer with a normal order history is usually fine to approve. Repeat claims, many claims relative to orders, or vague/contradictory statements → needs_info or deny.
 - pp / not_arrived: tracking shows no delivery long after shipping. Approve unless the history shows a pattern of claims.
 "has_package_protection" tells you whether the order had Package Protection; it does not change how you judge truthfulness.

@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.28.1
+- Delivered orders with Package Protection: the Other tab offers only "Something else" (shipping problems go through the Package Protection tab).
+- "My package hasn't arrived" stays selectable while a package is in transit — including "Accepted" or not yet scanned. Before 14 days it shows the date the claim opens; from day 14 it's approved automatically. Needs at least one carrier source (ShipStation or USPS) to confirm it isn't delivered.
+- AI review for defective and damaged claims now also weighs the customer's past returns (items and reasons) and earlier claims, and checks the photos match the reason given.
+
 ## 4.28.0
 - Portal tabs follow the order: not shipped → Edit or cancel + Other (message only); shipped, in transit → Start a return and Defective greyed; delivered → everything.
 - Edit or cancel: stays available until the order ships. Cancel (full refund) any time before shipping; size changes (in-stock sizes only) and address changes within 15 minutes. Adding items and quantity changes removed.
