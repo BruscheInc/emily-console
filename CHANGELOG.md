@@ -3,6 +3,17 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.28.0
+- Portal tabs follow the order: not shipped → Edit or cancel + Other (message only); shipped, in transit → Start a return and Defective greyed; delivered → everything.
+- Edit or cancel: stays available until the order ships. Cancel (full refund) any time before shipping; size changes (in-stock sizes only) and address changes within 15 minutes. Adding items and quantity changes removed.
+- Package Protection claim: "My package hasn't arrived", "My package was marked delivered, but I didn't get it", "My package arrived damaged" (missing items removed). Damaged and marked-delivered greyed until delivered.
+- "Package not delivered" tab is now "Other": the same three options plus "Something else" (message + optional photos → Helpdesk ticket). Without Package Protection: hasn't arrived and damaged work like PP; marked delivered → carrier claim steps.
+- Hasn't arrived is days-based: opens 14 days after shipping if verified tracking still isn't delivered (setting).
+- Auto-approval: hasn't arrived (14-day rule), marked delivered (AI on history), damaged and defective (AI checks photos are genuine) approve automatically when every check passes — value limit, AI confidence, no more than N approved claims per customer in 12 months, no reused/stock photos. Otherwise the claim waits in Claims with the reason. All limits in Returns → Settings.
+- Return reasons: Too small, Too large, Didn't like the fit, Color or print wasn't as expected, Fabric or material wasn't as expected, Item arrived damaged or defective, Received the wrong item, Changed my mind, Arrived too late, Other (requires a note).
+- Package Protection now shows greyed out in the return list ("Package Protection isn't returnable").
+- Emily's policy: 14+ days not delivered → replacement or store credit for everyone; marked delivered without PP → carrier claim.
+
 ## 4.27.0
 - Claims: tracking is now verified across independent sources before a lost or not-delivered claim can open — Shopify's fulfillment tracking (when Shopify follows the number), ShipStation's carrier tracking, and USPS directly for USPS packages (needs USPS_CLIENT_ID / USPS_CLIENT_SECRET from developers.usps.com). At least two sources must answer. Any source saying delivered blocks "hasn't arrived"; "marked delivered" needs a carrier source (ShipStation or USPS) to confirm delivery. If sources can't be reached the claim stays closed and the customer is asked to email. Staff see each source's answer on the claim.
 

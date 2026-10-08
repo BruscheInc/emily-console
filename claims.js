@@ -27,8 +27,8 @@ const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short",
 const fmtWhen = (d) => new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" });
 const usd = (n) => "$" + Number(n || 0).toFixed(2);
 
-const TYPE_LABEL = { defective: "defective item claim", pp: "Package Protection claim", not_delivered: "not-delivered report", edit: "order edit" };
-const SUBTYPE_LABEL = { not_arrived: "Package hasn't arrived", delivered_missing: "Marked delivered, but not received", damaged: "Package arrived damaged", missing_items: "Items missing from the package" };
+const TYPE_LABEL = { defective: "defective item claim", pp: "shipping claim", other: "message", not_delivered: "not-delivered report", edit: "order edit", cancel: "order cancellation" };
+const SUBTYPE_LABEL = { not_arrived: "My package hasn't arrived", delivered_missing: "My package was marked delivered, but I didn't get it", damaged: "My package arrived damaged", something_else: "Something else" };
 const RES_LABEL = { replacement: "Replacement (no charge)", store_credit: "Store credit", refund: "Refund to original payment" };
 const CARRIER_CLAIMS = {
   USPS: [{ label: "Search for missing mail", url: "https://www.usps.com/help/missing-mail.htm" }, { label: "File a USPS claim", url: "https://www.usps.com/help/claims.htm" }],
@@ -109,33 +109,49 @@ async function returnedQty(orderName) {
 }
 
 /* ---------------- what the customer can do with this order ---------------- */
-function menuFor(c) {
-  const s = c.s, fs = String(c.o.displayFulfillmentStatus || "").toUpperCase();
-  const shipped = c.fulfillments.length > 0 || ["FULFILLED", "PARTIALLY_FULFILLED", "IN_PROGRESS"].includes(fs);
-  const cancelled = !!c.o.cancelledAt;
+// unshipped → in_transit → delivered (any shipment delivered counts), from verified tracking.
+async function orderState(c) {
+  if (c._state) return c._state;
+  const fs = String(c.o.displayFulfillmentStatus || "").toUpperCase();
+  let st;
+  if (c.o.cancelledAt) st = { state: "cancelled", ship: [] };
+  else if (!c.fulfillments.length && !["FULFILLED", "PARTIALLY_FULFILLED"].includes(fs)) st = { state: "unshipped", ship: [] };
+  else { const ship = await trackingFor(c); st = { state: ship.some((x) => x.delivered) || c.fulfillments.some((f) => f.delivered_at) ? "delivered" : "in_transit", ship }; }
+  c._state = st; return st;
+}
+function menuFor(c, st) {
+  const s = c.s, state = st.state, now = Date.now();
   const editUntil = new Date(new Date(c.o.createdAt).getTime() + s.edit_window_minutes * 60000);
   const claimUntil = c.shipped_at ? new Date(new Date(c.shipped_at).getTime() + s.claim_window_days * 86400e3) : null;
-  const closed = claimUntil && Date.now() > claimUntil.getTime();
-  const notShipped = { ok: false, why: "Available once your order ships" };
-  return {
-    shipped, has_pp: c.has_pp,
-    edit: cancelled ? { ok: false, why: "This order was cancelled" } : shipped ? { ok: false, why: "Your order has already shipped" }
-      : Date.now() > editUntil.getTime() ? { ok: false, why: `Orders can be changed for ${s.edit_window_minutes} minutes after purchase` }
-      : { ok: true, until: editUntil.toISOString() },
-    defective: !shipped ? notShipped : closed ? { ok: false, why: `Claims are open for ${s.claim_window_days} days after shipping` } : { ok: true },
-    pp: !c.has_pp ? { ok: false, why: "Your order doesn't include Package Protection" } : !shipped ? notShipped
-      : closed ? { ok: false, why: `Claims are open for ${s.claim_window_days} days after shipping` } : { ok: true },
-    not_delivered: !shipped ? { ok: false, why: "Your order hasn't shipped yet" } : { ok: true, has_pp: c.has_pp },
+  const closed = claimUntil && now > claimUntil.getTime() ? { show: true, ok: false, why: `Claims are open for ${s.claim_window_days} days after shipping` } : null;
+  const notYet = { show: true, ok: false, why: "Available once your order is delivered" };
+  const hidden = { show: false, ok: false };
+  const m = { state, has_pp: c.has_pp, shipped: state === "in_transit" || state === "delivered" };
+  m.edit = state === "cancelled" ? { show: true, ok: false, why: "This order was cancelled" }
+    : state !== "unshipped" ? { show: true, ok: false, why: "Your order has already shipped" }
+    : { show: true, ok: true, cancel_ok: true, changes_ok: now < editUntil.getTime(), until: editUntil.toISOString() };
+  m.return = state === "unshipped" || state === "cancelled" ? hidden : state === "in_transit" ? notYet : { show: true, ok: true };
+  m.defective = state === "unshipped" || state === "cancelled" ? hidden : state === "in_transit" ? notYet : closed || { show: true, ok: true };
+  m.pp = state === "unshipped" || state === "cancelled" ? hidden : !c.has_pp ? { show: true, ok: false, why: "Your order doesn't include Package Protection" } : closed || { show: true, ok: true };
+  m.other = { show: true, ok: true };
+  const shippedNo = { ok: false, why: "Your order hasn't shipped yet" };
+  m.subs = {
+    not_arrived: state === "in_transit" ? { ok: true } : state === "delivered" ? { ok: false, why: "Tracking shows your package was delivered" } : shippedNo,
+    delivered_missing: state === "delivered" ? { ok: true } : state === "in_transit" ? { ok: false, why: "Your package hasn't been delivered yet" } : shippedNo,
+    damaged: state === "delivered" ? { ok: true } : state === "in_transit" ? { ok: false, why: "Your package hasn't been delivered yet" } : shippedNo,
+    something_else: { ok: true },
   };
+  if (state === "cancelled") for (const k of ["not_arrived", "delivered_missing", "damaged"]) m.subs[k] = { ok: false, why: "This order was cancelled" };
+  return m;
 }
-async function menu(key, order) { return menuFor(await loadOrder(key, order.id)); }
+async function menu(key, order) { const c = await loadOrder(key, order.id); return menuFor(c, await orderState(c)); }
 function session(token) { const p = R().verify(token); return p; }
 
 /* =============================================================================================
  *  EDIT ORDER
  * ============================================================================================= */
 async function editable(token) {
-  const p = session(token), c = await loadOrder(p.k, p.o), m = menuFor(c);
+  const p = session(token), c = await loadOrder(p.k, p.o), m = menuFor(c, await orderState(c));
   if (!m.edit.ok) throw httpError(400, `${m.edit.why}, so it can't be changed here. Please email ${c.def.support} and we'll help.`);
   return { p, c, m };
 }
@@ -143,11 +159,11 @@ async function editOptions(token) {
   const { c, m } = await editable(token);
   const a = c.o.shippingAddress || {};
   return {
-    until: m.edit.until, currency: c.currency,
+    until: m.edit.until, changes_ok: m.edit.changes_ok, cancel_ok: m.edit.cancel_ok, currency: c.currency,
     address: { first_name: a.firstName || "", last_name: a.lastName || "", address1: a.address1 || "", address2: a.address2 || "", city: a.city || "", state: a.provinceCode || "", zip: a.zip || "", phone: a.phone || "" },
     lines: c.lines.filter((l) => l.unfulfilled > 0).map((l) => ({
       id: l.id, title: l.title, variant: l.variant, quantity: l.unfulfilled, unit_price: l.unit_price, image: l.image, variant_id: l.variant_id,
-      sizes: l.product ? l.product.variants.map((v) => ({ id: v.id, title: v.title, price: Number(v.price), available: v.availableForSale })) : [],
+      sizes: l.product ? l.product.variants.map((v) => ({ id: v.id, title: v.title, price: Number(v.price), available: v.availableForSale })) : [], is_pp: R().isPP(l, c.s),
     })),
   };
 }
@@ -174,15 +190,17 @@ const numId = (gid) => String(gid || "").split("/").pop();
 const uerr = (x, what) => { const e = (x && x.userErrors) || []; if (e.length) throw httpError(400, `${what}: ${e.map((y) => y.message).join("; ")}`); };
 
 async function editSubmit(token, body) {
-  const p = session(token), c = await loadOrder(p.k, p.o), m = menuFor(c);
+  const p = session(token), c = await loadOrder(p.k, p.o), m = menuFor(c, await orderState(c));
+  if (!m.edit.ok) throw httpError(400, `${m.edit.why}. Please email ${c.def.support} and we'll help.`);
   // a few minutes' grace so someone who opened the editor in time isn't cut off mid-edit
   const grace = (c.s.edit_window_minutes + 5) * 60000;
-  if (!m.edit.ok && !(m.edit.why && /minutes/.test(m.edit.why) && Date.now() - new Date(c.o.createdAt).getTime() < grace)) throw httpError(400, `${m.edit.why}. Please email ${c.def.support} and we'll help.`);
+  if (!m.edit.changes_ok && Date.now() - new Date(c.o.createdAt).getTime() > grace) throw httpError(400, `Orders can be changed for ${c.s.edit_window_minutes} minutes after purchase. You can still cancel it while it hasn't shipped.`);
+  body.adds = [];   // size changes only — adding items isn't offered
   const changes = [], adds = [], done = [], seen = new Set();
   for (const x of Array.isArray(body.lines) ? body.lines : []) {
     if (!x || seen.has(x.id)) continue; seen.add(x.id);
     const l = c.lines.find((y) => y.id === x.id); if (!l || l.unfulfilled < 1) continue;
-    const qty = Math.max(0, Math.min(20, Math.floor(Number(x.quantity))));
+    const qty = l.unfulfilled;   // size changes only: quantity stays the same
     const vid = qty > 0 && x.variant_id && x.variant_id !== l.variant_id ? x.variant_id : null;
     if (vid) { const v = l.product && l.product.variants.find((y) => y.id === vid); if (!v || !v.availableForSale) throw httpError(400, `That size of ${l.title} is sold out. Pick another size.`); }
     if (qty !== l.unfulfilled || vid) changes.push({ l, qty, vid, vtitle: vid ? l.product.variants.find((y) => y.id === vid).title : null });
@@ -267,6 +285,22 @@ async function editSubmit(token, body) {
   await core.audit({ kind: "portal-order-edit", detail: `${c.o.name} · ${done.join("; ")}${owed ? ` · pay link for ${usd(owed)}` : ""}${refunded > 0 ? ` · refunded ${usd(refunded)}` : ""}`, who: "customer (portal)", target: rec.id }).catch(() => {});
   core.slackPost(`✏️ ${c.o.name} (${c.def.name}) edited by the customer in the portal — ${done.join("; ")}${owed ? ` · Shopify emailed a pay link for ${usd(owed)}` : ""}${refunded > 0 ? ` · ${usd(refunded)} refunded` : ""}`).catch(() => {});
   return { changes: done, owed, refunded: refunded > 0 ? refunded : 0, refund_failed: refunded === -1, address_failed: addrFailed, support: c.def.support };
+}
+
+async function editCancel(token, body) {
+  const { p, c, m } = await editable(token);
+  if (!m.edit.cancel_ok) throw httpError(400, `This order can't be cancelled here. Please email ${c.def.support}.`);
+  const o = await K().orderDetail(c.o.name);
+  if (o.error || o.note) throw httpError(400, `We couldn't load the order. Please email ${c.def.support}.`);
+  if (!o.can_cancel) throw httpError(400, `Your order is already being packed or has shipped, so it can't be cancelled here. Please email ${c.def.support} and we'll help.`);
+  const why = String(body.reason || "").trim().slice(0, 300);
+  let r;
+  try { r = await K().cancelOrder(o, { reason: "CUSTOMER", refund: true, restock: true, notify: true, note: `Cancelled by the customer in the returns portal${why ? `: ${why}` : ""}` }); }
+  catch (e) { console.error("portal cancel:", e.message); core.slackPost(`⚠️ ${c.o.name}: the customer tried to cancel in the portal and it failed (${e.message}). Please handle it.`).catch(() => {}); throw httpError(502, `We couldn't cancel it automatically. Please email ${c.def.support} right away and we'll take care of it.`); }
+  await putClaim({ id: crypto.randomUUID(), number: `${c.o.name.replace(/^#/, "")}-X${Date.now().toString(36).slice(-4).toUpperCase()}`, store: p.k, type: "cancel", status: "done", order_name: c.o.name, email: c.o.email || p.e, ticket_id: null, changes: [r.note], reason: why, source: "portal" }, `Customer cancelled the order${why ? `: ${why}` : ""}. ${r.note}`);
+  await core.audit({ kind: "portal-order-cancel", detail: `${c.o.name} · ${r.note}${why ? ` · ${why}` : ""}`, who: "customer (portal)" }).catch(() => {});
+  core.slackPost(`🛑 ${c.o.name} (${c.def.name}) cancelled by the customer in the portal — ${r.note}${why ? ` · reason: ${why}` : ""}`).catch(() => {});
+  return { cancelled: true, note: "Your order is cancelled and refunded in full. Shopify will email you a confirmation. Refunds take 5–10 business days to show." };
 }
 
 /* =============================================================================================
@@ -355,21 +389,21 @@ const UNVERIFIED = "We couldn't confirm your tracking with every carrier source 
 function gates(c, ship) {
   const s = c.s, now = Date.now();
   const tracked = ship.filter((x) => x.number);
-  const g = { damaged: { ok: true }, missing_items: { ok: true } };
+  const g = { damaged: { ok: true }, something_else: { ok: true } };
   if (!ship.length) { g.not_arrived = g.delivered_missing = { ok: false, why: "Your order hasn't shipped yet." }; return g; }
-  if (!tracked.length) { g.not_arrived = g.delivered_missing = { ok: false, why: "This order shipped without a tracking number, so we have to check it by hand. Please email us and we'll look into it right away." }; return g; }
-  // "Hasn't arrived": no source anywhere may say delivered, every required source must answer, and nothing may have moved for N days.
+  if (!tracked.length) { g.not_arrived = g.delivered_missing = { ok: false, why: "This order shipped without a tracking number, so we have to check it by hand. Choose \"Something else\" and tell us what's going on." }; return g; }
+  // "Hasn't arrived": decided by DAYS since shipping (tracking can keep updating forever). No source may say delivered,
+  // and the tracking must be verified by every required source.
   if (tracked.some((x) => x.delivered)) {
     const d = tracked.find((x) => x.delivered);
-    g.not_arrived = { ok: false, why: `Tracking shows your package was delivered${d.delivered_at ? ` on ${fmtDate(d.delivered_at)}` : ""}. If you can't find it, choose "Marked delivered, but I didn't get it".` };
+    g.not_arrived = { ok: false, why: `Tracking shows your package was delivered${d.delivered_at ? ` on ${fmtDate(d.delivered_at)}` : ""}. If you can't find it, choose "My package was marked delivered, but I didn't get it".` };
   } else if (tracked.some((x) => !x.verified)) g.not_arrived = { ok: false, why: UNVERIFIED };
   else {
-    const newest = Math.max(...tracked.map((x) => new Date(x.last_update_at).getTime()));
-    const days = (now - newest) / 86400e3;
-    if (days < s.pp_stall_days) {
-      const opens = new Date(newest + s.pp_stall_days * 86400e3), x = tracked[0];
-      g.not_arrived = { ok: false, why: `Your package is still moving. Last update ${fmtWhen(newest)}${x.last_event && x.last_event.desc ? `: ${x.last_event.desc}` : ""}. If tracking doesn't change by ${fmtDate(opens)}, come back and file your claim here.`, opens: opens.toISOString() };
-    } else g.not_arrived = { ok: true, rule: true, note: `Verified with ${srcList(tracked[0].required)}: no movement in ${Math.floor(days)} days.` };
+    const shipped = Math.min(...tracked.map((x) => new Date(x.shipped_at).getTime()));
+    const days = (now - shipped) / 86400e3, opens = new Date(shipped + s.transit_claim_days * 86400e3), x = tracked[0];
+    g.not_arrived = days < s.transit_claim_days
+      ? { ok: false, why: `Your package is on its way. Last update ${fmtWhen(x.last_update_at)}${x.last_event && x.last_event.desc ? `: ${x.last_event.desc}` : ""}. If it still hasn't arrived by ${fmtDate(opens)}, come back and file your claim here.`, opens: opens.toISOString() }
+      : { ok: true, rule: true, note: `Shipped ${Math.floor(days)} days ago and not delivered (verified with ${srcList(x.required)}).` };
   }
   // "Marked delivered": a CARRIER source (ShipStation or USPS) must confirm delivery, all required sources answered, and the wait has passed.
   const dl = tracked.filter((x) => x.delivered);
@@ -396,28 +430,33 @@ function shipmentItems(c, ship, sub, avail) {
   if (!mapped) return avail.map((i) => ({ ...i, quantity: i.max }));
   return avail.filter((i) => q[i.id]).map((i) => ({ ...i, quantity: Math.min(i.max, q[i.id]) }));
 }
-function resolutionsFor(type, c) { return type === "defective" ? ["replacement", "store_credit", ...(c.has_pp ? [] : ["refund"])] : ["replacement", "store_credit"]; }
+function resolutionsFor(type, c) { return type === "defective" ? ["replacement", "store_credit", ...(c.has_pp ? [] : ["refund"])] : type === "other" ? [] : ["replacement", "store_credit"]; }
+// What each "what happened" option looks like for this order: order state + tracking rules + Package Protection.
+function subOptions(c, m, g) {
+  const out = {};
+  for (const k of ["not_arrived", "delivered_missing", "damaged", "something_else"]) {
+    const st = m.subs[k];
+    out[k] = !st.ok ? st : g && g[k] && !g[k].ok ? g[k] : { ok: true, rule: !!(g && g[k] && g[k].rule), note: (g && g[k] && g[k].note) || "" };
+  }
+  if (!c.has_pp && out.delivered_missing.ok) out.delivered_missing = { ok: true, carrier_only: true };   // no PP → carrier claim, shown as guidance
+  return out;
+}
 
 async function claimStart(token, type) {
-  const p = session(token), c = await loadOrder(p.k, p.o), m = menuFor(c);
-  if (!["defective", "pp", "not_delivered"].includes(type)) throw httpError(400, "Pick an option.");
-  if (type === "not_delivered" && !m.not_delivered.ok) throw httpError(400, m.not_delivered.why);
-  const open = (await db(`SELECT number, type FROM hd_claims WHERE order_name=$1 AND status IN ('pending','info_requested') AND type=$2 ORDER BY created_at DESC LIMIT 1`, [c.o.name, type === "defective" ? "defective" : "pp"])).rows[0];
-  if (type === "defective") {
-    if (!m.defective.ok) throw httpError(400, m.defective.why);
-    return { type, has_pp: c.has_pp, items: claimItems(c, type, await usedQty(c)), resolutions: resolutionsFor(type, c), open_claim: open ? open.number : null, currency: c.currency };
-  }
-  const ship = await trackingFor(c);
-  if (type === "not_delivered" && !c.has_pp) {
-    const carrier = (ship[0] && ship[0].carrier) || "USPS";
-    const seenRecently = (await db(`SELECT 1 FROM hd_claims WHERE order_name=$1 AND type='not_delivered' AND created_at > now() - interval '1 day'`, [c.o.name])).rows.length;
-    if (!seenRecently) await putClaim({ id: crypto.randomUUID(), number: `${c.o.name.replace(/^#/, "")}-N${Date.now().toString(36).slice(-4).toUpperCase()}`, store: p.k, type: "not_delivered", status: "info",
-      order_name: c.o.name, email: c.o.email || p.e, ticket_id: null, has_pp: false, tracking: ship, source: "portal" }, "Not-delivered report without Package Protection — shown carrier claim steps").catch(() => {});
-    return { type, has_pp: false, shipments: ship, carrier_links: CARRIER_CLAIMS[carrier] || CARRIER_CLAIMS.USPS, carrier, support: c.def.support };
-  }
-  if (!m.pp.ok) throw httpError(400, m.pp.why);
+  const p = session(token), c = await loadOrder(p.k, p.o), st = await orderState(c), m = menuFor(c, st);
+  if (type === "not_delivered") type = "other";
+  if (!["defective", "pp", "other"].includes(type)) throw httpError(400, "Pick an option.");
+  const tab = m[type === "other" ? "other" : type];
+  if (!tab.ok) throw httpError(400, tab.why || "That option isn't available for this order.");
+  const open = (await db(`SELECT number, type FROM hd_claims WHERE order_name=$1 AND status IN ('pending','info_requested','processing') AND type=$2 ORDER BY created_at DESC LIMIT 1`, [c.o.name, type === "defective" ? "defective" : "pp"])).rows[0];
+  if (type === "defective") return { type, state: st.state, has_pp: c.has_pp, items: claimItems(c, type, await usedQty(c)), resolutions: resolutionsFor(type, c), open_claim: open ? open.number : null, currency: c.currency };
+  const ship = st.ship, g = st.state === "unshipped" ? null : gates(c, ship);
   const avail = claimItems(c, "pp", await claimedQty(c.o.name));
-  return { type: "pp", has_pp: true, shipments: ship, gates: gates(c, ship), items: avail, shipment_items: { not_arrived: shipmentItems(c, ship, "not_arrived", avail).map((i) => ({ id: i.id, quantity: i.quantity })), delivered_missing: shipmentItems(c, ship, "delivered_missing", avail).map((i) => ({ id: i.id, quantity: i.quantity })) }, resolutions: resolutionsFor("pp", c), open_claim: open ? open.number : null, currency: c.currency, stall_days: c.s.pp_stall_days };
+  const carrier = (ship.find((x) => x.number) || {}).carrier || "USPS";
+  return { type, state: st.state, has_pp: c.has_pp, shipments: ship, subs: subOptions(c, m, g), items: avail,
+    shipment_items: g ? { not_arrived: shipmentItems(c, ship, "not_arrived", avail).map((i) => ({ id: i.id, quantity: i.quantity })), delivered_missing: shipmentItems(c, ship, "delivered_missing", avail).map((i) => ({ id: i.id, quantity: i.quantity })) } : {},
+    resolutions: resolutionsFor("pp", c), open_claim: open ? open.number : null, currency: c.currency,
+    carrier_links: CARRIER_CLAIMS[/ups/i.test(carrier) ? "UPS" : /fedex/i.test(carrier) ? "FedEx" : "USPS"], carrier, support: c.def.support };
 }
 
 /* ---- photos (resized in the browser to ≤ 1600px JPEG before upload) ---- */
@@ -439,21 +478,25 @@ async function savePhoto(token, body) {
 async function getPhoto(id) { const r = (await db(`SELECT content_type, data FROM hd_claim_photos WHERE id=$1`, [id])).rows[0]; return r || null; }
 
 async function claimSubmit(token, body) {
-  const p = session(token), c = await loadOrder(p.k, p.o), m = menuFor(c);
-  const type = body.type === "defective" ? "defective" : "pp";
-  if (type === "defective" ? !m.defective.ok : !m.pp.ok) throw httpError(400, (type === "defective" ? m.defective : m.pp).why);
-  const open = (await db(`SELECT number FROM hd_claims WHERE order_name=$1 AND status IN ('pending','info_requested') AND type=$2`, [c.o.name, type])).rows[0];
+  const p = session(token), c = await loadOrder(p.k, p.o), st = await orderState(c), m = menuFor(c, st);
+  let type = body.type === "defective" ? "defective" : body.type === "other" && body.subtype === "something_else" ? "other" : "pp";
+  const description = String(body.description || "").trim().slice(0, 2000);
+  if (type === "other") return submitOther(p, c, st, body, description);
+  if (type === "defective" && !m.defective.ok) throw httpError(400, m.defective.why);
+  if (type === "pp" && body.type === "pp" && !m.pp.ok) throw httpError(400, m.pp.why);
+  const open = (await db(`SELECT number FROM hd_claims WHERE order_name=$1 AND status IN ('pending','info_requested','processing') AND type=$2`, [c.o.name, type])).rows[0];
   if (open) throw httpError(400, `You already have a claim open for this order (${open.number}). We'll email you as soon as it's reviewed.`);
   const resolution = String(body.resolution || "");
   if (resolution === "refund" && c.has_pp) throw httpError(400, "Orders with Package Protection can choose a replacement or store credit.");
   if (!resolutionsFor(type, c).includes(resolution)) throw httpError(400, "Pick how you'd like us to make it right.");
-  const description = String(body.description || "").trim().slice(0, 2000);
   let subtype = null, gate = null, ship = null;
   if (type === "pp") {
     subtype = String(body.subtype || "");
-    if (!SUBTYPE_LABEL[subtype]) throw httpError(400, "Tell us what happened to the package.");
-    ship = await trackingFor(c); gate = gates(c, ship)[subtype];
-    if (!gate.ok) throw httpError(400, gate.why);
+    if (!["not_arrived", "delivered_missing", "damaged"].includes(subtype)) throw httpError(400, "Tell us what happened to the package.");
+    ship = st.ship; const opt = subOptions(c, m, gates(c, ship))[subtype];
+    if (!opt.ok) throw httpError(400, opt.why);
+    if (opt.carrier_only) throw httpError(400, "Your order didn't include Package Protection, so please file a claim with the carrier for a package marked delivered.");
+    gate = opt;
   }
   const avail = claimItems(c, type, type === "defective" ? await usedQty(c) : await claimedQty(c.o.name));
   let items;
@@ -476,7 +519,7 @@ async function claimSubmit(token, body) {
     order_id: c.o.id, customer_id: c.o.customer ? c.o.customer.id : null, customer_name: [a.firstName, a.lastName].filter(Boolean).join(" ") || a.name || "", currency: c.currency,
     has_pp: c.has_pp, subtype, items: items.map(({ max, image, ...i }) => ({ ...i, image })), description, photos, resolution, value, amount: value,
     gate: gate ? { rule: !!gate.rule, note: gate.note || "" } : null, tracking: ship, order_created_at: c.o.createdAt, shipped_at: c.shipped_at, source: "portal",
-  }, `Claim submitted by the customer: ${type === "pp" ? SUBTYPE_LABEL[subtype] : "defective item"} · wants ${RES_LABEL[resolution]} · ${usd(value)}`); }
+  }, `Claim submitted by the customer: ${type === "pp" ? SUBTYPE_LABEL[subtype] + (c.has_pp ? "" : " (no Package Protection)") : "defective item"} · wants ${RES_LABEL[resolution]} · ${usd(value)}`); }
   catch (e) { if (e.code === "23505") throw httpError(400, "You already have a claim open for this order. We'll email you as soon as it's reviewed."); throw e; }
   if (photos.length) await db(`UPDATE hd_claim_photos SET claim_id=$1 WHERE id = ANY($2)`, [claim.id, photos]);
   // Background: confirmation email (opens a Helpdesk ticket), AI review, Slack.
@@ -484,20 +527,69 @@ async function claimSubmit(token, body) {
   return { number: claim.number, type, resolution, value, email: claim.email };
 }
 
+async function submitOther(p, c, st, body, description) {
+  if (description.length < 10) throw httpError(400, "Please tell us a little more so we can help.");
+  const photoIds = (Array.isArray(body.photo_ids) ? body.photo_ids : []).slice(0, 8).map(String);
+  const photos = photoIds.length ? (await db(`SELECT id FROM hd_claim_photos WHERE id = ANY($1) AND order_id=$2 AND claim_id IS NULL`, [photoIds, p.o])).rows.map((r) => r.id) : [];
+  const recent = (await db(`SELECT number FROM hd_claims WHERE order_name=$1 AND type='other' AND created_at > now() - interval '10 minutes'`, [c.o.name])).rows[0];
+  if (recent) throw httpError(400, `We just got your message (${recent.number}). We'll reply by email soon.`);
+  const n = (await db(`SELECT count(*)::int n FROM hd_claims WHERE order_name=$1 AND type='other'`, [c.o.name])).rows[0].n;
+  const a = c.o.shippingAddress || {};
+  const claim = await putClaim({ id: crypto.randomUUID(), number: `${c.o.name.replace(/^#/, "")}-M${n + 1}`, store: p.k, type: "other", status: "pending", order_name: c.o.name, email: c.o.email || p.e, ticket_id: null,
+    order_id: c.o.id, customer_name: [a.firstName, a.lastName].filter(Boolean).join(" ") || a.name || "", has_pp: c.has_pp, subtype: "something_else", items: [], description, photos, value: 0, order_state: st.state, source: "portal" },
+    "Message from the customer (Something else)");
+  if (photos.length) await db(`UPDATE hd_claim_photos SET claim_id=$1 WHERE id = ANY($2)`, [claim.id, photos]);
+  setImmediate(() => afterSubmit(claim.id).catch((e) => console.error("claim after-submit:", e.message)));
+  return { number: claim.number, type: "other", email: claim.email };
+}
 function firstName(c) { return String(c.customer_name || "").split(" ")[0] || "there"; }
 function itemsText(c) { return c.items.map((i) => `• ${i.quantity}× ${i.title}${i.variant ? ` (${i.variant})` : ""}`).join("\n"); }
 async function afterSubmit(id) {
   let c = await getClaim(id); if (!c) return;
   const def = R().STORE_DEFS[c.store];
   try {
-    const what = c.type === "pp" ? `Package Protection claim (${SUBTYPE_LABEL[c.subtype].toLowerCase()})` : "defective item claim";
-    const text = `Hi ${firstName(c)},\n\nWe received your ${what} for order ${c.order_name}. Your claim number is ${c.number}.\n\nItems:\n${itemsText(c)}\n\nYou asked for: ${RES_LABEL[c.resolution]}.\n\nOur team reviews claims within 1 business day and will email you here with the result. If you have more photos or details, just reply to this email.\n\n— The ${def.name} Team`;
-    const r = await core.sendNewEmail({ mailbox: def.support, to: c.email, subject: `Your claim ${c.number} for order ${c.order_name}`, text, who: "Returns portal", tags: ["claim", `claim-${c.type}`], name: c.customer_name });
+    const what = c.type === "pp" ? `claim (${SUBTYPE_LABEL[c.subtype].toLowerCase()})` : "defective item claim";
+    const text = c.type === "other"
+      ? `Hi ${firstName(c)},\n\nThanks for reaching out about order ${c.order_name}. We got your message (reference ${c.number}):\n\n"${c.description}"\n\n${(c.photos || []).length ? `We also received ${c.photos.length} photo${c.photos.length === 1 ? "" : "s"}.\n\n` : ""}Our team will reply to this email soon.\n\n— The ${def.name} Team`
+      : `Hi ${firstName(c)},\n\nWe received your ${what} for order ${c.order_name}. Your claim number is ${c.number}.\n\nItems:\n${itemsText(c)}\n\nYou asked for: ${RES_LABEL[c.resolution]}.\n\nWe'll email you here with the result, usually within one business day. If you have more photos or details, just reply to this email.\n\n— The ${def.name} Team`;
+    const r = await core.sendNewEmail({ mailbox: def.support, to: c.email, subject: c.type === "other" ? `We got your message about order ${c.order_name}` : `Your claim ${c.number} for order ${c.order_name}`, text, who: "Returns portal", tags: ["claim", `claim-${c.type}`], name: c.customer_name });
     c = await patchClaim(id, { ticket_id: r.ticket_id }, "Confirmation emailed to the customer");
   } catch (e) { c = await patchClaim(id, {}, "Confirmation email failed: " + e.message); }
+  if (c.type === "other") {
+    core.slackPost(`✉️ ${c.order_name} (${def.name}) — customer message from the portal (${c.number}): "${String(c.description).slice(0, 200)}"${(c.photos || []).length ? ` · ${c.photos.length} photo(s)` : ""} · reply from the ticket in Helpdesk`).catch(() => {});
+    return;
+  }
   try { c = await review(c); } catch (e) { c = await patchClaim(id, { ai: { verdict: "needs_review", summary: "AI review failed: " + e.message, reasons: [], flags: [] } }, "AI review failed: " + e.message); }
   if (c.ticket_id) core.addNote({ ticketId: String(c.ticket_id), text: `🧾 Claim ${c.number} — ${TYPE_LABEL[c.type]}${c.subtype ? ` (${SUBTYPE_LABEL[c.subtype]})` : ""}\nWants: ${RES_LABEL[c.resolution]} · ${usd(c.value)}\nAI: ${c.ai ? `${c.ai.verdict} (${Math.round((c.ai.confidence || 0) * 100)}%) — ${c.ai.summary}` : "—"}\nApprove or deny in Helpdesk → Claims.`, who: "Returns portal" }).catch(() => {});
+  try { const d = await autoDecide(c); if (d.approve) { await approve(c.id, { resolution: c.resolution }, "Auto-approved"); return; } await patchClaim(c.id, { auto: d }, `Not auto-approved: ${d.why}`); c.auto = d; }
+  catch (e) { await patchClaim(c.id, {}, "Auto-approval failed, left for staff: " + e.message); }
   core.slackPost(`🧾 New ${TYPE_LABEL[c.type]} ${c.number} — ${c.order_name} (${def.name}) · wants ${RES_LABEL[c.resolution]} ${usd(c.value)} · AI: ${c.ai ? `*${c.ai.verdict}* — ${c.ai.summary}` : "—"} · approve in Helpdesk → Claims`).catch(() => {});
+}
+
+/* ---------------- automatic approval (every check must pass, otherwise staff decide) ---------------- */
+async function autoDecide(c) {
+  const s = await R().settings();
+  const no = (why) => ({ approve: false, why });
+  if (!s.auto_approve) return no("auto-approval is off");
+  if (Number(c.value) > Number(s.auto_approve_max)) return no(`value ${usd(c.value)} is over the ${usd(s.auto_approve_max)} limit`);
+  const prior = (await db(`SELECT count(*)::int n FROM hd_claims WHERE lower(email)=lower($1) AND id<>$2 AND status='approved' AND type IN ('defective','pp') AND created_at > now() - interval '365 days'`, [c.email, c.id])).rows[0].n;
+  if (prior > Number(s.auto_approve_max_prior)) return no(`${prior} approved claims in the last 12 months`);
+  const ai = c.ai || {};
+  if ((ai.flags || []).some((f) => /photo was used|reused|stock|screenshot/i.test(f))) return no("photo looks reused or not original");
+  if (c.resolution === "replacement" && (c.items || []).some((i) => !i.in_stock)) return no("replacement item out of stock");
+  const sure = ai.verdict === "approve" && Number(ai.confidence) >= Number(s.auto_approve_confidence);
+  if (c.type === "pp" && c.subtype === "not_arrived") {
+    if (!(c.gate && c.gate.rule)) return no("tracking rule not met");
+    if (ai.verdict === "deny" && Number(ai.confidence) >= 0.7) return no("AI flagged it: " + (ai.summary || ""));
+    return { approve: true, why: "not delivered after the transit window, verified tracking" };
+  }
+  if (c.type === "pp" && c.subtype === "delivered_missing") return sure ? { approve: true, why: "AI approved after reviewing history" } : no(`AI ${ai.verdict || "unsure"} (${Math.round((ai.confidence || 0) * 100)}%)`);
+  if (c.type === "pp" && c.subtype === "damaged" || c.type === "defective") {
+    if (!(c.photos || []).length) return no("no photos");
+    if ((ai.flags || []).length) return no("AI raised: " + ai.flags.join("; "));
+    return sure ? { approve: true, why: "AI confirmed the photos" } : no(`AI ${ai.verdict || "unsure"} (${Math.round((ai.confidence || 0) * 100)}%)`);
+  }
+  return no("needs a person");
 }
 
 /* ---------------- AI review ---------------- */
@@ -514,11 +606,14 @@ async function historyFor(c) {
     lifetime_orders: hist && hist.shopify ? hist.shopify.lifetime_orders : null, lifetime_spent: hist && hist.shopify ? hist.shopify.lifetime_spent : null,
   };
 }
-const REVIEW_SYS = `You review customer claims for a baby clothing store (Larkspur Baby). Staff will make the final decision; your job is a careful first read.
+const REVIEW_SYS = `You review customer claims for a baby clothing store (Larkspur Baby). Your verdict can approve a claim automatically, so be careful and honest; when unsure say needs_info.
 Claim types:
-- defective: the customer says an item is defective (holes, broken snaps/zippers, seams coming apart, stains from the factory, misprints). They keep the item. Approve when the photos clearly show a manufacturing defect on the claimed item that matches the description. Be suspicious of: photos that don't show the item or the defect, stock/catalog/screenshot images, wear and tear or damage from use/washing long after delivery, a defect inconsistent with the description, photos reused from another claim, and customers with many previous claims or returns relative to their orders.
-- pp (Package Protection): lost, stalled, marked delivered but not received, damaged in transit, or items missing. Check the tracking facts. A package whose tracking hasn't moved for the stall threshold, or that was marked delivered over 24h ago and the customer can't find it, normally qualifies — unless the customer's history suggests a pattern. Damaged claims need photos showing transit damage. Missing items: consider whether the claim is plausible.
-Reply with ONLY a JSON object, no prose: {"verdict":"approve"|"deny"|"needs_info","confidence":0.0-1.0,"summary":"one sentence for staff","reasons":["..."],"flags":["risk signals, empty if none"],"photo_findings":"what the photos show, or empty","ask_customer":"if needs_info, the question to ask the customer, else empty"}`;
+- defective: the customer says an item has a manufacturing defect (holes, broken snaps/zippers, seams coming apart, misprints, stains from the factory). They keep the item. First decide whether the photos are GENUINE: real photos taken by the customer of the item they ordered (matching product, color/print), not stock or catalog images, not screenshots, not edited, not obviously from a different product. Then decide whether they show a real defect matching the description, rather than normal wear, washing damage, or misuse long after delivery. Approve only when both are clearly true.
+- pp / damaged ("My package arrived damaged"): photos must show transit damage to the package and/or the items. Same genuineness check.
+- pp / delivered_missing ("marked delivered but not received"): there is no photo proof, so decide from the facts: tracking (delivered scan, time since), the customer's history (earlier claims and how they ended, returns, store credits and replacements already given, number of orders and amount spent, how long they've been a customer), the claim value, and the customer's own words. A first claim from a customer with a normal order history is usually fine to approve. Repeat claims, many claims relative to orders, or vague/contradictory statements → needs_info or deny.
+- pp / not_arrived: tracking shows no delivery long after shipping. Approve unless the history shows a pattern of claims.
+"has_package_protection" tells you whether the order had Package Protection; it does not change how you judge truthfulness.
+Reply with ONLY a JSON object, no prose: {"verdict":"approve"|"deny"|"needs_info","confidence":0.0-1.0,"summary":"one sentence for staff","reasons":["..."],"flags":["risk signals (e.g. 'photo looks like a stock image'), empty if none"],"photo_findings":"what the photos show and whether they look genuine, or empty","ask_customer":"if needs_info, the question to ask the customer, else empty"}`;
 async function review(c) {
   const k = K();
   if (!k.anthropic) return patchClaim(c.id, { ai: { verdict: "needs_review", confidence: 0, summary: "AI review is off (no ANTHROPIC_API_KEY).", reasons: [], flags: [] } }, "AI review skipped");
@@ -534,7 +629,7 @@ async function review(c) {
     items: c.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity, price: i.unit_price })), value: c.value, wants: RES_LABEL[c.resolution],
     order_placed: c.order_created_at, shipped: c.shipped_at, claim_filed: c.created_at, has_package_protection: c.has_pp,
     tracking: (c.tracking || []).map((t) => ({ carrier: t.carrier, status: t.status, delivered: t.delivered, delivered_at: t.delivered_at, last_update: t.last_update_at, last_event: t.last_event })),
-    policy_check: c.gate ? c.gate.note : null, stall_threshold_days: (await R().settings()).pp_stall_days, customer_history: hist,
+    policy_check: c.gate ? c.gate.note : null, transit_claim_days: (await R().settings()).transit_claim_days, customer_history: hist,
   };
   content.push({ type: "text", text: `Review this claim.\n${JSON.stringify(facts, null, 2)}` });
   const resp = await k.anthropic.messages.create({ model: k.model, max_tokens: 900, system: REVIEW_SYS, messages: [{ role: "user", content }] });
@@ -642,5 +737,5 @@ async function close(id, who) { const c = await getClaim(id); if (!c) throw http
 
 async function init() { try { await migrate(); } catch (e) { console.error("claims migrate:", e.message); } }
 
-module.exports = { claimedQty, init, menu, editOptions, editSearch, editSubmit, claimStart, savePhoto, getPhoto, claimSubmit, list, counts, getClaim, approve, deny, askInfo, rerun, close, review,
+module.exports = { claimedQty, init, menu, editOptions, editSearch, editSubmit, editCancel, claimStart, savePhoto, getPhoto, claimSubmit, list, counts, getClaim, approve, deny, askInfo, rerun, close, review,
   _t: { gates, menuFor, loadOrder, TYPE_LABEL, SUBTYPE_LABEL, RES_LABEL } };

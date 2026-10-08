@@ -63,7 +63,7 @@ const DEFAULTS = {
   carrier_id: "",
   ss_store: { lb: "", lbo: "" },
   // The reasons customers pick from (Returns → Settings). Each is matched to Shopify's closest standard reason.
-  reasons: ["I received the wrong item", "Item was damaged", "I didn't have a good experience", "Item didn't fit", "I found something else I like more", "I didn't like the item"],   // ShipStation store each brand's returns are filed under (empty = match by name)
+  reasons: ["Too small", "Too large", "Didn't like the fit", "Color or print wasn't as expected", "Fabric or material wasn't as expected", "Item arrived damaged or defective", "Received the wrong item", "Changed my mind", "Arrived too late", "Other"],   // ShipStation store each brand's returns are filed under (empty = match by name)
   service_code: "usps_ground_advantage",
   default_item_oz: 8,
   packaging_oz: 4,
@@ -72,7 +72,12 @@ const DEFAULTS = {
   // Portal options beyond returns (edit order, defective, Package Protection, not delivered)
   edit_window_minutes: 15,         // customers can edit an unshipped order for this long after placing it
   claim_window_days: 30,           // defective / PP claims allowed this many days after the order shipped
-  pp_stall_days: 5,                // a PP "hasn't arrived" claim opens once tracking hasn't moved for this many days
+  pp_stall_days: 5,                // (older rule, no longer used for opening claims)
+  transit_claim_days: 14,          // "hasn't arrived" claims open this many days after shipping if tracking still isn't delivered
+  auto_approve: true,              // approve claims automatically when every safety check passes
+  auto_approve_max: 150,           // ...only up to this claim value ($)
+  auto_approve_confidence: 0.8,    // ...and only when the AI is at least this sure (photo / delivered-not-received claims)
+  auto_approve_max_prior: 1,       // ...and the customer has had at most this many approved claims in the last 12 months
   delivered_wait_hours: 24,        // "marked delivered but not received" claims open this long after the delivery scan
   pp_match: "package protection, shipping protection",   // line items whose title/SKU contains one of these are Package Protection
   return_address: {
@@ -80,14 +85,16 @@ const DEFAULTS = {
     address_line1: "701 E Plano Pkwy", address_line2: "Suite 103", city_locality: "Plano", state_province: "TX", postal_code: "75074", country_code: "US",
   },
 };
+const OLD_REASONS = ["I received the wrong item", "Item was damaged", "I didn't have a good experience", "Item didn't fit", "I found something else I like more", "I didn't like the item"];
 async function settings() {
   const s = (await core.setting("returns", null)) || {};
+  if (JSON.stringify(s.reasons) === JSON.stringify(OLD_REASONS)) delete s.reasons;   // the 6-reason list was the old default → use the new one
   return { ...DEFAULTS, ...s, window_days: { ...DEFAULTS.window_days, ...(s.window_days || {}) }, ss_store: { ...DEFAULTS.ss_store, ...(s.ss_store || {}) }, return_address: { ...DEFAULTS.return_address, ...(s.return_address || {}) } };
 }
 async function saveSettings(patch, who) {
   const cur = await settings();
   const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
-  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours"]) next[k] = Number(next[k]) || 0;
+  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
   if (patch.reasons !== undefined) { next.reasons = (Array.isArray(patch.reasons) ? patch.reasons : String(patch.reasons).split("\n")).map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 20); if (!next.reasons.length) next.reasons = DEFAULTS.reasons; }
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('returns', $1, $2, now())
@@ -209,6 +216,12 @@ async function reasons(st) {
 // Our short list → Shopify's closest standard reason (Shopify requires one). The exact wording the customer
 // picked is also saved as the return's reason note, so nothing is lost in the mapping.
 const REASON_RULES = [
+  [/too small/i, /too.?small|small/i, /fit|size/i],
+  [/too large|too big/i, /too.?big|large|big/i, /fit|size/i],
+  [/color|colour|print/i, /color|colour/i, /style/i, /not.?as/i],
+  [/fabric|material/i, /material|quality/i, /not.?as/i],
+  [/too late/i, /late/i, /\bother\b/i],
+  [/^other$/i, /\bother\b/i],
   [/wrong|incorrect|different item/i, /wrong|incorrect/i],
   [/damag|defect|broken|torn|stain/i, /damag/i, /defect/i],
   [/fit|size|small|big|large|tight|loose/i, /fit|size/i, /too.?small/i, /too.?big/i],
@@ -437,7 +450,7 @@ async function prepare(key, order, s) {
     order: { name: order.name, created_at: order.createdAt, currency: order.currencyCode, email: order.email, customer_name: (a && a.name) || "" },
     address: a ? { name: a.name, address1: a.address1, address2: a.address2, city: a.city, state: a.provinceCode, zip: a.zip, country: a.countryCodeV2, phone: a.phone || "" } : null,
     international: !!(a && a.countryCodeV2 && a.countryCodeV2 !== "US"),
-    items: items.filter((i) => !isPP(i, s)).map((i) => { const e = eligibility(i, s, key); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
+    items: items.map((i) => { const pp = isPP(i, s); const e = pp ? { ok: false, why: "Package Protection isn't returnable" } : eligibility(i, s, key); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
     reasons: rs,
     existing: existing.map(publicRec),
     options: { label_fee: s.label_fee, store_credit_enabled: s.store_credit_enabled, store_credit_bonus_pct: s.store_credit_bonus_pct, fee_on_store_credit: s.fee_on_store_credit, window_days: s.window_days[key] },
@@ -484,6 +497,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     const reason = rs.find((r) => r.id === l.reasonId);
     if (!reason) throw httpError(400, `Pick a reason for ${it.title}.`);
     if (!reason.sid) throw httpError(500, "Return reasons aren't set up in Shopify.");
+    if (/^other\b/i.test(reason.name) && String(l.note || "").trim().length < 3) throw httpError(400, `Tell us a little about why you're returning ${it.title}.`);
     chosen.push({ ...it, quantity: qty, reasonId: reason.id, reasonSid: reason.sid, reasonName: reason.name, note: String(l.note || "").slice(0, 255) });
   }
   if (!chosen.length) throw httpError(400, "Pick at least one item to return.");

@@ -723,6 +723,7 @@ const pub = (fn) => async (req, res) => { try { res.json(await fn(req.body || {}
 app.post("/api/returns/public/edit/options", pub((b) => CL.editOptions(b.token)));
 app.post("/api/returns/public/edit/search", pub((b) => CL.editSearch(b.token, b.q)));
 app.post("/api/returns/public/edit/submit", pub((b) => CL.editSubmit(b.token, b)));
+app.post("/api/returns/public/edit/cancel", pub((b) => CL.editCancel(b.token, b)));
 app.post("/api/returns/public/claim/start", pub((b) => CL.claimStart(b.token, String(b.type || ""))));
 app.post("/api/returns/public/claim/photo", pub((b) => CL.savePhoto(b.token, b)));
 app.post("/api/returns/public/claim/submit", pub((b) => CL.claimSubmit(b.token, b)));

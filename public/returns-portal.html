@@ -317,26 +317,36 @@ body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
 
       <section id="sEdit" class="hidden">
         <h1 id="editTitle">Edit your order</h1>
-        <p class="lead" id="editLead"></p>
         <div id="eEditTop" class="err hidden"></div>
-        <h2 class="label" style="margin-top:0">Items</h2>
-        <div id="editLines"></div>
-        <h2 class="label">Add items</h2>
-        <input type="text" id="editQ" placeholder="Search products, e.g. sleeper" autocomplete="off">
-        <div class="sres" id="editRes"></div>
-        <div class="sres" id="editAdded"></div>
-        <h2 class="label">Shipping name &amp; address</h2>
-        <div class="box">
-          <div class="grid2 row"><div><label class="f">First name</label><input id="ed_first" type="text" autocomplete="given-name"></div><div><label class="f">Last name</label><input id="ed_last" type="text" autocomplete="family-name"></div></div>
-          <div class="row"><label class="f">Address</label><input id="ed_1" type="text" autocomplete="address-line1"></div>
-          <div class="row"><label class="f">Apt, suite (optional)</label><input id="ed_2" type="text" autocomplete="address-line2"></div>
-          <div class="grid2 row"><div><label class="f">City</label><input id="ed_city" type="text" autocomplete="address-level2"></div><div><label class="f">State</label><input id="ed_state" type="text" maxlength="2" autocomplete="address-level1"></div></div>
-          <div class="grid2"><div><label class="f">ZIP</label><input id="ed_zip" type="text" inputmode="numeric" autocomplete="postal-code"></div><div><label class="f">Phone</label><input id="ed_phone" type="tel" autocomplete="tel"></div></div>
+        <div id="editChanges">
+          <p class="lead" id="editLead"></p>
+          <h2 class="label" style="margin-top:0">Change a size</h2>
+          <div id="editLines"></div>
+          <h2 class="label">Shipping name &amp; address</h2>
+          <div class="box">
+            <div class="grid2 row"><div><label class="f">First name</label><input id="ed_first" type="text" autocomplete="given-name"></div><div><label class="f">Last name</label><input id="ed_last" type="text" autocomplete="family-name"></div></div>
+            <div class="row"><label class="f">Address</label><input id="ed_1" type="text" autocomplete="address-line1"></div>
+            <div class="row"><label class="f">Apt, suite (optional)</label><input id="ed_2" type="text" autocomplete="address-line2"></div>
+            <div class="grid2 row"><div><label class="f">City</label><input id="ed_city" type="text" autocomplete="address-level2"></div><div><label class="f">State</label><input id="ed_state" type="text" maxlength="2" autocomplete="address-level1"></div></div>
+            <div class="grid2"><div><label class="f">ZIP</label><input id="ed_zip" type="text" inputmode="numeric" autocomplete="postal-code"></div><div><label class="f">Phone</label><input id="ed_phone" type="tel" autocomplete="tel"></div></div>
+          </div>
+          <h2 class="label">Summary</h2>
+          <div class="box" id="editSum"></div>
+          <div id="eEdit" class="err hidden" style="margin-top:16px"></div>
+          <div style="margin-top:22px"><button class="btn main" id="bEdit" onclick="submitEdit()" data-sec="buttons">Save changes</button></div>
         </div>
-        <h2 class="label">Summary</h2>
-        <div class="box" id="editSum"></div>
-        <div id="eEdit" class="err hidden" style="margin-top:16px"></div>
-        <div style="margin-top:22px"><button class="btn main" id="bEdit" onclick="submitEdit()" data-sec="buttons">Save changes</button></div>
+        <div id="editClosed" class="note hidden"></div>
+        <h2 class="label">Cancel my order</h2>
+        <div class="box" id="cancelBox">
+          <div class="muted" style="margin-bottom:10px">You can cancel any time before your order ships. You’ll get a full refund to your original payment.</div>
+          <div id="cancelAsk"><button class="btn2" onclick="$('cancelAsk').classList.add('hidden');$('cancelConfirm').classList.remove('hidden')">Cancel my order</button></div>
+          <div id="cancelConfirm" class="hidden">
+            <label class="f" for="cancelWhy">Mind telling us why? (optional)</label>
+            <textarea id="cancelWhy" rows="2" placeholder="e.g. Ordered the wrong item"></textarea>
+            <div id="eCancel" class="err hidden" style="margin-top:12px"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn sm" id="bCancel" onclick="submitCancel()">Yes, cancel my order</button><button class="btn2" onclick="$('cancelConfirm').classList.add('hidden');$('cancelAsk').classList.remove('hidden')">Keep my order</button></div>
+          </div>
+        </div>
         <div class="stepnav"><button class="btn2" onclick="back()">← <span data-copy="back"></span></button><button class="btn2 quiet" onclick="startOver()" data-copy="nav_start_over"></button></div>
       </section>
 
@@ -591,8 +601,8 @@ function renderItems() {
     return `<div class="item ${x.eligible ? '' : 'off'}">${thumb}<div>
       <div class="t">${esc(x.title)}</div>${meta ? `<div class="v">${meta}</div>` : ''}
       ${x.eligible ? `<label class="pick"><input type="checkbox" data-i="${i}" onchange="toggleItem(${i})"> ${esc(C('return_this'))}</label>
-      <div class="detail hidden" id="d${i}"><div class="g"><select id="q${i}" aria-label="${esc(C('qty_label'))}">${qty}</select><select id="r${i}" onchange="validate2()" aria-label="Reason">${ropts}</select></div>
-      <textarea id="n${i}" rows="2" placeholder="${esc(C('note_placeholder'))}"></textarea></div>` : `<span class="tag">${esc(x.why || 'Not returnable')}</span>`}
+      <div class="detail hidden" id="d${i}"><div class="g"><select id="q${i}" aria-label="${esc(C('qty_label'))}">${qty}</select><select id="r${i}" onchange="reasonPicked(${i})" aria-label="Reason">${ropts}</select></div>
+      <textarea id="n${i}" rows="2" oninput="validate2()" placeholder="${esc(C('note_placeholder'))}"></textarea></div>` : `<span class="tag">${esc(x.why || 'Not returnable')}</span>`}
     </div></div>`;
   }).join('') || `<p class="muted">${esc(C('none_returnable'))}</p>`;
   for (const l of prev) {   // keep selections when the look changes in preview
@@ -611,7 +621,9 @@ function selectedLines() {
     return { it, fulfillmentLineItemId: it.fulfillmentLineItemId, quantity: Number($('q' + i).value), reasonId: $('r' + i).value, note: $('n' + i).value };
   }).filter(Boolean);
 }
-function validate2() { const l = selectedLines(); $('b2').disabled = !l.length || l.some((x) => !x.reasonId); }
+const isOtherReason = (id) => { const r = (S.reasons || []).find((x) => x.id === id); return !!(r && /^other\b/i.test(r.name)); };
+function reasonPicked(i) { const n = $('n' + i); if (n) { n.placeholder = isOtherReason($('r' + i).value) ? 'Please tell us why (required)' : C('note_placeholder'); if (isOtherReason($('r' + i).value)) n.focus(); } validate2(); }
+function validate2() { const l = selectedLines(); $('b2').disabled = !l.length || l.some((x) => !x.reasonId || (isOtherReason(x.reasonId) && x.note.trim().length < 3)); }
 
 function estimate() {
   const o = S.options, sub = selectedLines().reduce((s, l) => s + l.it.unit_price * l.quantity, 0);
@@ -686,7 +698,7 @@ const ICONS = {
   return: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
   defective: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
   pp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>',
-  nd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>',
+  other: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>',
 };
 const CHEV = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>';
 function renderMenu() {
@@ -695,110 +707,88 @@ function renderMenu() {
   const ex = (S.existing || []).filter((r) => r.status !== 'cancelled');
   $('menuExisting').innerHTML = ex.length ? ex.map((r) => `<div class="note"><strong>${esc(r.rma)}</strong> · ${esc(statusText(r.status))}${r.label_url && r.status !== 'refunded' ? ` · <a href="${esc(r.label_url)}" target="_blank" rel="noopener">${esc(C('download'))}</a>` : ''}</div>`).join('') : '';
   const m = S.menu || {}, canReturn = (S.items || []).some((i) => i.eligible);
-  const opt = (k, icon, title, sub, st) => `<button class="mopt" ${st && st.ok === false ? 'disabled' : ''} onclick="pickOption('${k}')"><span class="ic">${ICONS[icon]}</span><span><span class="mt">${esc(title)}</span><span class="ms">${esc(sub)}</span>${st && st.ok === false && st.why ? `<span class="why">${esc(st.why)}</span>` : ''}</span><span class="chev">${st && st.ok === false ? '' : CHEV}</span></button>`;
-  const editSt = m.edit || { ok: false, why: 'Not available' };
-  const items = [];
-  if (editSt.ok || !m.shipped) items.push(opt('edit', 'edit', CX('opt_edit_title', 'Edit my order'), CX('opt_edit_sub', 'Change the address, name or size, or add or remove items'), editSt));
-  items.push(opt('return', 'return', CX('opt_return_title', 'Start a return'), CX('opt_return_sub', 'Send items back for a refund or store credit'), canReturn ? { ok: true } : { ok: false, why: m.shipped === false ? 'Available once your order arrives' : (S.items || []).length ? 'Nothing on this order can be returned right now' : C('none_returnable') }));
-  items.push(opt('defective', 'defective', CX('opt_defect_title', 'Defective item'), CX('opt_defect_sub', 'Something arrived broken, torn or faulty'), m.defective));
-  items.push(opt('pp', 'pp', CX('opt_pp_title', 'Package Protection claim'), CX('opt_pp_sub', 'Lost, stuck, stolen, damaged or missing items'), m.pp));
-  items.push(opt('nd', 'nd', CX('opt_nd_title', 'Package not delivered'), CX('opt_nd_sub', "Tracking stopped, or it never showed up"), m.not_delivered));
-  $('mopts').innerHTML = items.join('');
+  const opt = (k, icon, title, sub, st) => { if (!st || st.show === false) return ''; const off = st.ok === false;
+    return `<button class="mopt" ${off ? 'disabled' : ''} onclick="pickOption('${k}')"><span class="ic">${ICONS[icon]}</span><span><span class="mt">${esc(title)}</span><span class="ms">${esc(sub)}</span>${off && st.why ? `<span class="why">${esc(st.why)}</span>` : ''}</span><span class="chev">${off ? '' : CHEV}</span></button>`; };
+  const ret = m.return && m.return.ok && !canReturn ? { show: true, ok: false, why: 'Nothing on this order can be returned right now' } : m.return;
+  const edit = m.edit && m.edit.ok ? { ...m.edit, why: null } : m.edit;
+  $('mopts').innerHTML = [
+    opt('edit', 'edit', CX('opt_edit_title', 'Edit or cancel my order'), m.edit && m.edit.ok && !m.edit.changes_ok ? 'Cancel before it ships' : CX('opt_edit_sub', 'Change a size or the address, or cancel'), edit),
+    opt('return', 'return', CX('opt_return_title', 'Start a return'), CX('opt_return_sub', 'Send items back for a refund or store credit'), ret),
+    opt('defective', 'defective', CX('opt_defect_title', 'Defective item'), CX('opt_defect_sub', 'Something arrived broken, torn or faulty'), m.defective),
+    opt('pp', 'pp', CX('opt_pp_title', 'Package Protection claim'), CX('opt_pp_sub', 'Lost, stolen or damaged in shipping'), m.pp),
+    opt('other', 'other', CX('opt_nd_title', 'Other'), m.state === 'unshipped' ? 'Send us a message' : CX('opt_nd_sub', "Package hasn't arrived, delivery problem, or something else"), m.other),
+  ].join('');
 }
 function pickOption(k) {
   if (PICK) return;
+  const me = $('menuErr'); if (me) me.remove();
   if (B.preview) { if (k === 'return') { renderItems(); go(2); } return; }
   if (k === 'return') { renderItems(); go(2); return; }
   if (k === 'edit') return openEdit();
   if (k === 'defective') return openClaim('defective');
   if (k === 'pp') return openClaim('pp');
-  if (k === 'nd') return openClaim('not_delivered');
+  if (k === 'other') return openClaim('other');
 }
-async function busyMenu(on) { document.querySelectorAll('.mopt').forEach((b) => { b.style.pointerEvents = on ? 'none' : ''; }); document.body.style.cursor = on ? 'progress' : ''; }
+function busyMenu(on) { document.querySelectorAll('.mopt').forEach((b) => { b.style.pointerEvents = on ? 'none' : ''; }); document.body.style.cursor = on ? 'progress' : ''; }
+function alertMenu(msg) { let el = $('menuErr'); if (!el) { el = document.createElement('div'); el.id = 'menuErr'; el.className = 'err'; $('mopts').before(el); } el.textContent = msg; el.classList.remove('hidden'); }
 
-/* ---------- edit order ---------- */
+/* ---------- edit / cancel order ---------- */
 let ED = null, edTimer = null;
 async function openEdit() {
   busyMenu(true);
-  try { ED = await api('/api/returns/public/edit/options', { token: S.token }); ED.adds = []; ED.changes = {}; }
+  try { ED = await api('/api/returns/public/edit/options', { token: S.token }); ED.changes = {}; }
   catch (e) { busyMenu(false); alertMenu(e.message); return; }
   busyMenu(false);
   const a = ED.address;
   $('ed_first').value = a.first_name; $('ed_last').value = a.last_name; $('ed_1').value = a.address1; $('ed_2').value = a.address2;
   $('ed_city').value = a.city; $('ed_state').value = a.state; $('ed_zip').value = a.zip; $('ed_phone').value = a.phone;
-  $('editTitle').textContent = 'Edit order ' + S.order.name; $('editQ').value = ''; $('editRes').innerHTML = ''; showErr('eEdit', ''); showErr('eEditTop', '');
-  renderEdit(); tickEdit(); clearInterval(edTimer); edTimer = setInterval(tickEdit, 1000);
+  $('editTitle').textContent = 'Order ' + S.order.name; showErr('eEdit', ''); showErr('eEditTop', ''); showErr('eCancel', '');
+  $('cancelAsk').classList.remove('hidden'); $('cancelConfirm').classList.add('hidden'); $('cancelWhy').value = '';
+  $('cancelBox').parentElement && $('cancelBox').classList.toggle('hidden', !ED.cancel_ok);
+  renderEdit(); tickEdit(); clearInterval(edTimer); if (ED.changes_ok) edTimer = setInterval(tickEdit, 1000);
   go('sEdit');
 }
-function alertMenu(msg) { let el = $('menuErr'); if (!el) { el = document.createElement('div'); el.id = 'menuErr'; el.className = 'err'; $('mopts').before(el); } el.textContent = msg; el.classList.remove('hidden'); }
 function tickEdit() {
   if (!ED) return;
   const left = Math.max(0, new Date(ED.until).getTime() - Date.now()), mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
-  $('editLead').innerHTML = left > 0 ? `You can make changes for <span class="timer">⏱ ${mm}:${String(ss).padStart(2, '0')}</span> more. After that your order goes to packing.` : 'The time to change this order has run out. Please email ' + esc(CTX.support) + ' and we’ll try to help.';
-  if (left <= 0) { $('bEdit').disabled = true; clearInterval(edTimer); }
+  const open = ED.changes_ok && left > 0;
+  $('editChanges').classList.toggle('hidden', !open);
+  $('editClosed').classList.toggle('hidden', open);
+  $('editClosed').textContent = 'Size and address changes are available for the first 15 minutes after you order. Your order hasn’t shipped yet, so you can still cancel it below.';
+  if (open) $('editLead').innerHTML = `You can change sizes or the address for <span class="timer">⏱ ${mm}:${String(ss).padStart(2, '0')}</span> more.`;
+  else clearInterval(edTimer);
 }
 function edLine(id) { return ED.lines.find((l) => l.id === id); }
-function edState(l) { return ED.changes[l.id] || { quantity: l.quantity, variant_id: l.variant_id }; }
+function edState(l) { return ED.changes[l.id] || { variant_id: l.variant_id }; }
 function edSet(id, patch) { const l = edLine(id); ED.changes[id] = { ...edState(l), ...patch }; renderEdit(); }
 function renderEdit() {
   $('editLines').innerHTML = ED.lines.map((l) => {
-    const st = edState(l), gone = st.quantity === 0;
+    const st = edState(l);
     const thumb = l.image ? `<img class="thumb" src="${esc(l.image)}" alt="">` : `<div class="thumb">${esc((l.title || '?').slice(0, 1))}</div>`;
-    const sizes = l.sizes.length > 1 ? `<select onchange="edSet('${l.id}',{variant_id:this.value})" aria-label="Size">${l.sizes.map((v) => `<option value="${esc(v.id)}" ${v.id === st.variant_id ? 'selected' : ''} ${!v.available && v.id !== l.variant_id ? 'disabled' : ''}>${esc(v.title)}${!v.available && v.id !== l.variant_id ? ' — sold out' : ''}${v.id !== l.variant_id && Math.abs(v.price - l.unit_price) > 0.009 && v.available ? ` (${money(v.price)})` : ''}</option>`).join('')}</select>` : '';
-    return `<div class="eline ${gone ? 'gone' : ''}">${thumb}<div><div class="t">${esc(l.title)}</div><div class="v muted">${[l.variant ? esc(l.variant) : '', money(l.unit_price)].filter(Boolean).join(' · ')}</div>
-      <div class="ctl">${sizes}<span class="qty"><button onclick="edSet('${l.id}',{quantity:${Math.max(0, st.quantity - 1)}})" ${st.quantity <= 0 ? 'disabled' : ''} aria-label="Less">−</button><span>${st.quantity}</span><button onclick="edSet('${l.id}',{quantity:${st.quantity + 1}})" ${st.quantity >= 10 ? 'disabled' : ''} aria-label="More">+</button></span>
-      ${gone ? '<span class="pill warn">Will be removed</span>' : st.variant_id !== l.variant_id ? '<span class="pill ok">New size</span>' : ''}</div></div></div>`;
+    const sizes = l.sizes.length > 1 ? `<select onchange="edSet('${l.id}',{variant_id:this.value})" aria-label="Size">${l.sizes.map((v) => { const cur = v.id === l.variant_id, off = !v.available && !cur; return `<option value="${esc(v.id)}" ${v.id === st.variant_id ? 'selected' : ''} ${off ? 'disabled' : ''}>${esc(v.title)}${cur ? ' (current)' : off ? ' — sold out' : Math.abs(v.price - l.unit_price) > 0.009 ? ` (${money(v.price)})` : ''}</option>`; }).join('')}</select>` : '<span class="muted">One size only</span>';
+    return `<div class="eline">${thumb}<div><div class="t">${esc(l.title)}</div><div class="v muted">${[l.variant ? esc(l.variant) : '', 'Qty ' + l.quantity, money(l.unit_price)].filter(Boolean).join(' · ')}</div>
+      <div class="ctl">${sizes}${st.variant_id !== l.variant_id ? '<span class="pill ok">New size</span>' : ''}</div></div></div>`;
   }).join('') || '<p class="muted">Nothing on this order can be changed.</p>';
-  $('editAdded').innerHTML = ED.adds.map((a, i) => `<div class="r">${a.image ? `<img src="${esc(a.image)}" alt="">` : '<div class="ph"></div>'}<div><strong>${esc(a.title)}</strong><div class="muted">${esc(a.vtitle)} · ${money(a.price)}</div>
-    <div class="row2"><span class="qty"><button onclick="edAddQty(${i},-1)">−</button><span>${a.quantity}</span><button onclick="edAddQty(${i},1)" ${a.quantity >= 10 ? 'disabled' : ''}>+</button></span><span class="pill ok">Adding</span></div></div></div>`).join('');
   renderEditSum();
-}
-function edDiff() {
-  let d = 0;
-  for (const l of ED.lines) { const st = edState(l); const v = l.sizes.find((x) => x.id === st.variant_id); const newPrice = st.variant_id === l.variant_id ? l.unit_price : (v ? v.price : l.unit_price); d += newPrice * st.quantity - l.unit_price * l.quantity; }
-  for (const a of ED.adds) d += a.price * a.quantity;
-  return Math.round(d * 100) / 100;
 }
 function edChanges() {
   const out = [];
-  for (const l of ED.lines) { const st = edState(l); if (st.quantity === 0) out.push(`Remove ${l.title}`); else { if (st.variant_id !== l.variant_id) out.push(`${l.title}: ${l.variant || ''} → ${(l.sizes.find((v) => v.id === st.variant_id) || {}).title}`); if (st.quantity !== l.quantity) out.push(`${l.title}: quantity ${l.quantity} → ${st.quantity}`); } }
-  for (const a of ED.adds) out.push(`Add ${a.quantity}× ${a.title}${a.vtitle && a.vtitle !== 'Default Title' ? ` (${a.vtitle})` : ''}`);
+  for (const l of ED.lines) { const st = edState(l); if (st.variant_id !== l.variant_id) out.push(`${l.title}: ${l.variant || ''} → ${(l.sizes.find((v) => v.id === st.variant_id) || {}).title}`); }
   return out;
 }
 function renderEditSum() {
-  const ch = edChanges(), d = edDiff();
-  let h = ch.length ? `<ul class="changes">${ch.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<div class="muted">No item changes yet. Address changes are saved too.</div>';
-  if (ch.length) h += `<div class="sum total"><span>${d > 0 ? 'Estimated amount due' : d < 0 ? 'Estimated refund' : 'Price change'}</span><span>${d === 0 ? 'None' : money(Math.abs(d))}</span></div>
-    <div class="muted" style="margin-top:6px">${d > 0 ? 'We’ll email you a secure link to pay the difference (plus any tax). Your order ships once it’s paid.' : d < 0 ? 'We’ll refund the difference to your original payment.' : ''}</div>`;
-  $('editSum').innerHTML = h;
-}
-function edAddQty(i, n) { const a = ED.adds[i]; a.quantity += n; if (a.quantity <= 0) ED.adds.splice(i, 1); renderEdit(); }
-let edSearchT = null;
-$('editQ').addEventListener('input', () => { clearTimeout(edSearchT); edSearchT = setTimeout(edSearch, 350); });
-async function edSearch() {
-  const q = $('editQ').value.trim(); if (q.length < 2) { $('editRes').innerHTML = ''; return; }
-  $('editRes').innerHTML = '<div class="muted">Searching…</div>';
-  try {
-    const r = await api('/api/returns/public/edit/search', { token: S.token, q }); ED.found = r.products;
-    $('editRes').innerHTML = r.products.length ? r.products.map((p, i) => `<div class="r">${p.image ? `<img src="${esc(p.image)}" alt="">` : '<div class="ph"></div>'}<div><strong>${esc(p.title)}</strong>
-      <div class="row2">${p.variants.length > 1 || p.variants[0].title !== 'Default Title' ? `<select id="edv${i}">${p.variants.map((v) => `<option value="${esc(v.id)}">${esc(v.title)} · ${money(v.price)}</option>`).join('')}</select>` : `<span class="muted" style="align-self:center">${money(p.variants[0].price)}</span>`}<button class="btn sm" onclick="edAdd(${i})">Add</button></div></div></div>`).join('') : '<div class="muted">No products found. Try another word.</div>';
-  } catch (e) { $('editRes').innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
-}
-function edAdd(i) {
-  const p = ED.found[i], sel = $('edv' + i), v = sel ? p.variants.find((x) => x.id === sel.value) : p.variants[0];
-  const ex = ED.adds.find((a) => a.variant_id === v.id); if (ex) ex.quantity += 1; else ED.adds.push({ variant_id: v.id, title: p.title, vtitle: v.title, price: v.price, image: p.image, quantity: 1 });
-  $('editRes').innerHTML = ''; $('editQ').value = ''; renderEdit();
+  const ch = edChanges();
+  $('editSum').innerHTML = ch.length ? `<ul class="changes">${ch.map((x) => `<li>${esc(x)}</li>`).join('')}</ul><div class="muted" style="margin-top:6px">If a new size costs more, we’ll email you a secure link to pay the difference. If it costs less, we’ll refund the difference.</div>` : '<div class="muted">No size changes yet. Address changes are saved too.</div>';
 }
 async function submitEdit() {
   showErr('eEdit', '');
   const address = { first_name: $('ed_first').value.trim(), last_name: $('ed_last').value.trim(), address1: $('ed_1').value.trim(), address2: $('ed_2').value.trim(), city: $('ed_city').value.trim(), state: $('ed_state').value.trim().toUpperCase(), zip: $('ed_zip').value.trim(), phone: $('ed_phone').value.trim() };
   if (!address.first_name || !address.last_name || !address.address1 || !address.city || !address.state || !address.zip) { showErr('eEdit', 'Please fill in the name and full address.'); return; }
-  const lines = ED.lines.map((l) => ({ id: l.id, ...edState(l) }));
+  const lines = ED.lines.map((l) => ({ id: l.id, quantity: l.quantity, variant_id: edState(l).variant_id }));
   busy($('bEdit'), true);
   try {
-    const r = await api('/api/returns/public/edit/submit', { token: S.token, address, lines, adds: ED.adds.map((a) => ({ variant_id: a.variant_id, quantity: a.quantity })) });
-    clearInterval(edTimer); ED = null;
-    S.done2 = r;
+    const r = await api('/api/returns/public/edit/submit', { token: S.token, address, lines, adds: [] });
+    clearInterval(edTimer); ED = null; S.done2 = r;
     $('d2Title').textContent = 'Your order is updated';
     $('d2Sub').textContent = 'Order ' + S.order.name;
     $('d2Body').innerHTML = `<ul class="changes">${r.changes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` +
@@ -810,41 +800,54 @@ async function submitEdit() {
   } catch (e) { showErr('eEdit', e.message); }
   busy($('bEdit'), false, 'Save changes');
 }
+async function submitCancel() {
+  showErr('eCancel', '');
+  busy($('bCancel'), true);
+  try {
+    const r = await api('/api/returns/public/edit/cancel', { token: S.token, reason: $('cancelWhy').value });
+    clearInterval(edTimer); ED = null; S.done2 = r; S.menu = { ...(S.menu || {}), state: 'cancelled', edit: { show: true, ok: false, why: 'This order was cancelled' } };
+    $('d2Title').textContent = 'Your order is cancelled'; $('d2Sub').textContent = 'Order ' + S.order.name;
+    $('d2Body').innerHTML = `<div class="note" style="text-align:left">${esc(r.note)}</div>`;
+    go('sDone2');
+  } catch (e) { showErr('eCancel', e.message); }
+  busy($('bCancel'), false, 'Yes, cancel my order');
+}
 
-/* ---------- claims: defective / Package Protection / not delivered ---------- */
+/* ---------- claims: defective / Package Protection / Other ---------- */
 let CL = null, PH = [];
-const SUB = { not_arrived: "My package hasn't arrived", delivered_missing: "Marked delivered, but I didn't get it", damaged: 'My package arrived damaged', missing_items: 'Items are missing from my package' };
+const SUB = { not_arrived: "My package hasn't arrived", delivered_missing: "My package was marked delivered, but I didn't get it", damaged: 'My package arrived damaged', something_else: 'Something else' };
 const RES = { replacement: ['Replacement', 'We’ll send the same item(s) again, free'], store_credit: ['Store credit', 'Added to your {store} account'], refund: ['Refund', 'Back to your original payment'] };
 async function openClaim(type) {
   busyMenu(true);
   try { CL = await api('/api/returns/public/claim/start', { token: S.token, type }); }
   catch (e) { busyMenu(false); alertMenu(e.message); return; }
   busyMenu(false);
-  PH = []; CL.sel = {}; CL.res = null; CL.sub = null;
-  if (CL.type === 'pp' && type === 'not_delivered') CL.sub = (CL.shipments || []).some((s) => s.delivered) ? 'delivered_missing' : 'not_arrived';
+  PH = []; CL.sel = {}; CL.res = null; CL.sub = null; CL.desc = '';
+  if (CL.state === 'unshipped' && CL.type === 'other') CL.sub = 'something_else';
   showErr('eClaim', ''); renderClaim(); go('sClaim');
 }
 function trkHtml(list) {
-  return (list || []).map((t) => `<div class="trk"><div class="top"><span class="st">${esc(t.delivered ? 'Delivered' : t.status || 'In transit')}</span>${t.number ? `<a href="${esc(t.url || '#')}" target="_blank" rel="noopener">${esc(t.carrier)} · ${esc(t.number)}</a>` : ''}</div>
-    <div class="meta">${t.delivered && t.delivered_at ? 'Delivered ' + esc(new Date(t.delivered_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : t.last_event ? esc(t.last_event.desc || '') + (t.last_event.where ? ' · ' + esc(t.last_event.where) : '') + ' · ' + esc(new Date(t.last_update_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : 'Shipped ' + esc(new Date(t.shipped_at).toLocaleDateString([], { month: 'short', day: 'numeric' }))}</div></div>`).join('') || '<div class="note">We don’t have tracking for this order yet.</div>';
+  const tracked = (list || []).filter((t) => t.number);
+  return tracked.map((t) => `<div class="trk"><div class="top"><span class="st">${esc(t.delivered ? 'Delivered' : t.status || 'In transit')}</span><a href="${esc(t.url || '#')}" target="_blank" rel="noopener">${esc(t.carrier)} · ${esc(t.number)}</a></div>
+    <div class="meta">${t.delivered && t.delivered_at ? 'Delivered ' + esc(new Date(t.delivered_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : t.last_event ? esc(t.last_event.desc || '') + (t.last_event.where ? ' · ' + esc(t.last_event.where) : '') + ' · ' + esc(new Date(t.last_update_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : 'Shipped ' + esc(new Date(t.shipped_at).toLocaleDateString([], { month: 'short', day: 'numeric' }))}</div></div>`).join('');
 }
-function claimItemsHtml(withQty) {
+function claimItemsHtml() {
   return CL.items.map((x) => {
     const on = !!CL.sel[x.id], q = CL.sel[x.id] || 1;
     const thumb = x.image ? `<img class="thumb" src="${esc(x.image)}" alt="">` : `<div class="thumb">${esc((x.title || '?').slice(0, 1))}</div>`;
-    return `<div class="item">${thumb}<div><div class="t">${esc(x.title)}</div><div class="v">${esc(x.variant || '')}${x.variant ? ' · ' : ''}${money(x.unit_price)}</div>
+    return `<div class="item">${thumb}<div><div class="t">${esc(x.title)}</div><div class="v">${[x.variant ? esc(x.variant) : '', money(x.unit_price)].filter(Boolean).join(' · ')}</div>
       <label class="pick"><input type="checkbox" ${on ? 'checked' : ''} onchange="clSel('${x.id}', this.checked)"> This item</label>
-      ${on && withQty && x.max > 1 ? `<div class="ctl" style="margin-top:8px"><span class="qty"><button onclick="clQty('${x.id}',-1)" ${q <= 1 ? 'disabled' : ''}>−</button><span>${q}</span><button onclick="clQty('${x.id}',1)" ${q >= x.max ? 'disabled' : ''}>+</button></span></div>` : ''}</div></div>`;
-  }).join('');
+      ${on && x.max > 1 ? `<div class="ctl" style="margin-top:8px"><span class="qty"><button onclick="clQty('${x.id}',-1)" ${q <= 1 ? 'disabled' : ''}>−</button><span>${q}</span><button onclick="clQty('${x.id}',1)" ${q >= x.max ? 'disabled' : ''}>+</button></span></div>` : ''}</div></div>`;
+  }).join('') || '<p class="muted">There are no items left to claim on this order.</p>';
 }
 function clSel(id, on) { if (on) CL.sel[id] = 1; else delete CL.sel[id]; renderClaim(); }
 function clQty(id, n) { const x = CL.items.find((i) => i.id === id); CL.sel[id] = Math.max(1, Math.min(x.max, (CL.sel[id] || 1) + n)); renderClaim(); }
 function clLines() {
-  if (CL.type === 'pp' && (CL.sub === 'not_arrived' || CL.sub === 'delivered_missing')) return ((CL.shipment_items && CL.shipment_items[CL.sub]) || CL.items.map((x) => ({ id: x.id, quantity: x.max }))).map((q) => ({ it: CL.items.find((x) => x.id === q.id), quantity: q.quantity })).filter((l) => l.it);
+  if (CL.type !== 'defective' && (CL.sub === 'not_arrived' || CL.sub === 'delivered_missing')) return ((CL.shipment_items && CL.shipment_items[CL.sub]) || CL.items.map((x) => ({ id: x.id, quantity: x.max }))).map((q) => ({ it: CL.items.find((x) => x.id === q.id), quantity: q.quantity })).filter((l) => l.it);
   return Object.entries(CL.sel).map(([id, q]) => ({ it: CL.items.find((x) => x.id === id), quantity: q })).filter((l) => l.it);
 }
 function photosHtml(required) {
-  return `<h2 class="label">Photos${required ? '' : ' (optional)'}</h2><p class="muted" style="margin:-4px 0 10px">${required ? 'Clear photos of the problem help us approve your claim quickly. Add up to 6.' : 'Add photos if you have them.'}</p>
+  return `<h2 class="label">Photos${required ? '' : ' (optional)'}</h2><p class="muted" style="margin:-4px 0 10px">${required ? 'Clear photos of the problem help us approve your claim quickly. Add up to 6.' : 'Add photos if they help. Up to 6.'}</p>
     <div class="photos">${PH.map((p, i) => `<div class="p"><img src="${p.preview}" alt="">${p.id ? `<button onclick="rmPhoto(${i})" aria-label="Remove">×</button>` : '<div class="up"><span class="spin"></span></div>'}</div>`).join('')}
     ${PH.length < 6 ? `<label class="add"><input type="file" accept="image/*" multiple style="display:none" onchange="addPhotos(this.files);this.value=''">＋<br>Add photo</label>` : ''}</div>`;
 }
@@ -856,43 +859,47 @@ function resHtml(value) {
       <div class="top"><strong>${esc(t)}</strong>${r !== 'replacement' && value ? `<strong>${money(value)}</strong>` : ''}</div><div class="muted">${esc(dis ? 'Out of stock right now' : tok(d))}</div></label>`;
   }).join('');
 }
+function subChoices(keys) {
+  return keys.map((k) => { const o = (CL.subs || {})[k] || { ok: false }; const off = !o.ok;
+    return `<label class="choice ${CL.sub === k ? 'sel' : ''} ${off ? 'dis' : ''}"><input type="radio" name="clsub" ${off ? 'disabled' : ''} ${CL.sub === k ? 'checked' : ''} onchange="CL.sub='${k}';CL.sel={};CL.res=null;renderClaim()"><strong>${esc(SUB[k])}</strong>${off && o.why ? `<div class="muted" style="margin-top:4px">${esc(o.why)}</div>` : ''}</label>`; }).join('');
+}
 function renderClaim() {
-  const b = $('claimBody'); let h = '', canSubmit = true;
+  const b = $('claimBody'); let h = '', canSubmit = false;
   $('claimSubmitWrap').classList.remove('hidden');
-  if (CL.type === 'not_delivered') {
-    h = `<h1>Package not delivered</h1><p class="lead">Order ${esc(S.order.name)}</p>${trkHtml(CL.shipments)}
-      <div class="note" style="margin-top:12px">${rich(CX('nopp_text', "Your order didn't include Package Protection, so we aren't able to replace or refund a package that's lost, delayed or stolen in transit. The carrier can help, and your tracking number is your proof of shipment."))}</div>
-      <div class="linkrow">${(CL.carrier_links || []).map((l) => `<a class="btn2" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join('')}</div>
-      <h2 class="label">Before you file</h2><ol class="changes"><li>Check your mailbox, porch, garage and around your home.</li><li>Ask neighbors and anyone else at your address.</li><li>Carriers sometimes mark a package delivered up to a day early. Give it 24 hours.</li><li>Ask your local post office (for USPS) to check for it.</li></ol>`;
-    b.innerHTML = h; $('claimSubmitWrap').classList.add('hidden'); return;
-  }
+  const open = CL.open_claim ? `<div class="note">You already have a claim open on this order (${esc(CL.open_claim)}). We’ll email you about it soon.</div>` : '';
   if (CL.type === 'defective') {
     const lines = clLines(), value = lines.reduce((t, l) => t + l.it.unit_price * l.quantity, 0);
-    h = `<h1>Report a defective item</h1><p class="lead">Order ${esc(S.order.name)}. Tell us which item has a problem and show us with a photo. You can keep the item.</p>
-      ${CL.open_claim ? `<div class="note">You already have a claim open on this order (${esc(CL.open_claim)}). We’ll email you about it soon.</div>` : ''}
-      <div id="clItems">${claimItemsHtml(true)}</div>
+    h = `<h1>Report a defective item</h1><p class="lead">Order ${esc(S.order.name)}. Tell us which item has a problem and show us with a photo. You can keep the item.</p>${open}
+      <div>${claimItemsHtml()}</div>
       <h2 class="label">What’s wrong?</h2><textarea id="clDesc" rows="3" placeholder="e.g. The zipper came apart on the first wear">${esc(CL.desc || '')}</textarea>
       ${photosHtml(true)}${lines.length ? resHtml(value) : ''}`;
     canSubmit = lines.length > 0 && PH.length > 0 && PH.every((p) => p.id) && !!CL.res && !CL.open_claim;
   } else {
-    const sub = CL.sub, gate = sub ? CL.gates[sub] : null;
-    h = `<h1>Package Protection claim</h1><p class="lead">Order ${esc(S.order.name)} is covered by Package Protection.</p>
-      ${CL.open_claim ? `<div class="note">You already have a claim open on this order (${esc(CL.open_claim)}). We’ll email you about it soon.</div>` : ''}
-      ${trkHtml(CL.shipments)}<h2 class="label">What happened?</h2>` +
-      Object.keys(SUB).map((k) => `<label class="choice ${sub === k ? 'sel' : ''}"><input type="radio" name="clsub" ${sub === k ? 'checked' : ''} onchange="CL.sub='${k}';CL.sel={};renderClaim()"><strong>${esc(SUB[k])}</strong></label>`).join('');
-    if (gate && !gate.ok) { h += `<div class="gate">${esc(gate.why)}</div>`; canSubmit = false; }
-    else if (sub) {
-      if (sub === 'damaged' || sub === 'missing_items') h += `<h2 class="label">${sub === 'damaged' ? 'Which items were damaged?' : 'Which items are missing?'}</h2>${claimItemsHtml(true)}`;
+    const keys = CL.type === 'other' ? ['not_arrived', 'delivered_missing', 'damaged', 'something_else'] : ['not_arrived', 'delivered_missing', 'damaged'];
+    const sub = CL.sub, o = sub ? CL.subs[sub] : null;
+    h = CL.type === 'other' ? `<h1>How can we help?</h1><p class="lead">Order ${esc(S.order.name)}${CL.state === 'unshipped' ? ' hasn’t shipped yet.' : ''}</p>` : `<h1>Package Protection claim</h1><p class="lead">Order ${esc(S.order.name)} is covered by Package Protection.</p>`;
+    h += trkHtml(CL.shipments) + `<h2 class="label">What happened?</h2>` + subChoices(keys);
+    if (sub === 'something_else') {
+      h += `<h2 class="label">Tell us what’s going on</h2><textarea id="clDesc" rows="4" placeholder="Write your message here">${esc(CL.desc || '')}</textarea>${photosHtml(false)}`;
+      canSubmit = (CL.desc || '').trim().length >= 10 && PH.every((p) => p.id);
+    } else if (sub && o && o.ok && o.carrier_only) {
+      h += `<div class="note" style="margin-top:12px">${rich(CX('nopp_text', "Your order didn't include Package Protection, so we aren't able to replace or refund a package that the carrier marked delivered. Please file a claim with the carrier. Your tracking number is your proof of shipment."))}</div>
+        <div class="linkrow">${(CL.carrier_links || []).map((l) => `<a class="btn2" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join('')}</div>
+        <h2 class="label">Before you file</h2><ol class="changes"><li>Check your mailbox, porch, garage and around your home.</li><li>Ask neighbors and anyone else at your address.</li><li>Ask your local post office to check for it.</li></ol>`;
+      $('claimSubmitWrap').classList.add('hidden');
+    } else if (sub && o && o.ok) {
+      h += open;
+      if (sub === 'damaged') h += `<h2 class="label">Which items were damaged?</h2>${claimItemsHtml()}`;
       h += `<h2 class="label">Anything else we should know?${sub === 'damaged' ? '' : ' (optional)'}</h2><textarea id="clDesc" rows="3" placeholder="${sub === 'damaged' ? 'e.g. The box was crushed and the item inside is torn' : 'e.g. I checked with neighbors and the front office'}">${esc(CL.desc || '')}</textarea>`;
-      if (sub === 'damaged' || sub === 'missing_items') h += photosHtml(sub === 'damaged');
+      if (sub === 'damaged') h += photosHtml(true);
       const lines = clLines(), value = lines.reduce((t, l) => t + l.it.unit_price * l.quantity, 0);
       if (lines.length) h += resHtml(value);
-      canSubmit = lines.length > 0 && !!CL.res && (sub !== 'damaged' || (PH.length > 0)) && PH.every((p) => p.id);
-    } else canSubmit = false;
-    if (CL.open_claim) canSubmit = false;
+      canSubmit = lines.length > 0 && !!CL.res && (sub !== 'damaged' || PH.length > 0) && PH.every((p) => p.id) && !CL.open_claim;
+    }
   }
   b.innerHTML = h;
-  const d = $('clDesc'); if (d) d.addEventListener('input', () => { CL.desc = d.value; });
+  const d = $('clDesc'); if (d) d.addEventListener('input', () => { CL.desc = d.value; if (CL.sub === 'something_else') $('bClaim').disabled = !(CL.desc.trim().length >= 10 && PH.every((p) => p.id)); });
+  $('bClaim').textContent = CL.sub === 'something_else' ? 'Send message' : 'Submit claim';
   $('bClaim').disabled = !canSubmit;
 }
 function rmPhoto(i) { PH.splice(i, 1); renderClaim(); }
@@ -919,17 +926,23 @@ async function submitClaim() {
   const lines = clLines().map((l) => ({ id: l.it.id, quantity: l.quantity }));
   const desc = ($('clDesc') && $('clDesc').value) || '';
   if (CL.type === 'defective' && desc.trim().length < 10) { showErr('eClaim', 'Please tell us a little about what’s wrong with the item.'); return; }
-  if (CL.type === 'pp' && CL.sub === 'damaged' && desc.trim().length < 5) { showErr('eClaim', 'Please tell us what was damaged.'); return; }
+  if (CL.sub === 'damaged' && desc.trim().length < 5) { showErr('eClaim', 'Please tell us what was damaged.'); return; }
+  const other = CL.sub === 'something_else';
   busy($('bClaim'), true);
   try {
-    const r = await api('/api/returns/public/claim/submit', { token: S.token, type: CL.type, subtype: CL.sub, lines, description: desc, photo_ids: PH.map((p) => p.id), resolution: CL.res });
+    const r = await api('/api/returns/public/claim/submit', { token: S.token, type: other ? 'other' : CL.type === 'defective' ? 'defective' : 'pp', subtype: CL.sub, lines, description: desc, photo_ids: PH.map((p) => p.id), resolution: CL.res });
     S.done2 = r; CL = null; PH = [];
-    $('d2Title').textContent = CX('claim_done_title', 'Claim submitted');
-    $('d2Sub').textContent = CX('claim_done_sub', 'Claim {number}. Our team reviews claims within 1 business day and will email {email} with the result.', { number: r.number, email: r.email || 'you' });
-    $('d2Body').innerHTML = `<div class="note" style="text-align:left">You asked for: <strong>${esc(RES[r.resolution][0])}</strong>${r.resolution !== 'replacement' ? ' · ' + money(r.value) : ''}. We sent a confirmation to your email. Reply to it any time to add photos or details.</div>`;
+    if (other) {
+      $('d2Title').textContent = 'Message sent'; $('d2Sub').textContent = `Reference ${r.number}`;
+      $('d2Body').innerHTML = `<div class="note" style="text-align:left">Thanks! Our team will reply to ${esc(r.email || 'your email')} soon.</div>`;
+    } else {
+      $('d2Title').textContent = CX('claim_done_title', 'Claim submitted');
+      $('d2Sub').textContent = CX('claim_done_sub', 'Claim {number}. We’ll email {email} with the result, usually within minutes.', { number: r.number, email: r.email || 'you' });
+      $('d2Body').innerHTML = `<div class="note" style="text-align:left">You asked for: <strong>${esc(RES[r.resolution][0])}</strong>${r.resolution !== 'replacement' ? ' · ' + money(r.value) : ''}. We sent a confirmation to your email. Reply to it any time to add photos or details.</div>`;
+    }
     go('sDone2');
   } catch (e) { showErr('eClaim', e.message); }
-  busy($('bClaim'), false, 'Submit claim');
+  busy($('bClaim'), false, other ? 'Send message' : 'Submit claim');
 }
 
 /* ---------- preview (Portal Studio) ---------- */
@@ -945,7 +958,7 @@ function loadDemo() {
     ],
     reasons: (B.reasons || ['I received the wrong item', 'Item was damaged', "I didn't have a good experience", "Item didn't fit", 'I found something else I like more', "I didn't like the item"]).map((n, i) => ({ id: 'r' + (i + 1), name: n })),
     existing: [],
-    menu: { shipped: true, has_pp: true, edit: { ok: false, why: 'Orders can be changed for 15 minutes after purchase' }, defective: { ok: true }, pp: { ok: true }, not_delivered: { ok: true } },
+    menu: { state: 'delivered', shipped: true, has_pp: true, edit: { show: true, ok: false, why: 'Your order has already shipped' }, return: { show: true, ok: true }, defective: { show: true, ok: true }, pp: { show: true, ok: true }, other: { show: true, ok: true } },
     options: { label_fee: CTX.fee, store_credit_enabled: CTX.credit_enabled, store_credit_bonus_pct: CTX.bonus, fee_on_store_credit: CTX.fee_on_credit },
   };
   addr = { ...S.address };
