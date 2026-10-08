@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.26.2
+- Claims fix: the Package Protection line's own no-tracking fulfillment was treated as a package that never moved, so delivered orders showed "still moving". Cancelled fulfillments, PP-only fulfillments, and untracked fulfillments (when a tracked one exists) are now ignored.
+
 ## 4.26.1
 - Returns portal fix: after the first lookup, the reason list showed Shopify's full library (with no ids), so Continue never enabled. Customers now always get the six reasons.
 

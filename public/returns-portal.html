@@ -825,7 +825,7 @@ async function openClaim(type) {
   showErr('eClaim', ''); renderClaim(); go('sClaim');
 }
 function trkHtml(list) {
-  return (list || []).map((t) => `<div class="trk"><div class="top"><span class="st">${esc(t.delivered ? 'Delivered' : t.status || 'In transit')}</span><a href="${esc(t.url || '#')}" target="_blank" rel="noopener">${esc(t.carrier)} · ${esc(t.number)}</a></div>
+  return (list || []).map((t) => `<div class="trk"><div class="top"><span class="st">${esc(t.delivered ? 'Delivered' : t.status || 'In transit')}</span>${t.number ? `<a href="${esc(t.url || '#')}" target="_blank" rel="noopener">${esc(t.carrier)} · ${esc(t.number)}</a>` : ''}</div>
     <div class="meta">${t.delivered && t.delivered_at ? 'Delivered ' + esc(new Date(t.delivered_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : t.last_event ? esc(t.last_event.desc || '') + (t.last_event.where ? ' · ' + esc(t.last_event.where) : '') + ' · ' + esc(new Date(t.last_update_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : 'Shipped ' + esc(new Date(t.shipped_at).toLocaleDateString([], { month: 'short', day: 'numeric' }))}</div></div>`).join('') || '<div class="note">We don’t have tracking for this order yet.</div>';
 }
 function claimItemsHtml(withQty) {

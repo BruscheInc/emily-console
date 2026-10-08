@@ -68,7 +68,7 @@ const ORDER_Q = `query($id:ID!){ order(id:$id){ id name createdAt cancelledAt di
   lineItems(first:50){ nodes{ id title variantTitle sku quantity currentQuantity unfulfilledQuantity image{ url(transform:{maxWidth:200}) }
     discountedUnitPriceAfterAllDiscountsSet{ shopMoney{ amount } } originalUnitPriceSet{ shopMoney{ amount } }
     variant{ id availableForSale product{ id title variants(first:60){ nodes{ id title sku price availableForSale } } } } } }
-  fulfillments(first:10){ createdAt deliveredAt displayStatus trackingInfo{ number url company } fulfillmentLineItems(first:50){ nodes{ quantity lineItem{ id } } } } } }`;
+  fulfillments(first:10){ createdAt deliveredAt displayStatus status trackingInfo{ number url company } fulfillmentLineItems(first:50){ nodes{ quantity lineItem{ id } } } } } }`;
 
 async function loadOrder(key, orderId) {
   const st = R().shopFor(key), s = await R().settings();
@@ -82,7 +82,13 @@ async function loadOrder(key, orderId) {
   }));
   const ppLines = all.filter((l) => R().isPP(l, s) && l.current > 0);
   const lines = all.filter((l) => !R().isPP(l, s) && l.current > 0);
-  const fulfillments = (o.fulfillments || []).map((f) => ({ at: f.createdAt, delivered_at: f.deliveredAt, status: f.displayStatus,
+  // Real shipments only: skip cancelled fulfillments and ones that only "fulfil" the Package Protection fee line
+  // (PP apps mark that line fulfilled with no tracking — it isn't a package).
+  const ppIds = new Set(ppLines.map((l) => l.id));
+  const fulfillments = (o.fulfillments || []).filter((f) => !/CANCEL|FAIL|ERROR/i.test(String(f.status || ""))).filter((f) => {
+    const ls = ((f.fulfillmentLineItems && f.fulfillmentLineItems.nodes) || []).filter((x) => x.lineItem);
+    return !(ls.length && ls.every((x) => ppIds.has(x.lineItem.id)));
+  }).map((f) => ({ at: f.createdAt, delivered_at: f.deliveredAt, status: f.displayStatus,
     tracking: (f.trackingInfo || []).filter((t) => t.number).map((t) => ({ number: t.number, url: t.url, company: t.company })),
     lines: ((f.fulfillmentLineItems && f.fulfillmentLineItems.nodes) || []).filter((x) => x.lineItem).map((x) => ({ id: x.lineItem.id, quantity: x.quantity })) }));
   const shippedAt = fulfillments.map((f) => f.at).sort()[0] || null;
@@ -268,7 +274,8 @@ async function editSubmit(token, body) {
  * ============================================================================================= */
 async function trackingFor(c) {
   const out = [];
-  for (const [fi, f] of c.fulfillments.entries()) for (const t of (f.tracking.length ? f.tracking : [{ number: null, url: null, company: null }])) {
+  const anyTracked = c.fulfillments.some((f) => f.tracking.length);
+  for (const [fi, f] of c.fulfillments.entries()) for (const t of (f.tracking.length ? f.tracking : anyTracked ? [] : [{ number: null, url: null, company: null }])) {
     if (!t.number) { out.push({ fi, number: null, url: null, carrier: "the carrier", shipped_at: f.at, delivered: !!f.delivered_at || /DELIVERED/i.test(f.status || ""), delivered_at: f.delivered_at || null, status: f.delivered_at ? "Delivered" : "Shipped (no tracking number)", last_event: null, last_update_at: f.at, live: false, no_tracking: true }); continue; }
     const guess = K().carrierFromNumber(t.number);
     let live = null;
