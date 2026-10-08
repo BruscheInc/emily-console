@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.27.0
+- Claims: tracking is now verified across independent sources before a lost or not-delivered claim can open — Shopify's fulfillment tracking (when Shopify follows the number), ShipStation's carrier tracking, and USPS directly for USPS packages (needs USPS_CLIENT_ID / USPS_CLIENT_SECRET from developers.usps.com). At least two sources must answer. Any source saying delivered blocks "hasn't arrived"; "marked delivered" needs a carrier source (ShipStation or USPS) to confirm delivery. If sources can't be reached the claim stays closed and the customer is asked to email. Staff see each source's answer on the claim.
+
 ## 4.26.2
 - Claims fix: the Package Protection line's own no-tracking fulfillment was treated as a package that never moved, so delivered orders showed "still moving". Cancelled fulfillments, PP-only fulfillments, and untracked fulfillments (when a tracked one exists) are now ignored.
 

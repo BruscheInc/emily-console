@@ -68,7 +68,7 @@ const ORDER_Q = `query($id:ID!){ order(id:$id){ id name createdAt cancelledAt di
   lineItems(first:50){ nodes{ id title variantTitle sku quantity currentQuantity unfulfilledQuantity image{ url(transform:{maxWidth:200}) }
     discountedUnitPriceAfterAllDiscountsSet{ shopMoney{ amount } } originalUnitPriceSet{ shopMoney{ amount } }
     variant{ id availableForSale product{ id title variants(first:60){ nodes{ id title sku price availableForSale } } } } } }
-  fulfillments(first:10){ createdAt deliveredAt displayStatus status trackingInfo{ number url company } fulfillmentLineItems(first:50){ nodes{ quantity lineItem{ id } } } } } }`;
+  fulfillments(first:10){ createdAt deliveredAt displayStatus status events(first:3, sortKey: HAPPENED_AT, reverse:true){ nodes{ status happenedAt message city province } } trackingInfo{ number url company } fulfillmentLineItems(first:50){ nodes{ quantity lineItem{ id } } } } } }`;
 
 async function loadOrder(key, orderId) {
   const st = R().shopFor(key), s = await R().settings();
@@ -88,7 +88,7 @@ async function loadOrder(key, orderId) {
   const fulfillments = (o.fulfillments || []).filter((f) => !/CANCEL|FAIL|ERROR/i.test(String(f.status || ""))).filter((f) => {
     const ls = ((f.fulfillmentLineItems && f.fulfillmentLineItems.nodes) || []).filter((x) => x.lineItem);
     return !(ls.length && ls.every((x) => ppIds.has(x.lineItem.id)));
-  }).map((f) => ({ at: f.createdAt, delivered_at: f.deliveredAt, status: f.displayStatus,
+  }).map((f) => ({ at: f.createdAt, delivered_at: f.deliveredAt, status: f.displayStatus, events: ((f.events && f.events.nodes) || []),
     tracking: (f.trackingInfo || []).filter((t) => t.number).map((t) => ({ number: t.number, url: t.url, company: t.company })),
     lines: ((f.fulfillmentLineItems && f.fulfillmentLineItems.nodes) || []).filter((x) => x.lineItem).map((x) => ({ id: x.lineItem.id, quantity: x.quantity })) }));
   const shippedAt = fulfillments.map((f) => f.at).sort()[0] || null;
@@ -272,45 +272,116 @@ async function editSubmit(token, body) {
 /* =============================================================================================
  *  CLAIMS — defective / Package Protection / not delivered
  * ============================================================================================= */
+/* ---- Tracking, verified. Every package is checked with up to three independent sources — Shopify's fulfillment
+ * status, ShipStation's carrier tracking, and USPS directly (USPS packages, when USPS_CLIENT_ID/SECRET are set).
+ * A lost / not-delivered claim only opens when every required source answered and they agree. ---- */
+const DELIVERED_RE = /\bdelivered\b/i, NOT_DELIVERED_RE = /out for delivery|attempt|not delivered|undeliver|delivery exception|return(ed)? to sender/i;
+const SRC_NAME = { shopify: "Shopify", shipstation: "ShipStation", usps: "USPS" };
+const srcList = (ks) => ks.map((k) => SRC_NAME[k] || k).join(" + ");
+const isDeliveredText = (t) => DELIVERED_RE.test(t || "") && !NOT_DELIVERED_RE.test(t || "");
+let uspsTok = { token: null, exp: 0 };
+const uspsConfigured = () => !!(process.env.USPS_CLIENT_ID && process.env.USPS_CLIENT_SECRET);
+async function uspsToken() {
+  if (uspsTok.token && Date.now() < uspsTok.exp) return uspsTok.token;
+  const r = await fetch("https://apis.usps.com/oauth2/v3/token", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ grant_type: "client_credentials", client_id: process.env.USPS_CLIENT_ID, client_secret: process.env.USPS_CLIENT_SECRET }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error(`USPS sign-in failed (${r.status})`);
+  uspsTok = { token: j.access_token, exp: Date.now() + ((Number(j.expires_in) || 3600) - 300) * 1000 };
+  return uspsTok.token;
+}
+function parseUsps(j) {
+  // v3 JSON: statusCategory / status / trackingEvents[{eventType, eventTimestamp, eventCity, eventState}]; older shape: TrackSummary / TrackDetail
+  const evs = (j.trackingEvents || j.TrackDetail || []).map((e) => ({ desc: e.eventType || e.Event || e.event, at: e.eventTimestamp || e.GMTTimestamp || (e.EventDate ? `${e.EventDate} ${e.EventTime || ""}` : null), where: [e.eventCity || e.EventCity, e.eventState || e.EventState].filter(Boolean).join(", ") }));
+  const sum = j.TrackSummary ? { desc: j.TrackSummary.Event, at: `${j.TrackSummary.EventDate} ${j.TrackSummary.EventTime || ""}`, where: [j.TrackSummary.EventCity, j.TrackSummary.EventState].filter(Boolean).join(", ") } : null;
+  const all = (sum ? [sum, ...evs] : evs).filter((e) => e.desc).map((e) => ({ ...e, ms: e.at ? Date.parse(e.at) : NaN }));
+  all.sort((a, b) => (b.ms || 0) - (a.ms || 0));
+  const last = all[0] || null;
+  const statusText = j.statusCategory || j.status || (last && last.desc) || "";
+  const delivered = /^delivered$/i.test(String(j.statusCategory || "")) || isDeliveredText(statusText) || (last ? isDeliveredText(last.desc) : false);
+  const dEv = all.find((e) => isDeliveredText(e.desc));
+  return { ok: true, delivered, delivered_at: delivered && dEv && !isNaN(dEv.ms) ? new Date(dEv.ms).toISOString() : null, last_at: last && !isNaN(last.ms) ? new Date(last.ms).toISOString() : null, desc: statusText || (last && last.desc) || "", where: last ? last.where : "" };
+}
+async function uspsTrack(number) {
+  const tok = await uspsToken();
+  const r = await fetch(`https://apis.usps.com/tracking/v3/tracking/${encodeURIComponent(number)}?expand=DETAIL`, { headers: { Authorization: `Bearer ${tok}`, Accept: "application/json" } });
+  if (r.status === 401) uspsTok = { token: null, exp: 0 };
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`USPS ${r.status}: ${(j.error && (j.error.message || j.error)) || "tracking unavailable"}`.slice(0, 160));
+  return parseUsps(j);
+}
+function fromShopify(f) {
+  const ev = f.events[0] || null;
+  const delivered = !!f.delivered_at || /^DELIVERED$/i.test(f.status || "") || (ev && /^DELIVERED$/i.test(ev.status));
+  const known = delivered || !!ev || /IN_TRANSIT|OUT_FOR_DELIVERY|ATTEMPTED|READY_FOR_PICKUP|FAILURE|PICKED_UP/i.test(f.status || "");
+  return { ok: known, delivered, delivered_at: f.delivered_at || (delivered && ev ? ev.happenedAt : null), last_at: ev ? ev.happenedAt : null,
+    desc: ev ? String(ev.status).replace(/_/g, " ").toLowerCase() : String(f.status || "").replace(/_/g, " ").toLowerCase(), where: ev ? [ev.city, ev.province].filter(Boolean).join(", ") : "",
+    why: known ? null : "Shopify isn't following this tracking number" };
+}
 async function trackingFor(c) {
   const out = [];
   const anyTracked = c.fulfillments.some((f) => f.tracking.length);
-  for (const [fi, f] of c.fulfillments.entries()) for (const t of (f.tracking.length ? f.tracking : anyTracked ? [] : [{ number: null, url: null, company: null }])) {
-    if (!t.number) { out.push({ fi, number: null, url: null, carrier: "the carrier", shipped_at: f.at, delivered: !!f.delivered_at || /DELIVERED/i.test(f.status || ""), delivered_at: f.delivered_at || null, status: f.delivered_at ? "Delivered" : "Shipped (no tracking number)", last_event: null, last_update_at: f.at, live: false, no_tracking: true }); continue; }
+  for (const [fi, f] of c.fulfillments.entries()) for (const t of (f.tracking.length ? f.tracking : anyTracked ? [] : [{ number: null }])) {
+    if (!t.number) { out.push({ fi, number: null, url: null, carrier: "the carrier", shipped_at: f.at, delivered: false, delivered_at: null, status: "Shipped without a tracking number", last_event: null, last_update_at: f.at, no_tracking: true, verified: false, sources: {} }); continue; }
     const guess = K().carrierFromNumber(t.number);
-    let live = null;
-    if (guess) { try { live = await K().ssV2Track(guess.v2, t.number); } catch (e) { console.error(`claims tracking ${t.number}:`, e.message); } }
-    const lastAt = live && live.last_event && live.last_event.at ? live.last_event.at : null;
-    const delivered = (live && live.delivered) || !!f.delivered_at || /DELIVERED/i.test(f.status || "");
-    out.push({
-      fi, number: t.number, url: t.url, carrier: (guess && guess.name) || t.company || "the carrier", shipped_at: f.at,
-      delivered, delivered_at: (live && live.delivered_at) || f.delivered_at || null,
-      status: live ? live.description : (delivered ? "Delivered" : String(f.status || "In transit").replace(/_/g, " ").toLowerCase()),
-      last_event: live && live.last_event ? live.last_event : null, last_update_at: lastAt || f.at, live: !!live,
-    });
+    const carrier = (guess && guess.name) || t.company || "the carrier", isUsps = /usps/i.test(carrier);
+    const sources = { shopify: fromShopify(f) };
+    try { const l = guess ? await K().ssV2Track(guess.v2, t.number) : null; if (!l) throw new Error("carrier not recognized");
+      sources.shipstation = { ok: !l.not_in_system, delivered: !!l.delivered, delivered_at: l.delivered_at || null, last_at: l.last_event ? l.last_event.at : null, desc: l.description || "", where: l.last_event ? l.last_event.where : "", why: l.not_in_system ? "carrier has no scans yet" : null }; }
+    catch (e) { sources.shipstation = { ok: false, why: e.message }; console.error(`claims ShipStation tracking ${t.number}:`, e.message); }
+    if (isUsps) {
+      if (uspsConfigured()) { try { sources.usps = await uspsTrack(t.number); } catch (e) { sources.usps = { ok: false, why: e.message }; console.error(`claims USPS tracking ${t.number}:`, e.message); } }
+      else sources.usps = { ok: false, skipped: true, why: "USPS direct check not set up (USPS_CLIENT_ID / USPS_CLIENT_SECRET)" };
+    }
+    // Required: ShipStation, plus USPS for USPS packages (when set up), plus Shopify when Shopify is following the
+    // tracking. At least two independent sources must answer — one source alone is never enough.
+    const req = ["shipstation", ...(isUsps && uspsConfigured() ? ["usps"] : []), ...(sources.shopify.ok ? ["shopify"] : [])];
+    const answered = Object.entries(sources).filter(([, v]) => v.ok);
+    const verified = req.every((k) => sources[k] && sources[k].ok) && answered.length >= 2;
+    const delivered = answered.some(([, v]) => v.delivered);
+    const carrierDelivered = answered.some(([k, v]) => k !== "shopify" && v.delivered);
+    const ts = (k) => answered.map(([, v]) => v[k]).filter(Boolean).map((x) => Date.parse(x)).filter((x) => !isNaN(x));
+    const lastMs = Math.max(new Date(f.at).getTime(), ...ts("last_at"), ...ts("delivered_at"));
+    const dMs = ts("delivered_at");
+    const best = (sources.usps && sources.usps.ok && sources.usps) || (sources.shipstation.ok && sources.shipstation) || sources.shopify;
+    out.push({ fi, number: t.number, url: t.url, carrier, shipped_at: f.at, delivered, carrier_delivered: carrierDelivered,
+      delivered_at: dMs.length ? new Date(Math.max(...dMs)).toISOString() : null, status: delivered ? "Delivered" : best.desc || "In transit",
+      last_event: { at: new Date(lastMs).toISOString(), desc: best.desc, where: best.where }, last_update_at: new Date(lastMs).toISOString(),
+      verified, required: req, sources, agree: answered.every(([, v]) => v.delivered === delivered) });
   }
   return out;
 }
+const UNVERIFIED = "We couldn't confirm your tracking with every carrier source right now, so we can't open this claim yet. Please try again in a few hours, or email us and we'll check it by hand.";
 function gates(c, ship) {
   const s = c.s, now = Date.now();
-  const anyDelivered = ship.some((x) => x.delivered), allDelivered = ship.length && ship.every((x) => x.delivered);
-  const stale = ship.filter((x) => !x.delivered).map((x) => (now - new Date(x.last_update_at).getTime()) / 86400e3);
-  const g = {};
-  if (!ship.length) g.not_arrived = { ok: false, why: "Your order hasn't shipped yet." };
-  else if (allDelivered) g.not_arrived = { ok: false, why: `Tracking shows your package was delivered${ship[0].delivered_at ? ` on ${fmtDate(ship[0].delivered_at)}` : ""}. If you can't find it, choose "Marked delivered, but I didn't get it".` };
-  else if (Math.max(...stale) < s.pp_stall_days) {
-    const x = ship.find((y) => !y.delivered), opens = new Date(new Date(x.last_update_at).getTime() + s.pp_stall_days * 86400e3);
-    g.not_arrived = { ok: false, why: `Your package is still moving. Last update ${fmtWhen(x.last_update_at)}${x.last_event && x.last_event.desc ? `: ${x.last_event.desc}` : ""}. If tracking doesn't change by ${fmtDate(opens)}, come back and file your claim here.`, opens: opens.toISOString() };
-  } else g.not_arrived = { ok: true, rule: true, note: `Tracking hasn't moved in ${Math.floor(Math.max(...stale))} days.` };
-  if (!anyDelivered) g.delivered_missing = { ok: false, why: `Tracking doesn't show your package as delivered yet. Choose "My package hasn't arrived" instead.` };
+  const tracked = ship.filter((x) => x.number);
+  const g = { damaged: { ok: true }, missing_items: { ok: true } };
+  if (!ship.length) { g.not_arrived = g.delivered_missing = { ok: false, why: "Your order hasn't shipped yet." }; return g; }
+  if (!tracked.length) { g.not_arrived = g.delivered_missing = { ok: false, why: "This order shipped without a tracking number, so we have to check it by hand. Please email us and we'll look into it right away." }; return g; }
+  // "Hasn't arrived": no source anywhere may say delivered, every required source must answer, and nothing may have moved for N days.
+  if (tracked.some((x) => x.delivered)) {
+    const d = tracked.find((x) => x.delivered);
+    g.not_arrived = { ok: false, why: `Tracking shows your package was delivered${d.delivered_at ? ` on ${fmtDate(d.delivered_at)}` : ""}. If you can't find it, choose "Marked delivered, but I didn't get it".` };
+  } else if (tracked.some((x) => !x.verified)) g.not_arrived = { ok: false, why: UNVERIFIED };
   else {
-    const d = ship.find((x) => x.delivered), at = new Date(d.delivered_at || d.last_update_at || d.shipped_at).getTime();
-    if (at && now - at < s.delivered_wait_hours * 3600e3) {
+    const newest = Math.max(...tracked.map((x) => new Date(x.last_update_at).getTime()));
+    const days = (now - newest) / 86400e3;
+    if (days < s.pp_stall_days) {
+      const opens = new Date(newest + s.pp_stall_days * 86400e3), x = tracked[0];
+      g.not_arrived = { ok: false, why: `Your package is still moving. Last update ${fmtWhen(newest)}${x.last_event && x.last_event.desc ? `: ${x.last_event.desc}` : ""}. If tracking doesn't change by ${fmtDate(opens)}, come back and file your claim here.`, opens: opens.toISOString() };
+    } else g.not_arrived = { ok: true, rule: true, note: `Verified with ${srcList(tracked[0].required)}: no movement in ${Math.floor(days)} days.` };
+  }
+  // "Marked delivered": a CARRIER source (ShipStation or USPS) must confirm delivery, all required sources answered, and the wait has passed.
+  const dl = tracked.filter((x) => x.delivered);
+  if (!dl.length) g.delivered_missing = { ok: false, why: `Tracking doesn't show your package as delivered yet. Choose "My package hasn't arrived" instead.` };
+  else if (dl.some((x) => !x.verified) || !dl.some((x) => x.carrier_delivered)) g.delivered_missing = { ok: false, why: UNVERIFIED };
+  else {
+    const at = Math.max(...dl.map((x) => new Date(x.delivered_at || x.last_update_at).getTime()));
+    if (now - at < s.delivered_wait_hours * 3600e3) {
       const open = new Date(at + s.delivered_wait_hours * 3600e3);
       g.delivered_missing = { ok: false, why: `Carriers sometimes mark a package delivered a little early. Please give it until ${fmtWhen(open)} and check your mailbox, around your home, and with neighbors. If it still hasn't turned up, come back and file your claim.`, opens: open.toISOString() };
-    } else g.delivered_missing = { ok: true, rule: !!d.delivered_at, note: `Marked delivered ${fmtWhen(at)}.` };
+    } else g.delivered_missing = { ok: true, rule: true, note: `Delivery confirmed by ${srcList(dl[0].required)} on ${fmtWhen(at)}.` };
   }
-  g.damaged = { ok: true }; g.missing_items = { ok: true };
   return g;
 }
 function claimItems(c, type, used = {}) {
