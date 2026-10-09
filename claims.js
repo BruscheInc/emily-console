@@ -435,7 +435,10 @@ function gates(c, ship) {
     const shipped = Math.min(...tracked.map((x) => new Date(x.shipped_at).getTime()));
     const days = (now - shipped) / 86400e3, opens = new Date(shipped + s.transit_claim_days * 86400e3), x = tracked[0];
     const answered = Object.entries(x.sources || {}).filter(([, v]) => v.ok).map(([k]) => k);
-    g.not_arrived = days < s.transit_claim_days
+    const maxD = Number(s.transit_claim_max_days) || 0;
+    g.not_arrived = maxD > 0 && days > maxD
+      ? { ok: false, why: `Missing-package claims have to be filed within ${maxD} days of shipping. Please choose "Something else" and tell us what happened.` }
+      : days < s.transit_claim_days
       ? { ok: true, wait: true, why: `Your package is on its way${x.last_event && x.last_event.desc ? ` (latest status: ${x.last_event.desc}, ${fmtWhen(x.last_update_at)})` : ""}. If it still hasn't arrived by ${fmtDate(opens)}, come back here and file your claim.`, opens: opens.toISOString() }
       : { ok: true, rule: true, note: `Shipped ${Math.floor(days)} days ago and not delivered (checked with ${srcList(answered)}).` };
   }
@@ -484,11 +487,11 @@ function subOptions(c, m, g, tab) {
 }
 
 // "Did you contact the post office?" → "No" locks the attempted-delivery claim for 30 minutes (per order).
-const PO_LOCK_MIN = 30;
+const poLockMin = async () => Math.max(1, Number((await R().settings()).po_lock_minutes) || 30);
 async function poLockedUntil(orderId) { const r = await core.syncGet(`po_lock:${orderId}`); const t = r && r.cursor ? Date.parse(r.cursor) : 0; return t > Date.now() ? new Date(t).toISOString() : null; }
 async function poAnswer(token, body) {
   const p = session(token);
-  if (body.answer === "no") { const until = new Date(Date.now() + PO_LOCK_MIN * 60000).toISOString(); await core.syncSet(`po_lock:${p.o}`, until, {}); return { locked_until: until }; }
+  if (body.answer === "no") { const until = new Date(Date.now() + (await poLockMin()) * 60000).toISOString(); await core.syncSet(`po_lock:${p.o}`, until, {}); return { locked_until: until }; }
   return { locked_until: await poLockedUntil(p.o) };
 }
 async function claimStart(token, type) {

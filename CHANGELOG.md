@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.32.1
+- Returns → Settings: every time limit in one "Time limits" section with plain labels (return window, drop-off deadline and reminder, edit window, defect window, hasn't-arrived open day and new last day, marked-delivered wait, attempted-delivery lock, PP / no-PP damaged & marked-delivered windows). New: last day to file "hasn't arrived" (0 = no limit) and the post-office lock length.
+
 ## 4.32.0
 - Branded return emails, sent from the store's support mailbox and threaded into a Helpdesk ticket: "Return submitted" (print label + packing slip button, view-your-return link, items, refund summary, how-to-ship steps), "Drop-off reminder" (day 21) and "Return closed" (day 29). Logo, colors and button shape come from the portal theme.
 - Portal Studio → Emails: edit every line (subject, heading, message, button, steps, footer), preview each email with unsaved changes, and send a test to yourself.

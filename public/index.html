@@ -66,6 +66,9 @@
   td.empty{text-align:center;color:var(--muted);padding:40px}
   .stuckhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 22px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
   .stuckhead .seg{margin-left:auto}
+  .rs-sec{font-weight:800;font-size:14px;margin:20px 0 4px;padding-top:14px;border-top:1px solid var(--line)}
+  .rs-sub{font-weight:700;font-size:13px;margin:12px 0 0;color:var(--muted)}
+  .rs-note{font-size:12px;color:var(--muted);margin-bottom:4px}
   /* ---- returns command center ---- */
   .rc{padding:16px 22px;border-bottom:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;gap:12px}
   .rc-portals{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
@@ -1186,11 +1189,10 @@ async function retPoll(b){ b.disabled=true; b.textContent="Checking…"; try{ aw
 async function retSettings(){
   const s=RET_D.settings, a=s.return_address; closeModal();
   const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
-  m.innerHTML=`<div class="box"><h3>Returns settings</h3><div class="sub">Changes apply right away. Portal: ${esc(RET_D.portal_base)}lb and …/lbo</div>
+  m.innerHTML=`<div class="box"><h3>Returns settings</h3><div class="sub">Changes apply right away. Portals: ${Object.values(RET_D.portal_links||{}).map(esc).join(" · ")}</div>
     <label class="chk"><input type="checkbox" id="rs-live" ${s.portal_live?"checked":""}> Portal is live — Emily sends customers here instead of Loop</label>
     <label class="chk"><input type="checkbox" id="rs-branded" ${s.branded_links?"checked":""}> Use branded links (${esc(Object.values(RET_D.branded_hosts||{}).join(" / "))}) — turn on once the DNS records are added</label>
     <label class="chk"><input type="checkbox" id="rs-test" ${s.test_labels?"checked":""}> Test mode — no label is bought and nothing is charged: you get the price quote and a sample label, and the customer isn't emailed. Turn off to go live.</label>
-    <div class="grid2"><div><label>Return window LB (days)</label><input type="number" id="rs-wlb" value="${s.window_days.lb}"></div><div><label>Return window LBO (days)</label><input type="number" id="rs-wlbo" value="${s.window_days.lbo}"></div></div>
     <div class="grid2"><div><label>Label fee ($, taken off the refund)</label><input type="number" step="0.01" id="rs-fee" value="${s.label_fee}"></div><div><label>Store credit bonus (%)</label><input type="number" id="rs-bonus" value="${s.store_credit_bonus_pct}"></div></div>
     <label class="chk"><input type="checkbox" id="rs-credit" ${s.store_credit_enabled?"checked":""}> Offer store credit</label>
     <label class="chk"><input type="checkbox" id="rs-feecredit" ${s.fee_on_store_credit?"checked":""}> Charge the label fee on store credit too</label>
@@ -1199,16 +1201,22 @@ async function retSettings(){
     <label>Final-sale product tags (can't be returned)</label><input type="text" id="rs-tags" value="${esc(s.final_sale_tags)}">
     <label>ShipStation carrier &amp; service</label><select id="rs-svc"><option value="">Loading carriers…</option></select>
     <div class="grid2"><div><label>ShipStation store for LB returns</label><select id="rs-sslb"><option value="">Match by name (LB)</option></select></div><div><label>ShipStation store for LBO returns</label><select id="rs-sslbo"><option value="">Match by name (LBO)</option></select></div></div>
-    <div style="font-weight:700;margin-top:14px">Edit order &amp; claims</div>
-    <div class="grid2"><div><label>Customers can edit an order for (minutes)</label><input type="number" id="rs-editmin" value="${s.edit_window_minutes}"></div><div><label>Defect / damage claims open for (days after delivery)</label><input type="number" id="rs-claimdays" value="${s.claim_window_days}"></div></div>
-    <div class="grid2"><div><label>Marked delivered / damaged — with Package Protection (days after delivery)</label><input type="number" id="rs-ppwin" value="${s.pp_claim_window_days}"></div><div><label>Same — without Package Protection (days after delivery)</label><input type="number" id="rs-noppwin" value="${s.nopp_claim_window_days}"></div></div>
-    <div class="grid2"><div><label>"Attempted delivery": claim opens after (hours)</label><input type="number" id="rs-atth" value="${s.attempted_wait_hours}"></div><div><label>Replacement only if stock is more than</label><input type="number" id="rs-minstock" value="${s.replacement_min_stock}"></div></div>
-    <div class="grid2"><div><label>"Hasn't arrived" claims open after shipping (days)</label><input type="number" id="rs-transit" value="${s.transit_claim_days}"></div><div><label>"Marked delivered" claims open after (hours)</label><input type="number" id="rs-waith" value="${s.delivered_wait_hours}"></div></div>
-    <label>Package Protection line items contain (comma separated)</label><input type="text" id="rs-ppmatch" value="${esc(s.pp_match||"")}">
+    <div class="rs-sec">Time limits</div>
+    <div class="rs-note">Every window counts from the date tracking shows the package delivered, unless it says otherwise.</div>
+    <div class="grid2"><div><label>Start a return — days after delivery (LB)</label><input type="number" id="rs-wlb" value="${s.window_days.lb}"></div><div><label>Start a return — days after delivery (LBO)</label><input type="number" id="rs-wlbo" value="${s.window_days.lbo}"></div></div>
+    <div class="grid2"><div><label>Drop-off deadline — days after the return is started (label voided after)</label><input type="number" id="rs-void" value="${s.void_unused_after_days}"></div><div><label>Drop-off reminder email — on day</label><input type="number" id="rs-remind" value="${s.dropoff_reminder_days}"></div></div>
+    <div class="grid2"><div><label>Edit an order (size / address) — minutes after it's placed</label><input type="number" id="rs-editmin" value="${s.edit_window_minutes}"></div><div><label>Defective item claim — days after delivery</label><input type="number" id="rs-claimdays" value="${s.claim_window_days}"></div></div>
+    <div class="rs-sub">Package claims</div>
+    <div class="grid2"><div><label>"Hasn't arrived" — opens this many days after shipping</label><input type="number" id="rs-transit" value="${s.transit_claim_days}"></div><div><label>"Hasn't arrived" — last day to file, days after shipping (0 = no limit)</label><input type="number" id="rs-transitmax" value="${s.transit_claim_max_days||0}"></div></div>
+    <div class="grid2"><div><label>"Marked delivered, didn't get it" — opens this many hours after the delivery scan</label><input type="number" id="rs-waith" value="${s.delivered_wait_hours}"></div><div><label>Attempted delivery — lock after "No, I haven't called the post office" (minutes)</label><input type="number" id="rs-polock" value="${s.po_lock_minutes||30}"></div></div>
+    <div class="grid2"><div><label>"Marked delivered" &amp; "arrived damaged" — days after delivery, WITH Package Protection</label><input type="number" id="rs-ppwin" value="${s.pp_claim_window_days}"></div><div><label>Same — days after delivery, WITHOUT Package Protection</label><input type="number" id="rs-noppwin" value="${s.nopp_claim_window_days}"></div></div>
+    <div class="rs-sec">Claims</div>
+    <div class="grid2"><div><label>Replacement only if stock is more than</label><input type="number" id="rs-minstock" value="${s.replacement_min_stock}"></div><div><label>Package Protection line items contain (comma separated)</label><input type="text" id="rs-ppmatch" value="${esc(s.pp_match||"")}"></div></div>
     <label class="chk"><input type="checkbox" id="rs-autoap" ${s.auto_approve?"checked":""}> Auto-approve claims when every check passes (otherwise they wait for you in Claims)</label>
     <div class="grid2"><div><label>Auto-approve up to ($ claim value)</label><input type="number" id="rs-apmax" value="${s.auto_approve_max}"></div><div><label>AI must be at least (% sure)</label><input type="number" id="rs-apconf" value="${Math.round((s.auto_approve_confidence||0)*100)}"></div></div>
     <label>Max approved claims per customer in 12 months (more → you decide)</label><input type="number" id="rs-apprior" value="${s.auto_approve_max_prior}">
-    <div class="grid2"><div><label>Drop-off deadline — close return &amp; void label after (days)</label><input type="number" id="rs-void" value="${s.void_unused_after_days}"></div><div><label>Drop-off reminder on day</label><input type="number" id="rs-remind" value="${s.dropoff_reminder_days}"></div><div><label>Default item weight (oz)</label><input type="number" id="rs-oz" value="${s.default_item_oz}"></div></div>
+    <div class="rs-sec">Labels</div>
+    <div class="grid2"><div><label>Default item weight (oz)</label><input type="number" id="rs-oz" value="${s.default_item_oz}"></div><div></div></div>
     <label>Returns ship to</label>
     <div class="grid2"><div><input type="text" id="ra-name" placeholder="Name" value="${esc(a.name)}"></div><div><input type="text" id="ra-co" placeholder="Company" value="${esc(a.company_name)}"></div></div>
     <div class="grid2" style="margin-top:6px"><div><input type="text" id="ra-1" placeholder="Street" value="${esc(a.address_line1)}"></div><div><input type="text" id="ra-2" placeholder="Suite" value="${esc(a.address_line2||"")}"></div></div>
@@ -1227,7 +1235,7 @@ async function retSettings(){
     if(carrier_id) { body.carrier_id=carrier_id; body.service_code=service_code; }
     body.ss_store={lb:$("rs-sslb").value,lbo:$("rs-sslbo").value};
     body.reasons=$("rs-reasons").value.split("\n").map(x=>x.trim()).filter(Boolean);
-    body.edit_window_minutes=Number($("rs-editmin").value); body.claim_window_days=Number($("rs-claimdays").value); body.pp_claim_window_days=Number($("rs-ppwin").value); body.nopp_claim_window_days=Number($("rs-noppwin").value); body.attempted_wait_hours=Number($("rs-atth").value); body.replacement_min_stock=Number($("rs-minstock").value); body.transit_claim_days=Number($("rs-transit").value); body.delivered_wait_hours=Number($("rs-waith").value); body.pp_match=$("rs-ppmatch").value; body.auto_approve=$("rs-autoap").checked; body.auto_approve_max=Number($("rs-apmax").value); body.auto_approve_confidence=Number($("rs-apconf").value)/100; body.auto_approve_max_prior=Number($("rs-apprior").value);
+    body.edit_window_minutes=Number($("rs-editmin").value); body.claim_window_days=Number($("rs-claimdays").value); body.pp_claim_window_days=Number($("rs-ppwin").value); body.nopp_claim_window_days=Number($("rs-noppwin").value); body.po_lock_minutes=Number($("rs-polock").value); body.transit_claim_max_days=Number($("rs-transitmax").value); body.replacement_min_stock=Number($("rs-minstock").value); body.transit_claim_days=Number($("rs-transit").value); body.delivered_wait_hours=Number($("rs-waith").value); body.pp_match=$("rs-ppmatch").value; body.auto_approve=$("rs-autoap").checked; body.auto_approve_max=Number($("rs-apmax").value); body.auto_approve_confidence=Number($("rs-apconf").value)/100; body.auto_approve_max_prior=Number($("rs-apprior").value);
     if(body.portal_live&&!s.portal_live&&!confirm("Go live? Emily will start sending customers to the new portal instead of Loop."))return;
     try{ const r=await api("/api/returns/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error)throw new Error(r.error); toast("Saved"); closeModal(); loadReturns(); }catch(e){ toast(e.message,true); }
   };

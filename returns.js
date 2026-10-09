@@ -77,7 +77,9 @@ const DEFAULTS = {
   marked_delivered_window_days: 5, // (older single window — replaced by the two below)
   pp_claim_window_days: 7,         // WITH Package Protection: "marked delivered" and "arrived damaged" claims, days after delivery
   nopp_claim_window_days: 5,       // WITHOUT Package Protection: same two claims, days after delivery
-  attempted_wait_hours: 24,        // "Attempted delivery": customer checks with the post office first; claim opens after this
+  attempted_wait_hours: 24,        // (older rule, replaced by the post office question)
+  po_lock_minutes: 30,             // attempted delivery: answering "No, I haven't contacted the post office" locks the claim this long
+  transit_claim_max_days: 0,       // "hasn't arrived": last day to file, days after shipping (0 = no limit)
   replacement_min_stock: 3,        // a replacement is only offered when the variant has MORE than this many in stock
   pp_stall_days: 5,                // (older rule, no longer used for opening claims)
   transit_claim_days: 14,          // "hasn't arrived" claims open this many days after shipping if tracking still isn't delivered
@@ -101,7 +103,7 @@ async function settings() {
 async function saveSettings(patch, who) {
   const cur = await settings();
   const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
-  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "marked_delivered_window_days", "pp_claim_window_days", "nopp_claim_window_days", "attempted_wait_hours", "replacement_min_stock", "dropoff_reminder_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
+  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "marked_delivered_window_days", "pp_claim_window_days", "nopp_claim_window_days", "attempted_wait_hours", "replacement_min_stock", "dropoff_reminder_days", "po_lock_minutes", "transit_claim_max_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
   if (patch.reasons !== undefined) { next.reasons = (Array.isArray(patch.reasons) ? patch.reasons : String(patch.reasons).split("\n")).map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 20); if (!next.reasons.length) next.reasons = DEFAULTS.reasons; }
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('returns', $1, $2, now())
