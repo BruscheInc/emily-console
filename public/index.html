@@ -278,7 +278,9 @@
     td.c-tags,th.c-tags,td.c-ost,th.c-ost{display:none}
   }
   /* ==== Buzzin theme layer: Klaviyo-calm surfaces, ink buttons, honey highlights ==== */
-  .side{background:var(--bg);border-right:1px solid var(--line);padding:16px 12px}
+  .side{background:var(--bg);border-right:1px solid var(--line);padding:16px 12px 0;overflow:hidden}
+  .side-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:1px;margin:0 -12px;padding:0 12px 12px;scrollbar-width:thin}
+  .side-foot{flex:none;border-top:1px solid var(--line);margin:0 -12px;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0px));background:var(--bg);display:flex;flex-direction:column;gap:1px}
   .brand .name{font-weight:800;letter-spacing:-.02em}.ver{background:var(--honey-soft);color:var(--honey-ink)}
   .nav{border-radius:10px;color:#2E2C36;font-weight:500;transition:background .12s}
   .nav:hover{background:#ECEAE5}
@@ -321,6 +323,7 @@
   .toast{background:var(--ink);color:#fff;border-color:var(--ink)}
   ::selection{background:rgba(255,194,26,.45)}
   input[type=checkbox],input[type=radio]{accent-color:var(--ink)}
+  @media(max-width:920px){ .side{padding:10px 6px 0} .side .side-scroll,.side .side-foot{margin:0 -6px;padding-left:6px;padding-right:6px} }
   .modal input:focus,.modal select:focus,.modal textarea:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,194,26,.35)}
   .hidden{display:none!important}
 </style>
@@ -346,6 +349,7 @@
 <div id="app" class="hidden" style="display:flex;height:100%">
 <aside class="side">
   <div class="brand"><img class="mark" src="logo.svg" alt="" width="34" height="34"><div><div class="name">Buzzin <span id="ver" class="ver"></span></div><div class="subname">Larkspur Baby · Outlet</div></div></div>
+  <div class="side-scroll">
   <button class="nav-search" onclick="sideSearch()" title="Search tickets (⌘K)"><i class="ti ti-search"></i><span>Search</span><kbd>⌘K</kbd></button>
   <button class="nav view top" data-view="home" onclick="setView('home')"><i class="i ti ti-home"></i><span>Home</span></button>
   <div class="grp" data-g="inbox"><button class="nav gh" onclick="toggleGrp('inbox')"><i class="i ti ti-inbox"></i><span>Inbox</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
@@ -384,11 +388,12 @@
     <button class="nav view sub" data-view="returns_analytics" onclick="setView('returns_analytics')"><i class="si ti ti-chart-bar"></i><span>Return analytics</span></button>
     <button class="nav view sub" data-view="activity" onclick="setView('activity')"><i class="si ti ti-history"></i><span>Activity log</span></button>
   </div></div>
-  <div class="navsp"></div>
-  <div class="navline"></div>
+  </div>
+  <div class="side-foot">
   <button class="nav" onclick="openSettings()"><i class="i ti ti-settings"></i><span>Settings</span></button>
   <div class="acct" id="acct"><button class="nav acct-b" onclick="$('acctMenu').classList.toggle('hidden')"><span class="av" id="acctAv">·</span><span id="acctName">Signed in</span><i class="chev ti ti-selector"></i></button>
     <div class="acct-m hidden" id="acctMenu"><button class="nav" onclick="$('acctMenu').classList.add('hidden');openSettings()"><i class="i ti ti-user-cog"></i><span>Account &amp; password</span></button><button class="nav" onclick="signOut()"><i class="i ti ti-logout"></i><span>Sign out</span></button></div></div>
+  </div>
 </aside>
 <div class="mainarea">
   <div class="listcol" id="listcol">

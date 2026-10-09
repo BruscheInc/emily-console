@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.38.1
+- Sidebar: Settings and your account stay pinned at the bottom (and the logo at the top); only the menu in between scrolls. Same on the narrow icon-only sidebar.
+
 ## 4.38.0
 - Fresh look: warm off-white background, white work area, near-black primary buttons with soft shadows, outlined secondary buttons, honey-yellow highlights for the page you're on, focus rings and selection, rounder cards and modals, calmer table lines, and the Figtree typeface. Charts use ink and honey. Email Studio and Portal Studio match.
 
