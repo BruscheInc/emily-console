@@ -787,6 +787,12 @@ app.post("/api/claims/:id/:act", async (req, res) => {
     res.json({ ok: true, claim: out });
   } catch (e) { retErr(res, e); }
 });
+// Admin: website FAQ page — read, Emily's suggestions, publish, undo (faqs.js)
+const FAQ = require("./faqs");
+app.get("/api/faqs/:store", async (req, res) => { if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.view(k)); } catch (e) { retErr(res, e); } });
+app.post("/api/faqs/:store/suggest", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.suggest(k)); } catch (e) { retErr(res, e); } });
+app.post("/api/faqs/:store/publish", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.publish(k, req.body || {}, actorOf(req))) }); } catch (e) { retErr(res, e); } });
+app.post("/api/faqs/:store/undo", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.undo(k, actorOf(req))) }); } catch (e) { retErr(res, e); } });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
 const EXC = require("./exceptions");
 app.get("/api/returns/exceptions", async (req, res) => {
@@ -874,6 +880,7 @@ const PORT = process.env.PORT || 8080;
   try { await CL.init(); } catch (e) { console.error("Claims failed to start:", e.message); }
   try { await EXC.init(); } catch (e) { console.error("Exceptions failed to start:", e.message); }
   try { await EM.init(); } catch (e) { console.error("Email templates failed to start:", e.message); }
+  try { await FAQ.init(); } catch (e) { console.error("FAQs failed to start:", e.message); }
   // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
   try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
 })();

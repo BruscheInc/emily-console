@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.39.0
+- Website FAQs (sidebar → Content → Website FAQs, admins): shows each store's live FAQ page question by question, from the live theme. "Ask Emily to check" compares every answer with what Buzzin actually runs (return window, drop-off days, label fee, store-credit bonus, refund timing, defect and Package Protection claims, order edits, the returns portal link) and suggests rewrites with a reason for each, plus a list of policy calls for you. Review and edit side by side, then Publish writes only the answers you kept; Undo puts the page back. Publishing needs the Emily app's write_themes permission.
+
 ## 4.38.1
 - Sidebar: Settings and your account stay pinned at the bottom (and the logo at the top); only the menu in between scrolls. Same on the narrow icon-only sidebar.
 

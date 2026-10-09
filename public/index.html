@@ -322,6 +322,17 @@
   .hm-h{font-weight:800;letter-spacing:-.025em}
   .toast{background:var(--ink);color:#fff;border-color:var(--ink)}
   ::selection{background:rgba(255,194,26,.45)}
+  .modal .box.fq-box{width:min(1100px,100%)}.fq-load{padding:30px;text-align:center;color:var(--muted)}
+  .fq-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+  .fq-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+  .fq-notes{background:var(--honey-soft);border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:10px}.fq-notes b{display:block;margin-bottom:4px}
+  .fq-g{margin-top:16px}.fq-gt{font-weight:800;font-size:15px;margin-bottom:6px}
+  .fq-item{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px}.fq-item.chg{border-color:var(--honey);box-shadow:0 0 0 1px var(--honey) inset}.fq-item.off{opacity:.55}
+  .fq-q{display:flex;align-items:center;gap:8px}.fq-q b{flex:1;min-width:0}.fq-tag{background:var(--honey);color:var(--ink)}
+  .fq-a{font-size:13px;color:#3F3D47;margin-top:4px}.fq-a p{margin:4px 0}.fq-a.old{opacity:.75}
+  .fq-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}.fq-l{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .fq-cols textarea{width:100%;min-height:120px;margin:4px 0 6px;font:12.5px/1.5 var(--mono)}.fq-why{font-size:12px;color:var(--honey-ink);margin-bottom:6px}
+  @media(max-width:800px){.fq-cols{grid-template-columns:1fr}}
   input[type=checkbox],input[type=radio]{accent-color:var(--ink)}
   @media(max-width:920px){ .side{padding:10px 6px 0} .side .side-scroll,.side .side-foot{margin:0 -6px;padding-left:6px;padding-right:6px} }
   .modal input:focus,.modal select:focus,.modal textarea:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,194,26,.35)}
@@ -379,6 +390,7 @@
   </div></div>
   <div class="grp" data-g="content"><button class="nav gh" onclick="toggleGrp('content')"><i class="i ti ti-layout-board"></i><span>Content</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
+    <button class="nav sub" onclick="faqModal()"><i class="si ti ti-help-circle"></i><span>Website FAQs</span></button>
     <a class="nav sub" href="/email-studio" target="_blank" rel="noopener"><i class="si ti ti-mail-cog"></i><span>Customer emails</span><i class="ext ti ti-arrow-up-right"></i></a>
     <a class="nav sub" href="/returns-studio?store=lb" target="_blank" rel="noopener"><i class="si ti ti-palette"></i><span>LB portal design</span><i class="ext ti ti-arrow-up-right"></i></a>
     <a class="nav sub" href="/returns-studio?store=lbo" target="_blank" rel="noopener"><i class="si ti ti-palette"></i><span>LBO portal design</span><i class="ext ti ti-arrow-up-right"></i></a>
@@ -1412,6 +1424,56 @@ async function retSettings(){
     if(body.portal_live&&!s.portal_live&&!confirm("Go live? Emily will start sending customers to the new portal instead of Loop."))return;
     try{ const r=await api("/api/returns/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error)throw new Error(r.error); toast("Saved"); closeModal(); loadReturns(); }catch(e){ toast(e.message,true); }
   };
+}
+/* ---- Website FAQs: compare the store's FAQ page with what Buzzin does, let Emily suggest fixes, publish ---- */
+let FQ={store:"lb",d:null,edits:{},why:{},notes:[],busy:false};
+async function faqModal(store){
+  if(store) FQ.store=store; closeModal(); FQ.edits={}; FQ.why={}; FQ.notes=[];
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box fq-box"><div class="fq-load">Loading the FAQ page…</div></div>`; document.body.appendChild(m);
+  try{ FQ.d=await api("/api/faqs/"+FQ.store); if(FQ.d.error) throw new Error(FQ.d.error); }catch(e){ m.querySelector(".box").innerHTML=`<h3>Website FAQs</h3><div class="warn">${esc(e.message)}</div><div class="foot"><button class="btn sec" onclick="closeModal()">Close</button></div>`; return; }
+  faqRender();
+}
+function faqRender(){
+  const d=FQ.d, box=document.querySelector("#modal .box"); if(!box||!d) return;
+  const n=Object.keys(FQ.edits).length, admin=ME&&ME.role==="admin";
+  const item=(i)=>{ const ed=FQ.edits[i.id]; return `<div class="fq-item ${ed!=null?"chg":""} ${i.hidden?"off":""}">
+      <div class="fq-q"><b>${esc(i.title)}</b>${i.hidden?' <span class="chip">hidden on site</span>':""}${ed!=null?' <span class="chip fq-tag">changed</span>':""}
+        ${admin&&!i.hidden?`<button class="btn sec xs" onclick="faqEdit('${i.id}')">${ed!=null?"Edit":"Edit answer"}</button>`:""}</div>
+      ${ed!=null?`<div class="fq-cols"><div><div class="fq-l">Now on the site</div><div class="fq-a old">${i.answer}</div></div><div><div class="fq-l">New answer</div><textarea id="fq-${i.id.replace("/","_")}" oninput="FQ.edits['${i.id}']=this.value">${esc(ed)}</textarea>${FQ.why[i.id]?`<div class="fq-why">✨ ${esc(FQ.why[i.id])}</div>`:""}<button class="btn sec xs" onclick="faqDrop('${i.id}')">Keep the current answer</button></div></div>`
+        :`<div class="fq-a">${i.answer}</div>`}</div>`; };
+  box.innerHTML=`<div class="fq-head"><div><h3>Website FAQs</h3><div class="sub">The FAQ page on ${d.facts.store}'s website, from the live theme (${esc(d.theme.name)}). Emily checks it against what Buzzin actually does; nothing changes on the site until you publish.</div></div>
+      <div class="seg">${["lb","lbo"].map(k=>`<button class="tab ${FQ.store===k?"on":""}" onclick="faqModal('${k}')">${k.toUpperCase()}</button>`).join("")}</div></div>
+    ${d.can_publish?"":`<div class="warn">Publishing needs one more Shopify permission for the Emily app: <b>write_themes</b>. You can review and prepare changes now; Publish works once it's added.</div>`}
+    <div class="fq-bar">${admin?`<button class="btn" id="fq-ask" onclick="faqSuggest()">✨ Ask Emily to check the FAQs</button>`:""}<span class="sp" style="flex:1"></span>
+      ${d.last&&admin?`<button class="btn sec" onclick="faqUndo()">Undo last publish</button>`:""}
+      ${admin?`<button class="btn" ${n&&d.can_publish?"":"disabled"} onclick="faqPublish()">Publish ${n||""} change${n===1?"":"s"}</button>`:""}</div>
+    ${FQ.notes.length?`<div class="fq-notes"><b>For you to decide</b>${FQ.notes.map(x=>`<div>• ${esc(x)}</div>`).join("")}</div>`:""}
+    ${d.groups.filter(g=>!g.hidden).map(g=>`<div class="fq-g"><div class="fq-gt">${esc(g.title)}</div>${g.items.map(item).join("")}</div>`).join("")}
+    <div class="foot"><button class="btn sec" onclick="closeModal()">Close</button></div>`;
+}
+function faqFind(id){ for(const g of FQ.d.groups) for(const i of g.items) if(i.id===id) return i; }
+function faqEdit(id){ if(FQ.edits[id]==null) FQ.edits[id]=faqFind(id).answer; faqRender(); const t=document.getElementById("fq-"+id.replace("/","_")); if(t) t.focus(); }
+function faqDrop(id){ delete FQ.edits[id]; delete FQ.why[id]; faqRender(); }
+async function faqSuggest(){
+  const b=$("fq-ask"); if(b){ b.disabled=true; b.textContent="Emily is reading the FAQs…"; }
+  try{ const r=await api(`/api/faqs/${FQ.store}/suggest`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error) throw new Error(r.error);
+    for(const c of r.changes){ FQ.edits[c.id]=c.answer; FQ.why[c.id]=c.why; } FQ.notes=r.notes||[];
+    toast(r.changes.length?`Emily suggested ${r.changes.length} change${r.changes.length===1?"":"s"}`:"Emily found nothing to change"); }
+  catch(e){ toast(e.message,true); }
+  faqRender();
+}
+async function faqPublish(){
+  const n=Object.keys(FQ.edits).length; if(!n) return;
+  if(!confirm(`Publish ${n} FAQ change${n===1?"":"s"} to the live website?`)) return;
+  try{ const r=await api(`/api/faqs/${FQ.store}/publish`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({checksum:FQ.d.checksum,changes:Object.entries(FQ.edits).map(([id,answer])=>({id,answer}))})}); if(r.error) throw new Error(r.error);
+    toast(`Published: ${r.updated.length} answer${r.updated.length===1?"":"s"} updated`); faqModal(); }
+  catch(e){ toast(e.message,true); }
+}
+async function faqUndo(){
+  if(!confirm("Put the FAQ page back to how it was before the last publish?")) return;
+  try{ const r=await api(`/api/faqs/${FQ.store}/undo`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error) throw new Error(r.error); toast("FAQ page restored"); faqModal(); }
+  catch(e){ toast(e.message,true); }
 }
 /* ---- Goodwill exceptions: waive specific return / claim rules for one order ---- */
 let EXC_ALL=false;
