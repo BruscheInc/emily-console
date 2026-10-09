@@ -1008,7 +1008,7 @@ function renderClaim() {
   $('claimSubmitWrap').classList.remove('hidden');
   const open = CL.open_claim ? `<div class="note">You already have a claim open on this order (${esc(CL.open_claim)}). We’ll email you about it soon.</div>` : '';
   if (CL.type === 'defective') {
-    const lines = clLines(), value = lines.reduce((t, l) => t + l.it.unit_price * l.quantity, 0);
+    const lines = clLines(), value = lines.reduce((t, l) => t + (l.it.unit_price + (l.it.unit_tax || 0)) * l.quantity, 0);
     h = `<h1>Report a defective item</h1><p class="lead">Order ${esc(S.order.name)}. Tell us which item has a problem and show us with a photo. You can keep the item.</p>${open}
       <div>${claimItemsHtml()}</div>
       <h2 class="label">What’s wrong?</h2><textarea id="clDesc" rows="3" placeholder="e.g. The zipper came apart on the first wear">${esc(CL.desc || '')}</textarea>
@@ -1039,7 +1039,7 @@ function renderClaim() {
       if (sub === 'damaged') h += `<h2 class="label">Which items were damaged?</h2>${claimItemsHtml()}`;
       h += `<h2 class="label">Anything else we should know?${sub === 'damaged' ? '' : ' (optional)'}</h2><textarea id="clDesc" rows="3" placeholder="${sub === 'damaged' ? 'e.g. The box was crushed and the item inside is torn' : 'e.g. I checked with neighbors and the front office'}">${esc(CL.desc || '')}</textarea>`;
       if (sub === 'damaged') h += photosHtml(true);
-      const lines = clLines(), value = lines.reduce((t, l) => t + l.it.unit_price * l.quantity, 0);
+      const lines = clLines(), value = lines.reduce((t, l) => t + (l.it.unit_price + (l.it.unit_tax || 0)) * l.quantity, 0);
       if (lines.length) h += resHtml(value);
       canSubmit = lines.length > 0 && !!CL.res && (sub !== 'damaged' || PH.length > 0) && PH.every((p) => p.id) && !CL.open_claim;
     }

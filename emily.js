@@ -140,7 +140,7 @@ async function storeGraphQL(st, query, variables) {
 const ORDER_QUERY = `query($q:String!){orders(first:3,query:$q,sortKey:CREATED_AT,reverse:true){edges{node{
   id name email createdAt displayFinancialStatus displayFulfillmentStatus
   totalPriceSet{shopMoney{amount currencyCode}} shippingAddress{name firstName lastName address1 address2 city province provinceCode zip country countryCodeV2 phone} customer{displayName firstName lastName}
-  lineItems(first:25){edges{node{title quantity sku variant{availableForSale}}}} fulfillments(first:5){status trackingInfo{number url company}}
+  lineItems(first:25){edges{node{title quantity sku variant{availableForSale} discountedUnitPriceAfterAllDiscountsSet{shopMoney{amount}} taxLines{priceSet{shopMoney{amount}}}}}} fulfillments(first:5){status trackingInfo{number url company}}
 }}}}`;
 // Which store does an order-number PREFIX belong to? (LBO before LB — longest first.)
 function storeForPrefix(prefix) {
@@ -153,9 +153,20 @@ function storeForPrefix(prefix) {
     return false;
   });
 }
+// What the customer actually paid per unit: price after all discounts + that unit's sales tax.
+function paidEach(n) {
+  const price = Number((n.discountedUnitPriceAfterAllDiscountsSet && n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount) || 0);
+  const tax = n.quantity ? (n.taxLines || []).reduce((t, x) => t + Number(x.priceSet.shopMoney.amount || 0), 0) / n.quantity : 0;
+  const r2 = (x) => Math.round((x + 1e-9) * 100) / 100;   // half-cents round up (1.735 → 1.74)
+  return { paid_each: r2(price), tax_each: r2(tax), paid_each_incl_tax: r2(price + tax) };
+}
 async function queryStore(st, filter) {
   const data = await storeGraphQL(st, ORDER_QUERY, { q: filter });
-  return (data.orders?.edges || []).map((e) => e.node);
+  return (data.orders?.edges || []).map((e) => {
+    const n = e.node;
+    if (n.lineItems && n.lineItems.edges) n.lineItems.edges = n.lineItems.edges.map((x) => { const { discountedUnitPriceAfterAllDiscountsSet, taxLines, ...rest } = x.node; return { node: { ...rest, ...paidEach(x.node) } }; });
+    return n;
+  });
 }
 async function shopifyLookupOrder(raw) {
   const q = (raw || "").trim();
@@ -652,7 +663,7 @@ const ORDER_DETAIL_QUERY = `query($q:String!){orders(first:1,query:$q){edges{nod
   customer{displayName}
   totalPriceSet{shopMoney{amount currencyCode}} subtotalPriceSet{shopMoney{amount}} totalShippingPriceSet{shopMoney{amount}} totalRefundedSet{shopMoney{amount}}
   shippingAddress{name firstName lastName address1 address2 city province provinceCode zip country countryCodeV2 phone}
-  lineItems(first:50){edges{node{id title quantity currentQuantity refundableQuantity sku variantTitle originalUnitPriceSet{shopMoney{amount}} discountedTotalSet{shopMoney{amount}} variant{id availableForSale}}}}
+  lineItems(first:50){edges{node{id title quantity currentQuantity refundableQuantity sku variantTitle originalUnitPriceSet{shopMoney{amount}} discountedTotalSet{shopMoney{amount}} discountedUnitPriceAfterAllDiscountsSet{shopMoney{amount}} taxLines{priceSet{shopMoney{amount}}} variant{id availableForSale}}}}
   fulfillments(first:5){status createdAt trackingInfo{number url company}}
   refunds{id createdAt note totalRefundedSet{shopMoney{amount}}}
 }}}}`;
@@ -676,7 +687,7 @@ async function orderDetail(raw) {
         financial_status: n.displayFinancialStatus, fulfillment_status: n.displayFulfillmentStatus, note: n.note, tags: n.tags, edited: !!n.edited,
         currency: n.totalPriceSet.shopMoney.currencyCode, total: money(n.totalPriceSet), subtotal: money(n.subtotalPriceSet), shipping: money(n.totalShippingPriceSet), refunded: money(n.totalRefundedSet),
         shipping_address: n.shippingAddress, 
-        items: (n.lineItems.edges || []).map((x) => ({ id: x.node.id, title: x.node.title, variant: x.node.variantTitle, sku: x.node.sku, quantity: x.node.quantity, current_quantity: x.node.currentQuantity != null ? x.node.currentQuantity : x.node.quantity, refundable_quantity: x.node.refundableQuantity, unit_price: money(x.node.originalUnitPriceSet), line_total: money(x.node.discountedTotalSet), in_stock: x.node.variant ? x.node.variant.availableForSale : null })),
+        items: (n.lineItems.edges || []).map((x) => ({ id: x.node.id, title: x.node.title, variant: x.node.variantTitle, sku: x.node.sku, quantity: x.node.quantity, current_quantity: x.node.currentQuantity != null ? x.node.currentQuantity : x.node.quantity, refundable_quantity: x.node.refundableQuantity, unit_price: money(x.node.originalUnitPriceSet), line_total: money(x.node.discountedTotalSet), ...paidEach(x.node), in_stock: x.node.variant ? x.node.variant.availableForSale : null })),
         fulfillments: (n.fulfillments || []).map((f) => ({ status: f.status, at: f.createdAt, tracking: (f.trackingInfo || []).map((t) => ({ number: t.number, url: t.url, company: t.company })) })),
         refunds: (n.refunds || []).map((r) => ({ id: r.id, at: r.createdAt, note: r.note, amount: money(r.totalRefundedSet) })),
         shipstation: ss,
@@ -1263,8 +1274,28 @@ async function debitStoreCredit(st, customerGid, amount, currency) {
 // STAGE native store credit to the customer's account. On Apply it credits the account (Shopify auto-creates
 // one if needed) — no code; it applies at checkout when the customer is signed in with that email.
 async function shopifyProposeStoreCredit(input) {
-  const amount = Number(input.amount);
-  if (!(amount > 0)) return { error: "Provide a positive dollar amount for the store credit." };
+  // Credit for specific items is worked out here from the order — what the customer paid for them INCLUDING
+  // sales tax (same as a return or refund would give back), times percent (e.g. 50 for the one-time missing-items credit).
+  let amount = Number(input.amount), calc = null;
+  const isDebit0 = /^(debit|remove|deduct|reverse)$/i.test(String(input.action || "credit"));
+  if (!isDebit0 && Array.isArray(input.items) && input.items.length && input.order) {
+    const od = await orderDetail(String(input.order));
+    if (!od || od.error || od.note) return { error: `Couldn't load order ${input.order} to price the items${od && (od.error || od.note) ? `: ${od.error || od.note}` : ""}.` };
+    const pct = input.percent != null && input.percent !== "" ? Number(input.percent) : 100;
+    if (!(pct > 0 && pct <= 100)) return { error: "percent must be between 1 and 100." };
+    let sub = 0, tax = 0; const parts = [];
+    for (const r of input.items) {
+      const t = String(r.title || "").toLowerCase(), sku = String(r.sku || "").toLowerCase();
+      const li = od.items.find((x) => (sku && String(x.sku || "").toLowerCase() === sku)) || od.items.find((x) => t && x.title.toLowerCase() === t) || od.items.find((x) => t && x.title.toLowerCase().includes(t));
+      if (!li) return { error: `"${r.sku || r.title}" isn't on order ${od.name} — use the exact sku or title from the order.` };
+      const q = Math.max(1, Math.floor(Number(r.quantity) || 1));
+      sub += li.paid_each * q; tax += li.tax_each * q; parts.push(`${q}× ${li.title} ${usd(li.paid_each_incl_tax * q)}`);
+    }
+    const full = Math.round((sub + tax + 1e-9) * 100) / 100;
+    amount = Math.round(full * pct + 1e-7) / 100;
+    calc = `${parts.join(", ")} = ${usd(Math.round(sub * 100) / 100)} + ${usd(Math.round(tax * 100) / 100)} tax${pct !== 100 ? ` × ${pct}%` : ""}`;
+  }
+  if (!(amount > 0)) return { error: "Provide a positive dollar amount for the store credit (or the items + order so it can be calculated with tax)." };
   const st = storeFromOrderOrBrand(input.order, input.brand);
   if (!st) return { error: "Couldn't determine the store — pass the order number or a brand (Larkspur Baby / Outlet / Bumbunny)." };
   // find the customer: prefer explicit email, else the order's email
@@ -1284,9 +1315,9 @@ async function shopifyProposeStoreCredit(input) {
     return { ok: true, staged: true, note: `Staged a REMOVAL of $${amt} store credit from ${email} (${st.brand}) for Jose's approval. It will NOT be deducted until he clicks Apply. This is an internal correction — do NOT email the customer about it unless asked.` };
   }
   await stageAction({ kind: "shopify_propose_store_credit", input, title: `Store credit — ${st.brand}${orderRef ? ` (order ${orderRef})` : ""}`, ticketId: input.ticket_id,
-    summary: `💳 Add *$${amt}* native store credit to ${cust.displayName || email} (${email})${orderRef ? ` · order ${orderRef}` : ""}. Applies at checkout when signed in — no code.`,
+    summary: `💳 Add *$${amt}* native store credit to ${cust.displayName || email} (${email})${orderRef ? ` · order ${orderRef}` : ""}${calc ? `\n🧮 ${calc}` : ""}. Applies at checkout when signed in — no code.`,
     exec: async () => await issueStoreCredit(st, cust.id, amt, "USD") });
-  return { ok: true, staged: true, note: `Staged $${amt} native store credit for ${email} (${st.brand}) for Jose's approval. It will NOT be added until he clicks Apply. In your reply, tell the customer we're adding $${amt} in store credit to their account (this email) and it applies automatically at checkout when they're signed in — do NOT say it's a code, and don't say it's done yet.` };
+  return { ok: true, staged: true, amount: Number(amt), breakdown: calc || undefined, note: `Staged $${amt} native store credit${calc ? ` (${calc})` : ""} for ${email} (${st.brand}) for Jose's approval. It will NOT be added until he clicks Apply. In your reply, tell the customer we're adding $${amt} in store credit to their account (this email) and it applies automatically at checkout when they're signed in — do NOT say it's a code, and don't say it's done yet.` };
 }
 
 
@@ -1414,8 +1445,8 @@ const TOOLS = [
     input_schema: { type: "object", properties: { order: { type: "string" }, remove: { type: "array", items: { type: "object", properties: { sku: { type: "string" }, title: { type: "string" }, quantity: { type: "number" } } } }, add: { type: "array", items: { type: "object", properties: { sku: { type: "string" }, quantity: { type: "number" } } } }, reason: { type: "string" }, refund_difference: { type: "boolean" }, ticket_id: { type: "number" } }, required: ["order"] } },
   { name: "shopify_propose_discount", description: "STAGE a single-use discount CODE for the customer, for Jose's one-click approval (does NOT create until he clicks Apply). kind='percentage' (value=percent, e.g. 10) | 'fixed' (value=dollars off) | 'free_shipping' (optional min_subtotal). Route by passing the order number OR a brand (Larkspur Baby / Outlet / Bumbunny). Use for approved goodwill discounts or a free-shipping courtesy. Optionally pass a code; otherwise one is generated. Pass ticket_id. In your draft reply, write the code EXACTLY as {{DISCOUNT_CODE}} (e.g. 'use code {{DISCOUNT_CODE}} at checkout') — it is swapped for the real, active code the moment Jose approves; never invent a code and never say it is active yet.",
     input_schema: { type: "object", properties: { order: { type: "string" }, brand: { type: "string" }, kind: { type: "string" }, value: { type: "number" }, code: { type: "string" }, min_subtotal: { type: "number" }, title: { type: "string" }, ticket_id: { type: "number" } }, required: ["kind"] } },
-  { name: "shopify_propose_store_credit", description: "STAGE a NATIVE Shopify store-credit change on the customer's account for Jose's one-click approval (does NOT execute until he clicks Apply). action='credit' (default) ADDS real store credit to the account balance — NOT a code; it applies automatically at checkout when the customer is signed in with that email (Shopify auto-creates the account if needed). Use credit for any approved STORE-CREDIT resolution (Package Protection lost/stolen credit, goodwill credit, non-PP 50% missing-items credit). action='debit' REMOVES store credit from the account — use ONLY to correct an over-credit / duplicate credit (e.g. the same credit was applied twice); a debit is an internal correction, so do NOT email the customer about it. Pass amount (dollars) and the order number (preferred — routes the store and finds the customer) or brand + email; optional reason; ticket_id. For a credit, word your reply as account credit, never a code.",
-    input_schema: { type: "object", properties: { action: { type: "string", description: "'credit' (add, default) or 'debit' (remove, to fix an over-credit)" }, order: { type: "string" }, brand: { type: "string" }, email: { type: "string" }, amount: { type: "number" }, reason: { type: "string" }, ticket_id: { type: "number" } }, required: ["amount"] } },
+  { name: "shopify_propose_store_credit", description: "STAGE a NATIVE Shopify store-credit change on the customer's account for Jose's one-click approval (does NOT execute until he clicks Apply). action='credit' (default) ADDS real store credit to the account balance — NOT a code; it applies automatically at checkout when the customer is signed in with that email (Shopify auto-creates the account if needed). Use credit for any approved STORE-CREDIT resolution (Package Protection lost/stolen credit, goodwill credit, non-PP 50% missing-items credit). action='debit' REMOVES store credit from the account — use ONLY to correct an over-credit / duplicate credit (e.g. the same credit was applied twice); a debit is an internal correction, so do NOT email the customer about it. For a credit that's for specific items (defective, damaged, missing, wrong item…) pass order + items (sku/title + quantity) and optional percent — DON'T type the amount: the tool prices the items at what the customer paid INCLUDING sales tax and tells you the exact amount to quote. Pass amount only for a credit not tied to items, or for a debit. Pass the order number (preferred — routes the store and finds the customer) or brand + email; optional reason; ticket_id. For a credit, word your reply as account credit, never a code.",
+    input_schema: { type: "object", properties: { action: { type: "string", description: "'credit' (add, default) or 'debit' (remove, to fix an over-credit)" }, order: { type: "string" }, brand: { type: "string" }, email: { type: "string" }, amount: { type: "number", description: "Dollars. Only for credits NOT tied to specific items (e.g. a goodwill amount) or for a debit. For items, pass items instead — the amount is calculated with tax." }, items: { type: "array", description: "Items the credit is for (sku or title from the order + quantity). The tool prices them at what the customer paid INCLUDING sales tax.", items: { type: "object", properties: { sku: { type: "string" }, title: { type: "string" }, quantity: { type: "number" } } } }, percent: { type: "number", description: "Share of the items' value to credit (default 100; 50 for the one-time missing-items credit)." }, reason: { type: "string" }, ticket_id: { type: "number" } } } },
   { name: "return_propose", description: "STAGE a return with a prepaid return label for Jose's one-click approval (nothing happens until it's applied). Use ONLY when the customer can't or won't use the returns portal themselves, or asks us to send them a label. On apply it creates the return in Shopify, buys the ShipStation label, and attaches the label PDF to your reply automatically. Pass the order number, items [{title or sku, quantity, reason}], refund_method ('original' or 'store_credit'), and ticket_id. In the reply, say the label is attached and the refund is issued once the package is delivered back to us — don't quote an amount.",
     input_schema: { type: "object", properties: { order: { type: "string" }, items: { type: "array", items: { type: "object", properties: { title: { type: "string" }, sku: { type: "string" }, quantity: { type: "number" }, reason: { type: "string" } } } }, refund_method: { type: "string" }, ticket_id: { type: "number" } }, required: ["order", "items"] } },
   { name: "customer_history", description: "What we already know about THIS customer across every past ticket: previous conversations (subject, date, outcome), every store credit / replacement / discount already given, and how many goodwill credits they have received. CALL THIS before offering any goodwill credit, replacement, or refund, and whenever a customer says 'again', 'last time', 'second time', or references a previous order or issue. The non-PP 50% missing-items credit is ONE TIME per customer — if goodwill_credits_given is 1 or more, do NOT offer it again; escalate instead.",
@@ -1515,7 +1546,7 @@ const DEFAULT_RULES =
   `SHIPPING ADDRESS CORRECTION — this is something you HANDLE, not escalate. When the customer gives you the corrected address and the order has NOT shipped, call shipstation_propose_change (action=update_address with the new street1/city/state/postal_code; 2-letter state code) to STAGE the fix for Jose's one-click approval — it updates BOTH ShipStation and Shopify so they stay in sync. IMPORTANT: a brand-new order often hasn't synced to ShipStation yet, so shipstation_lookup may say "no ShipStation order found" — that is NOT a reason to skip the tool or hand it to Jose manually. Still call shipstation_propose_change; it corrects Shopify now and ShipStation imports the fix on sync (and re-checks ShipStation at Apply time). To confirm "not shipped," you can use the Shopify order's fulfillment status (UNFULFILLED = safe to change) — you don't need ShipStation to have it. Only when the order is already FULFILLED/SHIPPED do you explain it can't be redirected and lay out options. Tell the customer we're getting it updated (never say it's done). Retention-first — fix the address, don't cancel. ` +
   `PACKAGE PROTECTION REPLACEMENT — when the correct PP resolution is a replacement and the items are IN STOCK (confirm with shopify_check_stock), call shopify_propose_replacement (pass the original order number; optionally items:[{sku,quantity}] for a partial) to STAGE a no-charge replacement order for Jose's approval. Tell the customer their replacement is on its way; do NOT quote a new order number until it's approved. (This is the PP "replacement" path; store credit remains the alternative — and remember non-PP customers do NOT get a free replacement.) ` +
   `GOODWILL DISCOUNTS / COURTESY FREE SHIPPING — when you've decided a discount or a free-shipping courtesy is warranted, call shopify_propose_discount (kind=percentage|fixed|free_shipping; route by order number or brand) to STAGE a single-use code for Jose's approval. Do NOT invent or promise a specific code yourself — stage it, and tell the customer a code is on the way once approved. Any discount/credit is still a money move → escalate=true. ` +
-  `STORE CREDIT — this is something you ISSUE, not just promise. Whenever the resolution is STORE CREDIT (a Package Protection lost/stolen/not-received credit, the non-PP one-time 50% missing-items credit, or any approved goodwill credit), call shopify_propose_store_credit (pass amount in dollars + the order number, and ticket_id) to STAGE NATIVE Shopify store credit on the customer's account for Jose's one-click approval. This adds REAL credit to their account balance — it is NOT a code. So word your reply accordingly: tell the customer we're adding $X in store credit to their account (this email) and it applies automatically at checkout when they're signed in — NEVER say "your code" or "a code is on the way" for store credit, and never promise it's done (say we're getting it added). For the credit AMOUNT on a Package-Protection lost/damaged claim use the order's paid value (or the value of the affected items for a partial); for the non-PP missing-items case use 50% of the missing items' value. Money move → escalate=true. ` +
+  `STORE CREDIT — this is something you ISSUE, not just promise. Whenever the resolution is STORE CREDIT (a Package Protection lost/stolen/not-received credit, the non-PP one-time 50% missing-items credit, or any approved goodwill credit), call shopify_propose_store_credit (pass amount in dollars + the order number, and ticket_id) to STAGE NATIVE Shopify store credit on the customer's account for Jose's one-click approval. This adds REAL credit to their account balance — it is NOT a code. So word your reply accordingly: tell the customer we're adding $X in store credit to their account (this email) and it applies automatically at checkout when they're signed in — NEVER say "your code" or "a code is on the way" for store credit, and never promise it's done (say we're getting it added). Store credit for items ALWAYS includes the sales tax the customer paid on them (exactly like a return or refund) — so for items, pass order + items (+ percent: 50 for the non-PP missing-items case) and let the tool work out the amount; never quote an item's price without its tax. For a whole Package-Protection lost order use the order's paid total. Quote the customer the exact amount the tool returns. Money move → escalate=true. ` +
   `LARKSPUR VIP CLOSING — on Larkspur Baby / Larkspur Baby Outlet replies that are POSITIVE or NEUTRAL (order status, sizing, product questions, a resolved happy customer), END by inviting them to join our VIP group: "To stay on top of all things Larkspur — discounts, deals, and to be the first to know — join our VIP group: https://www.facebook.com/groups/larkspurcircle". NEVER add it when the customer is upset, when the ticket is a complaint, damage, lost/not-received or refund case, or when escalate=true — an invitation at the bottom of a complaint reads as tone-deaf. Never for Bumbunny. `;
 
 

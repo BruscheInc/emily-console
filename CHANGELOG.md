@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.45.0
+- Store credit now includes sales tax, the same as returns and refunds. Emily's store-credit tool takes the order + items (and a percent, e.g. 50%) and prices them at what the customer actually paid — after discounts, plus that item's tax — instead of Emily typing an amount. The Slack card shows the math (e.g. "1× Pajamas $22.74 = $21.00 + $1.74 tax"). Order lookups now show each item's paid price, tax and total.
+- Claims: the claim value (what store credit and refunds pay) now includes the items' sales tax. Open claims filed before this get their tax added automatically; staff see "incl. $X tax". The portal's claim estimate includes tax too.
+
 ## 4.44.7
 - FAQs give customers without Package Protection their time limits: report "marked delivered" or "arrived damaged" within 5 days of delivery (7 days with Package Protection); "hasn't arrived" opens 14 days after shipping for everyone. Outcomes stay unwritten ("our team will review it"). Every 7-day limit is labeled as the Package Protection limit. The lost/stolen answer now covers packages still in transit / not arrived, marked delivered, and damaged. Emily will ask in Slack before publishing.
 

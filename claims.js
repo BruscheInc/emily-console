@@ -22,7 +22,7 @@ const R = () => require("./returns");
 const K = () => require("./emily").claimsKit();
 const EX = () => require("./exceptions");
 
-const round2 = (n) => Math.round(Number(n) * 100) / 100;
+const round2 = (n) => Math.round((Number(n) + 1e-9) * 100) / 100;
 function httpError(status, message) { const e = new Error(message); e.status = status; return e; }
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
 const fmtWhen = (d) => new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" });
@@ -67,7 +67,7 @@ async function patchClaim(id, patch, event) { const c = await getClaim(id); if (
 const ORDER_Q = `query($id:ID!){ order(id:$id){ id name createdAt cancelledAt displayFulfillmentStatus currencyCode email customer { id }
   shippingAddress{ firstName lastName name address1 address2 city provinceCode zip countryCodeV2 phone }
   lineItems(first:50){ nodes{ id title variantTitle sku quantity currentQuantity unfulfilledQuantity image{ url(transform:{maxWidth:200}) }
-    discountedUnitPriceAfterAllDiscountsSet{ shopMoney{ amount } } originalUnitPriceSet{ shopMoney{ amount } }
+    discountedUnitPriceAfterAllDiscountsSet{ shopMoney{ amount } } originalUnitPriceSet{ shopMoney{ amount } } taxLines{ priceSet{ shopMoney{ amount } } }
     variant{ id availableForSale inventoryQuantity inventoryItem{ tracked } product{ id title variants(first:60){ nodes{ id title sku price availableForSale } } } } } }
   fulfillmentOrders(first:10){ nodes{ status deliveryMethod{ methodType } } }
   fulfillments(first:10){ createdAt deliveredAt displayStatus status events(first:3, sortKey: HAPPENED_AT, reverse:true){ nodes{ status happenedAt message city province } } trackingInfo{ number url company } fulfillmentLineItems(first:50){ nodes{ quantity lineItem{ id } } } } } }`;
@@ -79,7 +79,9 @@ async function loadOrder(key, orderId) {
   const all = o.lineItems.nodes.map((n) => ({
     id: n.id, title: n.title, variant: n.variantTitle, sku: n.sku, quantity: n.quantity, current: n.currentQuantity, unfulfilled: n.unfulfilledQuantity,
     fulfilled: Math.max(0, n.currentQuantity - n.unfulfilledQuantity), image: (n.image && n.image.url) || null,
-    unit_price: Number(n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount), stock: n.variant ? (n.variant.inventoryItem && n.variant.inventoryItem.tracked === false ? null : Number(n.variant.inventoryQuantity) || 0) : 0, full_price: Number(((n.originalUnitPriceSet || {}).shopMoney || {}).amount || n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount), variant_id: n.variant && n.variant.id,
+    unit_price: Number(n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount),
+    // sales tax the customer paid per unit — credits and refunds give it back with the item (same as returns)
+    unit_tax: n.quantity ? Math.round(((n.taxLines || []).reduce((t, x) => t + Number(x.priceSet.shopMoney.amount || 0), 0) / n.quantity) * 10000) / 10000 : 0, stock: n.variant ? (n.variant.inventoryItem && n.variant.inventoryItem.tracked === false ? null : Number(n.variant.inventoryQuantity) || 0) : 0, full_price: Number(((n.originalUnitPriceSet || {}).shopMoney || {}).amount || n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount), variant_id: n.variant && n.variant.id,
     // replacements need MORE than replacement_min_stock on hand (untracked inventory counts as in stock)
     in_stock: !!(n.variant && n.variant.availableForSale && (n.variant.inventoryItem && n.variant.inventoryItem.tracked === false || Number(n.variant.inventoryQuantity) > Number(s.replacement_min_stock))),
     product: n.variant && n.variant.product ? { id: n.variant.product.id, title: n.variant.product.title, variants: n.variant.product.variants.nodes } : null,
@@ -486,7 +488,7 @@ function gates(c, ship) {
   return g;
 }
 function claimItems(c, type, used = {}) {
-  return c.lines.map((l) => ({ id: l.id, title: l.title, variant: l.variant, sku: l.sku, image: l.image, unit_price: l.unit_price, max: Math.max(0, l.fulfilled - (used[l.id] || 0)), in_stock: l.in_stock })).filter((x) => x.max > 0);
+  return c.lines.map((l) => ({ id: l.id, title: l.title, variant: l.variant, sku: l.sku, image: l.image, unit_price: l.unit_price, unit_tax: l.unit_tax || 0, max: Math.max(0, l.fulfilled - (used[l.id] || 0)), in_stock: l.in_stock })).filter((x) => x.max > 0);
 }
 async function usedQty(c) { const a = await claimedQty(c.o.name), b = await returnedQty(c.o.name); const m = { ...a }; for (const k of Object.keys(b)) m[k] = (m[k] || 0) + b[k]; return m; }
 // Lost / marked-delivered claims cover only what was in the affected shipment(s).
@@ -597,13 +599,15 @@ async function claimSubmit(token, body) {
   if (needPhotos && !photos.length) throw httpError(400, "Please add at least one photo so we can see the problem.");
   if (type === "defective" && description.length < 10) throw httpError(400, "Please tell us a little about what's wrong with the item.");
   if (resolution === "replacement" && items.some((i) => !i.in_stock)) throw httpError(400, `${items.find((i) => !i.in_stock).title} is out of stock right now, so we can't send a replacement. Please choose ${type === "defective" && !realPP(c) ? "store credit or a refund" : "store credit"}.`);
-  const value = round2(items.reduce((t, i) => t + i.unit_price * i.quantity, 0));
+  // Claim value = what the customer paid for those items, including their sales tax.
+  const subtotal = round2(items.reduce((t, i) => t + i.unit_price * i.quantity, 0)), tax = round2(items.reduce((t, i) => t + (i.unit_tax || 0) * i.quantity, 0));
+  const value = round2(subtotal + tax);
   const n = (await db(`SELECT count(*)::int n FROM hd_claims WHERE order_name=$1 AND type IN ('defective','pp')`, [c.o.name])).rows[0].n;
   const a = c.o.shippingAddress || {};
   let claim; try { claim = await putClaim({
     id: crypto.randomUUID(), number: `${c.o.name.replace(/^#/, "")}-C${n + 1}`, store: p.k, type, status: "pending", order_name: c.o.name, email: c.o.email || p.e, ticket_id: null,
     order_id: c.o.id, customer_id: c.o.customer ? c.o.customer.id : null, customer_name: [a.firstName, a.lastName].filter(Boolean).join(" ") || a.name || "", currency: c.currency,
-    has_pp: type === "defective" ? realPP(c) : c.has_pp, subtype, items: items.map(({ max, image, ...i }) => ({ ...i, image })), description, photos, resolution, value, amount: value,
+    has_pp: type === "defective" ? realPP(c) : c.has_pp, subtype, items: items.map(({ max, image, ...i }) => ({ ...i, image })), description, photos, resolution, value, subtotal, tax, amount: value,
     gate: gate ? { rule: !!gate.rule, note: gate.note || "" } : null, tracking: ship, order_created_at: c.o.createdAt, shipped_at: c.shipped_at, source: "portal",
     pp_goodwill: !!c.pp_goodwill, exception: EX().describe(c.ex) || null,
   }, `Claim submitted by the customer: ${type === "pp" ? SUBTYPE_LABEL[subtype] + (c.has_pp ? (c.pp_goodwill ? " (Package Protection by goodwill exception)" : "") : " (no Package Protection)") : "defective item"} · wants ${RES_LABEL[resolution]} · ${usd(value)}${EX().describe(c.ex) ? ` · ${EX().describe(c.ex)}` : ""}`); }
@@ -746,7 +750,9 @@ async function list({ status = "pending", q = "", limit = 200 } = {}) {
   where.push(await sinceClause(args));
   if (q) { args.push(`%${String(q).toLowerCase()}%`); where.push(`(lower(number) LIKE $${args.length} OR lower(order_name) LIKE $${args.length} OR lower(email) LIKE $${args.length})`); }
   args.push(Math.min(Number(limit) || 200, 500));
-  return (await db(`SELECT * FROM hd_claims WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT $${args.length}`, args)).rows.map(rowToClaim);
+  const rows = (await db(`SELECT * FROM hd_claims WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT $${args.length}`, args)).rows.map(rowToClaim);
+  for (const c of rows) if (["pending", "info_requested"].includes(c.status) && c.type !== "edit" && c.tax == null) await withTax(c);   // older claims: add the items' tax
+  return rows;
 }
 async function counts() {
   const args = [], since = await sinceClause(args);
@@ -765,6 +771,17 @@ async function emailCustomer(c, kind, extra, who) {
   const r = await core.sendNewEmail({ mailbox: def.support, to: c.email, subject: m.subject, text: m.text, html: m.html, who, tags: ["claim"], name: c.customer_name });
   await patchClaim(c.id, { ticket_id: r.ticket_id });
 }
+// Claims filed before tax was counted: add the items' sales tax to the value (once) so credits match what was paid.
+async function withTax(c) {
+  if (c.tax != null || !(c.items || []).length) return c;
+  try {
+    const o = await loadOrder(c.store, c.order_id);
+    const tax = round2(c.items.reduce((t, i) => { const l = o.lines.find((y) => y.id === i.id); return t + ((l && l.unit_tax) || 0) * i.quantity; }, 0));
+    c.subtotal = round2(c.value); c.tax = tax; c.value = round2(c.subtotal + tax); c.amount = c.value;
+    await patchClaim(c.id, { subtotal: c.subtotal, tax, value: c.value, amount: c.value }, tax ? `Value now includes sales tax: ${usd(c.subtotal)} + ${usd(tax)} tax = ${usd(c.value)}` : null);
+  } catch (e) { console.error("claim tax:", e.message); }
+  return c;
+}
 async function approve(id, { resolution, amount, note } = {}, who) {
   const c = await getClaim(id); if (!c) throw httpError(404, "Claim not found");
   if (!["pending", "info_requested"].includes(c.status)) throw httpError(400, `This claim is already ${c.status}.`);
@@ -772,6 +789,7 @@ async function approve(id, { resolution, amount, note } = {}, who) {
   if (!RES_LABEL[res]) throw httpError(400, "Pick a resolution.");
   if (res === "refund" && (c.type === "pp" || c.has_pp)) throw httpError(400, "Orders with Package Protection get a replacement or store credit, not a refund.");
   const st = R().shopFor(c.store), def = R().STORE_DEFS[c.store];
+  await withTax(c);
   const amt = round2(amount != null && amount !== "" ? Number(amount) : c.value);
   if (res !== "replacement" && amt > round2(c.value) + 0.009) throw httpError(400, `The most this claim can pay is ${usd(c.value)} (the value of the claimed items).`);
   // Lock the claim so a double click or two people can't pay it twice.
