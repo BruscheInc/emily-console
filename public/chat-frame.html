@@ -16,6 +16,9 @@ button,input,textarea{font:inherit;color:inherit}
 .hd .av img{width:100%;height:100%;object-fit:contain;padding:5px}.hd .av b{color:var(--hbg);font-size:1.1em}
 .hd .av .st{position:absolute;right:0;bottom:0;width:11px;height:11px;border-radius:50%;background:#22C55E;border:2px solid var(--hbg)}
 .hd .tt{flex:1;min-width:0}.hd .t1{font-weight:700;font-size:1.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hd .t2{font-size:.84em;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd .act{flex:none;border-radius:999px;padding:7px 12px;background:rgba(255,255,255,.16);color:inherit;text-decoration:none;font-size:.82em;font-weight:700;white-space:nowrap}
+.hd .act:hover{background:rgba(255,255,255,.26)}
+@media (max-width:340px){.hd .act{display:none}}
 .hd .x{border:0;background:rgba(255,255,255,.14);color:inherit;width:34px;height:34px;border-radius:50%;cursor:pointer;display:grid;place-items:center;flex:none}
 .hd .x:hover{background:rgba(255,255,255,.24)}
 .body{flex:1;overflow-y:auto;padding:16px 14px 8px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
@@ -56,6 +59,7 @@ button,input,textarea{font:inherit;color:inherit}
 </head>
 <body>
 <div class="hd"><div class="av" id="av"><img id="avImg" alt=""><b id="avTxt" class="hidden"></b><span class="st" id="st"></span></div><div class="tt"><div class="t1" id="t1"></div><div class="t2" id="t2"></div></div>
+  <a class="act hidden" id="act" target="_blank" rel="noopener"></a>
   <button class="x" id="close" aria-label="Close chat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button></div>
 <div id="chat" style="flex:1;display:flex;flex-direction:column;min-height:0">
   <div class="body" id="body" aria-live="polite"></div>
@@ -102,6 +106,7 @@ function apply(c) {
   const img = $('avImg'), noImg = () => { img.classList.add('hidden'); $('avTxt').classList.remove('hidden'); };
   img.onerror = noImg; img.onload = () => { img.classList.remove('hidden'); $('avTxt').classList.add('hidden'); };
   if (c.header.avatar) { if (img.getAttribute('src') !== c.header.avatar) img.src = c.header.avatar; } else { img.removeAttribute('src'); noImg(); } $('st').classList.toggle('hidden', !c.header.status_dot);
+  $('act').textContent = c.header.action_label || ''; $('act').href = c.header.action_url || '#'; $('act').classList.toggle('hidden', !(c.header.action_label && c.header.action_url));
   $('in').placeholder = c.copy.placeholder; $('disc').textContent = c.copy.disclaimer;
   $('toTeam').textContent = c.handoff.label; $('toTeam').classList.toggle('hidden', !c.handoff.enabled);
   $('fTitle').textContent = c.handoff.title; $('fIntro').textContent = c.handoff.intro; $('fOrderWrap').classList.toggle('hidden', !c.handoff.ask_order);

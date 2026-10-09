@@ -38,12 +38,12 @@ async function defaultsFor(store) {
   return {
     enabled: false,                  // shown to customers only when on (preview on the live site with ?buzzin_chat=preview)
     launcher: { icon: "chat", icon_url: "", text: "", size: 60, bg: primary, fg: "#FFFFFF", radius: 30, shadow: true, position: "right",
-      offset_x: 20, offset_y: 20, offset_x_m: 14, offset_y_m: 14, show_mobile: true, z: 2147483000,
+      offset_x: 20, offset_y: 20, offset_x_m: 14, offset_y_m: 14, show_mobile: true, mobile_style: "sheet", mobile_height: 82, z: 2147483000,
       teaser: "Hi! Questions about an order or a return? We can help 💛", teaser_delay: 8, teaser_on: true, badge: true, auto_open: 0 },
     panel: { width: 380, height: 620, radius: 18, font, font_size: 15, bg: "#FFFFFF", text: "#242F3F", muted: "#6B7280",
       header_bg: primary, header_fg: "#FFFFFF", accent: primary, accent_fg: "#FFFFFF",
       bot_bg: "#F4F2EE", bot_fg: "#242F3F", user_bg: primary, user_fg: "#FFFFFF", chip_bg: "#FFFFFF", chip_fg: primary, chip_border: "#E6E3DC" },
-    header: { title: def.name, subtitle: "We're here to help", avatar: logo, show_avatar: true, status_dot: true },
+    header: { title: def.name, subtitle: "We're here to help", avatar: logo, show_avatar: true, status_dot: true, action_label: "Track or return", action_url: "{portal}" },
     copy: {
       welcome: `Hi there! 👋 I'm the ${def.name} helper. I can answer questions about orders, returns, sizing and shipping, and point you to the right place.`,
       placeholder: "Type your question…",
@@ -57,6 +57,7 @@ async function defaultsFor(store) {
       { label: "Where's my order?", type: "message", value: "My order hasn't arrived yet" },
       { label: "Defective or damaged item", type: "message", value: "My item arrived defective or damaged" },
       { label: "Change or cancel my order", type: "message", value: "Can I change or cancel my order?" },
+      { label: "How do I pick the right size?", type: "message", value: "How do I pick the right size?" },
     ],
     links: [
       { label: "Returns portal", url: "{portal}" },
@@ -83,7 +84,8 @@ function sanitize(d, v) {
       shadow: bool(L.shadow, d.launcher.shadow), position: L.position === "left" ? "left" : L.position === "right" ? "right" : d.launcher.position,
       offset_x: clamp(L.offset_x, 0, 200, d.launcher.offset_x), offset_y: clamp(L.offset_y, 0, 300, d.launcher.offset_y),
       offset_x_m: clamp(L.offset_x_m, 0, 200, d.launcher.offset_x_m), offset_y_m: clamp(L.offset_y_m, 0, 300, d.launcher.offset_y_m),
-      show_mobile: bool(L.show_mobile, d.launcher.show_mobile), z: clamp(L.z, 1, 2147483647, d.launcher.z),
+      show_mobile: bool(L.show_mobile, d.launcher.show_mobile), mobile_style: L.mobile_style === "full" ? "full" : L.mobile_style === "sheet" ? "sheet" : d.launcher.mobile_style,
+      mobile_height: clamp(L.mobile_height, 50, 100, d.launcher.mobile_height), z: clamp(L.z, 1, 2147483647, d.launcher.z),
       teaser: str(L.teaser, 160, d.launcher.teaser), teaser_delay: clamp(L.teaser_delay, 0, 120, d.launcher.teaser_delay), teaser_on: bool(L.teaser_on, d.launcher.teaser_on),
       badge: bool(L.badge, d.launcher.badge), auto_open: clamp(L.auto_open, 0, 300, d.launcher.auto_open),
     },
@@ -92,7 +94,8 @@ function sanitize(d, v) {
       : typeof dv === "number" ? clamp(P[k], k === "font_size" ? 12 : k === "radius" ? 0 : 280, k === "font_size" ? 20 : k === "radius" ? 32 : k === "width" ? 520 : 900, dv)
       : color(P[k], dv)])),
     header: { title: str(H.title, 60, d.header.title), subtitle: str(H.subtitle, 90, d.header.subtitle), avatar: H.avatar !== undefined ? url(H.avatar) : d.header.avatar,
-      show_avatar: bool(H.show_avatar, d.header.show_avatar), status_dot: bool(H.status_dot, d.header.status_dot) },
+      show_avatar: bool(H.show_avatar, d.header.show_avatar), status_dot: bool(H.status_dot, d.header.status_dot),
+      action_label: str(H.action_label, 30, d.header.action_label), action_url: String(H.action_url || "").trim() === "{portal}" ? "{portal}" : H.action_url !== undefined ? url(H.action_url) : d.header.action_url },
     copy: Object.fromEntries(Object.entries(d.copy).map(([k, dv]) => [k, str(C[k], 600, dv)])),
     quick: (Array.isArray(v.quick) ? v.quick : d.quick).slice(0, 8).map((q) => ({ label: str(q && q.label, 40), type: q && q.type === "link" ? "link" : "message", value: q && q.type === "link" ? (url(q.value) || str(q.value, 600)) : str(q && q.value, 300) })).filter((q) => q.label && q.value),
     links: (Array.isArray(v.links) ? v.links : d.links).slice(0, 12).map((l) => ({ label: str(l && l.label, 40), url: String((l && l.url) || "").trim() === "{portal}" ? "{portal}" : url(l && l.url) })).filter((l) => l.label && l.url),
@@ -129,7 +132,7 @@ const fill = (u, p) => String(u || "").replace("{portal}", p);
 async function publicConfig(store) {
   const s0 = await settings(store), p = await portal(store), o = await origin(store);
   const abs = (u) => (u && u.startsWith("/") ? o + u : u);
-  const v = { ...s0, header: { ...s0.header, avatar: abs(s0.header.avatar) }, launcher: { ...s0.launcher, icon_url: abs(s0.launcher.icon_url) } };
+  const v = { ...s0, header: { ...s0.header, avatar: abs(s0.header.avatar), action_url: fill(s0.header.action_url, p) }, launcher: { ...s0.launcher, icon_url: abs(s0.launcher.icon_url) } };
   return { ...v, store, store_name: R().STORE_DEFS[store].name, portal: p, links: v.links.map((l) => ({ ...l, url: fill(l.url, p) })),
     quick: v.quick.map((q) => (q.type === "link" ? { ...q, value: fill(q.value, p) } : q)), ai: { enabled: v.ai.enabled, max_messages: v.ai.max_messages }, fonts: require("./returns-theme").FONT_WEIGHTS };
 }
@@ -322,7 +325,12 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
     + '.teaser .x{position:absolute;top:6px;right:6px;border:0;background:none;color:#888;cursor:pointer;font-size:16px;line-height:1;padding:2px 4px}'
     + '.panel{position:'+pos+';'+side+':var(--ox);bottom:calc(var(--oy) + '+(L.size+14)+'px);z-index:'+L.z+';width:'+P.width+'px;height:'+P.height+'px;max-height:calc(100% - '+(L.size+40)+'px);max-width:calc(100% - 2 * var(--ox));border:0;border-radius:'+P.radius+'px;box-shadow:0 20px 60px rgba(0,0,0,.22);background:'+P.bg+';overflow:hidden;opacity:0;transform:translateY(12px) scale(.98);pointer-events:none;transition:opacity .18s ease,transform .18s ease}'
     + '.panel.open{opacity:1;transform:none;pointer-events:auto}'
-    + '.panel.full{'+side+':0;bottom:0;width:100%;height:100%;max-height:100%;border-radius:0}'
+    + '.panel.full{'+side+':0;bottom:0;width:100%;height:100%;max-height:100%;max-width:100%;border-radius:0}'
+    + '.panel.sheet{left:0;right:0;bottom:0;width:100%;max-width:100%;height:'+(L.mobile_height||82)+'%;max-height:100%;border-radius:'+Math.max(P.radius,16)+'px '+Math.max(P.radius,16)+'px 0 0;transform:translateY(100%);box-shadow:0 -10px 40px rgba(0,0,0,.25)}'
+    + '.panel.sheet.open{transform:none}'
+    + '.panel.sheet:before{content:"";position:absolute;top:7px;left:50%;width:38px;height:4px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);z-index:2;pointer-events:none}'
+    + '.dim{position:'+pos+';inset:0;z-index:'+(L.z-1)+';background:rgba(15,15,20,.38);opacity:0;pointer-events:none;transition:opacity .2s ease}'
+    + '.dim.on{opacity:1;pointer-events:auto}'
     + '.panel iframe{width:100%;height:100%;border:0;display:block}'
     + '@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}';
   root.innerHTML = '<style>'+css+'</style>';
@@ -335,15 +343,21 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
   var send = function(msg){ if (frame && frame.contentWindow) frame.contentWindow.postMessage(Object.assign({ buzzinChat: 1 }, msg), '*'); };
   var load = function(){ if (frame) return; frame = document.createElement('iframe'); frame.title = 'Chat'; frame.src = o.origin + '/chat/' + o.store + '/frame' + (o.preview ? '?preview=1' : o.sitePreview ? '?site_preview=1' : ''); frame.setAttribute('allow','clipboard-write'); panel.appendChild(frame);
     frame.addEventListener('load', function(){ if (o.preview) send({ type: 'config', config: c }); send({ type: 'page', page: location.pathname }); }); };
+  var dim = document.createElement('div'); dim.className = 'dim'; dim.onclick = function(){ setOpen(false); };
   var setOpen = function(v){ opened = v; if (v) { load(); unread = false; hideTeaser(); try { localStorage.setItem('buzzin_chat_seen','1'); } catch(e){} }
-    panel.classList.toggle('open', v); panel.classList.toggle('full', v && mobile() && !inBox); btn.style.display = v && mobile() && !inBox ? 'none' : 'flex'; face(v); btn.setAttribute('aria-label', v ? 'Close chat' : 'Open chat'); };
+    var m = mobile(), sheet = m && L.mobile_style !== 'full', full = m && L.mobile_style === 'full';
+    panel.classList.toggle('sheet', sheet); panel.classList.toggle('full', full);
+    void panel.offsetWidth; panel.classList.toggle('open', v);
+    dim.classList.toggle('on', v && sheet);
+    btn.style.display = v && m ? 'none' : 'flex'; face(v); btn.setAttribute('aria-label', v ? 'Close chat' : 'Open chat');
+    try { if (!inBox) document.documentElement.style.overflow = v && m ? 'hidden' : ''; } catch(e){} };
   btn.onclick = function(){ setOpen(!opened); };
   var teaser = null, hideTeaser = function(){ if (teaser) { teaser.remove(); teaser = null; } };
   var showTeaser = function(){ if (opened || teaser || !L.teaser_on || !L.teaser) return; teaser = document.createElement('div'); teaser.className = 'teaser'; teaser.innerHTML = '<button class="x" aria-label="Dismiss">×</button>' + L.teaser.replace(/</g,'&lt;');
     teaser.onclick = function(e){ if (e.target.className === 'x') { hideTeaser(); try { sessionStorage.setItem('buzzin_chat_teased','1'); } catch(_){} return; } setOpen(true); }; root.appendChild(teaser); unread = true; face(false); };
   window.addEventListener('message', function(e){ if (!e.data || !e.data.buzzinChat || (frame && e.source !== frame.contentWindow)) return; if (e.data.type === 'close') setOpen(false); });
   window.addEventListener('resize', function(){ vars(); if (opened) setOpen(true); });
-  root.appendChild(panel); root.appendChild(btn); face(false);
+  root.appendChild(dim); root.appendChild(panel); root.appendChild(btn); face(false);
   var seen = false; try { seen = sessionStorage.getItem('buzzin_chat_teased') === '1' || localStorage.getItem('buzzin_chat_seen') === '1'; } catch(e){}
   if (o.preview) { if (L.teaser_on && L.teaser) showTeaser(); }
   else { if (!seen && L.teaser_on) setTimeout(showTeaser, (L.teaser_delay || 0) * 1000); if (L.auto_open && !seen) setTimeout(function(){ if (!opened) setOpen(true); }, L.auto_open * 1000); }

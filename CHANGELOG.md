@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.46.1
+- Chat on phones now opens as a sheet from the bottom (82% tall, page dimmed behind it, tap outside to close) instead of covering the whole screen. Full screen is still an option (Chat button → "On phones, the chat opens as"), and the sheet height is adjustable.
+- Header button in the chat window ("Track or return" → returns portal by default; label and link editable).
+- New default shortcut: "How do I pick the right size?".
+
 ## 4.46.0
 - Website chat widget for Larkspur Baby and the Outlet. A chat bubble on the store website with an AI helper that only guides: it answers from the FAQ page and the return / claim rules and sends people to the right place (mostly the returns portal and the exact option to pick). It can't see orders and never promises refunds, credits, replacements or exceptions. "Email our team" turns the chat into a Buzzin ticket (tag "chat") with the conversation attached, and Emily drafts the reply.
 - Chat Studio (Content → Website chat): customise everything per store with a live desktop / mobile preview — button icon (or your own image), text, colors, size, corners, position and gaps, greeting pop-up and auto-open, window size, font, every color, header title / picture, all wording, shortcut buttons, the links the AI may show, the "Email our team" form, AI tone, extra knowledge and instructions, message limit, pages to hide / show on, and custom CSS. Read every conversation. "Add to website" puts one line in the live theme; nothing shows until "Show the chat on the website" is on. "Preview on the live site" shows it only to you.

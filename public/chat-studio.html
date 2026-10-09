@@ -148,7 +148,9 @@ function renderSide() {
     ${F.sel('launcher.position', 'Position', [['right', 'Bottom right'], ['left', 'Bottom left']])}
     <div class="g2">${F.num('launcher.offset_x', 'Side gap (desktop)', 0, 200)}${F.num('launcher.offset_y', 'Bottom gap (desktop)', 0, 300)}</div>
     <div class="g2">${F.num('launcher.offset_x_m', 'Side gap (mobile)', 0, 200)}${F.num('launcher.offset_y_m', 'Bottom gap (mobile)', 0, 300)}</div>
-    ${F.tog('launcher.show_mobile', 'Show on phones')}${F.num('launcher.z', 'Stacking order (z-index)', 1, 2147483647)}`);
+    ${F.tog('launcher.show_mobile', 'Show on phones')}
+    ${F.sel('launcher.mobile_style', 'On phones, the chat opens as', [['sheet', 'A sheet from the bottom (page stays visible)'], ['full', 'Full screen']])}
+    ${V.launcher.mobile_style !== 'full' ? F.range('launcher.mobile_height', 'Sheet height on phones', 50, 100, '%') : ''}${F.num('launcher.z', 'Stacking order (z-index)', 1, 2147483647)}`);
   h += sec('teaser', '💬', 'Greeting pop-up & auto-open', `
     ${F.tog('launcher.teaser_on', 'Show a greeting bubble', 'A small message next to the button, once per visit.')}
     ${F.area('launcher.teaser', 'Greeting text', '', 2)}
@@ -166,7 +168,8 @@ function renderSide() {
     <div class="g2">${F.color('panel.accent', 'Buttons & send')}${F.color('panel.accent_fg', 'Button text')}</div>
     <div class="g3">${F.color('panel.chip_bg', 'Shortcut bg')}${F.color('panel.chip_fg', 'Shortcut text')}${F.color('panel.chip_border', 'Shortcut border')}</div>
     ${F.color('panel.muted', 'Small print')}`);
-  h += sec('header', '🪪', 'Header', `${F.text('header.title', 'Title')}${F.text('header.subtitle', 'Subtitle')}${F.tog('header.show_avatar', 'Show picture')}${F.img('header.avatar', 'Picture / logo')}${F.tog('header.status_dot', 'Green "online" dot')}`);
+  h += sec('header', '🪪', 'Header', `${F.text('header.title', 'Title')}${F.text('header.subtitle', 'Subtitle')}${F.tog('header.show_avatar', 'Show picture')}${F.img('header.avatar', 'Picture / logo')}${F.tog('header.status_dot', 'Green "online" dot')}
+    <div class="g2">${F.text('header.action_label', 'Header button', 'e.g. "Track or return" — empty hides it.')}${F.text('header.action_url', 'Header button link', 'Use {portal} for the returns portal.')}</div>`);
   h += sec('copy', '✍️', 'Messages & wording', `${F.area('copy.welcome', 'Welcome message', 'The first thing customers see.', 3)}${F.text('copy.placeholder', 'Message box placeholder')}${F.area('copy.disclaimer', 'Small print under the message box', '', 2)}${F.text('copy.thinking', 'Typing indicator label')}${F.area('copy.error', 'When something goes wrong', '', 2)}${F.area('copy.limit', 'When a chat reaches the message limit', '', 2)}`);
   h += sec('quick', '⚡', 'Shortcut buttons', `<div class="hint" style="margin-top:4px">Shown under the welcome message. "Ask" sends the text as the customer's question; "Link" opens a page. Use {portal} for the returns portal.</div>
     <div class="lst">${V.quick.map((q, i) => `<div class="it"><div class="row"><input type="text" data-q="${i}" data-k="label" value="${esc(q.label)}" placeholder="Button label"><select data-q="${i}" data-k="type"><option value="message" ${q.type === 'message' ? 'selected' : ''}>Ask</option><option value="link" ${q.type === 'link' ? 'selected' : ''}>Link</option></select></div>
@@ -247,7 +250,7 @@ async function loadChats() {
 let pv = null;
 function previewConfig() {
   const p = D.public.portal, fill = (u) => String(u || '').replace('{portal}', p), abs = (u) => (u && u.startsWith('/') ? D.origin + u : u);
-  return { ...JSON.parse(JSON.stringify(V)), store: STORE, portal: p, fonts: D.public.fonts, header: { ...V.header, avatar: abs(V.header.avatar) }, launcher: { ...V.launcher, icon_url: abs(V.launcher.icon_url), teaser_on: V.launcher.teaser_on && !previewOpen },
+  return { ...JSON.parse(JSON.stringify(V)), store: STORE, portal: p, fonts: D.public.fonts, header: { ...V.header, avatar: abs(V.header.avatar), action_url: fill(V.header.action_url) }, launcher: { ...V.launcher, icon_url: abs(V.launcher.icon_url), teaser_on: V.launcher.teaser_on && !previewOpen },
     links: V.links.map((l) => ({ ...l, url: fill(l.url) })), quick: V.quick.map((q) => (q.type === 'link' ? { ...q, value: fill(q.value) } : q)) };
 }
 function mount() {
