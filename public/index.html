@@ -1137,13 +1137,15 @@ async function loadReturns(silent){
           <span class="rc-pill ${s.portal_live?"on":"off"}">${s.portal_live?"● Live":"● Not live"}</span></div>
         <div class="rc-pa"><a class="btn" href="${esc(u)}" target="_blank" rel="noopener">Open portal ↗</a>
           <button class="btn sec" onclick="navigator.clipboard.writeText('${esc(u)}').then(()=>toast('Link copied'))">Copy link</button>
-          <a class="btn sec" href="/returns-studio?store=${x.key}" target="_blank" rel="noopener">🎨 Customize</a></div></div>`; };
+          <a class="btn sec" href="/returns-studio?store=${x.key}" target="_blank" rel="noopener">🎨 Customize</a>
+          <a class="btn sec" href="/email-studio?store=${x.key}" target="_blank" rel="noopener">✉️ Emails</a></div></div>`; };
     const tile=(k,label,val,sub,cls)=>`<button class="rc-tile ${cls||""} ${k!==null&&RET_F.status===k?"on":""}" ${k===null?"disabled":`onclick="RET_F.status='${k}';loadReturns()"`}><div class="rc-tl">${label}</div><div class="rc-tv">${val}</div><div class="rc-ts">${sub}</div></button>`;
     let h=`<div class="rc">
       <div class="rc-portals">${Object.values(d.stores).map(portalCard).join("")}
         <div class="rc-quick"><div class="rc-pn">Quick actions</div>
           <button class="btn sec" onclick="setView('returns_analytics')">📊 Return analytics</button>
           <button class="btn sec" onclick="retExceptions()">✨ Order exceptions</button>
+          <a class="btn sec" href="/email-studio" target="_blank" rel="noopener">✉️ Customer emails</a>
           <button class="btn sec" onclick="retPoll(this)">↻ Check tracking</button>
           <a class="btn sec" href="/api/returns.csv?key=${encodeURIComponent(KEY)}">⬇ Export CSV</a>
           ${d.admin?`<button class="btn sec" onclick="retSettings()">⚙︎ Settings</button>`:""}

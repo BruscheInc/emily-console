@@ -791,7 +791,8 @@ async function sendBranded(kind, rec, opts = {}) {
   const s = await settings(), def = STORE_DEFS[rec.store];
   const theme = opts.theme || await require("./returns-theme").published(rec.store);
   const view = await publicView(rec);
-  const m = require("./emails").render(kind, { view, theme, def, base: portalUrl(rec.store, s).replace(/\/returns\/\w+$/, "") });
+  const EM = require("./emails");
+  const m = EM.render(kind, { copy: await EM.copyFor(rec.store, kind), view, theme, def, base: portalUrl(rec.store, s).replace(/\/returns\/\w+$/, "") });
   if (rec.ticket_id && !opts.fresh) { try { await core.sendReply({ ticketId: String(rec.ticket_id), text: m.text, html: m.html, who: "Returns" }); return { ticket_id: rec.ticket_id }; } catch (_) {} }
   return core.sendNewEmail({ mailbox: def.support, to: rec.email, subject: m.subject, text: m.text, html: m.html, who: "Returns", tags: ["return", kind.replace("_", "-")], name: rec.customer_name });
 }

@@ -72,7 +72,6 @@ const BASE = {
   announce: { on: false, text: "", link: "", bg: "#242F3F", color: "#FFFFFF" },
   footer: { text: "Questions? Email {support}", links: [], show: true, show_shop_link: true },
   copy: {
-    ...require("./emails").DEFAULT_COPY,
     step1: "Find order", step2: "Choose items", step3: "Refund", step4: "Label",
     lookup_title: "Start a return",
     lookup_sub: "Enter your order number and the email you used at checkout.",

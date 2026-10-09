@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.34.0
+- Email Studio (/email-studio, Helpdesk → Returns → ✉️ Customer emails or ✉️ Emails on a portal card): every customer email from returns, claims and order edits on one page, each with its own editor and a live preview (desktop / mobile), test send, save, discard and reset to default. Per store.
+- Every email is marked with who sends it: Helpdesk (edit here) or Shopify (edited in Shopify Admin → Settings → Notifications — listed for reference with the Shopify template name). Filter by sender.
+- Claim emails (received, message received, approved — replacement / store credit / refund, denied, quick question) are now branded like the return emails and editable. Footer is its own item and applies to every Helpdesk email.
+- Saved wording goes live right away (no Portal Studio publish needed). Logo, colors and button shape still come from Portal Studio. Email wording already edited in Portal Studio moved over automatically; the Emails section there now links to Email Studio.
+
 ## 4.33.1
 - "Print label and packing slip" and label links now use the store's branded domain (returns.larkspurbaby.com / returns.larkspurbabyoutlet.com) when branded links are on, instead of the Helpdesk's Railway address. Applies to the confirmation page and the return emails.
 

@@ -658,7 +658,7 @@ app.get("/returns/asset/:id/:name?", async (req, res) => {
 /* ---- Portal Studio (customize the look of each portal) ---- */
 app.get("/returns-studio", (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(STUDIO_HTML.replace(/__VERSION__/g, VERSION)); });
 const studioStore = (req, res) => { const k = req.params.store; if (!R.STORE_DEFS[k]) { res.status(404).json({ error: "unknown store" }); return null; } return k; };
-const studioGuard = (req, res) => { if (!guard(req, res)) return false; if (!isAdmin(req)) { res.status(403).json({ error: "Only admins can change the portal look." }); return false; } return true; };
+const studioGuard = (req, res) => { if (!guard(req, res)) return false; if (!isAdmin(req)) { res.status(403).json({ error: "Only admins can make this change." }); return false; } return true; };
 app.get("/api/portal/meta", async (req, res) => {
   if (!guard(req, res)) return;
   try { const stores = {}; for (const k of Object.keys(R.STORE_DEFS)) stores[k] = { ...R.STORE_DEFS[k], ctx: await portalCtx(k) };
@@ -673,27 +673,36 @@ app.get("/api/portal/:store/version/:id", async (req, res) => {
   if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
   try { const t = await PT.versionTheme(k, Number(req.params.id)); if (!t) return res.status(404).json({ error: "not found" }); res.json({ theme: t }); } catch (e) { retErr(res, e); }
 });
-// Email previews (Portal Studio → Emails): render with the theme being edited, or send a test to yourself.
+// Email Studio (/email-studio): every customer email, who sends it (Helpdesk or Shopify), wording per store, live preview, test send.
 const EM = require("./emails");
-async function emailFor(k, kind, themeIn) {
-  if (!EM.KINDS.includes(kind)) throw Object.assign(new Error("unknown email"), { status: 400 });
+const EMAIL_STUDIO_HTML = fs.readFileSync(path.join(__dirname, "public", "email-studio.html"), "utf8");
+app.get("/email-studio", (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(EMAIL_STUDIO_HTML.replace(/__VERSION__/g, VERSION)); });
+async function emailBuild(k, kind, over) {
   const s = await R.settings(), def = R.STORE_DEFS[k];
-  const theme = themeIn ? PT.sanitize(themeIn, k) : await PT.draft(k);
+  const theme = await PT.published(k);
   const base = R.portalUrl(k, s).replace(/\/returns\/\w+$/, "");
-  return { def, m: EM.render(kind, { view: EM.sampleView(def, s, base), theme, def, base }) };
+  return { def, m: await EM.build(k, kind, { def, s, theme, base, over }) };
 }
-app.post("/api/portal/:store/email-preview", async (req, res) => {
+app.get("/api/emails/:store", async (req, res) => {
   if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
-  try { const { m } = await emailFor(k, String(req.body.kind || ""), req.body.theme); res.json({ subject: m.subject, html: m.html }); } catch (e) { retErr(res, e); }
+  try { res.json({ emails: await EM.listFor(k), stores: Object.fromEntries(Object.entries(R.STORE_DEFS).map(([x, d]) => [x, { name: d.name, support: d.support }])), admin: isAdmin(req) }); } catch (e) { retErr(res, e); }
 });
-app.post("/api/portal/:store/email-test", async (req, res) => {
+app.post("/api/emails/:store/preview", async (req, res) => {
+  if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { const { m } = await emailBuild(k, String(req.body.kind || ""), req.body.copy); res.json({ subject: m.subject, html: m.html }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/emails/:store/test", async (req, res) => {
   if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
   try {
     const to = String(req.body.to || "").trim(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: "Enter an email address." });
-    const { def, m } = await emailFor(k, String(req.body.kind || ""), req.body.theme);
+    const { def, m } = await emailBuild(k, String(req.body.kind || ""), req.body.copy);
     await core.gmailSend({ mailbox: def.support, to, subject: "[TEST] " + m.subject, text: m.text, html: m.html, fromName: def.name, reply: false });
     res.json({ ok: true });
   } catch (e) { retErr(res, e); }
+});
+app.put("/api/emails/:store/:kind", async (req, res) => {
+  if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { res.json({ ok: true, ...(await EM.save(k, req.params.kind, (req.body || {}).copy || {}, actorOf(req))) }); } catch (e) { retErr(res, e); }
 });
 app.put("/api/portal/:store/draft", async (req, res) => {
   if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
@@ -864,6 +873,7 @@ const PORT = process.env.PORT || 8080;
   try { await PT.init(); } catch (e) { console.error("Portal theme failed to start:", e.message); }
   try { await CL.init(); } catch (e) { console.error("Claims failed to start:", e.message); }
   try { await EXC.init(); } catch (e) { console.error("Exceptions failed to start:", e.message); }
+  try { await EM.init(); } catch (e) { console.error("Email templates failed to start:", e.message); }
   // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
   try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
 })();

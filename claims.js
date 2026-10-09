@@ -614,17 +614,12 @@ async function submitOther(p, c, st, body, description) {
   setImmediate(() => afterSubmit(claim.id).catch((e) => console.error("claim after-submit:", e.message)));
   return { number: claim.number, type: "other", email: claim.email };
 }
-function firstName(c) { return String(c.customer_name || "").split(" ")[0] || "there"; }
-function itemsText(c) { return c.items.map((i) => `• ${i.quantity}× ${i.title}${i.variant ? ` (${i.variant})` : ""}`).join("\n"); }
 async function afterSubmit(id) {
   let c = await getClaim(id); if (!c) return;
   const def = R().STORE_DEFS[c.store];
   try {
-    const what = c.type === "pp" ? `claim (${SUBTYPE_LABEL[c.subtype].toLowerCase()})` : "defective item claim";
-    const text = c.type === "other"
-      ? `Hi ${firstName(c)},\n\nThanks for reaching out about order ${c.order_name}. We got your message (reference ${c.number}):\n\n"${c.description}"\n\n${(c.photos || []).length ? `We also received ${c.photos.length} photo${c.photos.length === 1 ? "" : "s"}.\n\n` : ""}Our team will reply to this email soon.\n\n— The ${def.name} Team`
-      : `Hi ${firstName(c)},\n\nWe received your ${what} for order ${c.order_name}. Your claim number is ${c.number}.\n\nItems:\n${itemsText(c)}\n\nYou asked for: ${RES_LABEL[c.resolution]}.\n\nWe'll email you here with the result, usually within one business day. If you have more photos or details, just reply to this email.\n\n— The ${def.name} Team`;
-    const r = await core.sendNewEmail({ mailbox: def.support, to: c.email, subject: c.type === "other" ? `We got your message about order ${c.order_name}` : `Your claim ${c.number} for order ${c.order_name}`, text, who: "Returns portal", tags: ["claim", `claim-${c.type}`], name: c.customer_name });
+    const m = await claimMail(c.type === "other" ? "message_received" : "claim_received", c);
+    const r = await core.sendNewEmail({ mailbox: def.support, to: c.email, subject: m.subject, text: m.text, html: m.html, who: "Returns portal", tags: ["claim", `claim-${c.type}`], name: c.customer_name });
     c = await patchClaim(id, { ticket_id: r.ticket_id }, "Confirmation emailed to the customer");
   } catch (e) { c = await patchClaim(id, {}, "Confirmation email failed: " + e.message); }
   if (c.type === "other") {
@@ -736,10 +731,16 @@ async function counts() {
   const r = (await db(`SELECT CASE WHEN type='edit' THEN 'edits' ELSE status END k, count(*)::int n FROM hd_claims GROUP BY 1`)).rows;
   const o = {}; for (const x of r) o[x.k] = x.n; o.open = (o.pending || 0) + (o.info_requested || 0); return o;
 }
-async function emailCustomer(c, subject, text, who) {
-  const def = R().STORE_DEFS[c.store];
-  if (c.ticket_id) { try { await core.sendReply({ ticketId: String(c.ticket_id), text, who }); return; } catch (e) { console.error("claim reply:", e.message); } }
-  const r = await core.sendNewEmail({ mailbox: def.support, to: c.email, subject, text, who, tags: ["claim"], name: c.customer_name });
+// Branded claim emails — wording from Email Studio (emails.js), look from the store's portal theme.
+async function claimMail(kind, c, extra = {}) {
+  const EM = require("./emails"), def = R().STORE_DEFS[c.store], s = await R().settings();
+  const theme = await require("./returns-theme").published(c.store);
+  return EM.render(kind, { copy: await EM.copyFor(c.store, kind), theme, def, base: R().portalUrl(c.store, s).replace(/\/returns\/\w+$/, ""), claim: c, extra });
+}
+async function emailCustomer(c, kind, extra, who) {
+  const def = R().STORE_DEFS[c.store], m = await claimMail(kind, c, extra);
+  if (c.ticket_id) { try { await core.sendReply({ ticketId: String(c.ticket_id), text: m.text, html: m.html, who }); return; } catch (e) { console.error("claim reply:", e.message); } }
+  const r = await core.sendNewEmail({ mailbox: def.support, to: c.email, subject: m.subject, text: m.text, html: m.html, who, tags: ["claim"], name: c.customer_name });
   await patchClaim(c.id, { ticket_id: r.ticket_id });
 }
 async function approve(id, { resolution, amount, note } = {}, who) {
@@ -754,7 +755,7 @@ async function approve(id, { resolution, amount, note } = {}, who) {
   // Lock the claim so a double click or two people can't pay it twice.
   const locked = (await db(`UPDATE hd_claims SET status='processing', updated_at=now() WHERE id=$1 AND status IN ('pending','info_requested') RETURNING id`, [id])).rows[0];
   if (!locked) throw httpError(409, "Someone else is already deciding this claim. Refresh to see it.");
-  let result, custText;
+  let result, mail;
   try {
   if (res === "replacement") {
     const fresh = await loadOrder(c.store, c.order_id).catch(() => null);
@@ -765,13 +766,13 @@ async function approve(id, { resolution, amount, note } = {}, who) {
     const r = await K().createReplacementOrder(prep.st, { email: prep.email, shippingAddress: prep.shippingAddress, lineItems: prep.lineItems, origOrder: prep.node.name, reason: `Claim ${c.number}`,
       label: c.type === "pp" ? "Package Protection replacement" : "Defective item replacement", tag: c.type === "pp" ? "PP-replacement" : "defect-replacement" });
     result = { replacement_order: r.order_name, note: r.note };
-    custText = `Good news — your claim ${c.number} was approved.\n\nWe've created a replacement order${r.order_name ? ` (${r.order_name})` : ""} at no charge:\n${itemsText(c)}\n\nIt ships to ${prep.shipTo}. You'll get a shipping confirmation with tracking as soon as it's on its way.`;
+    mail = { kind: "claim_approved_replacement", extra: { replacement_order: r.order_name, ship_to: prep.shipTo } };
   } else if (res === "store_credit") {
     if (!(amt > 0)) throw httpError(400, "Enter the credit amount.");
     let cid = c.customer_id; if (!cid) { const cu = await K().findCustomer(st, c.email); if (!cu) throw httpError(400, `No Shopify customer account for ${c.email}.`); cid = cu.id; }
     const r = await K().issueStoreCredit(st, cid, amt.toFixed(2), c.currency || "USD");
     result = { credit: amt, note: r.note };
-    custText = `Good news — your claim ${c.number} was approved.\n\nWe've added ${usd(amt)} in store credit to your ${def.name} account (${c.email}). It applies automatically at checkout when you're signed in with this email.`;
+    mail = { kind: "claim_approved_credit", extra: { amount: amt } };
   } else {
     if (!(amt > 0)) throw httpError(400, "Enter the refund amount.");
     // Full value → refund the claimed line items (marks them refunded, so they can't also be returned); a custom amount → that amount.
@@ -780,12 +781,11 @@ async function approve(id, { resolution, amount, note } = {}, who) {
       ? { mode: "items", items: c.items.map((i) => ({ line_item_id: i.id, quantity: i.quantity })), restock: false, note: `Claim ${c.number}`, notify: false }
       : { mode: "amount", amount: amt, note: `Claim ${c.number}`, notify: false });
     result = { refund: r.amount, note: r.note };
-    custText = `Good news — your claim ${c.number} was approved.\n\nWe've refunded ${usd(r.amount)} to your original payment method. Depending on your bank it can take 5–10 business days to show up.`;
+    mail = { kind: "claim_approved_refund", extra: { amount: r.amount } };
   }
   } catch (e) { await db(`UPDATE hd_claims SET status=$2 WHERE id=$1 AND status='processing'`, [id, c.status]); throw e; }
-  const text = `Hi ${firstName(c)},\n\n${custText}${c.type === "defective" ? "\n\nThere's no need to send the item back." : ""}\n\nThank you for your patience, and sorry for the trouble.\n\n— The ${def.name} Team`;
   let mailNote = "Customer emailed";
-  try { await emailCustomer(c, `Your claim ${c.number} was approved`, text, who); } catch (e) { mailNote = "Email to customer FAILED: " + e.message; }
+  try { await emailCustomer(c, mail.kind, mail.extra, who); } catch (e) { mailNote = "Email to customer FAILED: " + e.message; }
   const out = await patchClaim(id, { status: "approved", resolved_with: res, resolved_amount: res === "replacement" ? c.value : (result.credit || result.refund), result, decided_by: who, decided_at: new Date().toISOString() },
     `Approved by ${who}: ${RES_LABEL[res]}${res !== "replacement" ? ` ${usd(result.credit || result.refund)}` : ""} — ${result.note}. ${mailNote}`);
   await core.audit({ ticketId: c.ticket_id || null, kind: "claim-approved", detail: `${c.number} · ${RES_LABEL[res]} · ${result.note}`, who, target: id }).catch(() => {});
@@ -800,7 +800,7 @@ async function deny(id, { message } = {}, who) {
   if (msg.length < 10) throw httpError(400, "Write a short note to the customer explaining why.");
   const locked = (await db(`UPDATE hd_claims SET status='processing', updated_at=now() WHERE id=$1 AND status IN ('pending','info_requested') RETURNING id`, [id])).rows[0];
   if (!locked) throw httpError(409, "Someone else is already deciding this claim. Refresh to see it.");
-  try { await emailCustomer(c, `About your claim ${c.number}`, `Hi ${firstName(c)},\n\nThank you for your patience while we reviewed claim ${c.number} for order ${c.order_name}.\n\n${msg}\n\n— The ${def.name} Team`, who); }
+  try { await emailCustomer(c, "claim_denied", { message: msg }, who); }
   catch (e) { await db(`UPDATE hd_claims SET status=$2 WHERE id=$1 AND status='processing'`, [id, c.status]); throw e; }
   await core.audit({ ticketId: c.ticket_id || null, kind: "claim-denied", detail: `${c.number} · ${msg.slice(0, 200)}`, who, target: id }).catch(() => {});
   return patchClaim(id, { status: "denied", deny_message: msg, decided_by: who, decided_at: new Date().toISOString() }, `Denied by ${who}. Customer emailed.`);
@@ -810,7 +810,7 @@ async function askInfo(id, { message } = {}, who) {
   if (!["pending", "info_requested"].includes(c.status)) throw httpError(400, `This claim is already ${c.status}.`);
   const def = R().STORE_DEFS[c.store];
   const msg = String(message || "").trim(); if (msg.length < 5) throw httpError(400, "Write the question for the customer.");
-  await emailCustomer(c, `A quick question about claim ${c.number}`, `Hi ${firstName(c)},\n\nWe're reviewing claim ${c.number} for order ${c.order_name}. ${msg}\n\nJust reply to this email (photos are welcome).\n\n— The ${def.name} Team`, who);
+  await emailCustomer(c, "claim_question", { message: msg }, who);
   return patchClaim(id, { status: "info_requested" }, `${who} asked the customer: ${msg}`);
 }
 async function rerun(id) { const c = await getClaim(id); if (!c) throw httpError(404, "Claim not found"); return review(c); }
