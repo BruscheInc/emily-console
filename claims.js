@@ -859,4 +859,4 @@ async function close(id, who) { const c = await getClaim(id); if (!c) throw http
 async function init() { try { await migrate(); } catch (e) { console.error("claims migrate:", e.message); } }
 
 module.exports = { poAnswer, deliveredAt, claimedQty, init, menu, editOptions, editSearch, editSubmit, editCancel, claimStart, savePhoto, getPhoto, claimSubmit, list, counts, getClaim, approve, deny, askInfo, rerun, close, review,
-  _t: { gates, menuFor, loadOrder, TYPE_LABEL, SUBTYPE_LABEL, RES_LABEL } };
+  _t: { gates, menuFor, loadOrder, orderState, TYPE_LABEL, SUBTYPE_LABEL, RES_LABEL } };

@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.47.0
+- Chat order lookup: customers enter their order number + billing ZIP (shipping ZIP if the order has no billing address) and get an order card — status, items, tracking with the latest scan, delivery date, and what they can do next (edit / cancel window, return-by date, defect or Package Protection claim) with a link to the portal. After that the AI can answer follow-ups about that order ("when will it arrive?"). Read-only: no email, street address or payment details, and no changes from chat.
+- When someone asks about their order, the AI shows the lookup form instead of saying it can't see orders. New shortcut type "Order lookup" (default: "Track my order").
+- Security: a wrong number or ZIP gets the same "don't match" message (it never says whether the order exists); 5 wrong tries lock lookup for that chat, and there's a per-device hourly limit. Toggle: Chat Studio → AI helper → Order lookup.
+
 ## 4.46.2
 - Browser tab icons: Email Studio, Chat widget and Portal Studio now show the Buzzin bee (icon links versioned so browsers drop the old cached icon); the studio title bars use the bee too.
 

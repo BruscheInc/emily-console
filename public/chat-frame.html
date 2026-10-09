@@ -53,6 +53,23 @@ button,input,textarea{font:inherit;color:inherit}
 .btn:disabled{opacity:.5}
 .lnk{display:block;margin:12px auto 0;border:0;background:none;color:var(--muted);cursor:pointer;font-weight:600}
 .err{color:#B42318;font-size:.88em;margin-top:10px}
+.oc{width:92%;border:1px solid rgba(0,0,0,.09);border-radius:14px;background:#fff;padding:12px 13px;font-size:.92em;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.oc .oh{display:flex;justify-content:space-between;align-items:center;gap:8px}.oc .oh b{font-size:1.02em}
+.oc .pill{border-radius:999px;padding:3px 9px;font-size:.8em;font-weight:700;white-space:nowrap;background:#EEF2F6;color:#334155}
+.oc .pill.delivered{background:#E3F3EA;color:#126B3B}.oc .pill.in_transit{background:#E8F0FE;color:#1D4ED8}.oc .pill.cancelled{background:#FDECEC;color:#B42318}.oc .pill.unshipped{background:#FFF4E0;color:#8A5300}
+.oc .om{color:var(--muted);font-size:.86em;margin-top:2px}
+.oc .sec{margin-top:10px;padding-top:9px;border-top:1px solid rgba(0,0,0,.07)}
+.oc .lab{font-size:.75em;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:4px}
+.oc .li{display:flex;gap:6px;margin:2px 0}.oc .li span:first-child{color:var(--muted);min-width:22px}
+.oc a{color:var(--accent);font-weight:700}
+.oc .do{margin:2px 0;padding-left:14px;position:relative}.oc .do:before{content:"";position:absolute;left:3px;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.vf{width:92%;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;padding:12px}
+.vf .t{font-weight:700;margin-bottom:2px}.vf .h{color:var(--muted);font-size:.84em;margin-bottom:8px}
+.vf .g{display:grid;grid-template-columns:1.3fr 1fr;gap:6px}
+.vf input{width:100%;border:1px solid rgba(0,0,0,.14);border-radius:9px;padding:9px 10px;outline:0;min-width:0}
+.vf input:focus{border-color:var(--accent)}
+.vf button{margin-top:8px;width:100%;border:0;border-radius:10px;padding:10px;background:var(--accent);color:var(--accentfg);font-weight:700;cursor:pointer}
+.vf button:disabled{opacity:.5}.vf .e{color:#B42318;font-size:.84em;margin-top:6px}
 .ok{text-align:center;padding:40px 10px}.ok .ic{width:56px;height:56px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);display:grid;place-items:center;margin:0 auto 14px}
 </style>
 <style id="custom"></style>
@@ -113,7 +130,29 @@ function apply(c) {
   $('custom').textContent = c.custom_css || '';
   render();
 }
+function orderCard(o) {
+  const st = o.status === 'delivered' && o.delivered_on ? `${o.status_label} ${o.delivered_on}` : o.status_label;
+  let h = `<div class="oc"><div class="oh"><b>Order ${esc(o.order)}</b><span class="pill ${esc(o.status)}">${esc(st)}</span></div>
+    <div class="om">Placed ${esc(o.placed)}${o.ship_to ? ` · ${o.pickup ? 'Pickup' : 'Shipping to'} ${esc(o.ship_to)}` : ''}</div>`;
+  h += `<div class="sec"><div class="lab">Items</div>${o.items.map((i) => `<div class="li"><span>${i.quantity}×</span><span>${esc(i.title)}${i.variant ? ` — ${esc(i.variant)}` : ''}</span></div>`).join('')}</div>`;
+  if (o.shipments.length) h += `<div class="sec"><div class="lab">Tracking</div>${o.shipments.map((x) => `<div>${esc(x.carrier || '')} ${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.number || 'Track')} ↗</a>` : esc(x.number || '')}<div class="om">${esc(x.status || '')}${x.last_update ? ` · ${esc(x.last_update)}` : ''}</div></div>`).join('')}</div>`;
+  if (o.can_do_now.length) h += `<div class="sec"><div class="lab">You can</div>${o.can_do_now.map((x) => `<div class="do">${esc(x)}</div>`).join('')}<div style="margin-top:6px"><a href="${esc(o.portal)}" target="_blank" rel="noopener">Open the returns portal ↗</a></div></div>`;
+  return h + '</div>';
+}
+function verifyForm() {
+  return `<div class="row bot"><div class="vf" id="vf"><div class="t">Look up your order</div><div class="h">Enter your order number and the ZIP code from your billing address.</div>
+    <div class="g"><input id="vOrder" placeholder="Order # (e.g. ${STORE === 'lbo' ? 'LBO' : 'LB'}12345)" autocomplete="off" value="${esc(S.vOrder || '')}"><input id="vZip" placeholder="Billing ZIP" inputmode="numeric" autocomplete="postal-code" maxlength="10" value="${esc(S.vZip || '')}"></div>
+    <div class="e hidden" id="vErr"></div><button id="vGo">Find my order</button></div></div>`;
+}
+async function verify() {
+  const b = $('vGo'); if (!b) return; S.vOrder = $('vOrder').value; S.vZip = $('vZip').value;
+  b.disabled = true; $('vErr').classList.add('hidden');
+  try { const r = await api('verify', { session: S.id, order: S.vOrder, zip: S.vZip }); S.id = r.session || S.id;
+    S.msgs.push({ role: 'user', text: 'Look up order ' + r.order.order }); S.msgs.push({ role: 'bot', text: '', order: r.order }); S.ask = false; S.vZip = ''; keep(); render(); }
+  catch (e) { b.disabled = false; $('vErr').textContent = e.message; $('vErr').classList.remove('hidden'); }
+}
 function bubble(m) {
+  if (m.order) return `<div class="row bot">${orderCard(m.order)}</div>`;
   let h = `<div class="row ${m.role === 'user' ? 'me' : 'bot'}"><div class="b">${esc(m.text)}</div>`;
   const chips = (m.buttons || []).map((b) => `<a class="chip" href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.label)} ${ARROW}</a>`);
   if (m.handoff && C.handoff.enabled) chips.push(`<button class="chip" data-team="1">${MAIL} ${esc(C.handoff.label)}</button>`);
@@ -125,6 +164,8 @@ function render() {
   let h = bubble({ role: 'bot', text: C.copy.welcome });
   if (!S.msgs.some((m) => m.role === 'user') && C.quick.length) h += `<div class="chips">${C.quick.map((q, i) => q.type === 'link' ? `<a class="chip" href="${esc(q.value)}" target="_blank" rel="noopener">${esc(q.label)} ${ARROW}</a>` : `<button class="chip" data-q="${i}">${esc(q.label)}</button>`).join('')}</div>`;
   h += S.msgs.map(bubble).join('');
+  const last = S.msgs[S.msgs.length - 1];
+  if (C.ai && C.ai.order_lookup && !busy && (S.ask || (last && last.need_order))) h += verifyForm();
   if (busy) h += `<div class="row bot"><div class="b typing" aria-label="${esc(C.copy.thinking)}"><i></i><i></i><i></i></div></div>`;
   $('body').innerHTML = h;
   $('body').scrollTop = $('body').scrollHeight;
@@ -148,7 +189,13 @@ function openForm() {
   if (!$('fMsg').value && last) $('fMsg').value = last.text;
   $('fErr').classList.add('hidden'); view('form'); setTimeout(() => $(($('fEmail').value ? 'fMsg' : 'fName')).focus(), 50);
 }
-$('body').addEventListener('click', (e) => { const q = e.target.closest('[data-q]'); if (q) return ask(C.quick[+q.dataset.q].value); if (e.target.closest('[data-team]')) openForm(); });
+$('body').addEventListener('click', (e) => {
+  const q = e.target.closest('[data-q]');
+  if (q) { const it = C.quick[+q.dataset.q]; if (it.type === 'lookup') { S.msgs.push({ role: 'user', text: it.label }); S.ask = true; keep(); render(); setTimeout(() => $('vOrder') && $('vOrder').focus(), 30); return; } return ask(it.value); }
+  if (e.target.closest('#vGo')) return verify();
+  if (e.target.closest('[data-team]')) openForm();
+});
+$('body').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.id === 'vOrder' || e.target.id === 'vZip')) { e.preventDefault(); verify(); } });
 $('in').addEventListener('input', grow);
 $('in').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask($('in').value); } });
 $('send').onclick = () => ask($('in').value);
