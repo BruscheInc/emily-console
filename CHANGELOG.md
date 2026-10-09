@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.40.2
+- Emily's FAQ check: room for longer answers (the first run cut off mid-reply) and a clearer log line if her reply can't be read.
+
 ## 4.40.1
 - Local pickup orders: once the order is marked picked up (fulfilled) it counts as delivered on that day, so returns and defective-item claims open (return window and defect window run from pickup). Before pickup, only Edit / Cancel and "Something else" show. Shipping-only options (Package Protection, hasn't arrived, marked delivered, damaged in shipping) are off for pickup orders with a clear reason.
 

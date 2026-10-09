@@ -104,16 +104,17 @@ const SUGGEST_SYS = `You keep a baby-clothing store's FAQ page accurate. You get
 Rewrite ONLY answers that are wrong, out of date or missing something important per the FACTS (e.g. old Loop Returns links, wrong day counts, "email us" where there is now a portal flow, missing label fee or store-credit bonus). Leave correct answers alone.
 Keep the brand voice: warm, short, plain, written to parents. Keep answers brief (1–4 short sentences, a list only if it really helps). Use simple HTML only: <p>, <strong>, <a href="...">, <ul><li>. Link the returns portal where customers need it.
 Never invent policies that aren't in the FACTS. If a question can't be answered from the FACTS and its current answer isn't contradicted, leave it.
-Reply with ONLY JSON: {"changes":[{"id":"<question id>","answer":"<new HTML>","why":"<one short sentence for staff>"}],"notes":["anything staff should decide, e.g. a policy the FAQ promises that the system doesn't enforce"]}`;
+Only include questions you are changing. Reply with ONLY JSON, no code fences: {"changes":[{"id":"<question id>","answer":"<new HTML>","why":"<one short sentence for staff>"}],"notes":["anything staff should decide, e.g. a policy the FAQ promises that the system doesn't enforce"]}`;
 async function suggest(store) {
   const k = K(); if (!k.anthropic) throw httpError(400, "Emily's AI isn't connected (no ANTHROPIC_API_KEY).");
   const t = await readTemplate(store);
   const groups = itemsOf(t.tpl).filter((g) => !g.hidden);
   const qs = groups.flatMap((g) => g.items.filter((i) => !i.hidden).map((i) => ({ id: i.id, group: g.title, question: i.title, answer: i.answer })));
   const f = await facts(store);
-  const resp = await k.anthropic.messages.create({ model: k.model, max_tokens: 4000, system: SUGGEST_SYS, messages: [{ role: "user", content: `FACTS:\n${JSON.stringify(f, null, 2)}\n\nFAQ:\n${JSON.stringify(qs, null, 2)}` }] });
+  const resp = await k.anthropic.messages.create({ model: k.model, max_tokens: 16000, system: SUGGEST_SYS, messages: [{ role: "user", content: `FACTS:\n${JSON.stringify(f, null, 2)}\n\nFAQ:\n${JSON.stringify(qs, null, 2)}` }] });
   const txt = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-  let out; try { out = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1)); } catch (_) { throw httpError(502, "Emily's suggestion couldn't be read. Try again."); }
+  let out; try { out = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1)); }
+  catch (_) { console.error(`faq suggest: unreadable reply (stop: ${resp.stop_reason}, ${txt.length} chars): ${txt.slice(0, 200)} … ${txt.slice(-200)}`); throw httpError(502, resp.stop_reason === "max_tokens" ? "Emily's suggestion was too long to finish. Try again." : "Emily's suggestion couldn't be read. Try again."); }
   const ids = new Set(qs.map((q) => q.id));
   return { changes: (Array.isArray(out.changes) ? out.changes : []).filter((c) => c && ids.has(c.id) && typeof c.answer === "string").map((c) => ({ id: c.id, answer: cleanHtml(c.answer), why: String(c.why || "").slice(0, 300) })),
     notes: (Array.isArray(out.notes) ? out.notes : []).map(String).slice(0, 8), checksum: t.checksum };
