@@ -67,12 +67,17 @@ const DEFAULTS = {
   service_code: "usps_ground_advantage",
   default_item_oz: 8,
   packaging_oz: 4,
-  void_unused_after_days: 28,
+  void_unused_after_days: 28,      // customers have this many days to drop off; the label is voided and the return closed the day after
+  dropoff_reminder_days: 21,       // reminder email if the package hasn't been dropped off by this day
   test_labels: true,
   // Portal options beyond returns (edit order, defective, Package Protection, not delivered)
   edit_window_minutes: 15,         // customers can edit an unshipped order for this long after placing it
   claim_window_days: 30,           // defective and arrived-damaged claims: this many days after delivery
-  marked_delivered_window_days: 5, // "marked delivered, but I didn't get it": this many days after the delivery scan
+  marked_delivered_window_days: 5, // (older single window — replaced by the two below)
+  pp_claim_window_days: 7,         // WITH Package Protection: "marked delivered" and "arrived damaged" claims, days after delivery
+  nopp_claim_window_days: 5,       // WITHOUT Package Protection: same two claims, days after delivery
+  attempted_wait_hours: 24,        // "Attempted delivery": customer checks with the post office first; claim opens after this
+  replacement_min_stock: 3,        // a replacement is only offered when the variant has MORE than this many in stock
   pp_stall_days: 5,                // (older rule, no longer used for opening claims)
   transit_claim_days: 14,          // "hasn't arrived" claims open this many days after shipping if tracking still isn't delivered
   auto_approve: true,              // approve claims automatically when every safety check passes
@@ -95,7 +100,7 @@ async function settings() {
 async function saveSettings(patch, who) {
   const cur = await settings();
   const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
-  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "marked_delivered_window_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
+  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "marked_delivered_window_days", "pp_claim_window_days", "nopp_claim_window_days", "attempted_wait_hours", "replacement_min_stock", "dropoff_reminder_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
   if (patch.reasons !== undefined) { next.reasons = (Array.isArray(patch.reasons) ? patch.reasons : String(patch.reasons).split("\n")).map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 20); if (!next.reasons.length) next.reasons = DEFAULTS.reasons; }
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('returns', $1, $2, now())
@@ -668,8 +673,30 @@ async function checkOne(rec) {
   }
   if (["AC", "IT", "AT", "EX"].includes(t.code) && rec.status === "label_created") return update(rec.id, { status: "in_transit" }, "On its way back");
   const age = (Date.now() - new Date(rec.created_at).getTime()) / 86400e3;
-  if (rec.status === "label_created" && s.void_unused_after_days > 0 && age > s.void_unused_after_days && ["NY", "UN"].includes(t.code))
-    await cancel(rec, `Label never used in ${s.void_unused_after_days} days`, "system");
+  const unused = rec.status === "label_created" && ["NY", "UN"].includes(t.code);
+  if (unused && s.void_unused_after_days > 0 && age >= s.void_unused_after_days) {
+    rec = await cancel(rec, `Not dropped off within ${s.void_unused_after_days} days — return closed`, "system");
+    if (rec && rec.status === "cancelled") await dropoffEmail(rec, "closed").catch((e) => update(rec.id, {}, "Closing email failed: " + e.message));
+    return;
+  }
+  if (unused && s.dropoff_reminder_days > 0 && age >= s.dropoff_reminder_days && !rec.reminder_sent) {
+    try { await dropoffEmail(rec, "reminder"); await update(rec.id, { reminder_sent: new Date().toISOString() }, `Drop-off reminder emailed (day ${Math.floor(age)})`); }
+    catch (e) { await update(rec.id, {}, "Drop-off reminder failed: " + e.message); }
+  }
+}
+// Customer emails for an unused return label: a reminder before the deadline, and a note when the return is closed.
+async function dropoffEmail(rec, kind) {
+  const s = await settings(), def = STORE_DEFS[rec.store];
+  const first = String(rec.customer_name || "").split(" ")[0] || "there";
+  const deadline = new Date(new Date(rec.created_at).getTime() + s.void_unused_after_days * 86400e3).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/Chicago" });
+  const label = `${PUBLIC_URL()}/returns/label/${rec.id}/${labelToken(rec.id)}`;
+  const text = kind === "reminder"
+    ? `Hi ${first},\n\nJust a reminder: your return ${rec.rma} for order ${rec.order_name} hasn't been dropped off yet. Please drop it off by ${deadline}. After that the return label expires and the return will be closed.\n\nYour return label: ${label}\n\nAlready sent it? Thank you — tracking can take a day to update.\n\n— The ${def.name} Team`
+    : `Hi ${first},\n\nYour return ${rec.rma} for order ${rec.order_name} has been closed because the package wasn't dropped off within ${s.void_unused_after_days} days, and the return label is no longer valid. Nothing was charged.\n\nIf you still need help, just reply to this email.\n\n— The ${def.name} Team`;
+  const subject = kind === "reminder" ? `Reminder: drop off your return ${rec.rma} by ${deadline}` : `Your return ${rec.rma} has been closed`;
+  if (rec.ticket_id) { try { await core.sendReply({ ticketId: String(rec.ticket_id), text, who: "Returns" }); return; } catch (_) {} }
+  const r = await core.sendNewEmail({ mailbox: def.support, to: rec.email, subject, text, who: "Returns", tags: ["return", kind === "reminder" ? "return-reminder" : "return-closed"], name: rec.customer_name });
+  if (!rec.ticket_id && r && r.ticket_id) await update(rec.id, { ticket_id: r.ticket_id });
 }
 let polling = false;
 async function poll() {

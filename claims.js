@@ -67,7 +67,7 @@ const ORDER_Q = `query($id:ID!){ order(id:$id){ id name createdAt cancelledAt di
   shippingAddress{ firstName lastName name address1 address2 city provinceCode zip countryCodeV2 phone }
   lineItems(first:50){ nodes{ id title variantTitle sku quantity currentQuantity unfulfilledQuantity image{ url(transform:{maxWidth:200}) }
     discountedUnitPriceAfterAllDiscountsSet{ shopMoney{ amount } } originalUnitPriceSet{ shopMoney{ amount } }
-    variant{ id availableForSale product{ id title variants(first:60){ nodes{ id title sku price availableForSale } } } } } }
+    variant{ id availableForSale inventoryQuantity inventoryItem{ tracked } product{ id title variants(first:60){ nodes{ id title sku price availableForSale } } } } } }
   fulfillments(first:10){ createdAt deliveredAt displayStatus status events(first:3, sortKey: HAPPENED_AT, reverse:true){ nodes{ status happenedAt message city province } } trackingInfo{ number url company } fulfillmentLineItems(first:50){ nodes{ quantity lineItem{ id } } } } } }`;
 
 async function loadOrder(key, orderId) {
@@ -77,7 +77,9 @@ async function loadOrder(key, orderId) {
   const all = o.lineItems.nodes.map((n) => ({
     id: n.id, title: n.title, variant: n.variantTitle, sku: n.sku, quantity: n.quantity, current: n.currentQuantity, unfulfilled: n.unfulfilledQuantity,
     fulfilled: Math.max(0, n.currentQuantity - n.unfulfilledQuantity), image: (n.image && n.image.url) || null,
-    unit_price: Number(n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount), full_price: Number(((n.originalUnitPriceSet || {}).shopMoney || {}).amount || n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount), variant_id: n.variant && n.variant.id, in_stock: !!(n.variant && n.variant.availableForSale),
+    unit_price: Number(n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount), stock: n.variant ? (n.variant.inventoryItem && n.variant.inventoryItem.tracked === false ? null : Number(n.variant.inventoryQuantity) || 0) : 0, full_price: Number(((n.originalUnitPriceSet || {}).shopMoney || {}).amount || n.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount), variant_id: n.variant && n.variant.id,
+    // replacements need MORE than replacement_min_stock on hand (untracked inventory counts as in stock)
+    in_stock: !!(n.variant && n.variant.availableForSale && (n.variant.inventoryItem && n.variant.inventoryItem.tracked === false || Number(n.variant.inventoryQuantity) > Number(s.replacement_min_stock))),
     product: n.variant && n.variant.product ? { id: n.variant.product.id, title: n.variant.product.title, variants: n.variant.product.variants.nodes } : null,
   }));
   const ppLines = all.filter((l) => R().isPP(l, s) && l.current > 0);
@@ -148,8 +150,11 @@ function menuFor(c, st) {
     damaged: state === "delivered" ? { ok: true } : state === "in_transit" ? { ok: false, why: "Your package hasn't been delivered yet" } : shippedNo,
     something_else: { ok: true },
   };
-  if (state === "delivered" && past(s.marked_delivered_window_days)) m.subs.delivered_missing = { ok: false, why: `This has to be reported within ${s.marked_delivered_window_days} days of delivery` };
-  if (state === "delivered" && past(s.claim_window_days)) m.subs.damaged = { ok: false, why: `Damage has to be reported within ${s.claim_window_days} days of delivery` };
+  const win = c.has_pp ? s.pp_claim_window_days : s.nopp_claim_window_days;   // PP 7 days, no PP 5 days (from delivery)
+  if (state === "delivered" && past(win)) {
+    m.subs.delivered_missing = { ok: false, why: `This has to be reported within ${win} days of delivery` };
+    m.subs.damaged = { ok: false, why: `Damage has to be reported within ${win} days of delivery` };
+  }
   if (state === "cancelled") for (const k of ["not_arrived", "delivered_missing", "damaged"]) m.subs[k] = { ok: false, why: "This order was cancelled" };
   return m;
 }
@@ -371,7 +376,7 @@ async function trackingFor(c) {
     const carrier = (guess && guess.name) || t.company || "the carrier", isUsps = /usps/i.test(carrier);
     const sources = { shopify: fromShopify(f) };
     try { const l = guess ? await K().ssV2Track(guess.v2, t.number) : null; if (!l) throw new Error("carrier not recognized");
-      sources.shipstation = { ok: true, accepted_only: !!l.accepted_only, not_scanned: !!l.not_in_system, delivered: !!l.delivered, delivered_at: l.delivered_at || null, last_at: l.last_event ? l.last_event.at : null, desc: l.description || "", where: l.last_event ? l.last_event.where : "", why: null }; }
+      sources.shipstation = { ok: true, code: l.code, accepted_only: !!l.accepted_only, not_scanned: !!l.not_in_system, delivered: !!l.delivered, delivered_at: l.delivered_at || null, last_at: l.last_event ? l.last_event.at : null, desc: l.description || "", where: l.last_event ? l.last_event.where : "", why: null }; }
     catch (e) { sources.shipstation = { ok: false, why: e.message }; console.error(`claims ShipStation tracking ${t.number}:`, e.message); }
     if (isUsps) {
       if (uspsConfigured()) { try { sources.usps = await uspsTrack(t.number); } catch (e) { sources.usps = { ok: false, why: e.message }; console.error(`claims USPS tracking ${t.number}:`, e.message); } }
@@ -384,6 +389,9 @@ async function trackingFor(c) {
     const verified = req.every((k) => sources[k] && sources[k].ok) && answered.length >= 2;
     const delivered = answered.some(([, v]) => v.delivered);
     const carrierAnswered = answered.some(([k]) => k !== "shopify");
+    const txt = answered.map(([, v]) => `${v.desc || ""} ${v.code || ""}`).join(" | ");
+    const returned = /return(ed)? to sender|returning to sender|\bRTS\b/i.test(txt);
+    const attempted = !returned && (/attempt|notice left|no access to delivery|receptacle full|business closed/i.test(txt) || answered.some(([, v]) => v.code === "AT"));
     const carrierDelivered = answered.some(([k, v]) => k !== "shopify" && v.delivered);
     const ts = (k) => answered.map(([, v]) => v[k]).filter(Boolean).map((x) => Date.parse(x)).filter((x) => !isNaN(x));
     const lastMs = Math.max(new Date(f.at).getTime(), ...ts("last_at"), ...ts("delivered_at"));
@@ -392,7 +400,7 @@ async function trackingFor(c) {
     out.push({ fi, number: t.number, url: t.url, carrier, shipped_at: f.at, delivered, carrier_delivered: carrierDelivered,
       delivered_at: dMs.length ? new Date(Math.max(...dMs)).toISOString() : null, status: delivered ? "Delivered" : best.desc || "In transit",
       last_event: { at: new Date(lastMs).toISOString(), desc: best.desc, where: best.where }, last_update_at: new Date(lastMs).toISOString(),
-      verified, carrier_answered: carrierAnswered, required: req, sources, agree: answered.every(([, v]) => v.delivered === delivered) });
+      verified, carrier_answered: carrierAnswered, attempted, returned, required: req, sources, agree: answered.every(([, v]) => v.delivered === delivered) });
   }
   return out;
 }
@@ -409,13 +417,20 @@ function gates(c, ship) {
     const d = tracked.find((x) => x.delivered);
     g.not_arrived = { ok: false, why: `Tracking shows your package was delivered${d.delivered_at ? ` on ${fmtDate(d.delivered_at)}` : ""}. If you can't find it, choose "My package was marked delivered, but I didn't get it".` };
   } else if (tracked.some((x) => !x.carrier_answered)) g.not_arrived = { ok: false, why: UNVERIFIED };
-  else {
+  else if (tracked.some((x) => x.returned)) g.not_arrived = { ok: false, why: "Tracking shows your package is being returned to us by the carrier. We'll email you as soon as it arrives back. If you have questions, choose \"Something else\"." };
+  else if (tracked.some((x) => x.attempted)) {
+    // Attempted delivery (not returned to sender): the post office is usually holding it.
+    const x = tracked.find((y) => y.attempted), at = new Date(x.last_update_at).getTime(), open = at + s.attempted_wait_hours * 3600e3;
+    g.not_arrived = now < open
+      ? { ok: true, wait: true, why: `The carrier tried to deliver your package on ${fmtWhen(at)}. Please check with your local post office — they're usually holding it for pickup. If you still can't get it, come back after ${fmtWhen(open)} and file your claim.` }
+      : { ok: true, rule: false, attempted: true, note: `Delivery attempted ${fmtWhen(at)}; customer was told to check with the post office first. Needs review.` };
+  } else {
     // Days since shipping decide it — "Accepted" or no new scans still counts as not delivered.
     const shipped = Math.min(...tracked.map((x) => new Date(x.shipped_at).getTime()));
     const days = (now - shipped) / 86400e3, opens = new Date(shipped + s.transit_claim_days * 86400e3), x = tracked[0];
     const answered = Object.entries(x.sources || {}).filter(([, v]) => v.ok).map(([k]) => k);
     g.not_arrived = days < s.transit_claim_days
-      ? { ok: true, wait: true, why: `Your package is on its way${x.last_event && x.last_event.desc ? ` (latest status: ${x.last_event.desc}, ${fmtWhen(x.last_update_at)})` : ""}. If it still hasn't arrived by ${fmtDate(opens)}, come back here and file your claim — it will be approved automatically.`, opens: opens.toISOString() }
+      ? { ok: true, wait: true, why: `Your package is on its way${x.last_event && x.last_event.desc ? ` (latest status: ${x.last_event.desc}, ${fmtWhen(x.last_update_at)})` : ""}. If it still hasn't arrived by ${fmtDate(opens)}, come back here and file your claim.`, opens: opens.toISOString() }
       : { ok: true, rule: true, note: `Shipped ${Math.floor(days)} days ago and not delivered (checked with ${srcList(answered)}).` };
   }
   // "Marked delivered": a CARRIER source (ShipStation or USPS) must confirm delivery, all required sources answered, and the wait has passed.
@@ -698,6 +713,9 @@ async function approve(id, { resolution, amount, note } = {}, who) {
   let result, custText;
   try {
   if (res === "replacement") {
+    const fresh = await loadOrder(c.store, c.order_id).catch(() => null);
+    const low = fresh ? c.items.find((i) => { const l = fresh.lines.find((y) => y.id === i.id); return !l || !l.in_stock; }) : null;
+    if (low) { await db(`UPDATE hd_claims SET status=$2 WHERE id=$1 AND status='processing'`, [id, c.status]); throw httpError(400, `${low.title} doesn't have enough stock for a replacement (needs more than ${(await R().settings()).replacement_min_stock}). Approve it as store credit instead.`); }
     const prep = await K().prepareReplacement({ order: c.order_name, items: c.items.map((i) => ({ sku: i.sku, title: i.title, quantity: i.quantity })), reason: `Claim ${c.number}${note ? ` — ${note}` : ""}` });
     if (prep.error || prep.note) throw httpError(400, prep.error || prep.note);
     const r = await K().createReplacementOrder(prep.st, { email: prep.email, shippingAddress: prep.shippingAddress, lineItems: prep.lineItems, origOrder: prep.node.name, reason: `Claim ${c.number}`,

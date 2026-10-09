@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.30.0
+- Returns: customers have 28 days to drop off. If tracking shows no carrier scan by day 21 they get a reminder email with the label link; on day 29 the label is voided in ShipStation, the return is closed and they're emailed.
+- Attempted delivery (not returned to sender): "My package hasn't arrived" tells the customer to check with their local post office and opens 24 hours after the attempt; those claims go to staff review. Return-to-sender packages can't be claimed as lost.
+- Replacements are only offered (and approved) when the variant has more than 3 in stock; otherwise store credit.
+- Removed "it will be approved automatically" from the waiting message.
+- "Marked delivered" and "arrived damaged" claims: 7 days after delivery with Package Protection, 5 days without.
+
 ## 4.29.0
 - Windows now run from the DELIVERY date (verified tracking, not the ship date): returns 7 days, defect and arrived-damaged claims 30 days, "marked delivered but I didn't get it" 5 days. Set once on deploy; adjustable in Returns → Settings.
 - The policy note at the bottom now reads 7 days (it uses the return window).
