@@ -1,9 +1,9 @@
 /**
- * Emily — the agent inside Helpdesk.
+ * Emily — the agent inside Buzzin.
  *
- * Reads tickets from Helpdesk's own database, drafts replies with Claude and live Shopify/ShipStation
+ * Reads tickets from Buzzin's own database, drafts replies with Claude and live Shopify/ShipStation
  * lookups, stages every money or order change for one-tap approval, and talks in Slack. Sends go
- * through Helpdesk's one sending path (core.sendReply) — she never has her own way to email a customer.
+ * through Buzzin's one sending path (core.sendReply) — she never has her own way to email a customer.
  *
  * ENV (all optional except ANTHROPIC_API_KEY for drafting)
  *   ANTHROPIC_API_KEY, CLAUDE_MODEL
@@ -132,7 +132,7 @@ async function storeGraphQL(st, query, variables) {
   if (j.errors) {
     // A missing access scope reads as a plain sentence instead of a JSON dump: say which scope and where to add it.
     const denied = j.errors.map((e) => (e.message || "").match(/Requires `([a-z_]+)` access scope/)).find(Boolean);
-    if (denied) throw new Error(`${st.brand}: the Emily Shopify app doesn't have the "${denied[1]}" permission yet. In Shopify admin → Settings → Apps and sales channels → Develop apps → the Emily app → Configuration → Admin API scopes, tick ${denied[1]}, save, then restart Helpdesk.`);
+    if (denied) throw new Error(`${st.brand}: the Emily Shopify app doesn't have the "${denied[1]}" permission yet. In Shopify admin → Settings → Apps and sales channels → Develop apps → the Emily app → Configuration → Admin API scopes, tick ${denied[1]}, save, then restart Buzzin.`);
     throw new Error(`${st.brand}: ${JSON.stringify(j.errors).slice(0, 200)}`);
   }
   return j.data;
@@ -376,7 +376,7 @@ async function markAction(id, status, extra) {
 }
 async function stageAction({ title, summary, ticketId, exec, kind, input }) {
   const now = execNow.getStore();
-  if (now) {                                   // a person is applying this from the Helpdesk right now — run it, don't post a card
+  if (now) {                                   // a person is applying this from Buzzin right now — run it, don't post a card
     const r = await exec();
     now.results.push({ kind, title, summary, ticketId, input, result: r });
     return null;
@@ -426,7 +426,7 @@ async function applyAddressChange(input, addr, shopHandle) {
   return { note: parts.join(" · ") };
 }
 
-/* ---- Staged actions from the Helpdesk app (Slack has its own buttons; this is the same thing from the ticket page) ---- */
+/* ---- Staged actions from Buzzin app (Slack has its own buttons; this is the same thing from the ticket page) ---- */
 function codeFrom(text) { const m = String(text || "").match(/\bcode\s+([A-Z0-9]{4,})\b/); return m ? m[1] : null; }
 async function listActions(ticketId) {
   const r = await db(`SELECT id, kind, title, summary, status, result, decided_by, created_at, decided_at FROM emily_actions WHERE ticket_id=$1 ORDER BY created_at DESC LIMIT 12`, [String(ticketId)]);
@@ -459,7 +459,7 @@ async function applyAction(id, who, overrides = null) {
   await markAction(id, "applied", { by: who, result: (result && result.note) || "ok" });
   await core.audit({ ticketId: rec.ticket_id, kind: "action-applied", detail: `${rec.title} → ${(result && result.note) || "ok"}`, who, target: id });
   if (result && result.files && result.files.length) { try { await db(`UPDATE emily_actions SET files=$2 WHERE id=$1`, [id, JSON.stringify(result.files.map((f) => ({ ...f, sent: false })))]); } catch (_) {} }
-  if (p && p.ts && app) { try { await app.client.chat.update({ channel: APPROVALS_CH, ts: p.ts, text: "Applied", blocks: [{ type: "section", text: { type: "mrkdwn", text: `✅ *Applied from Helpdesk* by ${who} — ${p.title}\n${(result && result.note) || p.summary}` } }] }); } catch (_) {} }
+  if (p && p.ts && app) { try { await app.client.chat.update({ channel: APPROVALS_CH, ts: p.ts, text: "Applied", blocks: [{ type: "section", text: { type: "mrkdwn", text: `✅ *Applied from Buzzin* by ${who} — ${p.title}\n${(result && result.note) || p.summary}` } }] }); } catch (_) {} }
   if (rec.ticket_id) { try { await core.addNote({ ticketId: rec.ticket_id, text: `⚙️ ${rec.title} — applied by ${who}\n→ ${(result && result.note) || "done"}`, who }); } catch (_) {} }
   return { ok: true, note: result && result.note, code: codeFrom(result && result.note) || codeFrom(rec.summary), files: (result && result.files) || [] };
 }
@@ -489,7 +489,7 @@ async function dismissAction(id, who) {
   const p = pendingAct.get(id); pendingAct.delete(id);
   await markAction(id, "dismissed", { by: who });
   await core.audit({ ticketId: rec.ticket_id, kind: "action-dismissed", detail: rec.title, who, target: id });
-  if (p && p.ts && app) { try { await app.client.chat.update({ channel: APPROVALS_CH, ts: p.ts, text: "Dismissed", blocks: [{ type: "section", text: { type: "mrkdwn", text: `✖ *Dismissed from Helpdesk* by ${who} — ${p.title}` } }] }); } catch (_) {} }
+  if (p && p.ts && app) { try { await app.client.chat.update({ channel: APPROVALS_CH, ts: p.ts, text: "Dismissed", blocks: [{ type: "section", text: { type: "mrkdwn", text: `✖ *Dismissed from Buzzin* by ${who} — ${p.title}` } }] }); } catch (_) {} }
   return { ok: true };
 }
 // Swap {{DISCOUNT_CODE}} for the real code of a discount applied on this ticket; if a code was created but the
@@ -943,7 +943,7 @@ async function verifyWatch() {
       try { await shopifyFixTracking(st, r.id, guess.name, r.tracking, r.tracking_url || null); await db(`UPDATE hd_stuck SET tracking_fixed_at=now(), shopify_trackable=true WHERE id=$1`, [r.id]); fixed++; note = `Carrier corrected to ${guess.name} in Shopify — Shopify will start updating this shipment.`; }
       catch (e) { if (/access|scope|permission|forbidden|401|403/i.test(e.message)) { fixTrackingBlocked = e.message; console.error(`shipment repair blocked — add the write_fulfillments scope to the Emily Shopify app: ${e.message}`); } else console.error(`shipment repair ${r.order_name}: ${e.message}`); }
     }
-    if (!trackable && fixTrackingBlocked && !r.tracking_fixed_at) note += " Add the write_fulfillments scope to the Emily Shopify app and the Helpdesk will fix this automatically.";
+    if (!trackable && fixTrackingBlocked && !r.tracking_fixed_at) note += " Add the write_fulfillments scope to the Emily Shopify app and Buzzin will fix this automatically.";
     // 1) ask the carrier
     let cs = null;
     if (SS_V2_KEY && guess) {
@@ -1072,7 +1072,7 @@ async function editOrder(o, { remove = [], add = [], reason, who, refundDifferen
     for (const a of add) { if (toDiscount <= 0) break; const amt = Math.min(toDiscount, a._line); const d = await storeGraphQL(st, `mutation($id:ID!,$li:ID!,$disc:OrderEditAppliedDiscountInput!){ orderEditAddLineItemDiscount(id:$id, lineItemId:$li, discount:$disc){ userErrors{ field message } } }`, { id: cid, li: a._cl, disc: { fixedValue: { amount: amt.toFixed(2), currencyCode: cur }, description: String(reason ? `Replacement — ${reason}` : "Replacement (no charge)").slice(0, 250) } }); const ue = d.orderEditAddLineItemDiscount.userErrors; if (ue && ue.length) throw new Error("discount: " + ue.map((x) => x.message).join("; ")); toDiscount -= amt; }
     parts.push(`$${net.toFixed(2)} discounted so nothing extra is charged`); net = 0;
   }
-  const c = await storeGraphQL(st, `mutation($id:ID!,$note:String){ orderEditCommit(id:$id, notifyCustomer:false, staffNote:$note){ order{ id } userErrors{ field message } } }`, { id: cid, note: `${reason || "Item swap"} — by ${who || "Helpdesk"}`.slice(0, 1000) });
+  const c = await storeGraphQL(st, `mutation($id:ID!,$note:String){ orderEditCommit(id:$id, notifyCustomer:false, staffNote:$note){ order{ id } userErrors{ field message } } }`, { id: cid, note: `${reason || "Item swap"} — by ${who || "Buzzin"}`.slice(0, 1000) });
   const ue = c.orderEditCommit.userErrors; if (ue && ue.length) throw new Error("commit: " + ue.map((x) => x.message).join("; "));
   let refundNote = null;
   if (net < 0 && refundDifference) {
@@ -1121,7 +1121,7 @@ async function refreshOrderCache() {
   }
 }
 
-/* ---- Compose a new outbound email (Helpdesk "New ticket" → Draft with Emily). The agent types rough notes;
+/* ---- Compose a new outbound email (Buzzin "New ticket" → Draft with Emily). The agent types rough notes;
  * Emily looks up the order/customer if given and writes the professional version in the brand's voice. ---- */
 async function composeEmail({ brand, mailbox, to, name, order, subject, notes, who }) {
   if (!anthropic) throw new Error("ANTHROPIC_API_KEY not set");
@@ -1162,8 +1162,8 @@ ${rulesText}
   return j;
 }
 
-/* ---- Direct order actions from the Helpdesk app (a person is doing it, so no Slack approval) ---- */
-async function applyOrderAction({ kind, order, input = {}, who = "Helpdesk", ticketId = null }) {
+/* ---- Direct order actions from Buzzin app (a person is doing it, so no Slack approval) ---- */
+async function applyOrderAction({ kind, order, input = {}, who = "Buzzin", ticketId = null }) {
   const o = await orderDetail(order);
   if (o.error) throw new Error(o.error);
   if (o.note) throw new Error(o.note);
@@ -1178,11 +1178,11 @@ async function applyOrderAction({ kind, order, input = {}, who = "Helpdesk", tic
   } else if (kind === "cancel") {
     if (!o.can_cancel) throw new Error(`${o.name} can't be cancelled — it is ${o.cancelled_at ? "already cancelled" : "already fulfilled/shipped"}.`);
     title = `Cancel order ${o.name}`; summary = `${input.refund === false ? "no refund" : "full refund"} · ${input.restock === false ? "no restock" : "restock"} · reason ${input.reason_code || "CUSTOMER"}${input.note ? ` · ${input.note}` : ""}`;
-    result = await cancelOrder(o, { reason: input.reason_code, refund: input.refund !== false, restock: input.restock !== false, notify: !!input.notify, note: input.note || `Cancelled from Helpdesk by ${who}${ticketId ? ` (ticket ${ticketId})` : ""}` });
+    result = await cancelOrder(o, { reason: input.reason_code, refund: input.refund !== false, restock: input.restock !== false, notify: !!input.notify, note: input.note || `Cancelled from Buzzin by ${who}${ticketId ? ` (ticket ${ticketId})` : ""}` });
   } else if (kind === "refund") {
     if (!o.can_refund) throw new Error(`${o.name} has nothing left to refund.`);
     title = `Refund — order ${o.name}`; summary = input.mode === "amount" ? `$${Number(input.amount).toFixed(2)}` : input.mode === "items" ? `${(input.items || []).length} item line(s)${input.shipping ? " + shipping" : ""}` : "full refund";
-    result = await refundOrder(o, { mode: input.mode || "full", items: input.items, amount: input.amount, shipping: !!input.shipping, note: input.note || `Refund from Helpdesk by ${who}${ticketId ? ` (ticket ${ticketId})` : ""}`, notify: !!input.notify, restock: input.restock !== false });
+    result = await refundOrder(o, { mode: input.mode || "full", items: input.items, amount: input.amount, shipping: !!input.shipping, note: input.note || `Refund from Buzzin by ${who}${ticketId ? ` (ticket ${ticketId})` : ""}`, notify: !!input.notify, restock: input.restock !== false });
   } else if (kind === "replacement") {
     const p = await prepareReplacement({ order: o.name, items: input.items, address: input.address, reason: input.reason });
     if (p.error) throw new Error(p.error); if (p.note) throw new Error(p.note);
@@ -1420,9 +1420,9 @@ const TOOLS = [
     input_schema: { type: "object", properties: { order: { type: "string" }, items: { type: "array", items: { type: "object", properties: { title: { type: "string" }, sku: { type: "string" }, quantity: { type: "number" }, reason: { type: "string" } } } }, refund_method: { type: "string" }, ticket_id: { type: "number" } }, required: ["order", "items"] } },
   { name: "customer_history", description: "What we already know about THIS customer across every past ticket: previous conversations (subject, date, outcome), every store credit / replacement / discount already given, and how many goodwill credits they have received. CALL THIS before offering any goodwill credit, replacement, or refund, and whenever a customer says 'again', 'last time', 'second time', or references a previous order or issue. The non-PP 50% missing-items credit is ONE TIME per customer — if goodwill_credits_given is 1 or more, do NOT offer it again; escalate instead.",
     input_schema: { type: "object", properties: { email: { type: "string" } }, required: ["email"] } },
-  { name: "helpdesk_recent_tickets", description: "List recent Helpdesk tickets (newest first): id, subject, customer, brand, status, whether the customer is waiting.",
+  { name: "helpdesk_recent_tickets", description: "List recent Buzzin tickets (newest first): id, subject, customer, brand, status, whether the customer is waiting.",
     input_schema: { type: "object", properties: { limit: { type: "number" } } } },
-  { name: "helpdesk_ticket_conversation", description: "Read the full message thread of one Helpdesk ticket by id.",
+  { name: "helpdesk_ticket_conversation", description: "Read the full message thread of one Buzzin ticket by id.",
     input_schema: { type: "object", properties: { ticket_id: { type: "string" } }, required: ["ticket_id"] } },
 ];
 async function runTool(name, input) {
@@ -1520,7 +1520,7 @@ const DEFAULT_RULES =
 
 
 /* ======================================================================================================
- *  DRAFTING — from Helpdesk's own tables
+ *  DRAFTING — from Buzzin's own tables
  * ====================================================================================================== */
 const DRAFT_ON = (process.env.DRAFT_LOOP || "on").toLowerCase() === "on";
 const SWEEP_MS = (Number(process.env.DRAFT_SWEEP_MIN) || 5) * 60 * 1000;
@@ -1651,7 +1651,7 @@ function onInboundMessage(ticketId) {
 }
 // Safety sweep: anything where the customer is waiting and Emily hasn't drafted since they wrote.
 let sweepBusy = false;
-// Emily only sweeps mail that arrived after she went live in the Helpdesk ("sweep_since"). Anything older was
+// Emily only sweeps mail that arrived after she went live in Buzzin ("sweep_since"). Anything older was
 // already handled by the previous Emily or is Jose's to pick up in the app — otherwise every restart would
 // walk the whole backlog and flood Slack with cards. New replies on old tickets still count as new mail.
 let sweepSince = null;
@@ -1722,7 +1722,7 @@ async function autoSend(t, r) {
       { type: "section", text: { type: "mrkdwn", text: `🤖 *Sent automatically* · *${t.brand || s.mailbox}* · ticket ${t.id} — ${t.subject}\nCustomer: ${t.customer_email} · intent: \`${r.intent}\`` } },
       { type: "section", text: { type: "mrkdwn", text: `*Customer wrote:*\n>>> ${(r._customer || "").slice(0, 600)}` } },
       { type: "section", text: { type: "mrkdwn", text: `*Emily sent:*\n>>> ${String(r.draft).slice(0, 2000)}` } },
-      { type: "context", elements: [{ type: "mrkdwn", text: `No money, no escalation, customer not upset. Change this under Settings → Emily in Helpdesk. Say \`redraft ${t.id}\` to follow up.` }] },
+      { type: "context", elements: [{ type: "mrkdwn", text: `No money, no escalation, customer not upset. Change this under Settings → Emily in Buzzin. Say \`redraft ${t.id}\` to follow up.` }] },
     ] });
     console.log(`🤖 AUTO-SENT ticket ${t.id} (${r.intent}) to ${t.customer_email}`);
   } catch (e) { console.error(`auto-send failed for ${t.id}, falling back to approval:`, e.message); await postApprovalCard(t, r); }
@@ -1741,7 +1741,7 @@ function fmtAge(iso) {
 async function postApprovalCard(t, r) {
   if (!app) return;
   const status = r.escalate ? `🛑 *NEEDS APPROVAL* — ${r.escalate_reason || "review"}` : "✅ Draft ready";
-  const header = `🎫 *${t.brand || "?"}* · Ticket ${t.id} — ${t.subject}\nCustomer: ${t.customer_email}\nOpened: ${fmtAge(t.created_at)}\n${status}\n<${PUBLIC_URL}/?ticket=${t.id}|Open in Helpdesk>`;
+  const header = `🎫 *${t.brand || "?"}* · Ticket ${t.id} — ${t.subject}\nCustomer: ${t.customer_email}\nOpened: ${fmtAge(t.created_at)}\n${status}\n<${PUBLIC_URL}/?ticket=${t.id}|Open in Buzzin>`;
   const blocks = [
     { type: "section", text: { type: "mrkdwn", text: header } },
     { type: "section", text: { type: "mrkdwn", text: `*Customer wrote:*\n>>> ${(r._customer || "(not captured)").slice(0, 1400)}` } },
@@ -1812,7 +1812,7 @@ async function onHumanReply(ticketId, text, who) {
   const d = await latestDraft(ticketId);
   if (!d || d.outcome) return;
   await recordOutcome(ticketId, "human_replied", text, who);
-  await updateCard(d, "Answered in Helpdesk", [{ type: "section", text: { type: "mrkdwn", text: `✍️ *Answered in Helpdesk* by ${who} · ticket ${ticketId}` } }]);
+  await updateCard(d, "Answered in Buzzin", [{ type: "section", text: { type: "mrkdwn", text: `✍️ *Answered in Buzzin* by ${who} · ticket ${ticketId}` } }]);
 }
 
 /* ======================================================================================================
@@ -2004,7 +2004,7 @@ async function maybeRedraftCommand(text) {
   if (!m) return null;
   const id = m[1], guidance = (m[2] || "").trim();
   const t = await loadTicket(id);
-  if (!t) return `I can't find ticket ${id} in Helpdesk.`;
+  if (!t) return `I can't find ticket ${id} in Buzzin.`;
   const r = await handleTicket(id, { force: true, guidance });
   return r && r.category === "cs" ? `🔁 Redrafted ticket ${id}${guidance ? ` with your notes` : ""} — new card in <#${APPROVALS_CH}>.` : `Looked at ticket ${id} — ${r && (r.skipped || r.category) || "nothing to draft"}.`;
 }
@@ -2172,7 +2172,7 @@ async function start() {
     await app.start();
     console.log(`⚡️ Emily connected to Slack (approvals in ${APPROVALS_CH})`);
   } else {
-    console.log("Emily: Slack tokens not set — approvals live only in Helpdesk");
+    console.log("Emily: Slack tokens not set — approvals live only in Buzzin");
   }
   core.onInbound((ticketId) => onInboundMessage(ticketId));
   if (DRAFT_ON && anthropic) { sweepFloor().catch(() => {}); setTimeout(sweep, 15000); setInterval(sweep, SWEEP_MS); console.log(`✍️  Emily drafting: on new mail + sweep every ${SWEEP_MS / 60000}m · model ${CLAUDE_MODEL}`); }

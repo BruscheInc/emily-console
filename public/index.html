@@ -8,7 +8,7 @@
 <link rel="icon" type="image/svg+xml" href="logo.svg" />
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-<title>Helpdesk</title>
+<title>Buzzin</title>
 <link rel="stylesheet" href="tabler-icons.css">
 <style>
   :root{--bg:#f4f6fb;--panel:#ffffff;--panel2:#eef2f8;--line:#d8e0ec;--ink:#1a2433;--muted:#647087;--accent:#3b6ef5;--in:#1a8f5a;--out:#1f6fb0;--warn:#b7791f;--bad:#d84a4a;--mono:ui-monospace,Menlo,Consolas,monospace}
@@ -18,7 +18,7 @@
   /* ---- sidebar · main (table list, or the open conversation) ---- */
   .side{width:236px;flex:none;display:flex;flex-direction:column;background:#f6f7fa;border-right:1px solid var(--line);padding:14px 10px;gap:1px;overflow-y:auto}
   .brand{display:flex;gap:10px;align-items:center;padding:4px 8px 14px}
-  .brand .mark{width:34px;height:34px;border-radius:9px;flex:none;box-shadow:0 2px 6px rgba(30,70,184,.25)}.ver{font-size:10.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.08);border-radius:5px;padding:1px 5px;vertical-align:middle;margin-left:2px}.brand .name{font-weight:800;font-size:16px;letter-spacing:-.01em}.brand .subname{font-size:11px;color:var(--muted)}
+  .brand .mark{width:34px;height:34px;border-radius:9px;flex:none;box-shadow:0 2px 6px rgba(23,22,31,.25)}.ver{font-size:10.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.08);border-radius:5px;padding:1px 5px;vertical-align:middle;margin-left:2px}.brand .name{font-weight:800;font-size:16px;letter-spacing:-.01em}.brand .subname{font-size:11px;color:var(--muted)}
   .navsec{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:12px 10px 4px;font-weight:700}
   .side .ti{font-size:18px;line-height:1}
   .side .nav .n:empty{display:none}
@@ -281,7 +281,7 @@
 <body>
 <div id="keygate" class="keyprompt hidden">
   <img src="logo.svg" alt="" width="56" height="56" style="border-radius:14px;box-shadow:0 6px 18px rgba(30,70,184,.25)">
-  <h2 style="margin:12px 0 2px">Helpdesk</h2>
+  <h2 style="margin:12px 0 2px">Buzzin</h2>
   <p style="color:#647087;margin:0 0 14px" id="gateMsg">Sign in with your email and password.</p>
   <div id="loginForm">
     <input id="loginEmail" type="email" placeholder="you@larkspurbaby.com" autocomplete="username" onkeydown="if(event.key==='Enter')$('loginPass').focus()" />
@@ -298,7 +298,7 @@
 
 <div id="app" class="hidden" style="display:flex;height:100%">
 <aside class="side">
-  <div class="brand"><img class="mark" src="logo.svg" alt="" width="34" height="34"><div><div class="name">Helpdesk <span id="ver" class="ver"></span></div><div class="subname">Larkspur Baby · Outlet</div></div></div>
+  <div class="brand"><img class="mark" src="logo.svg" alt="" width="34" height="34"><div><div class="name">Buzzin <span id="ver" class="ver"></span></div><div class="subname">Larkspur Baby · Outlet</div></div></div>
   <button class="nav-search" onclick="sideSearch()" title="Search tickets (⌘K)"><i class="ti ti-search"></i><span>Search</span><kbd>⌘K</kbd></button>
   <button class="nav view top" data-view="home" onclick="setView('home')"><i class="i ti ti-home"></i><span>Home</span></button>
   <div class="grp" data-g="inbox"><button class="nav gh" onclick="toggleGrp('inbox')"><i class="i ti ti-inbox"></i><span>Inbox</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
@@ -460,7 +460,7 @@ async function loadCounts(){try{
   for(const v of ["lb","lbo","lb_tickets","lbo_tickets","oos","all"]){const el=$("v-"+v);if(el)el.textContent=(c.views&&c.views[v])?c.views[v]:"";}
   const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||"";
   // tab title carries the pending count, like a real inbox
-  const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Helpdesk`:"Helpdesk";
+  const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Buzzin`:"Buzzin";
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
@@ -495,10 +495,10 @@ function orderStatusChips(oi){
 const PAGE_VERSION="__VERSION__"; let _newVer=null;
 async function checkVersion(first){
   try{ const v=await api("/api/version"); const cur=String(v.version||"");
-    $("ver").textContent="v"+cur.replace(/\.0$/,""); $("ver").title="Helpdesk "+cur;
+    $("ver").textContent="v"+cur.replace(/\.0$/,""); $("ver").title="Buzzin "+cur;
     if(cur&&PAGE_VERSION&&!/__/.test(PAGE_VERSION)&&cur!==PAGE_VERSION){ _newVer=cur;
       const typing=[...document.querySelectorAll("textarea")].some(t=>t.value.trim().length>0);
-      if(!typing&&!first) location.reload(); else if(!$("upbanner")){ const b=document.createElement("div"); b.id="upbanner"; b.style.cssText="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer"; b.innerHTML="Helpdesk v"+cur.replace(/\.0$/,"")+" is ready — click to reload"; b.onclick=()=>location.reload(); document.body.appendChild(b); }
+      if(!typing&&!first) location.reload(); else if(!$("upbanner")){ const b=document.createElement("div"); b.id="upbanner"; b.style.cssText="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer"; b.innerHTML="Buzzin v"+cur.replace(/\.0$/,"")+" is ready — click to reload"; b.onclick=()=>location.reload(); document.body.appendChild(b); }
     }
   }catch(e){}
 }
@@ -949,7 +949,7 @@ async function loadStuck(silent){
       <button class="btn sec xs" onclick="stuckRefresh(this)">↻ Check now</button>
       <span style="flex-basis:100%;color:var(--muted);font-size:12px">How to read this: Shopify only updates delivery status itself for labels bought through Shopify Shipping. ShipStation-fulfilled orders stay on "Tracking added" whatever happens to the package, so a package here may already be delivered — check the tracking link before acting.${d.carrier_api?" Each row is also checked with the carrier automatically.":""}</span>
       ${d.carrier_api_error?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Carrier check unavailable: ${esc(d.carrier_api_error)}</span>`:(!d.carrier_api?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ No carrier check configured — add SHIPSTATION_V2_KEY (ShipStation plan with API tracking) and delivered packages will close themselves.</span>`:"")}
-      ${d.repair_blocked?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Some fulfillments carry a carrier name Shopify doesn't recognise. Add the <b>write_fulfillments</b> scope to the Emily Shopify app and the Helpdesk will correct them.</span>`:""}
+      ${d.repair_blocked?`<span style="flex-basis:100%;color:#b7791f;font-size:12.5px">⚠️ Some fulfillments carry a carrier name Shopify doesn't recognise. Add the <b>write_fulfillments</b> scope to the Emily Shopify app and Buzzin will correct them.</span>`:""}
       <div class="seg">${seg("open","Needs attention")}${seg("contacted","Contacted")}${seg("resolved","Resolved")}${seg("ignored","Ignored")}${seg("all","All")}</div></div>`;
     if(!d.items.length){ w.innerHTML=head+`<div class="empty">${KIND==="undelivered"?"Nothing here — every order older than "+d.threshold_days+" days has been delivered.":"Nothing here — every recent package has been scanned by the carrier."}</div>`; return; }
     w.innerHTML=head+`<table class="tickets stuck"><thead><tr><th class="c-t">Order</th><th>Customer</th><th>Tracking</th><th>${KIND==="undelivered"?"Order age":"Tracking added"}</th><th>Shopify status</th><th>Actions</th></tr></thead><tbody>${d.items.map(x=>`<tr>
@@ -1099,7 +1099,7 @@ function renderHome(){
 /* ---------------- Return analytics ---------------- */
 let RA={preset:"30d",from:"",to:"",store:"",metric:"returns",reason:"",product:"",d:null};
 const RA_C={lb:"#2a78d6",lbo:"#eb6834",original:"#2a78d6",store_credit:"#eb6834",portal:"#2a78d6",staff:"#eb6834"};
-const RA_N={lb:"Larkspur Baby",lbo:"Larkspur Baby Outlet",original:"Refund to card",store_credit:"Store credit",portal:"Customer portal",staff:"Staff (Helpdesk)"};
+const RA_N={lb:"Larkspur Baby",lbo:"Larkspur Baby Outlet",original:"Refund to card",store_credit:"Store credit",portal:"Customer portal",staff:"Staff (Buzzin)"};
 function raToday(){ return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()); }
 function raShift(day,n){ const d=new Date(day+"T12:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
 function raRange(){
@@ -1374,7 +1374,7 @@ async function retExceptions(prefill){
       <div class="exc" style="display:block;white-space:normal">${x.until?"until "+fmtDay(x.until)+" · ":"no end date · "}added by ${esc(x.created_by||"staff")} ${fmtDay(x.created_at)}${x.note?` — “${esc(x.note)}”`:""}${x.removed_at?` · removed by ${esc(x.removed_by||"staff")}`:""}</div></div>
       ${x.active?`<button class="btn sec xs danger" onclick="exRemove('${x.id}','${esc(x.order_name)}')">Remove</button>`:""}</div>`;
   m.innerHTML=`<div class="box" style="width:min(640px,100%)"><h3>Order exceptions</h3>
-    <div class="sub">Goodwill: let one order skip specific return or claim rules. Applies right away in the portal and in Helpdesk.</div>
+    <div class="sub">Goodwill: let one order skip specific return or claim rules. Applies right away in the portal and in Buzzin.</div>
     <div class="grid2"><div><label>Order number</label><input type="text" id="ex-order" placeholder="LB191494" value="${esc(prefill||"")}"></div><div><label>Valid until (optional)</label><input type="date" id="ex-until"></div></div>
     <label>Waive these rules</label>
     ${groups.map(([g,ks])=>`<div class="exg"><div class="exgt">${g}</div>${ks.filter(k=>R[k]).map(k=>`<label class="chk" style="margin-top:4px"><input type="checkbox" class="ex-k" value="${k}"> <span><b>${esc(R[k].label)}</b> <span style="color:var(--muted)">— ${esc(R[k].hint)}</span></span></label>`).join("")}</div>`).join("")}
@@ -1424,7 +1424,7 @@ async function loadActivity(silent){
     const d=await api(`/api/activity?limit=100&offset=${ACT_F.offset}&who=${encodeURIComponent(ACT_F.who)}&kind=${encodeURIComponent(ACT_F.kind)}&q=${encodeURIComponent(ACT_F.q)}`);
     const sig=JSON.stringify([ACT_F,d.total,d.items.slice(0,3).map(x=>x.id)]); if(silent&&sig===_actSig) return; _actSig=sig;
     $("showing").textContent=d.total?`${d.offset+1}–${Math.min(d.offset+d.items.length,d.total)} of ${d.total.toLocaleString()}`:"";
-    const head=`<div class="stuckhead"><span>Every action in the Helpdesk — by a person, by Emily, or by a scheduled job — with the time it happened. Times are shown in your timezone.</span>
+    const head=`<div class="stuckhead"><span>Every action in Buzzin — by a person, by Emily, or by a scheduled job — with the time it happened. Times are shown in your timezone.</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;flex-basis:100%;align-items:center">
         <select id="act-who" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)" onchange="ACT_F.who=this.value;ACT_F.offset=0;loadActivity()"><option value="">Everyone</option>${(d.whos||[]).map(x=>`<option value="${esc(x.user_name)}" ${ACT_F.who===x.user_name?"selected":""}>${esc(x.user_name)} (${x.n})</option>`).join("")}</select>
         <select id="act-kind" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)" onchange="ACT_F.kind=this.value;ACT_F.offset=0;loadActivity()"><option value="">All actions</option><option value="reply" ${ACT_F.kind==="reply"?"selected":""}>Replies</option><option value="emily" ${ACT_F.kind==="emily"?"selected":""}>Emily</option><option value="action" ${ACT_F.kind==="action"?"selected":""}>Proposed actions</option><option value="order" ${ACT_F.kind==="order"?"selected":""}>Order changes</option><option value="shipment" ${ACT_F.kind==="shipment"?"selected":""}>Shipments</option><option value="oos" ${ACT_F.kind==="oos"?"selected":""}>Out of stock</option><option value="user" ${ACT_F.kind==="user"?"selected":""}>Users</option><option value="login" ${ACT_F.kind==="login"?"selected":""}>Sign-ins</option><option value="policy" ${ACT_F.kind==="policy"?"selected":""}>Policies</option></select>

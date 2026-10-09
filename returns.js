@@ -1,8 +1,8 @@
 /**
- * Returns — Helpdesk's own returns system (replaces Loop).
+ * Returns — Buzzin's own returns system (replaces Loop).
  *
  *  Customer portal  /returns/lb  and  /returns/lbo   (public, no login)
- *  Helpdesk         "Returns" view + "Start return" on an order  (staff)
+ *  Buzzin         "Returns" view + "Start return" on an order  (staff)
  *  Emily            return_propose tool → staged for approval → label attached to the reply
  *
  * Flow: find order → pick items + reason → refund method (original payment, or store credit + bonus)
@@ -10,7 +10,7 @@
  *       → tracking checked hourly → delivered to us → refund issued automatically (label fee deducted).
  *
  * Uses Emily's existing keys: SHOPIFY_STORES (both stores' apps) and SHIPSTATION_V2_KEY.
- * Settings (window, fee, bonus, return address, carrier…) live in Helpdesk → Returns → Settings.
+ * Settings (window, fee, bonus, return address, carrier…) live in Buzzin → Returns → Settings.
  */
 const crypto = require("crypto");
 const core = require("./core");
@@ -51,7 +51,7 @@ function keyForOrderName(name) {
   return null;
 }
 
-/* ---------------- settings (editable in Helpdesk → Returns → Settings) ---------------- */
+/* ---------------- settings (editable in Buzzin → Returns → Settings) ---------------- */
 const DEFAULTS = {
   portal_live: false,              // when on, Emily sends customers to this portal instead of Loop
   branded_links: false,
@@ -142,7 +142,7 @@ async function gql(st, query, variables = {}) {
     const denied = errs.some((e) => /access denied|access scope/i.test(e.message || "") || (e.extensions && e.extensions.code === "ACCESS_DENIED"));
     // Staff see the plain cause; the customer portal turns any of these into a friendly message (see `staff` below).
     const err = new Error(denied
-      ? `${st.brand}: the Emily Shopify app is missing permissions returns need. Add these Admin API scopes to the app: ${RETURN_SCOPES.join(", ")} — then restart Helpdesk.`
+      ? `${st.brand}: the Emily Shopify app is missing permissions returns need. Add these Admin API scopes to the app: ${RETURN_SCOPES.join(", ")} — then restart Buzzin.`
       : `${st.brand}: Shopify error — ${errs.map((e) => e.message).join("; ").slice(0, 200)}`);
     err.staff = true;
     throw err;
@@ -680,7 +680,7 @@ async function submitPortal(body) {
   const rec = await create({ key: p.k, orderId: p.o, lines: body.lines, refundMethod: body.refund_method, address: body.address, source: "portal" });
   return publicView(rec);
 }
-// From a Helpdesk ticket (staff, or Emily's approved action). Saves the label PDF so it rides along on the next reply.
+// From a Buzzin ticket (staff, or Emily's approved action). Saves the label PDF so it rides along on the next reply.
 async function createForTicket({ orderName, lines, refundMethod, ticketId, who, staffOverride }) {
   const key = keyForOrderName(orderName); if (!key) throw httpError(400, "Order number must start with LB or LBO.");
   const st = shopFor(key);
@@ -792,7 +792,7 @@ async function checkOne(rec) {
   }
 }
 // Customer emails for an unused return label: a reminder before the deadline, and a note when the return is closed.
-// Render + send one of the branded emails (emails.js) for a return, threaded into its Helpdesk ticket when it has one.
+// Render + send one of the branded emails (emails.js) for a return, threaded into its Buzzin ticket when it has one.
 async function sendBranded(kind, rec, opts = {}) {
   const s = await settings(), def = STORE_DEFS[rec.store];
   const theme = opts.theme || await require("./returns-theme").published(rec.store);
@@ -819,7 +819,7 @@ function csv(rows) {
   return [head.map(q).join(","), ...rows.map((r) => [r.rma, r.store, r.order_name, r.customer_name, r.email, r.status, r.refund_method, r.items.map((i) => `${i.quantity}x ${i.title}${i.variant ? " (" + i.variant + ")" : ""}`).join("; "), r.items.map((i) => i.reason).join("; "), r.est_subtotal, r.refunded_amount, r.fee_charged, r.label_cost, r.tracking_number, r.source, r.created_at && new Date(r.created_at).toISOString(), r.refunded_at].map(q).join(","))].join("\n");
 }
 
-/* ---------------- analytics (Helpdesk → Return analytics) ---------------- */
+/* ---------------- analytics (Buzzin → Return analytics) ---------------- */
 const TZ = "America/Chicago";
 const ORDERS_COUNT = `query OrdersCount($q: String!) { ordersCount(query: $q, limit: null) { count precision } }`;
 const ordersCache = new Map();   // "key|from|to" -> { at, n }

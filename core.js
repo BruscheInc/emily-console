@@ -1,7 +1,7 @@
 /**
- * Helpdesk — core.  Shared by the web app (server.js) and the agent (emily.js).
+ * Buzzin — core.  Shared by the web app (server.js) and the agent (emily.js).
  *
- *  Helpdesk  = the app: your own ticket store, Gmail transport, the inbox UI, the API.
+ *  Buzzin  = the app: your own ticket store, Gmail transport, the inbox UI, the API.
  *  Emily     = the agent inside it: triages, drafts, stages money moves, talks in Slack.
  *
  * This file owns everything both of them need: the database and schema, mailbox and brand
@@ -750,7 +750,7 @@ async function storeGmailMessage(address, m) {
     try {
       const tk = (await db(`SELECT customer_email, subject, customer_name FROM hd_tickets WHERE id=$1`, [t.id])).rows[0] || {};
       await addTags(t.id, ["bounced"]);
-      await db(`INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,body_text,sent_by,at) VALUES ($1,'system',$2,true,true,'note','Helpdesk',$3,'Helpdesk',now())`,
+      await db(`INSERT INTO hd_messages (ticket_id,source,external_id,from_agent,internal,channel,sender_name,body_text,sent_by,at) VALUES ($1,'system',$2,true,true,'note','Buzzin',$3,'Buzzin',now())`,
         [t.id, `local:${crypto.randomUUID()}`, `⚠️ Our email to ${tk.customer_email || "the customer"} bounced — ${cls.reason}. Nothing we send to this address will arrive until that changes; reach them another way (phone on the order) or wait and resend.`]);
       const oos = await db(`UPDATE oos_cases SET status='bounced', updated_at=now() WHERE ticket_id=$1 AND status IN ('offered','staged') RETURNING order_number`, [String(t.id)]).catch(() => ({ rows: [] }));
       slackPost(`📭 *Email bounced* — ${tk.customer_email || "?"} · ${cls.reason}${oos.rows.length ? ` · out-of-stock email for order ${oos.rows[0].order_number} did NOT reach the customer (follow-up cancelled)` : ""} · ticket ${t.id}`).catch(() => {});

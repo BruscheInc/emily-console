@@ -6,14 +6,14 @@
  *                        and before it ships. Runs immediately (Shopify order edit). Extra cost →
  *                        Shopify emails a pay link; lower total → difference refunded.
  *    • Defective product photos + description → AI review (photos, history, timing) → staff approve
- *                        in Helpdesk → replacement, store credit, or refund (refund only without PP).
+ *                        in Buzzin → replacement, store credit, or refund (refund only without PP).
  *                        The customer keeps the item.
  *    • Package Protection claim   order must have PP. Live tracking decides when a claim can open
  *                        (stalled N days, or delivered 24h+ ago and not found). AI review → staff
  *                        approve → replacement or store credit (never a refund on PP).
  *    • Package not delivered   with PP → the PP claim; without PP → carrier claim guidance, no credit.
  *
- *  Nothing that moves money happens without a person clicking Approve in Helpdesk → Claims.
+ *  Nothing that moves money happens without a person clicking Approve in Buzzin → Claims.
  * ============================================================================================= */
 const crypto = require("crypto");
 const core = require("./core");
@@ -95,7 +95,7 @@ async function loadOrder(key, orderId) {
     tracking: (f.trackingInfo || []).filter((t) => t.number).map((t) => ({ number: t.number, url: t.url, company: t.company })),
     lines: ((f.fulfillmentLineItems && f.fulfillmentLineItems.nodes) || []).filter((x) => x.lineItem).map((x) => ({ id: x.lineItem.id, quantity: x.quantity })) }));
   const shippedAt = fulfillments.map((f) => f.at).sort()[0] || null;
-  // Goodwill exception (Helpdesk → Returns → Exceptions): staff can waive specific rules for this order.
+  // Goodwill exception (Buzzin → Returns → Exceptions): staff can waive specific rules for this order.
   const ex = await EX().forOrder(o.name);
   const ppGoodwill = !ppLines.length && ex.has("pp_required");
   return { st, s, key, o, lines, ppLines, has_pp: ppLines.length > 0 || ppGoodwill, pp_goodwill: ppGoodwill, ex, fulfillments, shipped_at: shippedAt,
@@ -595,7 +595,7 @@ async function claimSubmit(token, body) {
   }, `Claim submitted by the customer: ${type === "pp" ? SUBTYPE_LABEL[subtype] + (c.has_pp ? (c.pp_goodwill ? " (Package Protection by goodwill exception)" : "") : " (no Package Protection)") : "defective item"} · wants ${RES_LABEL[resolution]} · ${usd(value)}${EX().describe(c.ex) ? ` · ${EX().describe(c.ex)}` : ""}`); }
   catch (e) { if (e.code === "23505") throw httpError(400, "You already have a claim open for this order. We'll email you as soon as it's reviewed."); throw e; }
   if (photos.length) await db(`UPDATE hd_claim_photos SET claim_id=$1 WHERE id = ANY($2)`, [claim.id, photos]);
-  // Background: confirmation email (opens a Helpdesk ticket), AI review, Slack.
+  // Background: confirmation email (opens a Buzzin ticket), AI review, Slack.
   setImmediate(() => afterSubmit(claim.id).catch((e) => console.error("claim after-submit:", e.message)));
   return { number: claim.number, type, resolution, value, email: claim.email };
 }
@@ -624,14 +624,14 @@ async function afterSubmit(id) {
     c = await patchClaim(id, { ticket_id: r.ticket_id }, "Confirmation emailed to the customer");
   } catch (e) { c = await patchClaim(id, {}, "Confirmation email failed: " + e.message); }
   if (c.type === "other") {
-    core.slackPost(`✉️ ${c.order_name} (${def.name}) — customer message from the portal (${c.number}): "${String(c.description).slice(0, 200)}"${(c.photos || []).length ? ` · ${c.photos.length} photo(s)` : ""} · reply from the ticket in Helpdesk`).catch(() => {});
+    core.slackPost(`✉️ ${c.order_name} (${def.name}) — customer message from the portal (${c.number}): "${String(c.description).slice(0, 200)}"${(c.photos || []).length ? ` · ${c.photos.length} photo(s)` : ""} · reply from the ticket in Buzzin`).catch(() => {});
     return;
   }
   try { c = await review(c); } catch (e) { c = await patchClaim(id, { ai: { verdict: "needs_review", summary: "AI review failed: " + e.message, reasons: [], flags: [] } }, "AI review failed: " + e.message); }
-  if (c.ticket_id) core.addNote({ ticketId: String(c.ticket_id), text: `🧾 Claim ${c.number} — ${TYPE_LABEL[c.type]}${c.subtype ? ` (${SUBTYPE_LABEL[c.subtype]})` : ""}\nWants: ${RES_LABEL[c.resolution]} · ${usd(c.value)}\nAI: ${c.ai ? `${c.ai.verdict} (${Math.round((c.ai.confidence || 0) * 100)}%) — ${c.ai.summary}` : "—"}\nApprove or deny in Helpdesk → Claims.`, who: "Returns portal" }).catch(() => {});
+  if (c.ticket_id) core.addNote({ ticketId: String(c.ticket_id), text: `🧾 Claim ${c.number} — ${TYPE_LABEL[c.type]}${c.subtype ? ` (${SUBTYPE_LABEL[c.subtype]})` : ""}\nWants: ${RES_LABEL[c.resolution]} · ${usd(c.value)}\nAI: ${c.ai ? `${c.ai.verdict} (${Math.round((c.ai.confidence || 0) * 100)}%) — ${c.ai.summary}` : "—"}\nApprove or deny in Buzzin → Claims.`, who: "Returns portal" }).catch(() => {});
   try { const d = await autoDecide(c); if (d.approve) { await approve(c.id, { resolution: c.resolution }, "Auto-approved"); return; } await patchClaim(c.id, { auto: d }, `Not auto-approved: ${d.why}`); c.auto = d; }
   catch (e) { await patchClaim(c.id, {}, "Auto-approval failed, left for staff: " + e.message); }
-  core.slackPost(`🧾 New ${TYPE_LABEL[c.type]} ${c.number} — ${c.order_name} (${def.name}) · wants ${RES_LABEL[c.resolution]} ${usd(c.value)} · AI: ${c.ai ? `*${c.ai.verdict}* — ${c.ai.summary}` : "—"} · approve in Helpdesk → Claims`).catch(() => {});
+  core.slackPost(`🧾 New ${TYPE_LABEL[c.type]} ${c.number} — ${c.order_name} (${def.name}) · wants ${RES_LABEL[c.resolution]} ${usd(c.value)} · AI: ${c.ai ? `*${c.ai.verdict}* — ${c.ai.summary}` : "—"} · approve in Buzzin → Claims`).catch(() => {});
 }
 
 /* ---------------- automatic approval (every check must pass, otherwise staff decide) ---------------- */

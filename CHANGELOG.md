@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.37.0
+- Helpdesk is now **Buzzin**: new name everywhere staff see it (app title, sidebar, browser tab, home-screen app, Email Studio, Portal Studio, Slack/Emily messages, logs). Customers never saw the old name and see nothing new.
+- New minimalist bee logo (yellow bee on near-black, with buzz lines) for the favicon, app icons and sidebar.
+
 ## 4.36.0
 - Test customers: Returns → Settings → Claims has a "Test customers" list (default jimmy@bruscheinc.com). Claims from these emails are judged with a blank history: no past claims, returns, tickets, credits or reused-photo flag go to the AI reviewer, and the "too many approved claims" auto-approve limit is skipped. Emily's customer-history lookup also returns nothing for them, so test runs never shape how she treats the account.
 

@@ -4,13 +4,13 @@
  *  Staff can exempt one order from specific return / claim policies — e.g. let a customer return
  *  after the 7-day window, or file a shipping claim without Package Protection. Each exception
  *  names the order, which rules are waived, an optional "valid until" date, a note and who added it.
- *  The portal and Helpdesk check these wherever the matching rule is enforced (returns.js, claims.js).
+ *  The portal and Buzzin check these wherever the matching rule is enforced (returns.js, claims.js).
  * ============================================================================================= */
 const crypto = require("crypto");
 const core = require("./core");
 const { db } = core;
 
-// key → what staff see in Helpdesk. Keep keys stable: they're stored on exceptions, returns and claims.
+// key → what staff see in Buzzin. Keep keys stable: they're stored on exceptions, returns and claims.
 const RULES = {
   return_window:   { label: "Return window", hint: "Can return any time (even before tracking shows delivered)" },
   final_sale:      { label: "Final sale", hint: "Final-sale items can be returned" },

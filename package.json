@@ -1,8 +1,8 @@
 {
   "name": "helpdesk",
-  "version": "4.36.0",
+  "version": "4.37.0",
   "private": true,
-  "description": "Helpdesk — Brusche Inc.'s own support desk (Larkspur Baby · Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
+  "description": "Buzzin (formerly Helpdesk) — Brusche Inc.'s own support desk (Larkspur Baby · Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

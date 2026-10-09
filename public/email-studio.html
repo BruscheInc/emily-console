@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Email Studio · Helpdesk</title>
+<title>Email Studio · Buzzin</title>
 <link rel="icon" href="/favicon-32.png">
 <style>
 :root{--bg:#eef1f6;--panel:#ffffff;--panel2:#f5f7fb;--line:#dde3ed;--ink:#1a2433;--muted:#667189;--accent:#3b6ef5;--accent-soft:#e8eefe;--ok:#158048;--warn:#b7791f;--bad:#d14343;
@@ -111,7 +111,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 </head>
 <body>
 <div class="top">
-  <a class="back" href="/">← Helpdesk</a>
+  <a class="back" href="/">← Buzzin</a>
   <div class="title">✉️ Email Studio</div>
   <div class="seg" id="view"><button data-v="map">🗺 Email map</button><button data-v="edit">✏️ Edit</button></div>
   <div class="seg" id="stores"></div>
@@ -122,15 +122,15 @@ button,input,select,textarea{font:inherit;color:inherit}
 <div class="main" id="main">
   <div class="list">
     <div class="filt">
-      <div class="seg" id="filt"><button data-f="all" class="on">All</button><button data-f="helpdesk">Helpdesk</button><button data-f="shopify">Shopify</button></div>
-      <div class="legend"><span class="badge helpdesk">Helpdesk</span> sent by us — edit here.<br><span class="badge shopify">Shopify</span> sent by Shopify — edit in Shopify.</div>
+      <div class="seg" id="filt"><button data-f="all" class="on">All</button><button data-f="helpdesk">Buzzin</button><button data-f="shopify">Shopify</button></div>
+      <div class="legend"><span class="badge helpdesk">Buzzin</span> sent by us — edit here.<br><span class="badge shopify">Shopify</span> sent by Shopify — edit in Shopify.</div>
     </div>
     <div class="items" id="items"></div>
   </div>
   <div class="edit" id="edit"></div>
   <div class="prev" id="prev"></div>
 </div>
-<div class="gate hidden" id="gate"><h3>Open this from Helpdesk</h3><p>Sign in to Helpdesk first, then open Email Studio from Returns.</p><a class="btn pri" href="/">Go to Helpdesk</a></div>
+<div class="gate hidden" id="gate"><h3>Open this from Buzzin</h3><p>Sign in to Buzzin first, then open Email Studio from Returns.</p><a class="btn pri" href="/">Go to Buzzin</a></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -147,7 +147,7 @@ const store_get = (k, d) => { try { return localStorage.getItem(k) || d; } catch
 const store_set = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
 let VIEW = 'map', STORE = 'lb', DATA = null, CUR = null, EDITS = {}, FILTER = 'all', ADMIN = false, lastField = null, prevTimer = null, MOBILE = false;
-const SENDER = { helpdesk: 'Helpdesk', shopify: 'Shopify' };
+const SENDER = { helpdesk: 'Buzzin', shopify: 'Shopify' };
 const badge = (s) => `<span class="badge ${s}">${SENDER[s]}</span>`;
 const fmtWhen = (d) => new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -169,10 +169,10 @@ function renderMap() {
   const flows = [];
   for (const e of [...DATA.emails].sort((a, b) => a.step - b.step)) { let f = flows.find((x) => x.n === e.group); if (!f) flows.push(f = { n: e.group, rows: [] }); let r = f.rows.find((x) => x.ev === e.event); if (!r) f.rows.push(r = { ev: e.event, list: [] }); r.list.push(e); }
   const order = ['Returns', 'Claims', 'Order edits', 'All emails']; flows.sort((a, b) => order.indexOf(a.n) - order.indexOf(b.n));
-  const chip = (e) => `<button class="chip ${e.sender}" data-open="${e.kind}" title="${esc(e.sender === 'shopify' ? 'Sent by Shopify — see where to edit it' : 'Sent by Helpdesk — click to edit')}">${e.sender === 'shopify' ? '🛍' : '✉️'} ${esc(e.name.replace(/ \(Shopify\)$/, '').replace(/^Claim approved — /, 'Approved: '))}${e.edited ? '<span class="ed" title="Edited"></span>' : ''}<span class="go">${e.sender === 'shopify' ? 'Shopify' : 'Edit →'}</span></button>`;
+  const chip = (e) => `<button class="chip ${e.sender}" data-open="${e.kind}" title="${esc(e.sender === 'shopify' ? 'Sent by Shopify — see where to edit it' : 'Sent by Buzzin — click to edit')}">${e.sender === 'shopify' ? '🛍' : '✉️'} ${esc(e.name.replace(/ \(Shopify\)$/, '').replace(/^Claim approved — /, 'Approved: '))}${e.edited ? '<span class="ed" title="Edited"></span>' : ''}<span class="go">${e.sender === 'shopify' ? 'Shopify' : 'Edit →'}</span></button>`;
   const hd = DATA.emails.filter((e) => e.sender === 'helpdesk').length, sh = DATA.emails.length - hd;
-  $('map').innerHTML = `<div class="wrap"><div class="intro"><b>Every customer email for ${esc(DATA.stores[STORE].name)}</b><span class="badge helpdesk">Helpdesk · ${hd}</span><span class="badge shopify">Shopify · ${sh}</span><span>Click an email to edit it.</span></div>
-    ${flows.map((f) => `<div class="flow"><div class="fh">${FLOW_ICON[f.n] || ''} ${esc(f.n)}<small>${f.n === 'All emails' ? 'shared by every Helpdesk email' : 'what happens → email the customer gets'}</small></div>
+  $('map').innerHTML = `<div class="wrap"><div class="intro"><b>Every customer email for ${esc(DATA.stores[STORE].name)}</b><span class="badge helpdesk">Buzzin · ${hd}</span><span class="badge shopify">Shopify · ${sh}</span><span>Click an email to edit it.</span></div>
+    ${flows.map((f) => `<div class="flow"><div class="fh">${FLOW_ICON[f.n] || ''} ${esc(f.n)}<small>${f.n === 'All emails' ? 'shared by every Buzzin email' : 'what happens → email the customer gets'}</small></div>
       ${f.rows.map((r) => `<div class="mrow"><span class="ev">${esc(r.ev)}</span><span class="ar">→</span><span class="chips">${r.list.map(chip).join('')}</span></div>`).join('')}</div>`).join('')}</div>`;
 }
 function setView(v) {
@@ -192,7 +192,7 @@ function renderEdit() {
   const head = `<div class="head"><div style="display:flex;align-items:center;gap:10px"><h2>${esc(e.name.replace(/ \(Shopify\)$/, ''))}</h2>${badge(e.sender)}</div>
     <div class="when"><b>When it's sent:</b> ${esc(e.when)}</div>${e.shows ? `<div class="when">${esc(e.shows)}</div>` : ''}</div>`;
   if (e.sender === 'shopify') {
-    $('edit').innerHTML = head + `<div class="shop"><div class="card"><p><b>Shopify sends this email, not Helpdesk.</b></p><p>Its wording and design are changed in Shopify, so they can't be edited here.</p>
+    $('edit').innerHTML = head + `<div class="shop"><div class="card"><p><b>Shopify sends this email, not Buzzin.</b></p><p>Its wording and design are changed in Shopify, so they can't be edited here.</p>
       <ol><li>Open Shopify Admin for ${esc(DATA.stores[STORE].name)}</li><li>Settings → Notifications → Customer notifications</li><li>Edit <b>${esc(e.shopify_template)}</b></li></ol></div></div>`;
     return;
   }

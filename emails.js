@@ -2,7 +2,7 @@
  *  Customer emails — one registry for everything the customer gets in their inbox from the
  *  returns portal and claims.
  *
- *  Helpdesk-sent emails are branded (logo, colors, button shape from the store's published Portal
+ *  Buzzin-sent emails are branded (logo, colors, button shape from the store's published Portal
  *  Studio theme) and every line of wording is editable per store in Email Studio (/email-studio).
  *  Saved wording lives in hd_email_templates (store, kind) and goes live as soon as it's saved.
  *
@@ -108,7 +108,7 @@ const EMAILS = {
       closing: "Thank you for your patience, and sorry for the trouble.",
     } },
   claim_denied: { step: 50, event: "Denied by staff", group: "Claims", name: "Claim denied", sender: "helpdesk",
-    when: "When staff deny a claim in Helpdesk → Claims. {message} is the note staff write.",
+    when: "When staff deny a claim in Buzzin → Claims. {message} is the note staff write.",
     fields: [F.subject, F.title, F.intro], tokens: [...T_CLAIM, ["message", "Staff's note to the customer"]],
     defaults: {
       subject: "About your claim {claim}",
@@ -125,14 +125,14 @@ const EMAILS = {
     } },
 
   /* ---- shared ---- */
-  _footer: { step: 99, event: "Bottom of every Helpdesk email", group: "All emails", name: "Footer", sender: "helpdesk",
-    when: "The small print at the bottom of every Helpdesk email above.",
+  _footer: { step: 99, event: "Bottom of every Buzzin email", group: "All emails", name: "Footer", sender: "helpdesk",
+    when: "The small print at the bottom of every Buzzin email above.",
     fields: [{ k: "text", label: "Footer text", type: "rich", rows: 3 }], tokens: [["store", "Store name"], ["support", "Support email"]],
     defaults: { text: "Questions? Just reply to this email or write to {support}." } },
 
   /* ---- sent by Shopify (shown for reference; edited in Shopify) ---- */
   shopify_label: { step: 15, event: "Staff start a return (or our email fails)", group: "Returns", name: "Return label (Shopify)", sender: "shopify", shopify_template: "Return label",
-    when: "Only for returns staff start from Helpdesk, or as a backup if \"Return submitted\" fails to send." },
+    when: "Only for returns staff start from Buzzin, or as a backup if \"Return submitted\" fails to send." },
   shopify_refund: { step: 40, event: "Package back, refund issued", group: "Returns", name: "Refund issued (Shopify)", sender: "shopify", shopify_template: "Refund notification",
     when: "When the refund is issued after the return is delivered back to us." },
   shopify_credit: { step: 50, event: "Store credit return, bonus added", group: "Returns", name: "Store credit bonus (Shopify)", sender: "shopify", shopify_template: "Store credit",

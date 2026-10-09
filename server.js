@@ -1,5 +1,5 @@
 /**
- * Helpdesk — the app.  HTTP API + inbox UI.  Everything shared lives in core.js; the agent is emily.js.
+ * Buzzin — the app.  HTTP API + inbox UI.  Everything shared lives in core.js; the agent is emily.js.
  * Start here: `node server.js` boots the database, the web app, the Gmail poller, and Emily.
  */
 const express = require("express");
@@ -28,7 +28,7 @@ const VERSION = require("./package.json").version;
 // index.html is served with the running version stamped in, and never cached, so a new deploy is picked up on the next load.
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8").replace(/__VERSION__/g, VERSION);
 // Branded portal domains (returns.larkspurbaby.com, returns.larkspurbabyoutlet.com) show only that store's portal —
-// never the Helpdesk. "/" is the portal; anything outside the portal's own paths goes back to "/".
+// never Buzzin. "/" is the portal; anything outside the portal's own paths goes back to "/".
 app.use((req, res, next) => {
   const d = R.storeForHost(String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().split(":")[0]);
   if (!d) return next();
@@ -545,7 +545,7 @@ app.get("/oauth/gmail/callback", async (req, res) => {
         redirect_uri_mismatch: `The OAuth client doesn't list ${OAUTH_REDIRECT} as an authorized redirect URI.`,
         admin_policy_enforced: "Your Google Workspace admin has blocked third-party apps for this account. In admin.google.com → Security → API controls, allow this app.",
       };
-      return res.status(400).send(`<body style="font-family:system-ui;padding:40px;max-width:640px"><h2>Google said: ${String(req.query.error)}</h2><p>${hints[String(req.query.error)] || String(req.query.error_description || "")}</p><p><a href="/">Back to Helpdesk</a></p></body>`);
+      return res.status(400).send(`<body style="font-family:system-ui;padding:40px;max-width:640px"><h2>Google said: ${String(req.query.error)}</h2><p>${hints[String(req.query.error)] || String(req.query.error_description || "")}</p><p><a href="/">Back to Buzzin</a></p></body>`);
     }
     let who = "unknown", usedClient = null;
     try {
@@ -673,7 +673,7 @@ app.get("/api/portal/:store/version/:id", async (req, res) => {
   if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
   try { const t = await PT.versionTheme(k, Number(req.params.id)); if (!t) return res.status(404).json({ error: "not found" }); res.json({ theme: t }); } catch (e) { retErr(res, e); }
 });
-// Email Studio (/email-studio): every customer email, who sends it (Helpdesk or Shopify), wording per store, live preview, test send.
+// Email Studio (/email-studio): every customer email, who sends it (Buzzin or Shopify), wording per store, live preview, test send.
 const EM = require("./emails");
 const EMAIL_STUDIO_HTML = fs.readFileSync(path.join(__dirname, "public", "email-studio.html"), "utf8");
 app.get("/email-studio", (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(EMAIL_STUDIO_HTML.replace(/__VERSION__/g, VERSION)); });
@@ -735,7 +735,7 @@ app.get("/returns/label/:id/:tok", async (req, res) => {
   try {
     if (req.params.tok !== R.labelToken(req.params.id)) return res.status(404).send("Not found");
     const rec = await R.getRec(req.params.id);
-    if (rec && rec.test_label && !rec.label_src) return res.type("html").send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Test label ${escH(rec.rma)}</title><body style="font:16px system-ui;display:grid;place-items:center;min-height:90vh;margin:0;background:#f6f5f2"><div style="border:3px dashed #b42318;padding:28px;max-width:420px;background:#fff;text-align:center"><h2 style="color:#b42318;margin:0 0 8px">TEST — NOT A REAL LABEL</h2><p>Return ${escH(rec.rma)} · ${escH(rec.order_name)}<br>From ${escH(rec.customer_name)} to Returns Dept</p><p>${rec.label_cost != null ? `This label would cost about <b>$${Number(rec.label_cost).toFixed(2)}</b>.` : "No price quote available."}</p><p style="color:#666;font-size:13px">Test mode is on in Helpdesk → Returns → Settings. Nothing was bought or charged.</p></div>`);
+    if (rec && rec.test_label && !rec.label_src) return res.type("html").send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Test label ${escH(rec.rma)}</title><body style="font:16px system-ui;display:grid;place-items:center;min-height:90vh;margin:0;background:#f6f5f2"><div style="border:3px dashed #b42318;padding:28px;max-width:420px;background:#fff;text-align:center"><h2 style="color:#b42318;margin:0 0 8px">TEST — NOT A REAL LABEL</h2><p>Return ${escH(rec.rma)} · ${escH(rec.order_name)}<br>From ${escH(rec.customer_name)} to Returns Dept</p><p>${rec.label_cost != null ? `This label would cost about <b>$${Number(rec.label_cost).toFixed(2)}</b>.` : "No price quote available."}</p><p style="color:#666;font-size:13px">Test mode is on in Buzzin → Returns → Settings. Nothing was bought or charged.</p></div>`);
     if (!rec || rec.status === "cancelled" || !rec.label_src) return res.status(404).send("This label is no longer available.");
     const r = await fetch(rec.label_src, { headers: { "API-Key": process.env.SHIPSTATION_V2_KEY || "" } });
     if (!r.ok) return res.redirect(rec.label_src);
@@ -855,13 +855,13 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); console.log("🗄️  Helpdesk schema ready"); await core.loadSessions(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
   if (pool) { try { if (!(await syncGet("dedupe_v3_1"))) { const n = await core.dedupeTickets(); await core.syncSet("dedupe_v3_1", String(n), { at: new Date().toISOString() }); console.log(`🧹 duplicate sweep done — ${n} merged`); } } catch (e) { console.error("dedupe:", e.message); } }
   app.listen(PORT, () => {
-    console.log(`📨 Helpdesk v${VERSION} on :${PORT}`);
+    console.log(`📨 Buzzin v${VERSION} on :${PORT}`);
     console.log(`🔎 boot → users:${USERS.map((u) => u.name).join("/") || "(none)"}${KEY ? "+admin-key" : ""} · db:${pool ? "set" : "MISSING"} · gorgias-import:${core.G_DOMAIN || "off"} · gmail-oauth:${gmailConfigured() ? `${core.OAUTH_CLIENTS.length} client${core.OAUTH_CLIENTS.length === 1 ? "" : "s"}` : "not configured"} · slack:${process.env.SLACK_BOT_TOKEN || process.env.EMILY_SLACK_BOT_TOKEN ? "set" : "off"}`);
   });
   if (pool && gmailConfigured()) {
