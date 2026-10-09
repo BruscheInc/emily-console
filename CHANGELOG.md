@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.41.0
+- Portal first: when a customer asks for something the self-serve portal does (change a size or address, cancel before shipping, start a return, defective item, Package Protection or delivery claim), Emily replies with the exact option to pick and the brand's portal link, sends it, and closes the ticket (it reopens if they reply). Every one posts a "Sent automatically · ticket closed" card in Slack. Not used when the customer is upset, outside the window, needs an exception, or the portal didn't work for them — those still go to approval. A portal reply that someone approves by hand also closes the ticket. Toggle: Settings → Emily → "Send portal answers and close the ticket" (on).
+
 ## 4.40.2
 - Emily's FAQ check: room for longer answers (the first run cut off mid-reply) and a clearer log line if her reply can't be read.
 

@@ -946,7 +946,14 @@ async function portalRule() {
     `A $${Number(s.label_fee).toFixed(2)} return-label fee is deducted from the refund${s.fee_on_store_credit ? "" : " (waived if they choose store credit)"}. ` +
     (s.store_credit_enabled ? `They can choose a refund to the original payment, or store credit with a ${s.store_credit_bonus_pct}% bonus. ` : "") +
     `The refund is issued automatically as soon as the package is delivered back to us. ` +
-    `If a customer can't use the portal (no email access, wants us to do it), call return_propose to stage the return + label for approval; the label PDF is attached to your reply automatically. Never promise a refund amount — the portal shows it.`;
+    `If a customer can't use the portal (no email access, wants us to do it), call return_propose to stage the return + label for approval; the label PDF is attached to your reply automatically. Never promise a refund amount — the portal shows it.` +
+    `\n\nPORTAL FIRST (self-serve): the same portal link also handles these — after the customer enters their order number + email they pick an option: ` +
+    `"Edit or cancel my order" (change a size or the shipping address within ${s.edit_window_minutes} minutes of ordering; cancel any time before it ships), ` +
+    `"Start a return", "Defective item" (within ${s.claim_window_days} days of delivery, with photos — they keep the item), ` +
+    `"Package Protection claim" (lost, stolen or damaged in shipping — marked-delivered / damaged within ${s.pp_claim_window_days} days of delivery; "hasn't arrived" once ${s.transit_claim_days} days have passed since shipping), ` +
+    `and "Other" (package hasn't arrived, delivery problem, or something else). ` +
+    `When a customer asks for one of these and the portal can do it for them, DON'T stage tools or escalate: write a short, friendly reply that names the exact option to pick, gives the brand's portal link, says what they'll need (order number + the email on the order; photos for defects or damage), and set "portal_redirect": true. Buzzin sends that reply and closes the ticket; it reopens if they write back. ` +
+    `Do NOT use portal_redirect (handle it normally instead) when: the customer is upset or says the portal didn't work for them; the order is outside the window or the option won't be available (e.g. it already shipped and they want to cancel or change it, edit window passed for a size change); they need an exception or something the portal can't do; or the message has other questions a person must answer. Local pickup orders: no shipping claims.`;
 }
 
 async function init() {

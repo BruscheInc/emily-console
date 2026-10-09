@@ -663,12 +663,18 @@ const INTENTS=[["tracking","Where is my order / tracking"],["subscription","News
 async function loadEmilyAuto(){
   try{
     const d=await api("/api/emily/settings"); const v=(d.auto_send&&d.auto_send.value)||{enabled:false,intents:[]};
+    const pa=(d.portal_auto&&d.portal_auto.value)||{enabled:true};
     $("emilyauto").innerHTML=`
+      <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;margin-bottom:6px"><input type="checkbox" id="paEnabled" ${pa.enabled!==false?"checked":""} onchange="savePortalAuto(this.checked)"> <span><b>Send portal answers and close the ticket</b><br><span style="font-size:12.5px;color:#8A8794">When the portal can do what the customer asked (edit or cancel, return, defective item, Package Protection or delivery claim), Emily replies with the right option and link, sends it, and closes the ticket. It reopens if they write back. Not used when the customer is upset, outside the window, or needs an exception.</span></span></label>
+      <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
       <label style="display:flex;align-items:center;gap:10px;font-size:14px;margin-bottom:10px"><input type="checkbox" id="asEnabled" ${v.enabled?"checked":""}> <b>Let Emily send these without asking</b></label>
       <div style="font-size:12.5px;color:#8A8794;margin-bottom:8px">Only when nothing is escalated, the customer isn't upset, and no money or order change is involved. Every automatic send still posts a card in Slack so you see it.</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px">${INTENTS.map(([k,l])=>`<label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border:1px solid var(--line,#1e2a3a);border-radius:8px"><input type="checkbox" class="asIntent" value="${k}" ${(v.intents||[]).includes(k)?"checked":""}> ${l}</label>`).join("")}</div>
       <div style="margin-top:10px;display:flex;gap:10px;align-items:center"><button class="btn" onclick="saveEmilyAuto()">Save</button><span style="font-size:12px;color:#8A8794">${d.auto_send&&d.auto_send.updated_by?`last changed by ${esc(d.auto_send.updated_by)} · ${fmt(d.auto_send.updated_at)}`:"never changed"}</span></div>`;
   }catch(e){ $("emilyauto").innerHTML="Couldn't load."; }
+}
+async function savePortalAuto(on){
+  try{ const r=await api("/api/emily/settings/portal_auto",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,value:{enabled:on}})}); if(r.error) throw new Error(r.error); toast(on?"Emily will send portal answers and close the ticket":"Portal answers will wait for approval"); }catch(e){ toast(e.message||"Couldn't save",true); }
 }
 async function saveEmilyAuto(){
   const value={enabled:$("asEnabled").checked,intents:[...document.querySelectorAll(".asIntent:checked")].map(x=>x.value)};

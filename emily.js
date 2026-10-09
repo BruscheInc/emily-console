@@ -1586,11 +1586,11 @@ async function draftForTicket(t, force, guidance) {
     `Then reply with ONLY a JSON object (no prose, no code fences):\n` +
     `{"category":"cs|spam|business|unclear","intent":"tracking|subscription|sizing_care|returns_info|policy_info|damage|lost|missing_items|cancel_or_address|discount|oos_reply|other",` +
     `"sentiment":"positive|neutral|upset","tags":["up to 3 short lowercase tags"],"escalate":true|false,` +
-    `"escalate_reason":"short reason or empty","oos_choice":"replacement|credit|refund|none",` +
+    `"escalate_reason":"short reason or empty","oos_choice":"replacement|credit|refund|none","portal_redirect":true|false,` +
     `"todo":["anything this reply PROMISES that no tool you called will actually do — e.g. 'send a manual return label for the 4 XL sleep sacks', 'ship the missing bonnet' — a person does these by hand; empty if none. Returns: send the returns portal link, or if we must make the label for them use return_propose — don't list returns here. For refunds/credits/discounts/cancellations/address changes use the matching tool instead of promising."],` +
     `"draft":"the full customer-ready reply if category is cs, else empty"}\n` +
     `intent = the ONE thing the customer needs. oos_choice = only when the customer is answering an out-of-stock options email; which option they picked. ` +
-    `Escalate=true for refunds/discounts/credits, order edits/cancellations, angry/sensitive cases, or low confidence.`;
+    `Escalate=true for refunds/discounts/credits, order edits/cancellations, angry/sensitive cases, or low confidence — EXCEPT a portal_redirect reply (sending the customer to the self-serve portal), which is escalate=false.`;
   const content = [{ type: "text", text: instruction }];
   if (custImages.length) content.push(...await imageBlocks(custImages));
   let text = await agentLoop([{ role: "user", content }], 8);
@@ -1637,7 +1637,9 @@ async function handleTicket(ticketId, { force = false, guidance = "" } = {}) {
     }
     await core.addTags(id, [...(r.tags || []).slice(0, 3), "emily-drafted"]);
     await core.audit({ ticketId: id, kind: "emily-draft", detail: `${r.intent || "cs"}${r.escalate ? ` · needs approval: ${r.escalate_reason || ""}` : ""}`, who: "Emily" });
-    if (await autoSendEligible(t, r)) await autoSend(t, r);
+    if (r.portal_redirect && !r.escalate) await core.addTags(id, ["portal-redirect"]);
+    if (await portalAutoEligible(t, r)) await autoSend(t, r, { close: true });
+    else if (await autoSendEligible(t, r)) await autoSend(t, r);
     else await postApprovalCard(t, r);
     return { category: "cs", escalate: !!r.escalate, intent: r.intent };
   } finally { inFlight.delete(id); }
@@ -1704,6 +1706,19 @@ async function closeOosCase(t, r) {
   if (!r.oos_choice || r.oos_choice === "none") return;
   try { await db(`UPDATE oos_cases SET status='resolved', resolution=$2, updated_at=now() WHERE ticket_id=$1 AND status IN ('offered','staged')`, [String(t.id), r.oos_choice]); } catch (e) {}
 }
+// Portal redirects: Emily points the customer to the self-serve portal, sends it, and closes the ticket (Settings → Emily).
+const PORTAL_AUTO_DEFAULT = { enabled: true };
+async function portalAutoEligible(t, r) {
+  const cfg = Object.assign({}, PORTAL_AUTO_DEFAULT, await core.setting("portal_auto", {}) || {});
+  if (!cfg.enabled || !r.portal_redirect || !r.draft || r.escalate || r.sentiment === "upset" || !t.customer_email) return false;
+  if (!/returns\.larkspurbaby(outlet)?\.com|\/returns\/lbo?\b/i.test(r.draft)) return false;   // must actually contain the portal link
+  try { const a = await db(`SELECT 1 FROM emily_actions WHERE ticket_id=$1 AND status='staged' AND created_at > now() - interval '10 minutes' LIMIT 1`, [String(t.id)]); if (a.rows.length) return false; } catch (e) { return false; }
+  return true;
+}
+async function closeTicket(id, why) {
+  await db(`UPDATE hd_tickets SET status='closed', updated_at=now(), reopened_at=NULL WHERE id=$1`, [String(id)]);
+  await db(`INSERT INTO hd_events (ticket_id,kind,detail,user_name) VALUES ($1,'status',$2,'Emily')`, [String(id), `closed — ${why}`]).catch(() => {});
+}
 const AUTO_SEND_DEFAULT = { enabled: false, intents: ["tracking", "subscription", "sizing_care", "returns_info", "policy_info"] };
 async function autoSendEligible(t, r) {
   const cfg = Object.assign({}, AUTO_SEND_DEFAULT, await core.setting("auto_send", {}) || {});
@@ -1712,14 +1727,15 @@ async function autoSendEligible(t, r) {
   try { const a = await db(`SELECT 1 FROM emily_actions WHERE ticket_id=$1 AND created_at > now() - interval '10 minutes' LIMIT 1`, [String(t.id)]); if (a.rows.length) return false; } catch (e) { return false; }
   return true;
 }
-async function autoSend(t, r) {
-  await core.audit({ ticketId: t.id, kind: "emily-autosend", detail: `${r.intent || ""} — sent without approval`, who: "Emily" });
+async function autoSend(t, r, opts = {}) {
+  await core.audit({ ticketId: t.id, kind: "emily-autosend", detail: `${r.intent || ""} — sent without approval${opts.close ? " (sent to the portal, ticket closed)" : ""}`, who: "Emily" });
   try {
     const s = await core.sendReply({ ticketId: t.id, text: r.draft, who: "Emily", via: "auto-send" });
     await core.addTags(t.id, ["emily-sent", "emily-auto"]);
     await recordOutcome(t.id, "auto_sent", r.draft, "Emily");
+    if (opts.close) await closeTicket(t.id, "customer sent to the self-serve portal");
     if (app) await app.client.chat.postMessage({ channel: APPROVALS_CH, text: `Sent automatically · ticket ${t.id}`, blocks: [
-      { type: "section", text: { type: "mrkdwn", text: `🤖 *Sent automatically* · *${t.brand || s.mailbox}* · ticket ${t.id} — ${t.subject}\nCustomer: ${t.customer_email} · intent: \`${r.intent}\`` } },
+      { type: "section", text: { type: "mrkdwn", text: `🤖 *Sent automatically${opts.close ? " · ticket closed (sent to the portal)" : ""}* · *${t.brand || s.mailbox}* · ticket ${t.id} — ${t.subject}\nCustomer: ${t.customer_email} · intent: \`${r.intent}\`` } },
       { type: "section", text: { type: "mrkdwn", text: `*Customer wrote:*\n>>> ${(r._customer || "").slice(0, 600)}` } },
       { type: "section", text: { type: "mrkdwn", text: `*Emily sent:*\n>>> ${String(r.draft).slice(0, 2000)}` } },
       { type: "context", elements: [{ type: "mrkdwn", text: `No money, no escalation, customer not upset. Change this under Settings → Emily in Buzzin. Say \`redraft ${t.id}\` to follow up.` }] },
@@ -1801,6 +1817,7 @@ async function decide({ ticketId, action, text, who, applyActions = [], override
   if (pf.length) await markFilesSent(id);
   await core.addTags(id, ["emily-sent"]);
   await recordOutcome(id, action === "edit" ? "edited" : "approved", body, who);
+  try { const tg = (await db(`SELECT tags FROM hd_tickets WHERE id=$1`, [String(id)])).rows[0]; if (tg && (tg.tags || []).includes("portal-redirect") && /returns\.larkspurbaby(outlet)?\.com/i.test(body)) await closeTicket(id, `customer sent to the self-serve portal (approved by ${who})`); } catch (_) {}
   await updateCard(d, `Sent to ${s.to}`, [
     { type: "section", text: { type: "mrkdwn", text: `✅ *Sent* → ${s.to} · from ${s.mailbox} · ticket ${id} · by ${who}` } },
     { type: "section", text: { type: "mrkdwn", text: `>>> ${body.slice(0, 2800)}` } },

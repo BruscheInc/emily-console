@@ -432,13 +432,14 @@ app.get("/api/emily/settings", async (req, res) => {
     const r = await db(`SELECT key, value, updated_by, updated_at FROM emily_settings`);
     const o = {}; for (const x of r.rows) o[x.key] = { value: x.value, updated_by: x.updated_by, updated_at: x.updated_at };
     if (!o.auto_send) o.auto_send = { value: { enabled: false, intents: ["tracking", "subscription", "sizing_care", "returns_info", "policy_info"] } };
+    if (!o.portal_auto) o.portal_auto = { value: { enabled: true } };
     res.json(o);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.put("/api/emily/settings/:key", async (req, res) => {
   if (!guard(req, res)) return;
   try {
-    if (!["auto_send"].includes(req.params.key)) return res.status(400).json({ error: "unknown setting" });
+    if (!["auto_send", "portal_auto"].includes(req.params.key)) return res.status(400).json({ error: "unknown setting" });
     const v = (req.body && req.body.value) || {};
     await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ($1,$2,$3,now())
               ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_by=EXCLUDED.updated_by, updated_at=now()`, [req.params.key, JSON.stringify(v), actorOf(req)]);
