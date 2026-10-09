@@ -69,6 +69,7 @@ const ORDER_Q = `query($id:ID!){ order(id:$id){ id name createdAt cancelledAt di
   lineItems(first:50){ nodes{ id title variantTitle sku quantity currentQuantity unfulfilledQuantity image{ url(transform:{maxWidth:200}) }
     discountedUnitPriceAfterAllDiscountsSet{ shopMoney{ amount } } originalUnitPriceSet{ shopMoney{ amount } }
     variant{ id availableForSale inventoryQuantity inventoryItem{ tracked } product{ id title variants(first:60){ nodes{ id title sku price availableForSale } } } } } }
+  fulfillmentOrders(first:10){ nodes{ status deliveryMethod{ methodType } } }
   fulfillments(first:10){ createdAt deliveredAt displayStatus status events(first:3, sortKey: HAPPENED_AT, reverse:true){ nodes{ status happenedAt message city province } } trackingInfo{ number url company } fulfillmentLineItems(first:50){ nodes{ quantity lineItem{ id } } } } } }`;
 
 async function loadOrder(key, orderId) {
@@ -95,10 +96,12 @@ async function loadOrder(key, orderId) {
     tracking: (f.trackingInfo || []).filter((t) => t.number).map((t) => ({ number: t.number, url: t.url, company: t.company })),
     lines: ((f.fulfillmentLineItems && f.fulfillmentLineItems.nodes) || []).filter((x) => x.lineItem).map((x) => ({ id: x.lineItem.id, quantity: x.quantity })) }));
   const shippedAt = fulfillments.map((f) => f.at).sort()[0] || null;
+  // Local pickup: no carrier, no tracking. The fulfillment is created when staff hand it over, so that moment is "delivered".
+  const pickup = ((o.fulfillmentOrders && o.fulfillmentOrders.nodes) || []).some((x) => x.deliveryMethod && x.deliveryMethod.methodType === "PICK_UP");
   // Goodwill exception (Buzzin → Returns → Exceptions): staff can waive specific rules for this order.
   const ex = await EX().forOrder(o.name);
   const ppGoodwill = !ppLines.length && ex.has("pp_required");
-  return { st, s, key, o, lines, ppLines, has_pp: ppLines.length > 0 || ppGoodwill, pp_goodwill: ppGoodwill, ex, fulfillments, shipped_at: shippedAt,
+  return { st, s, key, o, pickup, lines, ppLines, has_pp: ppLines.length > 0 || ppGoodwill, pp_goodwill: ppGoodwill, ex, fulfillments, shipped_at: shippedAt,
     minutes: (Date.now() - new Date(o.createdAt).getTime()) / 60000, currency: o.currencyCode, def: R().STORE_DEFS[key] };
 }
 
@@ -121,6 +124,10 @@ async function orderState(c) {
   const fs = String(c.o.displayFulfillmentStatus || "").toUpperCase();
   let st;
   if (c.o.cancelledAt) st = { state: "cancelled", ship: [] };
+  else if (c.pickup) {
+    const at = c.fulfillments.map((f) => f.at).filter(Boolean).sort()[0] || null;
+    st = at ? { state: "delivered", ship: [], delivered_at: at, pickup: true } : { state: "unshipped", ship: [], pickup: true };
+  }
   else if (!c.fulfillments.length && !["FULFILLED", "PARTIALLY_FULFILLED"].includes(fs)) st = { state: "unshipped", ship: [] };
   else {
     const ship = await trackingFor(c);
@@ -161,6 +168,13 @@ function menuFor(c, st) {
     m.subs.damaged = { ok: false, why: `Damage has to be reported within ${win} days of delivery` };
   }
   if (state === "cancelled") for (const k of ["not_arrived", "delivered_missing", "damaged"]) m.subs[k] = { ok: false, why: "This order was cancelled" };
+  if (c.pickup) {
+    m.pickup = true;
+    for (const k of ["not_arrived", "delivered_missing", "damaged"]) m.subs[k] = { ok: false, why: "This was a local pickup order, so there was no shipment. Choose \"Something else\" and tell us what happened." };
+    m.pp = state === "unshipped" || state === "cancelled" ? hidden : { show: true, ok: false, why: "Local pickup orders aren't shipped, so there's no shipping claim" };
+    if (state === "unshipped") m.return = m.defective = hidden;
+    if (state === "delivered" && m.edit.show) m.edit = { show: true, ok: false, why: "Your order was already picked up" };
+  }
   return m;
 }
 async function deliveredAt(key, orderId) { const c = await loadOrder(key, orderId); return (await orderState(c)).delivered_at; }
