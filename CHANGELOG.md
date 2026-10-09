@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.46.2
+- Browser tab icons: Email Studio, Chat widget and Portal Studio now show the Buzzin bee (icon links versioned so browsers drop the old cached icon); the studio title bars use the bee too.
+
 ## 4.46.1
 - Chat on phones now opens as a sheet from the bottom (82% tall, page dimmed behind it, tap outside to close) instead of covering the whole screen. Full screen is still an option (Chat button → "On phones, the chat opens as"), and the sheet height is adjustable.
 - Header button in the chat window ("Track or return" → returns portal by default; label and link editable).
