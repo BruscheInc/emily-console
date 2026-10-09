@@ -641,7 +641,7 @@ async function autoDecide(c) {
   if (!s.auto_approve) return no("auto-approval is off");
   if (Number(c.value) > Number(s.auto_approve_max)) return no(`value ${usd(c.value)} is over the ${usd(s.auto_approve_max)} limit`);
   const prior = (await db(`SELECT count(*)::int n FROM hd_claims WHERE lower(email)=lower($1) AND id<>$2 AND status='approved' AND type IN ('defective','pp') AND created_at > now() - interval '365 days'`, [c.email, c.id])).rows[0].n;
-  if (prior > Number(s.auto_approve_max_prior)) return no(`${prior} approved claims in the last 12 months`);
+  if (!R().isTestEmail(c.email, s) && prior > Number(s.auto_approve_max_prior)) return no(`${prior} approved claims in the last 12 months`);
   const ai = c.ai || {};
   if ((ai.flags || []).some((f) => /photo was used|reused|stock|screenshot/i.test(f))) return no("photo looks reused or not original");
   if (c.resolution === "replacement" && (c.items || []).some((i) => !i.in_stock)) return no("replacement item out of stock");
@@ -662,7 +662,10 @@ async function autoDecide(c) {
 }
 
 /* ---------------- AI review ---------------- */
+// What the AI reviewer sees about this customer. Test customers get a blank history so past test claims never sway the result.
+const BLANK_HISTORY = { previous_claims: [], previous_returns: 0, photos_reused_from_other_claims: 0, past_returns: [], past_claims_detail: [], tickets: null, store_credits_given: null, replacements_given: null, lifetime_orders: null, lifetime_spent: null };
 async function historyFor(c) {
+  if (R().isTestEmail(c.email, await R().settings())) return { ...BLANK_HISTORY };
   const email = String(c.email || "").toLowerCase();
   const claims = (await db(`SELECT number, type, status, created_at, data->>'value' AS value FROM hd_claims WHERE lower(email)=$1 AND id<>$2 AND type IN ('defective','pp') ORDER BY created_at DESC LIMIT 20`, [email, c.id])).rows;
   const retRows = (await db(`SELECT rma, order_name, status, created_at, data->'items' AS items FROM hd_returns WHERE lower(email)=$1 AND status<>'cancelled' ORDER BY created_at DESC LIMIT 20`, [email]).catch(() => ({ rows: [] }))).rows;

@@ -91,7 +91,8 @@ const DEFAULTS = {
   auto_approve_confidence: 0.8,    // ...and only when the AI is at least this sure (photo / delivered-not-received claims)
   auto_approve_max_prior: 1,       // ...and the customer has had at most this many approved claims in the last 12 months
   delivered_wait_hours: 24,        // "marked delivered but not received" claims open this long after the delivery scan
-  pp_match: "package protection, shipping protection",   // line items whose title/SKU contains one of these are Package Protection
+  pp_match: "package protection, shipping protection",
+  test_emails: "jimmy@bruscheinc.com",   // test customers: claims are judged with no history (no past claims, returns, tickets or reused-photo checks)   // line items whose title/SKU contains one of these are Package Protection
   return_address: {
     name: "Returns Dept", company_name: "Larkspur Baby", phone: "",
     address_line1: "701 E Plano Pkwy", address_line2: "Suite 103", city_locality: "Plano", state_province: "TX", postal_code: "75074", country_code: "US",
@@ -113,6 +114,11 @@ async function saveSettings(patch, who) {
             ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_by=EXCLUDED.updated_by, updated_at=now()`, [JSON.stringify(next), who || null]);
   await core.audit({ kind: "returns-settings", detail: "Returns settings changed", who: who || "system" });
   return next;
+}
+// Test customers (Returns → Settings → Claims): their history is never used to judge a claim.
+function isTestEmail(email, s) {
+  const e = String(email || "").trim().toLowerCase(); if (!e) return false;
+  return String((s && s.test_emails) || "").split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean).includes(e);
 }
 function setupProblems(s) {
   const p = [];
@@ -954,4 +960,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

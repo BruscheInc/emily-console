@@ -1296,6 +1296,8 @@ async function customerHistory(email) {
   const e = String(email || "").trim().toLowerCase();
   if (!e) return { error: "email required" };
   if (!pool) return { note: "no database connected — history unavailable" };
+  // Test customers (Returns → Settings → Claims): no history, so test runs never shape how Emily treats them.
+  try { const R = require("./returns"); if (R.isTestEmail(e, await R.settings())) return { email: e, tickets: [], actions_applied: [], goodwill_credits_given: 0, replacements_given: 0, discounts_given: 0 }; } catch (_) {}
   const out = { email: e, tickets: [], actions_applied: [], goodwill_credits_given: 0, replacements_given: 0, discounts_given: 0 };
   try {
     const t = await db(`SELECT id, subject, brand, status, created_at, last_message_at, tags,

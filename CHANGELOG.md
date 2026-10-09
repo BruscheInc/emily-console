@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.36.0
+- Test customers: Returns → Settings → Claims has a "Test customers" list (default jimmy@bruscheinc.com). Claims from these emails are judged with a blank history: no past claims, returns, tickets, credits or reused-photo flag go to the AI reviewer, and the "too many approved claims" auto-approve limit is skipped. Emily's customer-history lookup also returns nothing for them, so test runs never shape how she treats the account.
+
 ## 4.35.2
 - Portal size changes now always send Shopify's own "Order edited" email (the built-in notification, with the pay link when the total goes up), not only when the customer owes more. The Helpdesk "Order updated" email from 4.35.1 is removed. Email map updated: "Order edited (Shopify)".
 
