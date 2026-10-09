@@ -36,7 +36,7 @@ app.use((req, res, next) => {
   if (p === "/" || p === "/index.html") { req.url = `/returns/${d.key}` + (req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""); return next(); }
   if (p === `/returns/${d.key}` && !req.query.preview) return res.redirect(301, "/");
   if (p === "/robots.txt") return res.type("text").send("User-agent: *\nAllow: /\n");
-  if (p.startsWith("/returns/label/") || p.startsWith("/returns/asset/") || p.startsWith("/api/returns/public/") || p === `/returns/${d.key}`) return next();
+  if (p.startsWith("/returns/label/") || p.startsWith("/returns/print/") || p.startsWith("/returns/asset/") || p.startsWith("/api/returns/public/") || p === `/returns/${d.key}`) return next();
   return res.redirect(302, "/");
 });
 app.get(["/", "/index.html"], (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(INDEX_HTML); });
@@ -712,6 +712,13 @@ app.get("/returns/label/:id/:tok", async (req, res) => {
     res.send(Buffer.from(await r.arrayBuffer()));
   } catch (e) { res.status(500).send("Couldn't load the label."); }
 });
+app.get("/returns/print/:id/:tok", async (req, res) => {
+  try { const r = await R.printPdf(req.params.id, req.params.tok); res.setHeader("Content-Type", "application/pdf"); res.setHeader("Content-Disposition", `inline; filename="${r.name}"`); res.send(r.pdf); }
+  catch (e) { console.error("print label:", e.message); res.status(e.status || 500).type("text").send(e.status ? e.message : "Couldn't load the label. Please try again."); }
+});
+app.post("/api/returns/public/view", async (req, res) => { try { const b = req.body || {}; res.json(await R.viewReturn(String(b.id || ""), String(b.tok || ""))); } catch (e) { portalErr(res, e); } });
+app.post("/api/returns/public/return-cancel", async (req, res) => { try { const b = req.body || {}; res.json(await R.customerCancel(String(b.id || ""), String(b.tok || ""))); } catch (e) { portalErr(res, e); } });
+app.post("/api/returns/public/feedback", async (req, res) => { try { const b = req.body || {}; res.json(await R.saveFeedback(String(b.id || ""), String(b.tok || ""), b)); } catch (e) { portalErr(res, e); } });
 app.post("/api/returns/public/:store/lookup", async (req, res) => {
   if (tooMany(req.ip)) return res.status(429).json({ error: "Too many tries. Please wait a few minutes and try again." });
   try { const b = req.body || {}; res.json(await R.lookup(req.params.store, String(b.order_number || ""), String(b.email || ""))); } catch (e) { portalErr(res, e); }

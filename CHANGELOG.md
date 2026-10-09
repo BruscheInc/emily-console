@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.31.0
+- New return confirmation page (Loop-style, two columns): label card with "Print label and packing slip" (one PDF: the label, then a 4x6 packing slip), drop-off deadline, tracking link and how-to-ship steps; items to pack with photos; cancel return (until the package is scanned); customer information; return summary with item subtotal, tax, label fee and estimated refund / store credit; a 2-question feedback survey; other returns from the same order; contact.
+- The page has its own link (…?r=…) so customers can come back to it; the drop-off reminder email links to it.
+- Feedback shows on the return in Helpdesk → Returns.
+
 ## 4.30.3
 - Attempted delivery: instead of a 24-hour wait, the customer is asked "Have you contacted your local post office?" Yes → they can file (goes to staff review). No → they're asked to contact the post office and the claim is locked for 30 minutes.
 

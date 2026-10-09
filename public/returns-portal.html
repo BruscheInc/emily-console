@@ -229,6 +229,52 @@ body.noimg .eline{grid-template-columns:1fr}body.noimg .eline .thumb{display:non
 .linkrow{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
 .changes{margin:0;padding-left:20px;text-align:left}
 .changes li{margin-bottom:6px}
+/* return confirmation page (wide, two columns) */
+body.wide .shell{max-width:min(1080px,100%)}
+body.wide.lay-split .formside{padding:var(--page-pad)}
+.dhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.dhead h1{margin:0}
+.dgrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:22px;align-items:start}
+.dcol{display:flex;flex-direction:column;gap:18px;min-width:0}
+.dp{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--input-bg);padding:22px 24px}
+.dp h2{font-size:calc(var(--fs) * 1.25);margin:0 0 8px;color:var(--heading)}
+.dp h3{font-size:var(--fs);margin:0 0 10px;color:var(--heading);font-weight:700}
+.dp .sm{font-size:calc(var(--small) * .92);color:var(--muted)}
+.dp p{margin:0 0 14px}
+.dp ol{margin:0;padding-left:20px}.dp ol li{margin-bottom:7px}
+.dp hr{border:0;border-top:1px solid var(--border);margin:18px 0}
+.dlink{display:inline-block;margin-top:14px;font-weight:600}
+.dmail{display:flex;gap:10px;align-items:center;margin-top:14px;font-size:var(--small);color:var(--muted)}
+.dmail .ic{width:30px;height:30px;border-radius:50%;border:1px solid var(--border);display:grid;place-items:center;flex:none;color:var(--muted)}
+.dp details>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;font-weight:700;color:var(--heading)}
+.dp details>summary::-webkit-details-marker{display:none}
+.dp details>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin-right:4px;transition:transform .15s}
+.dp details[open]>summary::after{transform:rotate(-135deg)}
+.dp details[open]>summary{margin-bottom:14px}
+.dtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px}
+.dtile .im{aspect-ratio:1;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card-bg);display:grid;place-items:center;overflow:hidden;color:var(--muted);font-weight:700;font-size:24px}
+.dtile .im img{width:100%;height:100%;object-fit:contain}
+.dtile .t{font-weight:600;color:var(--heading);font-size:var(--small);margin-top:8px;line-height:1.3}
+.dtile .v{color:var(--muted);font-size:calc(var(--small) * .92)}
+.dtile .p{text-align:right;font-size:var(--small);color:var(--heading);margin-top:2px}
+.dsum{display:flex;justify-content:space-between;gap:10px;font-size:var(--small);padding:4px 0;color:var(--text)}
+.dsum.b{font-weight:700;color:var(--heading)}
+.dsitem{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:start;padding:6px 0;font-size:var(--small)}
+.dsitem img,.dsitem .ph{width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--soft)}
+.dsitem .ph{display:grid;place-items:center;color:var(--muted);font-weight:700}
+.dtotal{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;padding-top:14px;margin-top:10px;border-top:1px solid var(--border)}
+.dtotal .l{font-weight:700;color:var(--heading)}.dtotal .l span{display:block;font-weight:400;font-size:calc(var(--small) * .9);color:var(--muted)}
+.dtotal .a{font-size:calc(var(--fs) * 1.35);font-weight:700;color:var(--heading)}
+.dsurvey{background:var(--soft);text-align:center}
+.dsurvey .q{font-weight:600;color:var(--heading);margin:4px 0 10px}
+.rate{display:flex;justify-content:center;gap:10px}
+.rate button{width:38px;height:38px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);font:inherit;color:var(--heading);cursor:pointer}
+.rate button.on{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+.rlab{display:flex;justify-content:space-between;max-width:250px;margin:6px auto 18px;font-size:calc(var(--small) * .82);color:var(--muted)}
+.dsurvey textarea{min-height:64px;margin-bottom:12px}
+.dstatus{display:inline-block;font-size:calc(var(--small) * .9);font-weight:700;border-radius:999px;padding:3px 11px;background:var(--soft);color:var(--heading)}
+.dcancel{margin-top:4px}
+@media (max-width:860px){.dgrid{grid-template-columns:1fr}.dp{padding:18px}}
 /* preview helpers (studio only) */
 .previewflag{position:fixed;left:12px;bottom:12px;z-index:9;background:#111827;color:#fff;font:600 12px system-ui;padding:6px 10px;border-radius:8px;opacity:.85}
 body.picking [data-sec]{cursor:pointer}
@@ -297,14 +343,10 @@ body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
         <div class="stepnav"><button class="btn2" onclick="back()">← <span data-copy="back"></span></button><button class="btn2 quiet" onclick="startOver()" data-copy="nav_start_over"></button></div>
       </section>
 
-      <section id="s4" class="hidden done">
-        <div class="check">✓</div>
-        <h1 id="t_done_title"></h1>
-        <p class="lead" id="doneSub"></p>
-        <a id="labelBtn" class="btn main" target="_blank" rel="noopener" data-sec="buttons"></a>
-        <p class="muted" style="margin-top:12px"><span id="t_tracking"></span>: <a id="trk" target="_blank" rel="noopener"></a></p>
-        <ol id="doneSteps"></ol>
-        <div class="stepnav" style="justify-content:center"><button class="btn2" onclick="startOver()" data-copy="another_return"></button></div>
+      <section id="s4" class="hidden">
+        <div class="dhead"><h1 id="doneTitle"></h1><span class="muted" id="doneRma"></span></div>
+        <div class="dgrid"><div class="dcol" id="doneLeft"></div><div class="dcol" id="doneRight"></div></div>
+        <div class="stepnav" style="justify-content:center;margin-top:22px"><button class="btn2" onclick="startOver()" data-copy="another_return"></button></div>
       </section>
 
       <section id="sMenu" class="hidden">
@@ -450,6 +492,7 @@ function applyTheme(t) {
   if (t.header.show) cls.push('hdr-on'); if (t.header.sticky) cls.push('hdr-sticky'); if (t.header.border) cls.push('hdr-border');
   if (L.style === 'split') cls.push('split-' + (L.split_side || 'left'));
   if (PICK) cls.push('picking');
+  if (STEP === 4) cls.push('wide');
   document.body.className = cls.join(' ');
 
   // fonts
@@ -499,7 +542,7 @@ function renderChrome() {
   $('foot').classList.toggle('hidden', !f.show && !shopLink && !faq);
   $('foot').innerHTML = shopLink + faq + (f.show ? `<div class="rich">${rich(f.text)}</div>${f.links.length ? `<div class="links">${f.links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')}</div>` : ''}` : '');
   // steps
-  $('steps').classList.toggle('hidden', !T.layout.steps || typeof STEP !== 'number');
+  $('steps').classList.toggle('hidden', !T.layout.steps || typeof STEP !== 'number' || STEP === 4);
   $('steps').innerHTML = [1, 2, 3, 4].map((n) => `<li class="${n < STEP ? 'past' : n === STEP ? 'on' : ''}"><span>${esc(C('step' + n))}</span></li>`).join('');
   // chrome height so a centered card centers in what's left of the screen
   const h = ($('announce').offsetHeight || 0) + (hdrOn ? $('topbar').offsetHeight || 0 : 0);
@@ -516,7 +559,6 @@ function renderCopy() {
   document.querySelectorAll('[data-copy]').forEach((el) => { el.textContent = C(el.dataset.copy); });
   txt('refund_title'); txt('refund_sub'); txt('address_title'); txt('summary_title'); txt('estimate_note');
   $('editAddr').textContent = C('edit_address'); if (!$('b3').disabled) $('b3').textContent = C('submit');
-  txt('done_title'); txt('tracking'); $('labelBtn').textContent = C('download');
   if (S.order) $('ordTitle').textContent = C('items_title', { order: S.order.name });
   document.title = tok(T.meta.title);
 }
@@ -528,6 +570,7 @@ function go(n, fromHistory) {
   STEP = n;
   const id = typeof n === 'number' ? 's' + n : n;
   SECTIONS.forEach((x) => $(x).classList.toggle('hidden', x !== id));
+  document.body.classList.toggle('wide', id === 's4');
   if (id === 'sMenu' && S.order) renderMenu();
   renderChrome();
   if (!B.preview && !fromHistory) {
@@ -543,6 +586,8 @@ function back() {
 }
 function startOver() {
   if (PICK) return;
+  if (location.search) history.replaceState(history.state, '', location.pathname);
+  S.fb = null; S.fbDone = false;
   const keepEmail = $('em').value;
   S = {}; method = 'original'; addr = null; ED = null; CL = null; PH = []; clearInterval(edTimer);
   const me = $('menuErr'); if (me) me.remove();
@@ -681,16 +726,82 @@ async function submitReturn() {
     const lines = selectedLines().map(({ it, ...l }) => l);
     S.done = await api('/api/returns/public/submit', { token: S.token, lines, refund_method: method, address: a });
     renderDone(); go(4);
+    if (S.done.id) history.replaceState(history.state, '', location.pathname + '?r=' + S.done.id + '.' + S.done.token);
   } catch (err) { showErr('e3', err.message); }
   busy($('b3'), false, C('submit'));
 }
 function renderDone() {
-  const r = S.done;
-  $('doneSub').textContent = C('done_sub', { rma: r.rma, order: S.order.name });
-  $('labelBtn').href = r.label_url; $('trk').href = r.tracking_url; $('trk').textContent = r.tracking_number;
-  const steps = String(T.copy.done_steps || '').split('\n').map((x) => x.trim()).filter(Boolean);
-  steps.push(T.copy[method === 'store_credit' ? 'done_credit_note' : 'done_refund_note']);
-  $('doneSteps').innerHTML = steps.filter(Boolean).map((s) => `<li class="rich">${rich(s)}</li>`).join('');
+  const r = S.done; if (!r || !r.items) return;
+  const credit = r.refund_method === 'store_credit', d = new Date(r.dropoff_by);
+  const deadline = d.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+  const title = C('done_title') && C('done_title') !== 'Your return is ready' ? C('done_title') : 'Your return has been submitted';
+  $('doneTitle').textContent = r.status === 'cancelled' ? 'Your return was cancelled' : title;
+  $('doneRma').textContent = 'Return ' + r.rma;
+  const thumb = (i, cls) => i.image ? `<img src="${esc(i.image)}" alt="">` : `<div class="${cls || 'ph'}">${esc((i.title || '?').slice(0, 1))}</div>`;
+  const STATUS = { label_created: '', in_transit: 'Your package is on its way back to us.', delivered: 'We received your package. Your refund is being processed.', refunded: credit ? 'Your store credit has been issued.' : 'Your refund has been issued.', needs_attention: 'Our team is reviewing your return.', cancelled: 'This return was cancelled and its label no longer works.' };
+  let L = '';
+  // 1. label
+  L += `<div class="dp"><div class="sm">Order ${esc(r.order_name)}</div>`;
+  if (r.status === 'label_created') {
+    L += `<h2>${esc(CX('done_label_title', 'Your label is ready to print'))}</h2>
+      <p>${rich(CX('done_label_sub', 'Use the button below to print your label and packing slip. Put the packing slip inside the package, attach the label to the top of the package, then drop it off at any USPS location by **{deadline}**.', { deadline }))}</p>
+      <a class="btn" href="${esc(r.print_url)}" target="_blank" rel="noopener" data-sec="buttons"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>${esc(CX('done_print', 'Print label and packing slip'))}</a>`;
+  } else L += `<h2>${esc(r.status === 'cancelled' ? 'Return cancelled' : 'Return ' + r.rma)}</h2><p><span class="dstatus">${esc(statusText(r.status))}</span></p><p>${esc(STATUS[r.status] || '')}</p>`;
+  if (r.tracking_url && r.tracking_url !== '#' && r.status !== 'cancelled') L += `<div><a class="dlink" href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(CX('done_track', 'Track your return'))}</a></div>`;
+  if (r.status === 'label_created') L += `<div class="dmail"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></span><span>${r.label_emailed ? `Your label was also emailed to ${esc(r.email)}.` : `Keep this page — you can come back to it from the reminder we email to ${esc(r.email)}.`}</span></div>
+      <hr><h3>${esc(CX('done_ship_title', 'How to ship your item(s)'))}</h3>
+      <ol>${String(CX('done_ship_steps', "Securely pack your items. If you have it, use the original packaging.\nPut the packing slip inside and attach your return label to the outside of the package.\nDrop off the package within {dropoff} days at your nearest USPS location.\nWe'll issue your {refund} as soon as the package is delivered back to us.", { dropoff: r.dropoff_days, refund: credit ? 'store credit' : 'refund' })).split('\n').map((x) => x.trim()).filter(Boolean).map((x) => `<li class="rich">${rich(x)}</li>`).join('')}</ol>`;
+  L += `</div>`;
+  // 2. items
+  L += `<div class="dp"><details open><summary>${esc(CX('done_pack_title', 'Pack these items. Use the original packaging if possible.'))}</summary><div class="dtiles">${r.items.map((i) => `<div class="dtile"><div class="im">${i.image ? `<img src="${esc(i.image)}" alt="">` : esc((i.title || '?').slice(0, 1))}</div><div class="t">${esc(i.title)}${i.quantity > 1 ? ` <span class="v">× ${i.quantity}</span>` : ''}</div>${i.variant ? `<div class="v">${esc(i.variant)}</div>` : ''}<div class="p">${money(i.unit_price * i.quantity)}</div></div>`).join('')}</div></details></div>`;
+  // 3. cancel
+  if (r.can_cancel) L += `<div class="dp"><h3 style="margin-bottom:12px">${esc(CX('done_edit_title', 'Edit your return'))}</h3><details class="dcancel"><summary style="font-weight:600">🗑 ${esc(CX('done_cancel', 'Cancel return'))}</summary>
+      <p class="sm">Your return label will stop working and nothing will be refunded for these items. You can start a new return later if your return window is still open.</p><div id="eDone" class="err hidden"></div>
+      <button class="btn2" id="bCancelRet" onclick="cancelReturn()">Yes, cancel this return</button></details></div>`;
+  // 4. customer info
+  const a = r.address || {};
+  L += `<div class="dp"><details open><summary>${esc(CX('done_info_title', 'Customer information'))}</summary><h3 style="margin-bottom:4px">Contact info</h3><div>${esc(r.email || '')}</div>${r.phone ? `<div>${esc(r.phone)}</div>` : ''}
+      ${a.address1 ? `<h3 style="margin:14px 0 4px">Return label from</h3><div>${esc([a.address1, a.address2].filter(Boolean).join(', '))}, ${esc(a.city)}, ${esc(a.state)} ${esc(a.zip)}, United States</div>` : ''}</details></div>`;
+  $('doneLeft').innerHTML = L;
+  // right column
+  const sm = r.summary || {};
+  let R = `<div class="dp"><details open><summary>${esc(CX('done_summary_title', 'Return summary'))}<span class="sm" style="font-weight:600;margin-left:auto">Details</span></summary>
+    <div class="dsum b"><span>Return items (${r.items.reduce((t, i) => t + i.quantity, 0)})</span><span>${money(sm.subtotal + sm.tax)}</span></div>
+    ${r.items.map((i) => `<div class="dsitem">${thumb(i)}<div><div style="font-weight:600;color:var(--heading)">${esc(i.title)}</div><div class="sm">${esc([i.variant, i.quantity > 1 ? '× ' + i.quantity : ''].filter(Boolean).join(' '))}</div></div><div>${money(i.unit_price * i.quantity)}</div></div>`).join('')}
+    <div class="dsum b"><span>Item subtotal</span><span>${money(sm.subtotal)}</span></div>
+    <div class="dsum"><span>Tax</span><span>${money(sm.tax)}</span></div>
+    <div class="dsum"><span>Return shipping label</span><span>${sm.fee ? '−' + money(sm.fee) : 'Free'}</span></div>
+    ${credit && sm.bonus ? `<div class="dsum"><span>${sm.bonus_pct}% store credit bonus</span><span>+${money(sm.bonus)}</span></div>` : ''}
+    </details>
+    <div class="dtotal"><div class="l">${sm.final ? (credit ? 'Store credit issued' : 'Refunded') : (credit ? 'Estimated store credit' : 'Total estimated refund')}<span>${credit ? `to your ${esc(CTX.name)} account` : 'to your original payment method'}</span></div><div class="a">${money(sm.total)}</div></div></div>`;
+  if (r.status !== 'cancelled') R += r.feedback || S.fbDone ? `<div class="dp dsurvey"><div class="q">Thanks for your feedback!</div><div class="sm">It helps us make returns easier.</div></div>`
+    : `<div class="dp dsurvey"><div class="q">${esc(CX('done_q1', 'How was your returns experience?'))}</div>${rateRow('ease')}<div class="rlab"><span>Very difficult</span><span>Very easy</span></div>
+      <div class="q">${esc(CX('done_q2', 'How likely are you to buy from {store} again?'))}</div>${rateRow('again')}<div class="rlab"><span>Not likely at all</span><span>Very likely</span></div>
+      <textarea id="fbNote" rows="2" placeholder="Tell us more (optional)"></textarea><button class="btn" style="width:100%" id="bFb" onclick="sendFeedback()" ${S.fb && (S.fb.ease || S.fb.again) ? '' : 'disabled'}>Submit</button></div>`;
+  if ((r.others || []).length) R += `<div class="dp"><details><summary>Other returns from this order</summary>${r.others.map((o) => `<div style="padding:8px 0;border-top:1px solid var(--border)"><a href="${esc(o.view_url)}"><strong>${esc(o.rma)}</strong></a> · ${esc(statusText(o.status))}<div class="sm">${esc(o.items.join(', '))}</div></div>`).join('')}</details></div>`;
+  R += `<div class="dp" style="text-align:center;background:transparent;border-style:dashed"><strong>Questions?</strong><div class="sm" style="margin-top:4px">Contact <a href="mailto:${esc(CTX.support)}">${esc(CTX.support)}</a></div></div>`;
+  $('doneRight').innerHTML = R;
+}
+function rateRow(k) { S.fb = S.fb || {}; return `<div class="rate">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="${S.fb[k] === n ? 'on' : ''}" onclick="rate('${k}',${n})">${n}</button>`).join('')}</div>`; }
+function rate(k, n) { S.fb = S.fb || {}; S.fb[k] = n; const note = $('fbNote') ? $('fbNote').value : ''; renderDone(); if ($('fbNote')) $('fbNote').value = note; }
+async function sendFeedback() {
+  if (B.preview) { S.fbDone = true; renderDone(); return; }
+  busy($('bFb'), true);
+  try { await api('/api/returns/public/feedback', { id: S.done.id, tok: S.done.token, ease: S.fb.ease, again: S.fb.again, note: $('fbNote').value }); S.fbDone = true; renderDone(); }
+  catch (e) { busy($('bFb'), false, 'Submit'); }
+}
+async function cancelReturn() {
+  if (B.preview) return;
+  showErr('eDone', ''); busy($('bCancelRet'), true);
+  try { S.done = await api('/api/returns/public/return-cancel', { id: S.done.id, tok: S.done.token }); renderDone(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  catch (e) { showErr('eDone', e.message); busy($('bCancelRet'), false, 'Yes, cancel this return'); }
+}
+// Opened from a link in our emails: /returns/lb?r=<id>.<token>
+async function openFromLink() {
+  const v = new URLSearchParams(location.search).get('r'); if (!v || B.preview) return false;
+  const [id, tok] = v.split('.');
+  try { S.done = await api('/api/returns/public/view', { id, tok }); S.order = { name: S.done.order_name }; renderDone(); go(4); return true; }
+  catch (e) { history.replaceState(null, '', location.pathname); showErr('e1', e.message); return false; }
 }
 
 /* ---------- options menu (after the order is found) ---------- */
@@ -979,7 +1090,11 @@ function loadDemo() {
   addr = { ...S.address };
   renderItems();
 }
-function demoDone() { return { rma: (CTX.prefix || 'R') + '-R1042', label_url: '#', tracking_url: '#', tracking_number: '9405 5000 0000 0000 0000 01' }; }
+function demoDone() { const it = (S.items || []).filter((x) => x.eligible).slice(0, 2);
+  return { id: 'demo', token: 'demo', rma: '#' + (CTX.prefix || '') + '10423-R1', status: 'label_created', order_name: '#' + (CTX.prefix || '') + '10423', email: 'jane@example.com', phone: '(555) 555-0100', address: { address1: '100 Main St', city: 'Plano', state: 'TX', zip: '75024' },
+    dropoff_days: 28, dropoff_by: new Date(Date.now() + 28 * 864e5).toISOString(), print_url: '#', label_url: '#', tracking_url: '#', tracking_number: '9405 5000 0000 0000 0000 01', label_emailed: true, refund_method: method, can_cancel: true, others: [],
+    items: (it.length ? it : [{ title: 'Bamboo Zip Sleeper', variant: '3-6M', unit_price: 32.5 }]).map((x) => ({ title: x.title, variant: x.variant, quantity: 1, unit_price: x.unit_price, image: x.image || null })),
+    summary: { subtotal: 32.5, tax: 2.68, fee: CTX.fee || 0, bonus: 0, bonus_pct: CTX.bonus, total: Math.max(0, 35.18 - (CTX.fee || 0)) } }; }
 function showStep(n) {
   if (n >= 2 && !S.items) loadDemo();
   if (n >= 2) { const cb = document.querySelector('input[data-i="0"]'); if (cb && !cb.checked) { cb.checked = true; $('d0').classList.remove('hidden'); $('r0').value = 'r1'; validate2(); } }
@@ -1015,6 +1130,7 @@ if (B.preview) {
 
 applyTheme(T);
 go(1);
+openFromLink();
 window.addEventListener('resize', renderChrome);
 </script>
 </body>

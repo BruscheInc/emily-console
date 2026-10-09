@@ -433,6 +433,80 @@ async function counts() {
   return out;
 }
 const publicRec = (r) => ({ rma: r.rma, status: r.status, label_url: r.status === "cancelled" ? null : `${PUBLIC_URL()}/returns/label/${r.id}/${labelToken(r.id)}`, tracking_number: r.tracking_number, tracking_url: r.tracking_url, refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity })) });
+// Everything the confirmation page shows (also reachable later from the link in our emails).
+async function publicView(r) {
+  const s = await settings();
+  const tok = labelToken(r.id), credit = r.refund_method === "store_credit";
+  const sub = Number(r.est_subtotal) || 0, tax = Number(r.est_tax) || 0;
+  const fee = r.fee_charged != null ? Number(r.fee_charged) : (!credit || s.fee_on_store_credit ? Number(s.label_fee) : 0);
+  const net = Math.max(0, round2(sub + tax - fee)), bonus = credit ? round2((net * Number(s.store_credit_bonus_pct)) / 100) : 0;
+  const others = (await db(`SELECT * FROM hd_returns WHERE order_name=$1 AND id<>$2 ORDER BY created_at DESC`, [r.order_name, r.id])).rows.map(rowToRec).filter((x) => x.status !== "cancelled");
+  return {
+    id: r.id, token: tok, view_url: `${portalUrl(r.store, s)}?r=${r.id}.${tok}`, store: r.store,
+    rma: r.rma, status: r.status, order_name: r.order_name, created_at: r.created_at, email: r.email, phone: r.phone || "", address: r.address || null, customer_name: r.customer_name,
+    dropoff_days: s.void_unused_after_days, dropoff_by: new Date(new Date(r.created_at).getTime() + s.void_unused_after_days * 86400e3).toISOString(),
+    label_url: r.status === "cancelled" ? null : `${PUBLIC_URL()}/returns/label/${r.id}/${tok}`, print_url: r.status === "cancelled" ? null : `${PUBLIC_URL()}/returns/print/${r.id}/${tok}`,
+    tracking_number: r.tracking_number, tracking_url: r.tracking_url, label_emailed: r.label_emailed !== false && !r.test_label, test_label: !!r.test_label,
+    refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity, unit_price: i.unit_price, image: i.image || null, reason: i.reason })),
+    summary: { subtotal: round2(sub), tax: round2(tax), fee: round2(fee), bonus, bonus_pct: Number(s.store_credit_bonus_pct), total: r.status === "refunded" && r.refunded_amount != null ? Number(r.refunded_amount) : round2(net + bonus), final: r.status === "refunded" },
+    can_cancel: r.status === "label_created" && ["NY", "UN", undefined, null, ""].includes(r.tracking_code),
+    feedback: r.feedback ? { ease: r.feedback.ease, again: r.feedback.again } : null,
+    others: others.map((x) => ({ rma: x.rma, status: x.status, created_at: x.created_at, items: x.items.map((i) => `${i.quantity}× ${i.title}`), view_url: `${portalUrl(x.store, s)}?r=${x.id}.${labelToken(x.id)}` })),
+  };
+}
+function viewAuth(id, tok) { if (!id || String(tok) !== labelToken(id)) throw httpError(404, "We couldn't find that return."); }
+async function viewReturn(id, tok) { viewAuth(id, tok); const r = await getRec(id); if (!r) throw httpError(404, "We couldn't find that return."); return publicView(r); }
+async function customerCancel(id, tok) {
+  viewAuth(id, tok); const r = await getRec(id); if (!r) throw httpError(404, "We couldn't find that return.");
+  const v = await publicView(r);
+  if (!v.can_cancel) throw httpError(400, r.status === "cancelled" ? "This return is already cancelled." : "This return is already on its way to us, so it can't be cancelled. Please email us if you need help.");
+  await cancel(r, "Cancelled by the customer in the portal", "customer (portal)");
+  core.slackPost(`↩️❌ Return ${r.rma} (${r.order_name}) cancelled by the customer in the portal`).catch(() => {});
+  return publicView(await getRec(id));
+}
+async function saveFeedback(id, tok, body) {
+  viewAuth(id, tok); const r = await getRec(id); if (!r) throw httpError(404, "We couldn't find that return.");
+  const n = (x) => { const v = Math.round(Number(x)); return v >= 1 && v <= 5 ? v : null; };
+  const fb = { ease: n(body.ease), again: n(body.again), note: String(body.note || "").trim().slice(0, 1000), at: new Date().toISOString() };
+  if (!fb.ease && !fb.again && !fb.note) throw httpError(400, "Pick a rating first.");
+  await update(id, { feedback: fb }, `Customer feedback: experience ${fb.ease || "—"}/5 · would buy again ${fb.again || "—"}/5${fb.note ? ` · "${fb.note}"` : ""}`);
+  return { ok: true };
+}
+// One PDF: the shipping label, then a packing slip to put inside the box.
+async function printPdf(id, tok) {
+  viewAuth(id, tok); const r = await getRec(id);
+  if (!r || r.status === "cancelled") throw httpError(404, "This label is no longer available.");
+  const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
+  const doc = await PDFDocument.create();
+  const W = 288, H = 432;   // 4 x 6 in
+  const font = await doc.embedFont(StandardFonts.Helvetica), bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  if (r.label_src) {
+    const lr = await fetch(r.label_src, { headers: { "API-Key": SS_KEY } });
+    if (!lr.ok) throw httpError(502, "Couldn't load the label. Please try again.");
+    const label = await PDFDocument.load(Buffer.from(await lr.arrayBuffer()));
+    for (const pg of await doc.copyPages(label, label.getPageIndices())) doc.addPage(pg);
+  } else {
+    const pg = doc.addPage([W, H]);
+    pg.drawRectangle({ x: 12, y: 12, width: W - 24, height: H - 24, borderColor: rgb(0.7, 0.14, 0.1), borderWidth: 2 });
+    pg.drawText("TEST - NOT A REAL LABEL", { x: 30, y: H / 2, size: 16, font: bold, color: rgb(0.7, 0.14, 0.1) });
+  }
+  const def = STORE_DEFS[r.store];
+  const pg = doc.addPage([W, H]);
+  const clean = (t) => String(t == null ? "" : t).replace(/[^\x20-\x7E]/g, (c) => ({ "\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-", "\u00d7": "x" })[c] || "");
+  const wrap = (t, f, size, max) => { const words = clean(t).split(" "); const out = []; let line = ""; for (const w of words) { const tryL = line ? line + " " + w : w; if (f.widthOfTextAtSize(tryL, size) > max && line) { out.push(line); line = w; } else line = tryL; } if (line) out.push(line); return out; };
+  let y = H - 18; const L = 20, max = W - 40;
+  const text = (t, size, f = font, gap = 4) => { for (const ln of wrap(t, f, size, max)) { y -= size; pg.drawText(ln, { x: L, y, size, font: f, color: rgb(0.1, 0.12, 0.16) }); y -= gap; } };
+  text(def.name, 11, bold); text("RETURN PACKING SLIP", 9, font, 8);
+  pg.drawLine({ start: { x: L, y }, end: { x: W - L, y }, thickness: 0.8, color: rgb(0.75, 0.75, 0.75) }); y -= 10;
+  text("Return", 8); text(r.rma, 20, bold, 8);
+  text(`Order ${r.order_name}`, 10, bold); text(`${r.customer_name || ""}`, 9); text(`Started ${new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })}`, 9, font, 12);
+  text("Items in this package", 9, bold, 6);
+  for (const i of r.items) { text(`${i.quantity} x ${i.title}${i.variant ? ` (${i.variant})` : ""}`, 9, font, 2); text(`Reason: ${i.reason || "-"}`, 8, font, 7); if (y < 70) break; }
+  y = Math.min(y, 44);
+  pg.drawLine({ start: { x: L, y: y - 2 }, end: { x: W - L, y: y - 2 }, thickness: 0.8, color: rgb(0.75, 0.75, 0.75) }); y -= 6;
+  text("Place this slip inside the package. Attach the label to the outside.", 8);
+  return { pdf: Buffer.from(await doc.save()), name: `Return ${r.rma}.pdf` };
+}
 function labelToken(id) { return crypto.createHmac("sha256", SECRET).update(`label:${id}`).digest("hex").slice(0, 24); }
 
 /* ---------------- customer session token ---------------- */
@@ -544,13 +618,22 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     throw httpError(502, source === "portal" ? "We couldn't create your shipping label. Please check your address, or email us and we'll help." : `Label failed: ${err.message}`);
   }
   const turl = label.test ? "#" : trackingUrl(label.carrier, label.trackingNumber);
+  // Estimate the tax that comes back with the items (Shopify's own refund suggestion), for the summary the customer sees.
+  let estTax = 0;
+  try {
+    const det0 = (await gql(st, RETURN_DETAIL, { id: sret.id })).return;
+    const out0 = (await gql(st, SUGGEST, { id: sret.id, items: det0.returnLineItems.nodes.map((n) => ({ id: n.id, quantity: n.quantity })) })).return.suggestedFinancialOutcome;
+    const ft0 = out0.financialTransfer || {};
+    if (ft0.amount) estTax = Math.max(0, round2(Number(ft0.amount.shopMoney.amount) - Number(out0.discountedSubtotal.shopMoney.amount)));
+  } catch (e) { console.error("return tax estimate:", e.message); }
   const rec = await putRec({
     id: crypto.randomUUID(), store: key, rma, status: "label_created", source, created_by: who || null, ticket_id: ticketId || null,
     order_id: order.id, order_name: order.name, customer_id: order.customer ? order.customer.id : null, email: order.email, customer_name: from.name,
     currency: order.currencyCode, refund_method: refundMethod, shopify_return_id: sret.id, shopify_return_name: sret.name,
     label_id: label.labelId, label_src: label.labelUrl, label_cost: label.cost, tracking_number: label.trackingNumber, tracking_url: turl, tracking_code: "NY",
-    est_subtotal: round2(chosen.reduce((t, c) => t + c.unitPrice * c.quantity, 0)), test_label: !!s.test_labels,
-    items: chosen.map((c) => ({ fli: c.fulfillmentLineItemId, line_item_id: c.lineItemId, title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unit_price: c.unitPrice, reason: c.reasonName, note: c.note })),
+    est_subtotal: round2(chosen.reduce((t, c) => t + c.unitPrice * c.quantity, 0)), est_tax: estTax, test_label: !!s.test_labels,
+    phone: String(ad.phone || a.phone || ""), address: { name: from.name, address1: from.address_line1, address2: from.address_line2 || "", city: from.city_locality, state: from.state_province, zip: from.postal_code },
+    items: chosen.map((c) => ({ fli: c.fulfillmentLineItemId, line_item_id: c.lineItemId, title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unit_price: c.unitPrice, reason: c.reasonName, note: c.note, image: c.image || null })),
   }, `Return ${sret.name} created (${source}${who ? " · " + who : ""}); ${label.carrier || ""} label ${label.trackingNumber}${label.cost != null ? ` ($${label.cost}${label.test ? " quote" : ""})` : ""}${label.test ? " — TEST MODE: no label bought, nothing charged, customer not emailed" : ""}`);
 
   if (!label.test && linkNotes.length) await update(rec.id, {}, "ShipStation: " + linkNotes.join("; "));
@@ -572,7 +655,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
 async function submitPortal(body) {
   const p = verify(body.token);
   const rec = await create({ key: p.k, orderId: p.o, lines: body.lines, refundMethod: body.refund_method, address: body.address, source: "portal" });
-  return publicRec(rec);
+  return publicView(rec);
 }
 // From a Helpdesk ticket (staff, or Emily's approved action). Saves the label PDF so it rides along on the next reply.
 async function createForTicket({ orderName, lines, refundMethod, ticketId, who, staffOverride }) {
@@ -689,9 +772,9 @@ async function dropoffEmail(rec, kind) {
   const s = await settings(), def = STORE_DEFS[rec.store];
   const first = String(rec.customer_name || "").split(" ")[0] || "there";
   const deadline = new Date(new Date(rec.created_at).getTime() + s.void_unused_after_days * 86400e3).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/Chicago" });
-  const label = `${PUBLIC_URL()}/returns/label/${rec.id}/${labelToken(rec.id)}`;
+  const label = `${portalUrl(rec.store, s)}?r=${rec.id}.${labelToken(rec.id)}`;
   const text = kind === "reminder"
-    ? `Hi ${first},\n\nJust a reminder: your return ${rec.rma} for order ${rec.order_name} hasn't been dropped off yet. Please drop it off by ${deadline}. After that the return label expires and the return will be closed.\n\nYour return label: ${label}\n\nAlready sent it? Thank you — tracking can take a day to update.\n\n— The ${def.name} Team`
+    ? `Hi ${first},\n\nJust a reminder: your return ${rec.rma} for order ${rec.order_name} hasn't been dropped off yet. Please drop it off by ${deadline}. After that the return label expires and the return will be closed.\n\nPrint your label and packing slip: ${label}\n\nAlready sent it? Thank you — tracking can take a day to update.\n\n— The ${def.name} Team`
     : `Hi ${first},\n\nYour return ${rec.rma} for order ${rec.order_name} has been closed because the package wasn't dropped off within ${s.void_unused_after_days} days, and the return label is no longer valid. Nothing was charged.\n\nIf you still need help, just reply to this email.\n\n— The ${def.name} Team`;
   const subject = kind === "reminder" ? `Reminder: drop off your return ${rec.rma} by ${deadline}` : `Your return ${rec.rma} has been closed`;
   if (rec.ticket_id) { try { await core.sendReply({ ticketId: String(rec.ticket_id), text, who: "Returns" }); return; } catch (_) {} }
@@ -852,4 +935,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

@@ -1,8 +1,8 @@
 {
   "name": "helpdesk",
-  "version": "4.30.3",
+  "version": "4.31.0",
   "private": true,
-  "description": "Helpdesk \u2014 Brusche Inc.'s own support desk (Larkspur Baby \u00b7 Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
+  "description": "Helpdesk — Brusche Inc.'s own support desk (Larkspur Baby · Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,6 +11,7 @@
     "@anthropic-ai/sdk": "^0.30.1",
     "@slack/bolt": "^4.1.0",
     "express": "^4.19.2",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.13.1"
   }
 }
