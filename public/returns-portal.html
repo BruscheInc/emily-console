@@ -863,12 +863,14 @@ async function openEdit() {
 }
 function tickEdit() {
   if (!ED) return;
-  const left = Math.max(0, new Date(ED.until).getTime() - Date.now()), mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+  const noLimit = ED.changes_ok && !ED.until;   // goodwill exception: no countdown
+  const left = noLimit ? 1 : Math.max(0, new Date(ED.until).getTime() - Date.now()), mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
   const open = ED.changes_ok && left > 0;
   $('editChanges').classList.toggle('hidden', !open);
   $('editClosed').classList.toggle('hidden', open);
   $('editClosed').textContent = 'Size and address changes are available for the first 15 minutes after you order. Your order hasn’t shipped yet, so you can still cancel it below.';
-  if (open) $('editLead').innerHTML = `You can change sizes or the address for <span class="timer">⏱ ${mm}:${String(ss).padStart(2, '0')}</span> more.`;
+  if (open && noLimit) { $('editLead').textContent = 'You can change sizes or the address until your order ships.'; clearInterval(edTimer); }
+  else if (open) $('editLead').innerHTML = `You can change sizes or the address for <span class="timer">⏱ ${mm}:${String(ss).padStart(2, '0')}</span> more.`;
   else clearInterval(edTimer);
 }
 function edLine(id) { return ED.lines.find((l) => l.id === id); }

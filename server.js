@@ -778,6 +778,20 @@ app.post("/api/claims/:id/:act", async (req, res) => {
     res.json({ ok: true, claim: out });
   } catch (e) { retErr(res, e); }
 });
+// Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
+const EXC = require("./exceptions");
+app.get("/api/returns/exceptions", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json({ exceptions: await EXC.list({ all: req.query.all === "1", q: String(req.query.q || "") }), rules: EXC.RULES }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/returns/exceptions", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json({ ok: true, exception: await EXC.add(req.body || {}, actorOf(req)) }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/returns/exceptions/:id/remove", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json({ ok: true, exception: await EXC.remove(req.params.id, actorOf(req)) }); } catch (e) { retErr(res, e); }
+});
 // Staff
 app.get("/api/returns", async (req, res) => {
   if (!guard(req, res)) return;
@@ -849,6 +863,7 @@ const PORT = process.env.PORT || 8080;
   try { await R.init(); } catch (e) { console.error("Returns failed to start:", e.message); }
   try { await PT.init(); } catch (e) { console.error("Portal theme failed to start:", e.message); }
   try { await CL.init(); } catch (e) { console.error("Claims failed to start:", e.message); }
+  try { await EXC.init(); } catch (e) { console.error("Exceptions failed to start:", e.message); }
   // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
   try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
 })();

@@ -15,6 +15,7 @@
 const crypto = require("crypto");
 const core = require("./core");
 const { db, pool } = core;
+const EX = () => require("./exceptions");
 
 const SHOP_VER = process.env.RETURNS_SHOPIFY_VERSION || "2026-07";
 const SS_KEY = process.env.SHIPSTATION_V2_KEY || "";
@@ -253,9 +254,11 @@ function isPP(item, s) {
   const hay = `${item.title || ""} ${item.sku || ""}`.toLowerCase();
   return words.some((w) => hay.includes(w));
 }
-function eligibility(item, s, key, deliveredAt) {
+// ex = goodwill exception for this order (exceptions.js) — can waive final sale and the return window.
+function eligibility(item, s, key, deliveredAt, ex) {
   const finalTags = String(s.final_sale_tags || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
-  if (item.tags.some((t) => finalTags.includes(t))) return { ok: false, why: "Final sale" };
+  if (item.tags.some((t) => finalTags.includes(t)) && !(ex && ex.has("final_sale"))) return { ok: false, why: "Final sale" };
+  if (ex && ex.has("return_window")) return { ok: true, deadline: null, waived: true };
   const days = s.window_days[key] || 7;
   const from = item.deliveredAt || deliveredAt;   // the window runs from DELIVERY, never from shipping
   if (!from) return { ok: false, why: "Available once your order is delivered" };
@@ -441,7 +444,8 @@ async function publicView(r) {
   const s = await settings();
   const tok = labelToken(r.id), credit = r.refund_method === "store_credit";
   const sub = Number(r.est_subtotal) || 0, tax = Number(r.est_tax) || 0;
-  const fee = r.fee_charged != null ? Number(r.fee_charged) : (!credit || s.fee_on_store_credit ? Number(s.label_fee) : 0);
+  const ex = await EX().forOrder(r.order_name);
+  const fee = r.fee_charged != null ? Number(r.fee_charged) : ex.has("label_fee") ? 0 : (!credit || s.fee_on_store_credit ? Number(s.label_fee) : 0);
   const net = Math.max(0, round2(sub + tax - fee)), bonus = credit ? round2((net * Number(s.store_credit_bonus_pct)) / 100) : 0;
   const others = (await db(`SELECT * FROM hd_returns WHERE order_name=$1 AND id<>$2 ORDER BY created_at DESC`, [r.order_name, r.id])).rows.map(rowToRec).filter((x) => x.status !== "cancelled");
   return {
@@ -526,7 +530,7 @@ function verify(t) {
 /* ---------------- 1. look up an order ---------------- */
 async function prepare(key, order, s) {
   const st = shopFor(key);
-  const [items, rs, claimed, deliveredAt] = await Promise.all([returnableItems(st, order.id), reasons(st), require("./claims").claimedQty(order.name).catch(() => ({})), require("./claims").deliveredAt(key, order.id).catch(() => null)]);
+  const [items, rs, claimed, deliveredAt, ex] = await Promise.all([returnableItems(st, order.id), reasons(st), require("./claims").claimedQty(order.name).catch(() => ({})), require("./claims").deliveredAt(key, order.id).catch(() => null), EX().forOrder(order.name)]);
   for (const i of items) if (claimed[i.lineItemId]) i.returnableQty = Math.max(0, i.returnableQty - claimed[i.lineItemId]);
   const existing = (await db(`SELECT * FROM hd_returns WHERE order_name=$1 ORDER BY created_at DESC`, [order.name])).rows.map(rowToRec);
   const a = labelAddress(order);
@@ -535,10 +539,10 @@ async function prepare(key, order, s) {
     order: { name: order.name, created_at: order.createdAt, currency: order.currencyCode, email: order.email, customer_name: (a && a.name) || "" },
     address: a ? { name: a.name, address1: a.address1, address2: a.address2, city: a.city, state: a.provinceCode, zip: a.zip, country: a.countryCodeV2, phone: a.phone || "" } : null,
     international: !!(a && a.countryCodeV2 && a.countryCodeV2 !== "US"),
-    items: items.map((i) => { const pp = isPP(i, s); const e = pp ? { ok: false, why: "Package Protection isn't returnable" } : eligibility(i, s, key, deliveredAt); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
+    items: items.map((i) => { const pp = isPP(i, s); const e = pp ? { ok: false, why: "Package Protection isn't returnable" } : eligibility(i, s, key, deliveredAt, ex); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
     reasons: rs,
     existing: existing.map(publicRec),
-    options: { label_fee: s.label_fee, store_credit_enabled: s.store_credit_enabled, store_credit_bonus_pct: s.store_credit_bonus_pct, fee_on_store_credit: s.fee_on_store_credit, window_days: s.window_days[key] },
+    options: { label_fee: ex.has("label_fee") ? 0 : s.label_fee, store_credit_enabled: s.store_credit_enabled, store_credit_bonus_pct: s.store_credit_bonus_pct, fee_on_store_credit: s.fee_on_store_credit, window_days: s.window_days[key] },
   };
 }
 async function lookup(key, orderNumber, email) {
@@ -572,13 +576,14 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   const claimed = await require("./claims").claimedQty(order.name).catch(() => ({}));
   for (const i of items) if (claimed[i.lineItemId]) i.returnableQty = Math.max(0, i.returnableQty - claimed[i.lineItemId]);
   const deliveredAt = await require("./claims").deliveredAt(key, order.id).catch(() => null);
+  const ex = await EX().forOrder(order.name);
   const chosen = [];
   for (const l of lines) {
     const it = items.find((i) => i.fulfillmentLineItemId === l.fulfillmentLineItemId), qty = Math.floor(Number(l.quantity));
     if (!it || !(qty >= 1)) continue;
     if (isPP(it, s)) throw httpError(400, "Package Protection isn't returnable.");
     if (qty > it.returnableQty) throw httpError(400, `Only ${it.returnableQty} of ${it.title} can be returned.`);
-    const e = eligibility(it, s, key, deliveredAt);
+    const e = eligibility(it, s, key, deliveredAt, ex);
     if (!e.ok && !staffOverride) throw httpError(400, `${it.title}: ${e.why}`);
     const reason = rs.find((r) => r.id === l.reasonId);
     if (!reason) throw httpError(400, `Pick a reason for ${it.title}.`);
@@ -635,9 +640,10 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     currency: order.currencyCode, refund_method: refundMethod, shopify_return_id: sret.id, shopify_return_name: sret.name,
     label_id: label.labelId, label_src: label.labelUrl, label_cost: label.cost, tracking_number: label.trackingNumber, tracking_url: turl, tracking_code: "NY",
     est_subtotal: round2(chosen.reduce((t, c) => t + c.unitPrice * c.quantity, 0)), est_tax: estTax, test_label: !!s.test_labels,
+    exception: EX().describe(ex, ["return_window", "final_sale", "label_fee", "dropoff_deadline"]) || null,
     phone: String(ad.phone || a.phone || ""), address: { name: from.name, address1: from.address_line1, address2: from.address_line2 || "", city: from.city_locality, state: from.state_province, zip: from.postal_code },
     items: chosen.map((c) => ({ fli: c.fulfillmentLineItemId, line_item_id: c.lineItemId, title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unit_price: c.unitPrice, reason: c.reasonName, note: c.note, image: c.image || null })),
-  }, `Return ${sret.name} created (${source}${who ? " · " + who : ""}); ${label.carrier || ""} label ${label.trackingNumber}${label.cost != null ? ` ($${label.cost}${label.test ? " quote" : ""})` : ""}${label.test ? " — TEST MODE: no label bought, nothing charged, customer not emailed" : ""}`);
+  }, `Return ${sret.name} created (${source}${who ? " · " + who : ""}); ${label.carrier || ""} label ${label.trackingNumber}${label.cost != null ? ` ($${label.cost}${label.test ? " quote" : ""})` : ""}${label.test ? " — TEST MODE: no label bought, nothing charged, customer not emailed" : ""}${EX().describe(ex, ["return_window", "final_sale", "label_fee", "dropoff_deadline"]) ? ` · ${EX().describe(ex, ["return_window", "final_sale", "label_fee", "dropoff_deadline"])}` : ""}`);
 
   if (!label.test && linkNotes.length) await update(rec.id, {}, "ShipStation: " + linkNotes.join("; "));
   // Our branded confirmation email (portal returns). If it can't be sent, Shopify's own label email goes out instead.
@@ -706,7 +712,8 @@ async function refund(rec, { force = false, who = "auto" } = {}) {
   const total = Number((ft.amount && ft.amount.shopMoney.amount) || out.discountedSubtotal.shopMoney.amount);
   const currency = (ft.amount && ft.amount.shopMoney.currencyCode) || out.discountedSubtotal.shopMoney.currencyCode;
   const credit = rec.refund_method === "store_credit";
-  const fee = !credit || s.fee_on_store_credit ? Number(s.label_fee) : 0;
+  const feeWaived = (await EX().forOrder(rec.order_name)).has("label_fee");
+  const fee = feeWaived ? 0 : !credit || s.fee_on_store_credit ? Number(s.label_fee) : 0;
   const net = Math.max(0, round2(total - fee));
   const input = { returnId: rec.shopify_return_id, returnLineItems: rli, notifyCustomer: true };
   let bonus = 0;
@@ -765,7 +772,7 @@ async function checkOne(rec) {
   }
   if (["AC", "IT", "AT", "EX"].includes(t.code) && rec.status === "label_created") return update(rec.id, { status: "in_transit" }, "On its way back");
   const age = (Date.now() - new Date(rec.created_at).getTime()) / 86400e3;
-  const unused = rec.status === "label_created" && ["NY", "UN"].includes(t.code);
+  const unused = rec.status === "label_created" && ["NY", "UN"].includes(t.code) && !(await EX().forOrder(rec.order_name)).has("dropoff_deadline");
   if (unused && s.void_unused_after_days > 0 && age >= s.void_unused_after_days) {
     rec = await cancel(rec, `Not dropped off within ${s.void_unused_after_days} days — return closed`, "system");
     if (rec && rec.status === "cancelled") await dropoffEmail(rec, "closed").catch((e) => update(rec.id, {}, "Closing email failed: " + e.message));

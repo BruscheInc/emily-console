@@ -198,11 +198,13 @@
   .ord .acts .btn.danger{color:#c0392b;border-color:rgba(192,57,43,.35)}
   .ord .trk a{color:var(--accent);text-decoration:none;font-weight:600}
   .modal{position:fixed;inset:0;z-index:60;background:rgba(3,8,16,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+  .exr{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);font-size:13px}.exr.off{opacity:.55}
+  .exg{border:1px solid var(--line);border-radius:10px;padding:6px 10px 8px;margin-top:6px;background:var(--panel2)}.exgt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:4px}
   .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(520px,100%);max-height:90vh;overflow:auto;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
   .modal h3{margin:0 0 4px;font-size:17px}.modal .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
   .modal label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:10px 0 4px}
   .modal input[type=text],.modal select{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);color:var(--ink)}
-  .modal input[type=text],.modal input[type=number],.modal select,.modal textarea{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 10px;font-size:13.5px;font-family:inherit}
+  .modal input[type=text],.modal input[type=number],.modal input[type=date],.modal select,.modal textarea{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 10px;font-size:13.5px;font-family:inherit}
   .modal .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modal .grid3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}
   .modal .chk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;color:var(--ink);font-weight:500}
   .modal .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
@@ -751,6 +753,7 @@ function renderOrder(){
       <button class="btn sec" ${o.can_change_address?"":"disabled"} onclick="orderModal('update_address')">📍 Update address</button>
       <button class="btn sec" onclick="orderModal('replacement')">🎁 Replacement</button>
       <button class="btn sec" onclick="returnModal()">↩️ Start return</button>
+      <button class="btn sec" onclick="retExceptions(ORDER&&ORDER.name)">✨ Exception</button>
       <button class="btn sec" ${o.can_refund?"":"disabled"} onclick="orderModal('refund')">💸 Refund</button>
       <button class="btn sec danger" ${o.can_cancel?"":"disabled"} onclick="orderModal('cancel')">🛑 Cancel order</button>
     </div>
@@ -952,6 +955,7 @@ function renderClaims(){
           ${(x.tracking||[]).length?`<div class="cl-k">Tracking</div><div>${x.tracking.map(t=>`${esc(t.carrier)} <a href="${esc(t.url||"#")}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(t.number)}</a> · ${esc(t.delivered?"Delivered "+(t.delivered_at?fmtShort(t.delivered_at):""):t.status||"")}${t.last_event&&!t.delivered?` · last scan ${fmtShort(t.last_update_at)}`:""}${t.sources?`<div class="ra-mut">${Object.entries(t.sources).map(([k,v])=>`${({shopify:"Shopify",shipstation:"ShipStation",usps:"USPS"})[k]||k}: ${v.ok?(v.delivered?"✅ delivered":"🚚 "+esc(v.desc||"in transit")):"— "+esc(v.why||"no answer")}`).join(" · ")}${t.verified===false?' · <b style="color:#b42318">not verified</b>':""}</div>`:""}`).join("<br>")}${x.gate&&x.gate.note?`<div class="ra-mut">${esc(x.gate.note)}${x.gate.rule?" · meets the auto-approve rule":""}</div>`:""}</div>`:""}
           ${(x.photos||[]).length?`<div class="cl-k">Photos</div><div class="cl-ph">${x.photos.map(p=>`<a href="${clPhotoUrl(p)}" target="_blank" rel="noopener"><img src="${clPhotoUrl(p)}" alt="" loading="lazy"></a>`).join("")}</div>`:""}
         </div><div>
+          ${x.exception?`<div class="cl-k">Exception</div><div class="ra-mut">✨ ${esc(x.exception)}</div>`:""}
           ${x.auto&&x.auto.why&&x.status!=="approved"?`<div class="cl-k">Not auto-approved</div><div class="ra-mut">${esc(x.auto.why)}</div>`:""}
           <div class="cl-k">AI review</div>${x.ai?`<div><b>${esc(x.ai.summary||"")}</b></div>${(x.ai.reasons||[]).length?`<ul class="cl-ul">${x.ai.reasons.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}${(x.ai.flags||[]).length?`<div class="cl-flags">${x.ai.flags.map(f=>`<span>⚠ ${esc(f)}</span>`).join("")}</div>`:""}${x.ai.photo_findings?`<div class="ra-mut">Photos: ${esc(x.ai.photo_findings)}</div>`:""}${x.ai.ask_customer?`<div class="ra-mut">Suggested question: ${esc(x.ai.ask_customer)}</div>`:""}
             ${x.ai.history?`<div class="cl-k">Customer history</div><div class="ra-mut">${x.ai.history.lifetime_orders!=null?`${x.ai.history.lifetime_orders} orders · ${money(x.ai.history.lifetime_spent||0)} spent · `:""}${x.ai.history.previous_claims.length} earlier claim${x.ai.history.previous_claims.length===1?"":"s"} · ${x.ai.history.previous_returns} return${x.ai.history.previous_returns===1?"":"s"}${x.ai.history.store_credits_given?` · ${x.ai.history.store_credits_given} credit(s) given before`:""}${x.ai.history.replacements_given?` · ${x.ai.history.replacements_given} replacement(s) before`:""}</div>`:""}`:'<div class="ra-mut">Not reviewed yet.</div>'}
@@ -1139,6 +1143,7 @@ async function loadReturns(silent){
       <div class="rc-portals">${Object.values(d.stores).map(portalCard).join("")}
         <div class="rc-quick"><div class="rc-pn">Quick actions</div>
           <button class="btn sec" onclick="setView('returns_analytics')">📊 Return analytics</button>
+          <button class="btn sec" onclick="retExceptions()">✨ Order exceptions</button>
           <button class="btn sec" onclick="retPoll(this)">↻ Check tracking</button>
           <a class="btn sec" href="/api/returns.csv?key=${encodeURIComponent(KEY)}">⬇ Export CSV</a>
           ${d.admin?`<button class="btn sec" onclick="retSettings()">⚙︎ Settings</button>`:""}
@@ -1168,7 +1173,7 @@ async function loadReturns(silent){
         <td style="width:20%">${esc(r.customer_name||"")}<div class="exc">${esc(r.email||"")}</div></td>
         <td style="width:24%">${n} item${n===1?"":"s"}<div class="exc">${esc(r.items.map(i=>i.title).join(", "))}</div></td>
         <td style="width:12%">${r.refund_method==="store_credit"?"Store credit":"Original payment"}</td>
-        <td style="width:14%"><span class="chip ${RET_CHIP[r.status]||""}">${esc(RET_LABEL[r.status]||r.status)}</span>${r.test_label?' <span class="chip">test</span>':""}</td>
+        <td style="width:14%"><span class="chip ${RET_CHIP[r.status]||""}">${esc(RET_LABEL[r.status]||r.status)}</span>${r.test_label?' <span class="chip">test</span>':""}${r.exception?` <span class="chip" title="${esc(r.exception)}">✨ exception</span>`:""}</td>
         <td style="width:12%">${r.status==="refunded"?money(r.refunded_amount):'<span class="exc" style="display:inline">~'+money(r.est_subtotal)+'</span>'}</td></tr>`;
       if(RET_OPEN.has(r.id)){
         const act=!["refunded","cancelled"].includes(r.status);
@@ -1240,6 +1245,36 @@ async function retSettings(){
     try{ const r=await api("/api/returns/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error)throw new Error(r.error); toast("Saved"); closeModal(); loadReturns(); }catch(e){ toast(e.message,true); }
   };
 }
+/* ---- Goodwill exceptions: waive specific return / claim rules for one order ---- */
+let EXC_ALL=false;
+async function retExceptions(prefill){
+  closeModal();
+  let d; try{ d=await api("/api/returns/exceptions"+(EXC_ALL?"?all=1":"")); if(d.error)throw new Error(d.error); }catch(e){ toast(e.message,true); return; }
+  const R=d.rules, keys=Object.keys(R);
+  const groups=[["Returns",["return_window","final_sale","label_fee","dropoff_deadline"]],["Claims",["defect_window","claim_window","transit_wait","delivered_wait","po_check","pp_required"]],["Order edits",["edit_window"]]];
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  const row=(x)=>`<div class="exr ${x.active?"":"off"}"><div style="flex:1;min-width:0"><b>${esc(x.order_name)}</b>${x.active?"":x.expired?' <span class="chip">expired</span>':' <span class="chip">removed</span>'}
+      <div class="exc" style="display:block;white-space:normal">${x.rules.map(k=>esc((R[k]||{}).label||k)).join(" · ")}</div>
+      <div class="exc" style="display:block;white-space:normal">${x.until?"until "+fmtDay(x.until)+" · ":"no end date · "}added by ${esc(x.created_by||"staff")} ${fmtDay(x.created_at)}${x.note?` — “${esc(x.note)}”`:""}${x.removed_at?` · removed by ${esc(x.removed_by||"staff")}`:""}</div></div>
+      ${x.active?`<button class="btn sec xs danger" onclick="exRemove('${x.id}','${esc(x.order_name)}')">Remove</button>`:""}</div>`;
+  m.innerHTML=`<div class="box" style="width:min(640px,100%)"><h3>Order exceptions</h3>
+    <div class="sub">Goodwill: let one order skip specific return or claim rules. Applies right away in the portal and in Helpdesk.</div>
+    <div class="grid2"><div><label>Order number</label><input type="text" id="ex-order" placeholder="LB191494" value="${esc(prefill||"")}"></div><div><label>Valid until (optional)</label><input type="date" id="ex-until"></div></div>
+    <label>Waive these rules</label>
+    ${groups.map(([g,ks])=>`<div class="exg"><div class="exgt">${g}</div>${ks.filter(k=>R[k]).map(k=>`<label class="chk" style="margin-top:4px"><input type="checkbox" class="ex-k" value="${k}"> <span><b>${esc(R[k].label)}</b> <span style="color:var(--muted)">— ${esc(R[k].hint)}</span></span></label>`).join("")}</div>`).join("")}
+    <label>Note (why — shown to staff only)</label><input type="text" id="ex-note" placeholder="e.g. Goodwill — customer was traveling, approved by Jose">
+    <div class="foot" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">Close</button><button class="btn" id="ex-go">Add exception</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;border-top:1px solid var(--line);padding-top:12px"><b>${EXC_ALL?"All exceptions":"Active exceptions"} (${d.exceptions.length})</b>
+      <label class="chk" style="margin:0"><input type="checkbox" ${EXC_ALL?"checked":""} onchange="EXC_ALL=this.checked;retExceptions()"> Show expired / removed</label></div>
+    ${d.exceptions.map(row).join("")||'<div class="empty" style="padding:14px">No exceptions yet.</div>'}</div>`;
+  document.body.appendChild(m);
+  $("ex-go").onclick=async()=>{
+    const body={order_name:$("ex-order").value.trim(),rules:[...document.querySelectorAll(".ex-k:checked")].map(x=>x.value),until:$("ex-until").value||null,note:$("ex-note").value.trim()};
+    try{ const r=await api("/api/returns/exceptions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error)throw new Error(r.error); toast("Exception added for "+r.exception.order_name); retExceptions(); }catch(e){ toast(e.message,true); }
+  };
+}
+async function exRemove(id,name){ if(!confirm("Remove the exception for "+name+"? Normal rules apply again right away."))return;
+  try{ const r=await api(`/api/returns/exceptions/${id}/remove`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error)throw new Error(r.error); toast("Exception removed"); }catch(e){ toast(e.message,true); } retExceptions(); }
 // From a ticket's order panel: build the return here, label PDF rides on the next reply.
 async function returnModal(){
   const o=ORDER; if(!o)return; closeModal();

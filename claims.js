@@ -20,6 +20,7 @@ const core = require("./core");
 const { db } = core;
 const R = () => require("./returns");
 const K = () => require("./emily").claimsKit();
+const EX = () => require("./exceptions");
 
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
 function httpError(status, message) { const e = new Error(message); e.status = status; return e; }
@@ -94,7 +95,10 @@ async function loadOrder(key, orderId) {
     tracking: (f.trackingInfo || []).filter((t) => t.number).map((t) => ({ number: t.number, url: t.url, company: t.company })),
     lines: ((f.fulfillmentLineItems && f.fulfillmentLineItems.nodes) || []).filter((x) => x.lineItem).map((x) => ({ id: x.lineItem.id, quantity: x.quantity })) }));
   const shippedAt = fulfillments.map((f) => f.at).sort()[0] || null;
-  return { st, s, key, o, lines, ppLines, has_pp: ppLines.length > 0, fulfillments, shipped_at: shippedAt,
+  // Goodwill exception (Helpdesk → Returns → Exceptions): staff can waive specific rules for this order.
+  const ex = await EX().forOrder(o.name);
+  const ppGoodwill = !ppLines.length && ex.has("pp_required");
+  return { st, s, key, o, lines, ppLines, has_pp: ppLines.length > 0 || ppGoodwill, pp_goodwill: ppGoodwill, ex, fulfillments, shipped_at: shippedAt,
     minutes: (Date.now() - new Date(o.createdAt).getTime()) / 60000, currency: o.currencyCode, def: R().STORE_DEFS[key] };
 }
 
@@ -132,14 +136,15 @@ function menuFor(c, st) {
   // windows run from the DELIVERY date
   const dAt = st.delivered_at ? new Date(st.delivered_at).getTime() : null;
   const past = (days) => dAt && now > dAt + days * 86400e3;
-  const closed = past(s.claim_window_days) ? { show: true, ok: false, why: `Defect claims are open for ${s.claim_window_days} days after delivery` } : null;
+  const ex = c.ex || { has: () => false };
+  const closed = past(s.claim_window_days) && !ex.has("defect_window") ? { show: true, ok: false, why: `Defect claims are open for ${s.claim_window_days} days after delivery` } : null;
   const notYet = { show: true, ok: false, why: "Available once your order is delivered" };
   const hidden = { show: false, ok: false };
   const m = { state, has_pp: c.has_pp, shipped: state === "in_transit" || state === "delivered" };
   m.edit = state === "cancelled" ? { show: true, ok: false, why: "This order was cancelled" }
     : state !== "unshipped" ? { show: true, ok: false, why: "Your order has already shipped" }
-    : { show: true, ok: true, cancel_ok: true, changes_ok: now < editUntil.getTime(), until: editUntil.toISOString() };
-  m.return = state === "unshipped" || state === "cancelled" ? hidden : state === "in_transit" ? notYet : { show: true, ok: true };
+    : { show: true, ok: true, cancel_ok: true, changes_ok: now < editUntil.getTime() || ex.has("edit_window"), until: ex.has("edit_window") ? null : editUntil.toISOString() };
+  m.return = state === "unshipped" || state === "cancelled" ? hidden : state === "in_transit" && !ex.has("return_window") ? notYet : { show: true, ok: true };
   m.defective = state === "unshipped" || state === "cancelled" ? hidden : state === "in_transit" ? notYet : closed || { show: true, ok: true };
   m.pp = state === "unshipped" || state === "cancelled" ? hidden : !c.has_pp ? { show: true, ok: false, why: "Your order doesn't include Package Protection" } : { show: true, ok: true };
   m.other = { show: true, ok: true };
@@ -151,7 +156,7 @@ function menuFor(c, st) {
     something_else: { ok: true },
   };
   const win = c.has_pp ? s.pp_claim_window_days : s.nopp_claim_window_days;   // PP 7 days, no PP 5 days (from delivery)
-  if (state === "delivered" && past(win)) {
+  if (state === "delivered" && past(win) && !ex.has("claim_window")) {
     m.subs.delivered_missing = { ok: false, why: `This has to be reported within ${win} days of delivery` };
     m.subs.damaged = { ok: false, why: `Damage has to be reported within ${win} days of delivery` };
   }
@@ -412,7 +417,8 @@ async function trackingFor(c) {
 }
 const UNVERIFIED = "We couldn't confirm your tracking with every carrier source right now, so we can't open this claim yet. Please try again in a few hours, or email us and we'll check it by hand.";
 function gates(c, ship) {
-  const s = c.s, now = Date.now();
+  const s = c.s, now = Date.now(), ex = c.ex || { has: () => false };
+  const exNote = (k) => (ex.has(k) ? ` ${EX().describe(ex, [k])}.` : "");
   const tracked = ship.filter((x) => x.number);
   const g = { damaged: { ok: true }, something_else: { ok: true } };
   if (!ship.length) { g.not_arrived = g.delivered_missing = { ok: false, why: "Your order hasn't shipped yet." }; return g; }
@@ -424,7 +430,10 @@ function gates(c, ship) {
     g.not_arrived = { ok: false, why: `Tracking shows your package was delivered${d.delivered_at ? ` on ${fmtDate(d.delivered_at)}` : ""}. If you can't find it, choose "My package was marked delivered, but I didn't get it".` };
   } else if (tracked.some((x) => !x.carrier_answered)) g.not_arrived = { ok: false, why: UNVERIFIED };
   else if (tracked.some((x) => x.returned)) g.not_arrived = { ok: false, why: "Tracking shows your package is being returned to us by the carrier. We'll email you as soon as it arrives back. If you have questions, choose \"Something else\"." };
-  else if (tracked.some((x) => x.attempted)) {
+  else if (tracked.some((x) => x.attempted) && ex.has("po_check")) {
+    const x = tracked.find((y) => y.attempted);
+    g.not_arrived = { ok: true, rule: false, attempted: true, note: `Delivery attempted ${fmtWhen(x.last_update_at)}; post-office check waived.${exNote("po_check")} Needs review.` };
+  } else if (tracked.some((x) => x.attempted)) {
     // Attempted delivery (not returned to sender): the post office is usually holding it.
     // Ask "did you contact the post office?" — yes → file (staff review); no → contact them, locked for 30 minutes.
     const x = tracked.find((y) => y.attempted), at = new Date(x.last_update_at).getTime();
@@ -436,7 +445,9 @@ function gates(c, ship) {
     const days = (now - shipped) / 86400e3, opens = new Date(shipped + s.transit_claim_days * 86400e3), x = tracked[0];
     const answered = Object.entries(x.sources || {}).filter(([, v]) => v.ok).map(([k]) => k);
     const maxD = Number(s.transit_claim_max_days) || 0;
-    g.not_arrived = maxD > 0 && days > maxD
+    g.not_arrived = ex.has("transit_wait")
+      ? { ok: true, rule: true, note: `Shipped ${Math.floor(days)} days ago and not delivered (checked with ${srcList(answered)}); ${s.transit_claim_days}-day wait waived.${exNote("transit_wait")}` }
+      : maxD > 0 && days > maxD
       ? { ok: false, why: `Missing-package claims have to be filed within ${maxD} days of shipping. Please choose "Something else" and tell us what happened.` }
       : days < s.transit_claim_days
       ? { ok: true, wait: true, why: `Your package is on its way${x.last_event && x.last_event.desc ? ` (latest status: ${x.last_event.desc}, ${fmtWhen(x.last_update_at)})` : ""}. If it still hasn't arrived by ${fmtDate(opens)}, come back here and file your claim.`, opens: opens.toISOString() }
@@ -451,11 +462,11 @@ function gates(c, ship) {
   }
   else {
     const at = Math.max(...dl.map((x) => new Date(x.delivered_at || x.last_update_at).getTime()));
-    if (now - at < s.delivered_wait_hours * 3600e3) {
+    if (now - at < s.delivered_wait_hours * 3600e3 && !ex.has("delivered_wait")) {
       const open = new Date(at + s.delivered_wait_hours * 3600e3);
       g.delivered_missing = { ok: false, why: `Carriers sometimes mark a package delivered a little early. Please give it until ${fmtWhen(open)} and check your mailbox, around your home, and with neighbors. If it still hasn't turned up, come back and file your claim.`, opens: open.toISOString() };
     } else { const by = Object.entries(dl[0].sources || {}).filter(([, v]) => v.ok && v.delivered).map(([k]) => k);
-      g.delivered_missing = { ok: true, rule: true, note: `Delivery confirmed by ${srcList(by)} on ${fmtWhen(at)}.` }; }
+      g.delivered_missing = { ok: true, rule: true, note: `Delivery confirmed by ${srcList(by)} on ${fmtWhen(at)}.${exNote("delivered_wait")}` }; }
   }
   return g;
 }
@@ -471,7 +482,9 @@ function shipmentItems(c, ship, sub, avail) {
   if (!mapped) return avail.map((i) => ({ ...i, quantity: i.max }));
   return avail.filter((i) => q[i.id]).map((i) => ({ ...i, quantity: Math.min(i.max, q[i.id]) }));
 }
-function resolutionsFor(type, c) { return type === "defective" ? ["replacement", "store_credit", ...(c.has_pp ? [] : ["refund"])] : type === "other" ? [] : ["replacement", "store_credit"]; }
+// Package Protection granted by a goodwill exception only covers shipping claims — defects keep the no-PP refund option.
+const realPP = (c) => c.has_pp && !c.pp_goodwill;
+function resolutionsFor(type, c) { return type === "defective" ? ["replacement", "store_credit", ...(realPP(c) ? [] : ["refund"])] : type === "other" ? [] : ["replacement", "store_credit"]; }
 // What each "what happened" option looks like for this order: order state + tracking rules + Package Protection.
 function subOptions(c, m, g, tab) {
   const out = {};
@@ -540,7 +553,7 @@ async function claimSubmit(token, body) {
   const open = (await db(`SELECT number FROM hd_claims WHERE order_name=$1 AND status IN ('pending','info_requested','processing') AND type=$2`, [c.o.name, type])).rows[0];
   if (open) throw httpError(400, `You already have a claim open for this order (${open.number}). We'll email you as soon as it's reviewed.`);
   const resolution = String(body.resolution || "");
-  if (resolution === "refund" && c.has_pp) throw httpError(400, "Orders with Package Protection can choose a replacement or store credit.");
+  if (resolution === "refund" && (type === "defective" ? realPP(c) : c.has_pp)) throw httpError(400, "Orders with Package Protection can choose a replacement or store credit.");
   if (!resolutionsFor(type, c).includes(resolution)) throw httpError(400, "Pick how you'd like us to make it right.");
   let subtype = null, gate = null, ship = null;
   if (type === "pp") {
@@ -568,16 +581,17 @@ async function claimSubmit(token, body) {
   const needPhotos = type === "defective" || subtype === "damaged";
   if (needPhotos && !photos.length) throw httpError(400, "Please add at least one photo so we can see the problem.");
   if (type === "defective" && description.length < 10) throw httpError(400, "Please tell us a little about what's wrong with the item.");
-  if (resolution === "replacement" && items.some((i) => !i.in_stock)) throw httpError(400, `${items.find((i) => !i.in_stock).title} is out of stock right now, so we can't send a replacement. Please choose ${type === "defective" && !c.has_pp ? "store credit or a refund" : "store credit"}.`);
+  if (resolution === "replacement" && items.some((i) => !i.in_stock)) throw httpError(400, `${items.find((i) => !i.in_stock).title} is out of stock right now, so we can't send a replacement. Please choose ${type === "defective" && !realPP(c) ? "store credit or a refund" : "store credit"}.`);
   const value = round2(items.reduce((t, i) => t + i.unit_price * i.quantity, 0));
   const n = (await db(`SELECT count(*)::int n FROM hd_claims WHERE order_name=$1 AND type IN ('defective','pp')`, [c.o.name])).rows[0].n;
   const a = c.o.shippingAddress || {};
   let claim; try { claim = await putClaim({
     id: crypto.randomUUID(), number: `${c.o.name.replace(/^#/, "")}-C${n + 1}`, store: p.k, type, status: "pending", order_name: c.o.name, email: c.o.email || p.e, ticket_id: null,
     order_id: c.o.id, customer_id: c.o.customer ? c.o.customer.id : null, customer_name: [a.firstName, a.lastName].filter(Boolean).join(" ") || a.name || "", currency: c.currency,
-    has_pp: c.has_pp, subtype, items: items.map(({ max, image, ...i }) => ({ ...i, image })), description, photos, resolution, value, amount: value,
+    has_pp: type === "defective" ? realPP(c) : c.has_pp, subtype, items: items.map(({ max, image, ...i }) => ({ ...i, image })), description, photos, resolution, value, amount: value,
     gate: gate ? { rule: !!gate.rule, note: gate.note || "" } : null, tracking: ship, order_created_at: c.o.createdAt, shipped_at: c.shipped_at, source: "portal",
-  }, `Claim submitted by the customer: ${type === "pp" ? SUBTYPE_LABEL[subtype] + (c.has_pp ? "" : " (no Package Protection)") : "defective item"} · wants ${RES_LABEL[resolution]} · ${usd(value)}`); }
+    pp_goodwill: !!c.pp_goodwill, exception: EX().describe(c.ex) || null,
+  }, `Claim submitted by the customer: ${type === "pp" ? SUBTYPE_LABEL[subtype] + (c.has_pp ? (c.pp_goodwill ? " (Package Protection by goodwill exception)" : "") : " (no Package Protection)") : "defective item"} · wants ${RES_LABEL[resolution]} · ${usd(value)}${EX().describe(c.ex) ? ` · ${EX().describe(c.ex)}` : ""}`); }
   catch (e) { if (e.code === "23505") throw httpError(400, "You already have a claim open for this order. We'll email you as soon as it's reviewed."); throw e; }
   if (photos.length) await db(`UPDATE hd_claim_photos SET claim_id=$1 WHERE id = ANY($2)`, [claim.id, photos]);
   // Background: confirmation email (opens a Helpdesk ticket), AI review, Slack.
@@ -676,6 +690,7 @@ Claim types:
 - pp / delivered_missing ("marked delivered but not received"): there is no photo proof, so decide from the facts: tracking (delivered scan, time since), the customer's history (earlier claims and how they ended, returns, store credits and replacements already given, number of orders and amount spent, how long they've been a customer), the claim value, and the customer's own words. A first claim from a customer with a normal order history is usually fine to approve. Repeat claims, many claims relative to orders, or vague/contradictory statements → needs_info or deny.
 - pp / not_arrived: tracking shows no delivery long after shipping. Approve unless the history shows a pattern of claims.
 "has_package_protection" tells you whether the order had Package Protection; it does not change how you judge truthfulness.
+"goodwill_exception", when present, means staff deliberately waived the listed policies (a time window, a wait, Package Protection) for this order. Do not count those waived rules against the customer; still judge photos, facts and history as usual.
 Reply with ONLY a JSON object, no prose: {"verdict":"approve"|"deny"|"needs_info","confidence":0.0-1.0,"summary":"one sentence for staff","reasons":["..."],"flags":["risk signals (e.g. 'photo looks like a stock image'), empty if none"],"photo_findings":"what the photos show and whether they look genuine, or empty","ask_customer":"if needs_info, the question to ask the customer, else empty"}`;
 async function review(c) {
   const k = K();
@@ -692,7 +707,7 @@ async function review(c) {
     items: c.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity, price: i.unit_price })), value: c.value, wants: RES_LABEL[c.resolution],
     order_placed: c.order_created_at, shipped: c.shipped_at, claim_filed: c.created_at, has_package_protection: c.has_pp,
     tracking: (c.tracking || []).map((t) => ({ carrier: t.carrier, status: t.status, delivered: t.delivered, delivered_at: t.delivered_at, last_update: t.last_update_at, last_event: t.last_event })),
-    policy_check: c.gate ? c.gate.note : null, transit_claim_days: (await R().settings()).transit_claim_days, customer_history: hist,
+    policy_check: c.gate ? c.gate.note : null, goodwill_exception: c.exception || null, transit_claim_days: (await R().settings()).transit_claim_days, customer_history: hist,
   };
   content.push({ type: "text", text: `Review this claim.\n${JSON.stringify(facts, null, 2)}` });
   const resp = await k.anthropic.messages.create({ model: k.model, max_tokens: 900, system: REVIEW_SYS, messages: [{ role: "user", content }] });
