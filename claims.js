@@ -303,6 +303,17 @@ async function editSubmit(token, body) {
   const rec = await putClaim({ id: crypto.randomUUID(), number: `${c.o.name.replace(/^#/, "")}-E${Date.now().toString(36).slice(-4).toUpperCase()}`, store: p.k, type: "edit", status: "done",
     order_name: c.o.name, email: c.o.email || p.e, ticket_id: null, changes: done, owed, refunded, address_note: addrChanged ? addrNote : null, source: "portal" }, `Customer edited the order: ${done.join("; ")}`);
   await core.audit({ kind: "portal-order-edit", detail: `${c.o.name} · ${done.join("; ")}${owed ? ` · pay link for ${usd(owed)}` : ""}${refunded > 0 ? ` · refunded ${usd(refunded)}` : ""}`, who: "customer (portal)", target: rec.id }).catch(() => {});
+  // Confirmation to the customer (Email Studio → "Order updated"). Never blocks the edit.
+  setImmediate(async () => {
+    try {
+      const EM = require("./emails"), s = await R().settings(), theme = await require("./returns-theme").published(p.k);
+      const na = addrChanged && !addrFailed ? { name: `${String(body.address.first_name || "").trim()} ${String(body.address.last_name || "").trim()}`.trim(), street1: String(body.address.address1 || "").trim(), street2: String(body.address.address2 || "").trim(), city: String(body.address.city || "").trim(), state: String(body.address.state || "").trim().toUpperCase(), postal_code: String(body.address.zip || "").trim() } : null;
+      const m = EM.render("order_updated", { copy: await EM.copyFor(p.k, "order_updated"), theme, def: c.def, base: R().portalUrl(p.k, s).replace(/\/returns\/\w+$/, ""),
+        extra: { order: c.o.name, customer_name: [cur.firstName, cur.lastName].filter(Boolean).join(" ") || cur.name || "", changes: done, address: na, owed, refunded: refunded > 0 ? refunded : 0 } });
+      const r = await core.sendNewEmail({ mailbox: c.def.support, to: c.o.email || p.e, subject: m.subject, text: m.text, html: m.html, who: "Returns portal", tags: ["order-edit"], name: [cur.firstName, cur.lastName].filter(Boolean).join(" ") });
+      await patchClaim(rec.id, { ticket_id: r.ticket_id || null }, "\"Order updated\" email sent to the customer");
+    } catch (e) { console.error("order updated email:", e.message); await patchClaim(rec.id, {}, "\"Order updated\" email failed: " + e.message).catch(() => {}); }
+  });
   core.slackPost(`✏️ ${c.o.name} (${c.def.name}) edited by the customer in the portal — ${done.join("; ")}${owed ? ` · Shopify emailed a pay link for ${usd(owed)}` : ""}${refunded > 0 ? ` · ${usd(refunded)} refunded` : ""}`).catch(() => {});
   return { changes: done, owed, refunded: refunded > 0 ? refunded : 0, refund_failed: refunded === -1, address_failed: addrFailed, support: c.def.support };
 }
