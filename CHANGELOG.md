@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.38.0
+- Fresh look: warm off-white background, white work area, near-black primary buttons with soft shadows, outlined secondary buttons, honey-yellow highlights for the page you're on, focus rings and selection, rounder cards and modals, calmer table lines, and the Figtree typeface. Charts use ink and honey. Email Studio and Portal Studio match.
+
 ## 4.37.1
 - The old app name is gone from the code and the app: Emily's tool names, email sender labels, the return "source" for staff-started returns (now "staff"), the package name, the offline cache name, and a one-time update of stored text (internal notes, Activity log, Emily's actions and policies, returns and claims history).
 

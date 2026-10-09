@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Portal Studio · Buzzin</title>
 <link rel="icon" href="/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <style>
-:root{--bg:#eef1f6;--panel:#ffffff;--panel2:#f5f7fb;--line:#dde3ed;--ink:#1a2433;--muted:#667189;--accent:#3b6ef5;--accent-soft:#e8eefe;--ok:#158048;--warn:#b7791f;--bad:#d14343;--r:10px}
+:root{--bg:#F6F5F2;--panel:#ffffff;--panel2:#F2F1EE;--line:#E7E5E0;--ink:#17161F;--muted:#6E6B76;--accent:#17161F;--accent-soft:#FFF3CC;--ok:#158048;--warn:#b7791f;--bad:#d14343;--r:10px}
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 "Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
 button,input,select,textarea{font:inherit;color:inherit}
 .hidden{display:none!important}
 /* top bar */
@@ -167,6 +169,10 @@ button,input,select,textarea{font:inherit;color:inherit}
   .stage{min-height:80vh}
   .top{height:auto;flex-wrap:wrap;padding:10px}
 }
+.btn{border-radius:10px;color:var(--ink)}.btn.pri{color:#fff}.btn.pri:hover{background:#2C2A36;filter:none}
+.seg button.on{box-shadow:0 1px 3px rgba(23,22,31,.10)}
+input[type=checkbox]{accent-color:var(--ink)}
+::selection{background:rgba(255,194,26,.45)}
 </style>
 </head>
 <body>

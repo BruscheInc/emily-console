@@ -5,12 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Email Studio · Buzzin</title>
 <link rel="icon" href="/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <style>
-:root{--bg:#eef1f6;--panel:#ffffff;--panel2:#f5f7fb;--line:#dde3ed;--ink:#1a2433;--muted:#667189;--accent:#3b6ef5;--accent-soft:#e8eefe;--ok:#158048;--warn:#b7791f;--bad:#d14343;
-  --hd:#3b6ef5;--hd-soft:#e8eefe;--sh:#2f7d4f;--sh-soft:#e3f3ea}
+:root{--bg:#F6F5F2;--panel:#ffffff;--panel2:#F2F1EE;--line:#E7E5E0;--ink:#17161F;--muted:#6E6B76;--accent:#17161F;--accent-soft:#FFF3CC;--ok:#158048;--warn:#b7791f;--bad:#d14343;
+  --hd:#7A5600;--hd-soft:#FFF3CC;--sh:#2f7d4f;--sh-soft:#e3f3ea}
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 "Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
 button,input,select,textarea{font:inherit;color:inherit}
 .hidden{display:none!important}
 .top{flex:none;height:58px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
@@ -95,7 +97,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .mrow .ar{color:var(--muted);text-align:center}
 .mrow .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{display:inline-flex;align-items:center;gap:7px;border:1px solid;border-radius:9px;padding:6px 11px;font-weight:600;cursor:pointer;font-size:13px;text-align:left}
-.chip.buzzin{background:var(--hd-soft);border-color:#b9cbfb;color:#2349b8}
+.chip.buzzin{background:var(--hd-soft);border-color:#F2D57A;color:#7A5600}
 .chip.shopify{background:var(--sh-soft);border-color:#a9d6bb;border-style:dashed;color:#1f5e3a}
 .chip:hover{filter:brightness(.96)}
 .chip .go{font-size:11px;font-weight:600;opacity:.75}
@@ -107,6 +109,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .toast.bad{background:var(--bad)}
 @media (max-width:1100px){.edit{width:400px}.list{width:250px}}
 @media (max-width:860px){.top{flex-wrap:wrap;height:auto;padding:10px 12px;row-gap:8px}.top .sp{display:none}#portalLink{font-size:12px;padding:5px 10px}body{overflow:auto}.main{flex-direction:column}.list,.edit{width:100%;border-right:0;border-bottom:1px solid var(--line)}.items{max-height:260px}.prev iframe{min-height:520px}}
+.btn{border-radius:10px;color:var(--ink)}.btn.pri{color:#fff}.btn.pri:hover{background:#2C2A36;filter:none}
+.seg button.on{box-shadow:0 1px 3px rgba(23,22,31,.10)}
+input[type=checkbox]{accent-color:var(--ink)}
+::selection{background:rgba(255,194,26,.45)}
 </style>
 </head>
 <body>
