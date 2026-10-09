@@ -811,7 +811,7 @@ const CHAT_STUDIO = fs.readFileSync(path.join(__dirname, "public", "chat-studio.
 const chatStore = (req, res) => { const k = req.params.store; if (!R.STORE_DEFS[k]) { res.status(404).json({ error: "unknown store" }); return null; } return k; };
 const cors = (res) => { res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Headers", "Content-Type"); };
 app.get("/chat/:store/widget.js", async (req, res) => { const k = chatStore(req, res); if (!k) return;
-  try { res.setHeader("Cache-Control", "public, max-age=300"); res.type("application/javascript").send(await CHAT.widgetJs(k)); } catch (e) { res.status(500).type("application/javascript").send("/* chat unavailable */"); } });
+  try { res.setHeader("Cache-Control", "public, max-age=60"); res.type("application/javascript").send(await CHAT.widgetJs(k)); } catch (e) { res.status(500).type("application/javascript").send("/* chat unavailable */"); } });
 app.get("/chat/:store/frame", (req, res) => { const k = chatStore(req, res); if (!k) return; res.setHeader("Cache-Control", "no-store"); res.type("html").send(CHAT_FRAME.replace(/__STORE__/g, k)); });
 app.get("/chat/loader.js", (_q, res) => { res.setHeader("Cache-Control", "no-store"); res.type("application/javascript").send(CHAT.LOADER); });
 app.options("/api/chat/:store/:what", (req, res) => { cors(res); res.sendStatus(204); });

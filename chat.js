@@ -383,7 +383,8 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
   o = o || {}; var L = c.launcher, P = c.panel, inBox = !!o.container, host = o.container || document.body;
   var mobile = function(){ return (o.mobile != null ? o.mobile : window.matchMedia('(max-width: 520px)').matches); };
   if (!inBox && mobile() && !L.show_mobile) return null;
-  var wrap = document.createElement('div'); wrap.setAttribute('data-buzzin-chat', '');
+  // A custom element (not a div): store themes like Dawn hide "div:empty", and our host looks empty (everything is in its shadow root).
+  var wrap = document.createElement('buzzin-chat'); wrap.setAttribute('data-buzzin-chat', ''); wrap.setAttribute('style', 'display:block !important;position:static !important;width:0;height:0;margin:0;padding:0;border:0');
   var root = wrap.attachShadow ? wrap.attachShadow({ mode: 'open' }) : wrap;
   host.appendChild(wrap);
   var side = L.position === 'left' ? 'left' : 'right', pos = inBox ? 'absolute' : 'fixed';

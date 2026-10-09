@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.49.2
+- Fix: the chat didn't appear on the live sites. The store theme hides empty <div>s ("div:empty { display: none }"), and the chat's container looks empty from outside. It now uses its own element that the theme can't hide.
+
 ## 4.49.1
 - The website chat hides the old Gorgias chat bubble while it's showing, so customers only see one chat (Chat Studio → Where it shows → "Hide other chat widgets", on by default).
 
