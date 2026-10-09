@@ -72,13 +72,16 @@ function itemsOf(tpl) {
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
-  const fee = Number(s.label_fee) || 0;
+  const fee = Number(s.label_fee) || 0, byWeight = s.label_fee_mode !== "flat";
+  const onCredit = s.fee_on_store_credit ? " (also on store credit)" : " (not charged when choosing store credit)";
   return {
     store: def.name, support_email: def.support, returns_portal: portal,
     return_window_days_from_delivery: s.window_days[store],
     dropoff_days_after_label: s.void_unused_after_days, dropoff_reminder_day: s.dropoff_reminder_days,
     return_label: "Prepaid USPS label, made in the returns portal (no Loop Returns any more). Customer prints the label and packing slip from the portal or the confirmation email.",
-    label_fee: fee ? `$${fee.toFixed(2)} taken off the refund${s.fee_on_store_credit ? " (also on store credit)" : " (not charged when choosing store credit)"}` : "free",
+    label_fee: byWeight
+      ? `Based on the weight of the return package (it's the actual price of the prepaid label), so it varies by return. The exact amount is shown in the returns portal before the customer confirms, and it's taken off the refund${onCredit}. Never state a fixed dollar amount for the label fee.`
+      : fee ? `$${fee.toFixed(2)} taken off the refund${onCredit}` : "free",
     refund_methods: s.store_credit_enabled ? `Refund to the original payment method, or store credit with a ${s.store_credit_bonus_pct}% bonus` : "Refund to the original payment method",
     refund_timing: s.auto_refund ? "Issued automatically as soon as the return package is delivered back to us; the bank may take 5–10 business days to show it." : "Issued after the return is received and checked.",
     final_sale: `Items tagged final sale (${s.final_sale_tags}) can't be returned.`,
@@ -92,7 +95,10 @@ async function facts(store) {
       `Any link to /pages/package-protection-claim-center (the old claim page) → the returns portal ${portal}, where Package Protection claims are filed now`,
       `Any drop-off time other than ${s.void_unused_after_days} days after the label is made`,
       `"Email us" for returns, defects or damaged items → use the returns portal (email ${def.support} stays fine as a fallback for questions)`,
-      `Return answers that don't mention the ${fee ? `$${fee.toFixed(2)} label fee` : "free label"}${s.store_credit_enabled ? ` and the ${s.store_credit_bonus_pct}% store-credit bonus` : ""}`,
+      byWeight
+        ? `Any fixed dollar amount for the return label fee (e.g. "$5.95" or "$7.95") → say the label fee is based on the package's weight and the exact price is shown in the returns portal before confirming, taken off the refund`
+        : `Any label fee other than $${fee.toFixed(2)}`,
+      `Return answers that don't mention the ${byWeight ? "weight-based label fee (shown in the portal)" : fee ? `$${fee.toFixed(2)} label fee` : "free label"}${s.store_credit_enabled ? ` and the ${s.store_credit_bonus_pct}% store-credit bonus` : ""}`,
     ],
     never_change_policy: "Sale items being store credit only, international/Canada rules, shipping times and carrier choices are business policies Buzzin doesn't control: never rewrite them; if they conflict with the FACTS, add a note for staff instead.",
     unchanged_policies: "Return condition (unwashed, tags attached, original packaging), merging orders, P.O. boxes, delays, product care and sizing questions are not controlled by Buzzin — leave them as they are unless they mention Loop, a 7-day drop-off, or emailing for returns/defects.",

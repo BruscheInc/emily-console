@@ -57,7 +57,8 @@ const DEFAULTS = {
   branded_links: false,
   stats_since: "2026-10-07T23:10:00Z", // returns before this (testing) are left out of spend/analytics; "Reset stats" moves it            // when on, links use returns.larkspurbaby.com / returns.larkspurbabyoutlet.com (turn on once DNS is live)
   window_days: { lb: 7, lbo: 7 },
-  label_fee: 7.95,
+  label_fee: 7.95,                 // flat fee — only used when label_fee_mode is "flat", or as the fallback if a live quote fails
+  label_fee_mode: "weight",        // "weight" = the fee is the real label price for the package weight (live ShipStation quote shown in the portal)
   store_credit_enabled: true,
   store_credit_bonus_pct: 15,
   fee_on_store_credit: true,
@@ -109,6 +110,7 @@ async function saveSettings(patch, who) {
   const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
   for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "marked_delivered_window_days", "pp_claim_window_days", "nopp_claim_window_days", "attempted_wait_hours", "replacement_min_stock", "dropoff_reminder_days", "po_lock_minutes", "transit_claim_max_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
+  next.label_fee_mode = next.label_fee_mode === "flat" ? "flat" : "weight";
   if (patch.reasons !== undefined) { next.reasons = (Array.isArray(patch.reasons) ? patch.reasons : String(patch.reasons).split("\n")).map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 20); if (!next.reasons.length) next.reasons = DEFAULTS.reasons; }
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('returns', $1, $2, now())
             ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_by=EXCLUDED.updated_by, updated_at=now()`, [JSON.stringify(next), who || null]);
@@ -384,15 +386,35 @@ async function voidLabel(labelId) {
   return { ok, message: r.message || "" };
 }
 // Price of a label without buying it (used by test mode).
-async function quoteLabel(s, shipment) {
-  if (!s.carrier_id) return null;
+let carrierCache = null;
+async function carrierFor(s) {
+  if (s.carrier_id) return s.carrier_id;
   try {
-    const r = await ss("POST", "/v2/rates", { rate_options: { carrier_ids: [s.carrier_id], service_codes: [s.service_code] }, shipment: { ...shipment, carrier_id: undefined, service_code: undefined } });
+    if (!carrierCache || carrierCache.at < Date.now() - 6 * 3600e3) carrierCache = { at: Date.now(), list: await carriers() };
+    const c = carrierCache.list.find((x) => x.services.some((v) => v.code === s.service_code));
+    return c ? c.id : null;
+  } catch (e) { console.error("carrier lookup:", e.message); return null; }
+}
+async function quoteLabel(s, shipment) {
+  const carrierId = await carrierFor(s);
+  if (!carrierId) return null;
+  try {
+    const r = await ss("POST", "/v2/rates", { rate_options: { carrier_ids: [carrierId], service_codes: [s.service_code] }, shipment: { ...shipment, carrier_id: undefined, service_code: undefined } });
     const rate = ((r.rate_response && r.rate_response.rates) || []).find((x) => x.service_code === s.service_code) || ((r.rate_response && r.rate_response.rates) || [])[0];
     if (!rate) return null;
     const amt = (k) => Number((rate[k] && rate[k].amount) || 0);
     return Math.round((amt("shipping_amount") + amt("other_amount") + amt("confirmation_amount") + amt("insurance_amount")) * 100) / 100;
   } catch (e) { console.error("rate quote:", e.message); return null; }
+}
+// What the label costs the customer before waivers: the stored per-return price (weight-based), else the flat fee.
+const baseFee = (r, s) => (r && r.label_fee != null ? Number(r.label_fee) : Number(s.label_fee));
+// What actually comes off the refund: 0 if a goodwill exception waives it, or for store credit when the fee isn't charged on credit.
+function feeFor(base, s, { credit, waived }) { return waived || (credit && !s.fee_on_store_credit) ? 0 : round2(Number(base) || 0); }
+// Live price for a return package: same weight math and addresses as the real label.
+const packageOz = (s, chosen) => Number(s.packaging_oz) + chosen.reduce((w, c) => w + (c.weightOz || Number(s.default_item_oz)) * c.quantity, 0);
+async function quoteFor(s, from, weightOz) {
+  if (s.label_fee_mode === "flat") return null;
+  return quoteLabel(s, { ship_from: clean(from), ship_to: clean({ ...s.return_address, address_residential_indicator: "no" }), packages: [{ weight: { value: Math.max(1, Math.round(weightOz)), unit: "ounce" } }] });
 }
 async function carriers() {
   const j = await ss("GET", "/v2/carriers");
@@ -453,7 +475,7 @@ async function publicView(r) {
   const tok = labelToken(r.id), credit = r.refund_method === "store_credit";
   const sub = Number(r.est_subtotal) || 0, tax = Number(r.est_tax) || 0;
   const ex = await EX().forOrder(r.order_name);
-  const fee = r.fee_charged != null ? Number(r.fee_charged) : ex.has("label_fee") ? 0 : (!credit || s.fee_on_store_credit ? Number(s.label_fee) : 0);
+  const fee = r.fee_charged != null ? Number(r.fee_charged) : feeFor(baseFee(r, s), s, { credit, waived: ex.has("label_fee") });
   const net = Math.max(0, round2(sub + tax - fee)), bonus = credit ? round2((net * Number(s.store_credit_bonus_pct)) / 100) : 0;
   const others = (await db(`SELECT * FROM hd_returns WHERE order_name=$1 AND id<>$2 ORDER BY created_at DESC`, [r.order_name, r.id])).rows.map(rowToRec).filter((x) => x.status !== "cancelled");
   return {
@@ -550,7 +572,7 @@ async function prepare(key, order, s) {
     items: items.map((i) => { const pp = isPP(i, s); const e = pp ? { ok: false, why: "Package Protection isn't returnable" } : eligibility(i, s, key, deliveredAt, ex); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
     reasons: rs,
     existing: existing.map((r) => publicRec(r, s)),
-    options: { label_fee: ex.has("label_fee") ? 0 : s.label_fee, store_credit_enabled: s.store_credit_enabled, store_credit_bonus_pct: s.store_credit_bonus_pct, fee_on_store_credit: s.fee_on_store_credit, window_days: s.window_days[key] },
+    options: { label_fee: ex.has("label_fee") ? 0 : s.label_fee, fee_mode: s.label_fee_mode === "flat" ? "flat" : "weight", fee_waived: ex.has("label_fee"), store_credit_enabled: s.store_credit_enabled, store_credit_bonus_pct: s.store_credit_bonus_pct, fee_on_store_credit: s.fee_on_store_credit, window_days: s.window_days[key] },
   };
 }
 async function lookup(key, orderNumber, email) {
@@ -573,7 +595,20 @@ async function staffLookup(orderName) {
 }
 
 /* ---------------- 2. create the return + label ---------------- */
-async function create({ key, orderId, lines, refundMethod, address, source, ticketId, who, staffOverride }) {
+// The customer's side of the label (order address, or the one they typed in the portal).
+function shipFrom(s, a, address) {
+  a = a || {}; const ad = address || {};
+  const country = ad.country || a.countryCodeV2 || "US";
+  if (country !== "US") throw httpError(400, "Prepaid labels are only available for US addresses. Please email us and we'll help with your return.");
+  const from = {
+    name: String(ad.name || a.name || "Customer").slice(0, 60), phone: String(ad.phone || a.phone || s.return_address.phone || "").slice(0, 20), company_name: a.company,
+    address_line1: ad.address1 || a.address1, address_line2: (address ? ad.address2 : a.address2) || undefined, city_locality: ad.city || a.city,
+    state_province: ad.state || a.provinceCode, postal_code: ad.zip || a.zip, country_code: "US", address_residential_indicator: "yes",
+  };
+  if (!from.address_line1 || !from.postal_code) throw httpError(400, "We need your address for the label.");
+  return from;
+}
+async function create({ key, orderId, lines, refundMethod, address, source, ticketId, who, staffOverride, quoteToken }) {
   const s = await settings(), st = shopFor(key);
   if (!Array.isArray(lines) || !lines.length) throw httpError(400, "Pick at least one item to return.");
   if (refundMethod !== "original" && !(refundMethod === "store_credit" && s.store_credit_enabled)) throw httpError(400, "Pick how you'd like your refund.");
@@ -602,14 +637,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   if (!chosen.length) throw httpError(400, "Pick at least one item to return.");
 
   const a = labelAddress(order) || {}, ad = address || {};
-  const country = ad.country || a.countryCodeV2 || "US";
-  if (country !== "US") throw httpError(400, "Prepaid labels are only available for US addresses. Please email us and we'll help with your return.");
-  const from = {
-    name: String(ad.name || a.name || "Customer").slice(0, 60), phone: String(ad.phone || a.phone || s.return_address.phone || "").slice(0, 20), company_name: a.company,
-    address_line1: ad.address1 || a.address1, address_line2: (address ? ad.address2 : a.address2) || undefined, city_locality: ad.city || a.city,
-    state_province: ad.state || a.provinceCode, postal_code: ad.zip || a.zip, country_code: "US", address_residential_indicator: "yes",
-  };
-  if (!from.address_line1 || !from.postal_code) throw httpError(400, "We need your address for the label.");
+  const from = shipFrom(s, a, address);
 
   // a) Shopify return
   const cr = await gql(st, RETURN_CREATE, { input: { orderId: order.id, returnLineItems: chosen.map((c) => ({ fulfillmentLineItemId: c.fulfillmentLineItemId, quantity: c.quantity, returnReasonDefinitionId: c.reasonSid, returnReasonNote: (c.reasonName + (c.note ? " — " + c.note : "")).slice(0, 255) })) } });
@@ -622,7 +650,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   const rma = `${base}-R${n}`;
 
   // b) ShipStation label
-  const weight = Number(s.packaging_oz) + chosen.reduce((w, c) => w + (c.weightOz || Number(s.default_item_oz)) * c.quantity, 0);
+  const weight = packageOz(s, chosen);
   let label; const linkNotes = [];
   try { label = await buyLabel(s, from, weight, rma, { test: !!s.test_labels, key, notes: linkNotes, tracking: (order.fulfillments || []).flatMap((f) => (f.trackingInfo || []).map((t) => t.number)), orderName: order.name, email: order.email, items: chosen.map((c) => ({ title: c.title, variant: c.variantTitle, sku: c.sku, quantity: c.quantity, unitPrice: c.unitPrice, weightOz: c.weightOz })), reasons: chosen.map((c) => c.reasonName).join(", ") }); }
   catch (err) {
@@ -634,6 +662,14 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     throw httpError(502, source === "portal" ? "We couldn't create your shipping label. Please check your address, or email us and we'll help." : `Label failed: ${err.message}`);
   }
   const turl = label.test ? "#" : trackingUrl(label.carrier, label.trackingNumber);
+  // Weight-based fee = what the label really cost. Never more than the price the portal showed the customer.
+  let labelFee = Number(s.label_fee);
+  if (s.label_fee_mode !== "flat") {
+    let shown = null;
+    if (quoteToken) { try { const q = verify(quoteToken); if (q.t === "q" && q.o === order.id && String(q.z) === String(from.postal_code) && Math.round(q.w) === Math.round(weight)) shown = Number(q.f); } catch {} }
+    const cost = label.cost != null && Number(label.cost) > 0 ? Number(label.cost) : null;
+    labelFee = cost != null && shown != null ? Math.min(cost, shown) : cost != null ? cost : shown != null ? shown : Number(s.label_fee);
+  }
   // Estimate the tax that comes back with the items (Shopify's own refund suggestion), for the summary the customer sees.
   let estTax = 0;
   try {
@@ -646,7 +682,7 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
     id: crypto.randomUUID(), store: key, rma, status: "label_created", source, created_by: who || null, ticket_id: ticketId || null,
     order_id: order.id, order_name: order.name, customer_id: order.customer ? order.customer.id : null, email: order.email, customer_name: from.name,
     currency: order.currencyCode, refund_method: refundMethod, shopify_return_id: sret.id, shopify_return_name: sret.name,
-    label_id: label.labelId, label_src: label.labelUrl, label_cost: label.cost, tracking_number: label.trackingNumber, tracking_url: turl, tracking_code: "NY",
+    label_id: label.labelId, label_src: label.labelUrl, label_cost: label.cost, label_fee: round2(labelFee), weight_oz: Math.round(weight), tracking_number: label.trackingNumber, tracking_url: turl, tracking_code: "NY",
     est_subtotal: round2(chosen.reduce((t, c) => t + c.unitPrice * c.quantity, 0)), est_tax: estTax, test_label: !!s.test_labels,
     exception: EX().describe(ex, ["return_window", "final_sale", "label_fee", "dropoff_deadline"]) || null,
     phone: String(ad.phone || a.phone || ""), address: { name: from.name, address1: from.address_line1, address2: from.address_line2 || "", city: from.city_locality, state: from.state_province, zip: from.postal_code },
@@ -675,9 +711,29 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   core.slackPost(`↩️ Return ${rma} started for ${order.name} (${STORE_DEFS[key].name}) — ${chosen.map((c) => `${c.quantity}× ${c.title} (${c.reasonName})`).join(", ")} · ${refundMethod === "store_credit" ? "store credit" : "refund to card"}${source === "portal" ? " · via portal" : who ? ` · by ${who}` : ""}`).catch(() => {});
   return getRec(rec.id);
 }
+// Live label price for what the customer picked + the address they confirmed. Returns a signed quote the
+// submit step honours, so the customer is never charged more than the price they saw.
+async function quotePortal(body) {
+  const p = verify(body.token);
+  const s = await settings(), st = shopFor(p.k);
+  const ex = await EX().forOrder(p.n);
+  const items = await returnableItems(st, p.o);
+  const chosen = (Array.isArray(body.lines) ? body.lines : []).map((l) => { const it = items.find((i) => i.fulfillmentLineItemId === l.fulfillmentLineItemId); const q = Math.floor(Number(l.quantity)); return it && q >= 1 ? { ...it, quantity: Math.min(q, it.returnableQty || q) } : null; }).filter(Boolean);
+  if (!chosen.length) throw httpError(400, "Pick at least one item to return.");
+  const order = (await gql(st, `query O($id: ID!) { order(id: $id) { id customer { defaultAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } }
+      shippingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } billingAddress { name company address1 address2 city provinceCode zip countryCodeV2 phone } } }`, { id: p.o })).order;
+  const from = shipFrom(s, labelAddress(order || {}), body.address);
+  const weight = packageOz(s, chosen);
+  const live = await quoteFor(s, from, weight);
+  const fee = live != null && live > 0 ? live : Number(s.label_fee);
+  return {
+    fee: round2(fee), live: live != null && live > 0, mode: s.label_fee_mode === "flat" ? "flat" : "weight", waived: ex.has("label_fee"), weight_oz: Math.round(weight),
+    quote_token: live != null && live > 0 ? sign({ t: "q", o: p.o, f: round2(live), w: Math.round(weight), z: from.postal_code, exp: Date.now() + 2 * 3600e3 }) : null,
+  };
+}
 async function submitPortal(body) {
   const p = verify(body.token);
-  const rec = await create({ key: p.k, orderId: p.o, lines: body.lines, refundMethod: body.refund_method, address: body.address, source: "portal" });
+  const rec = await create({ key: p.k, orderId: p.o, lines: body.lines, refundMethod: body.refund_method, address: body.address, source: "portal", quoteToken: body.quote_token });
   return publicView(rec);
 }
 // From a Buzzin ticket (staff, or Emily's approved action). Saves the label PDF so it rides along on the next reply.
@@ -721,7 +777,7 @@ async function refund(rec, { force = false, who = "auto" } = {}) {
   const currency = (ft.amount && ft.amount.shopMoney.currencyCode) || out.discountedSubtotal.shopMoney.currencyCode;
   const credit = rec.refund_method === "store_credit";
   const feeWaived = (await EX().forOrder(rec.order_name)).has("label_fee");
-  const fee = feeWaived ? 0 : !credit || s.fee_on_store_credit ? Number(s.label_fee) : 0;
+  const fee = feeFor(baseFee(rec, s), s, { credit, waived: feeWaived });
   const net = Math.max(0, round2(total - fee));
   const input = { returnId: rec.shopify_return_id, returnLineItems: rli, notifyCustomer: true };
   let bonus = 0;
@@ -943,7 +999,9 @@ async function portalRule() {
   return `\n\nRETURNS PORTAL (this overrides any Loop links anywhere above — Loop is retired): send customers to our own returns portal, picked by order prefix (LBO before LB): ` +
     `LBO = Larkspur Baby Outlet → ${portalUrl("lbo", s)} ; LB = Larkspur Baby → ${portalUrl("lb", s)} . ` +
     `In the portal they enter the order number + email, pick items, and get a prepaid label instantly. Return window ${s.window_days.lb} days (LB) / ${s.window_days.lbo} days (LBO) from delivery. ` +
-    `A $${Number(s.label_fee).toFixed(2)} return-label fee is deducted from the refund${s.fee_on_store_credit ? "" : " (waived if they choose store credit)"}. ` +
+    (s.label_fee_mode === "flat"
+      ? `A $${Number(s.label_fee).toFixed(2)} return-label fee is deducted from the refund${s.fee_on_store_credit ? "" : " (waived if they choose store credit)"}. `
+      : `The return-label fee is based on the package's weight (the real label price), so it varies by return — the portal shows the exact amount before they confirm, and it's deducted from the refund${s.fee_on_store_credit ? "" : " (waived if they choose store credit)"}. Never quote a fixed label fee. `) +
     (s.store_credit_enabled ? `They can choose a refund to the original payment, or store credit with a ${s.store_credit_bonus_pct}% bonus. ` : "") +
     `The refund is issued automatically as soon as the package is delivered back to us. ` +
     `If a customer can't use the portal (no email access, wants us to do it), call return_propose to stage the return + label for approval; the label PDF is attached to your reply automatically. Never promise a refund amount — the portal shows it.` +
@@ -967,4 +1025,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

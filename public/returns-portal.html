@@ -672,15 +672,33 @@ const isOtherReason = (id) => { const r = (S.reasons || []).find((x) => x.id ===
 function reasonPicked(i) { const n = $('n' + i); if (n) { n.placeholder = isOtherReason($('r' + i).value) ? 'Please tell us why (required)' : C('note_placeholder'); if (isOtherReason($('r' + i).value)) n.focus(); } validate2(); }
 function validate2() { const l = selectedLines(); $('b2').disabled = !l.length || l.some((x) => !x.reasonId || (isOtherReason(x.reasonId) && x.note.trim().length < 3)); }
 
+// Label fee: weight-based by default — a live ShipStation quote for the picked items + the customer's address.
+const Q = { fee: null, token: null, key: '', loading: false, seq: 0 };
+const weightMode = () => S.options && S.options.fee_mode !== 'flat' && !S.options.fee_waived && !B.preview;
+function labelFee() { const o = S.options; if (o.fee_waived) return 0; if (!weightMode()) return Number(o.label_fee) || 0; return Q.fee == null ? null : Q.fee; }
+function quoteKey() { const a = readAddr() || {}; return JSON.stringify([selectedLines().map((l) => [l.fulfillmentLineItemId, l.quantity]), a.address1 || '', a.zip || '']); }
+async function fetchQuote() {
+  if (!weightMode()) return true;
+  const a = readAddr(), key = quoteKey();
+  if (!a || !a.address1 || !a.zip) return true;
+  if (key === Q.key && Q.fee != null) return true;
+  const seq = ++Q.seq; Q.loading = true; Q.fee = null; renderOpts();
+  try {
+    const r = await api('/api/returns/public/quote', { token: S.token, lines: selectedLines().map(({ it, ...l }) => ({ fulfillmentLineItemId: l.fulfillmentLineItemId, quantity: l.quantity })), address: a });
+    if (seq !== Q.seq) return false;
+    Q.fee = Number(r.fee) || 0; Q.token = r.quote_token || null;
+  } catch (err) { if (seq !== Q.seq) return false; Q.fee = Number(S.options.label_fee) || 0; Q.token = null; }
+  Q.key = key; Q.loading = false; renderOpts(); return true;
+}
 function estimate() {
-  const o = S.options, sub = selectedLines().reduce((s, l) => s + l.it.unit_price * l.quantity, 0);
-  const refund = Math.max(0, sub - o.label_fee), base = Math.max(0, sub - (o.fee_on_store_credit ? o.label_fee : 0)), bonus = base * o.store_credit_bonus_pct / 100;
+  const o = S.options, sub = selectedLines().reduce((s, l) => s + l.it.unit_price * l.quantity, 0), f = labelFee() || 0;
+  const refund = Math.max(0, sub - f), base = Math.max(0, sub - (o.fee_on_store_credit ? f : 0)), bonus = base * o.store_credit_bonus_pct / 100;
   return { sub, refund, bonus, credit: base + bonus };
 }
 function toStep3() {
   if (PICK) return;
   if (S.international) { showErr('e2', C('intl')); return; }
-  renderOpts(); renderAddr(); go(3);
+  renderOpts(); renderAddr(); go(3); fetchQuote();
 }
 function renderOpts() {
   const e = estimate(), o = S.options, b = { bonus: o.store_credit_bonus_pct };
@@ -691,13 +709,17 @@ function renderOpts() {
   h += `<label class="opt ${method === 'original' ? 'sel' : ''}"><input type="radio" name="m" ${method === 'original' ? 'checked' : ''} onchange="pick('original')">
     <div class="top"><div><strong>${esc(C('original_title'))}</strong></div><div class="amt">${money(e.refund)}</div></div>
     <div class="muted">${esc(C('original_desc'))}</div></label>`;
+  const pending = weightMode() && labelFee() == null;
+  if (pending) h = h.replace(/<div class="amt">[^<]*<\/div>/g, '<div class="amt muted">…</div>');
   $('opts').innerHTML = h;
-  const credit = method === 'store_credit', fee = credit && !o.fee_on_store_credit ? 0 : o.label_fee;
+  const credit = method === 'store_credit', fee = credit && !o.fee_on_store_credit ? 0 : labelFee();
   let s = selectedLines().map((l) => `<div class="sum"><span>${esc(l.quantity + '× ' + l.it.title)}</span><span>${money(l.it.unit_price * l.quantity)}</span></div>`).join('');
-  s += `<div class="sum"><span>${esc(C('fee_line'))}</span><span>${fee ? '−' + money(fee) : esc(C('fee_free'))}</span></div>`;
+  const feeNote = o.fee_mode !== 'flat' && !o.fee_waived ? `<br><small class="muted">${esc(CX('fee_weight_note', 'Based on your package weight'))}</small>` : '';
+  s += `<div class="sum"><span>${esc(C('fee_line'))}${feeNote}</span><span>${pending ? `<span class="muted">${esc(CX('fee_calculating', 'Calculating…'))}</span>` : fee ? '−' + money(fee) : esc(C('fee_free'))}</span></div>`;
   if (credit) s += `<div class="sum"><span>${esc(C('bonus_line', b))}</span><span>+${money(e.bonus)}</span></div>`;
-  s += `<div class="sum total"><span>${esc(C(credit ? 'total_credit' : 'total_refund'))}</span><span>${money(credit ? e.credit : e.refund)}</span></div>`;
+  s += `<div class="sum total"><span>${esc(C(credit ? 'total_credit' : 'total_refund'))}</span><span>${pending ? '…' : money(credit ? e.credit : e.refund)}</span></div>`;
   $('summary').innerHTML = s;
+  if ($('b3') && !$('b3').dataset.busy) $('b3').disabled = pending;
 }
 function pick(m) { method = m; renderOpts(); }
 function renderAddr() {
@@ -711,6 +733,7 @@ function openAddr() {
   $('addrForm').classList.remove('hidden'); $('addrView').classList.add('hidden'); $('editAddr').classList.add('hidden');
 }
 $('editAddr').onclick = () => { if (!PICK) openAddr(); };
+['a_1', 'a_zip'].forEach((id) => $(id).addEventListener('change', () => { if (!PICK && S.options) fetchQuote(); }));
 function readAddr() {
   if ($('addrForm').classList.contains('hidden')) return addr;
   return { name: $('a_name').value.trim(), address1: $('a_1').value.trim(), address2: $('a_2').value.trim(), city: $('a_city').value.trim(), state: $('a_state').value.trim().toUpperCase(), zip: $('a_zip').value.trim(), phone: $('a_phone').value.trim(), country: 'US' };
@@ -721,10 +744,12 @@ async function submitReturn() {
   if (B.preview) { S.done = demoDone(); renderDone(); go(4); return; }
   const a = readAddr();
   if (!a || !a.address1 || !a.city || !a.state || !a.zip) { showErr('e3', 'Please complete your address.'); return; }
+  // Address changed since the price was shown → get the new price and let them see it before confirming.
+  if (weightMode() && (quoteKey() !== Q.key || Q.fee == null)) { await fetchQuote(); showErr('e3', CX('fee_updated', 'We updated the label price for this address. Please review your refund and confirm.')); return; }
   busy($('b3'), true);
   try {
     const lines = selectedLines().map(({ it, ...l }) => l);
-    S.done = await api('/api/returns/public/submit', { token: S.token, lines, refund_method: method, address: a });
+    S.done = await api('/api/returns/public/submit', { token: S.token, lines, refund_method: method, address: a, quote_token: Q.token });
     renderDone(); go(4);
     if (S.done.id) history.replaceState(history.state, '', location.pathname + '?r=' + S.done.id + '.' + S.done.token);
   } catch (err) { showErr('e3', err.message); }
@@ -1087,7 +1112,7 @@ function loadDemo() {
     reasons: (B.reasons || ['I received the wrong item', 'Item was damaged', "I didn't have a good experience", "Item didn't fit", 'I found something else I like more', "I didn't like the item"]).map((n, i) => ({ id: 'r' + (i + 1), name: n })),
     existing: [],
     menu: { state: 'delivered', shipped: true, has_pp: true, edit: { show: true, ok: false, why: 'Your order has already shipped' }, return: { show: true, ok: true }, defective: { show: true, ok: true }, pp: { show: true, ok: true }, other: { show: true, ok: true } },
-    options: { label_fee: CTX.fee, store_credit_enabled: CTX.credit_enabled, store_credit_bonus_pct: CTX.bonus, fee_on_store_credit: CTX.fee_on_credit },
+    options: { label_fee: CTX.fee, fee_mode: CTX.fee_mode, store_credit_enabled: CTX.credit_enabled, store_credit_bonus_pct: CTX.bonus, fee_on_store_credit: CTX.fee_on_credit },
   };
   addr = { ...S.address };
   renderItems();

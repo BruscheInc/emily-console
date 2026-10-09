@@ -627,7 +627,7 @@ const STUDIO_HTML = fs.readFileSync(path.join(__dirname, "public", "returns-stud
 const jsonForScript = (o) => JSON.stringify(o).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 async function portalCtx(key) {
   const d = R.STORE_DEFS[key], s = await R.settings();
-  return { name: d.name, support: d.support, prefix: d.prefix, shop_url: d.shopUrl, faq_url: d.faqUrl, days: s.window_days[key], fee: Number(s.label_fee), bonus: Number(s.store_credit_bonus_pct), credit_enabled: !!s.store_credit_enabled, fee_on_credit: !!s.fee_on_store_credit };
+  return { name: d.name, support: d.support, prefix: d.prefix, shop_url: d.shopUrl, faq_url: d.faqUrl, days: s.window_days[key], fee: Number(s.label_fee), fee_mode: s.label_fee_mode === "flat" ? "flat" : "weight", bonus: Number(s.store_credit_bonus_pct), credit_enabled: !!s.store_credit_enabled, fee_on_credit: !!s.fee_on_store_credit };
 }
 app.get("/returns/:store", async (req, res, next) => {
   const d = R.STORE_DEFS[req.params.store]; if (!d) return next();
@@ -755,6 +755,13 @@ app.post("/api/returns/public/feedback", async (req, res) => { try { const b = r
 app.post("/api/returns/public/:store/lookup", async (req, res) => {
   if (tooMany(req.ip)) return res.status(429).json({ error: "Too many tries. Please wait a few minutes and try again." });
   try { const b = req.body || {}; res.json(await R.lookup(req.params.store, String(b.order_number || ""), String(b.email || ""))); } catch (e) { portalErr(res, e); }
+});
+// Live, weight-based label price for the portal's summary (signed so submit never charges more than shown).
+const quoteHits = new Map();
+app.post("/api/returns/public/quote", async (req, res) => {
+  const now = Date.now(), h = (quoteHits.get(req.ip) || []).filter((t) => now - t < 10 * 60e3); h.push(now); quoteHits.set(req.ip, h);
+  if (h.length > 60) return res.status(429).json({ error: "Too many tries. Please wait a few minutes and try again." });
+  try { res.json(await R.quotePortal(req.body || {})); } catch (e) { portalErr(res, e); }
 });
 app.post("/api/returns/public/submit", async (req, res) => { try { res.json(await R.submitPortal(req.body || {})); } catch (e) { portalErr(res, e); } });
 // Portal options beyond returns: edit order, defective, Package Protection, not delivered (claims.js)
