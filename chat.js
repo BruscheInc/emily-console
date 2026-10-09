@@ -69,6 +69,7 @@ async function defaultsFor(store) {
       success: "Got it! 💛 We'll reply to {email} soon.", ask_order: true },
     ai: { enabled: true, tone: "warm, friendly, clear and empathetic — like a helpful mom friend", knowledge: "", instructions: "", max_messages: 20, order_lookup: true, shopping: true },
     pages: { hide_paths: "", only_paths: "" },
+    hide_others: true,
     custom_css: "",
   };
 }
@@ -104,6 +105,7 @@ function sanitize(d, v) {
       success: str(HO.success, 300, d.handoff.success), ask_order: bool(HO.ask_order, d.handoff.ask_order) },
     ai: { enabled: bool(A.enabled, d.ai.enabled), tone: str(A.tone, 200, d.ai.tone), knowledge: str(A.knowledge, 6000, d.ai.knowledge), instructions: str(A.instructions, 2000, d.ai.instructions),
       max_messages: clamp(A.max_messages, 4, 60, d.ai.max_messages), order_lookup: bool(A.order_lookup, d.ai.order_lookup), shopping: bool(A.shopping, d.ai.shopping) },
+    hide_others: bool(v.hide_others, d.hide_others),
     pages: { hide_paths: str(PG.hide_paths, 1000, d.pages.hide_paths), only_paths: str(PG.only_paths, 1000, d.pages.only_paths) },
     custom_css: str(v.custom_css, 8000, d.custom_css).replace(/<\/?style/gi, ""),
   };
@@ -369,6 +371,8 @@ async function widgetJs(store) {
     var hide = list(c.pages.hide_paths), only = list(c.pages.only_paths);
     var match = function(p){ return p.slice(-1) === '*' ? path.indexOf(p.slice(0,-1)) === 0 : path === p; };
     if (hide.some(match)) return; if (only.length && !only.some(match)) return;
+    // Only one chat on the page: hide the old Gorgias chat (and its "chat-button") while ours is showing.
+    if (c.hide_others !== false) { var hs = document.createElement('style'); hs.textContent = '#gorgias-chat-container,#chat-button,iframe#chat-button,#gorgias-chat-messenger-button{display:none!important}'; document.head.appendChild(hs); }
     window.BuzzinChatMount(c, { origin: ORIGIN, store: STORE, sitePreview: sitePreview });
   }).catch(function(){});
 })();
