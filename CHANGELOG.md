@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.30.1
+- Claims fix: ShipStation often returns "unknown" for label tracking, which blocked "marked delivered" claims even when the package was delivered. "Unknown" no longer counts as an answer, and Shopify's carrier-fed delivered scan now confirms delivery — unless ShipStation or USPS says it isn't delivered.
+
 ## 4.30.0
 - Returns: customers have 28 days to drop off. If tracking shows no carrier scan by day 21 they get a reminder email with the label link; on day 29 the label is voided in ShipStation, the return is closed and they're emailed.
 - Attempted delivery (not returned to sender): "My package hasn't arrived" tells the customer to check with their local post office and opens 24 hours after the attempt; those claims go to staff review. Return-to-sender packages can't be claimed as lost.
