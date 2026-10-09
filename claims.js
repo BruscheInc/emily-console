@@ -440,7 +440,10 @@ function gates(c, ship) {
   // "Marked delivered": a CARRIER source (ShipStation or USPS) must confirm delivery, all required sources answered, and the wait has passed.
   const dl = tracked.filter((x) => x.delivered);
   if (!dl.length) g.delivered_missing = { ok: false, why: `Tracking doesn't show your package as delivered yet. Choose "My package hasn't arrived" instead.` };
-  else if (!dl.some((x) => x.carrier_delivered)) g.delivered_missing = { ok: false, why: UNVERIFIED };
+  else if (!dl.some((x) => x.carrier_delivered)) {
+    g.delivered_missing = { ok: false, why: UNVERIFIED };
+    for (const x of dl) console.log(`claims: delivery not confirmed for ${x.number} — ${JSON.stringify(x.sources)} contradicted=${x.contradicted}`);
+  }
   else {
     const at = Math.max(...dl.map((x) => new Date(x.delivered_at || x.last_update_at).getTime()));
     if (now - at < s.delivered_wait_hours * 3600e3) {
