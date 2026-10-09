@@ -1448,6 +1448,8 @@ async function returnPropose(input) {
 const TOOLS = [
   { name: "shopify_lookup_order", description: "Look up a real Shopify order by order name (e.g. #LB189673, #LBO8425, #BB21953) or customer email. It reads the brand PREFIX (LBO/LB/BB, longest-first) to route to the right store and tries every name format (with/without # and the bare number), then falls back to all stores. Pass the order number EXACTLY as the customer wrote it, including the BB/LB/LBO letters. Each result includes which store it belongs to plus status, fulfillment, tracking, line items, shipping address.",
     input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
+  { name: "product_info", description: "Search the store's product knowledge (every product's description, fabric, features, price / sale price, sizes in stock, rating, its SIZE CHART as text, and the store's pages like the fabric story). Use for product, sizing, fabric, care, gift or recommendation questions before answering. Pass the customer's question (and the product name if known) and the brand.",
+    input_schema: { type: "object", properties: { query: { type: "string" }, brand: { type: "string", description: "Larkspur Baby or Larkspur Baby Outlet" }, product_url: { type: "string" } }, required: ["query"] } },
   { name: "shopify_check_stock", description: "Check LIVE stock for a PRODUCT and each of its sizes/variants. Use this WHENEVER a customer asks whether an item/print/size is available, asks what sizes you have, or BEFORE you offer or refuse a replacement in a specific print/size. Pass a product name or print (e.g. 'Puppy Love') or a SKU; optionally a brand hint ('Larkspur Baby' / 'Outlet' / 'Bumbunny'). Returns each size with in_stock (true/false) and quantity. NEVER decide replacement availability from an order's line items — always confirm here first.",
     input_schema: { type: "object", properties: { query: { type: "string" }, brand: { type: "string" } }, required: ["query"] } },
   { name: "shopify_check_subscription", description: "Check whether a customer is ALREADY subscribed to email / newsletter marketing. Use this WHENEVER a customer asks to sign up for emails, to be added to the newsletter/mailing list, or whether they're on the list. Pass the customer's email (optionally a brand hint). Returns subscribed true/false and marketing_state. If subscribed=true, CONFIRM they're already on the list instead of telling them to sign up.",
@@ -1481,6 +1483,7 @@ async function runTool(name, input) {
   try {
     if (name === "shopify_lookup_order") return await shopifyLookupOrder(input.query);
     if (name === "shopify_check_stock") return await shopifyCheckStock(input.query, input.brand);
+    if (name === "product_info") { const key = /outlet|lbo/i.test(String(input.brand || "")) ? "lbo" : "lb"; const r = await require("./catalog").search(key, String(input.query || ""), { path: String(input.product_url || "") }); return r || { note: "Product knowledge isn't loaded yet — use shopify_check_stock." }; }
     if (name === "shopify_check_subscription") return await shopifyCheckSubscription(input.email, input.brand);
     if (name === "shipstation_lookup") return await shipstationLookup(input.query);
     if (name === "shipstation_propose_change") return await shipstationProposeChange(input);

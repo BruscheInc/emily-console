@@ -819,11 +819,12 @@ app.post("/api/chat/:store/verify", async (req, res) => { const k = chatStore(re
 app.post("/api/chat/:store/handoff", async (req, res) => { const k = chatStore(req, res); if (!k) return; try { res.json(await CHAT.handoff(k, req.body || {}, req.ip)); } catch (e) { res.status(e.status || 500).json({ error: e.status ? e.message : "Sorry, we couldn't send that. Please try again." }); } });
 app.get("/chat-studio", (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(CHAT_STUDIO.replace(/__VERSION__/g, VERSION)); });
 app.get("/api/chat-admin/:store", async (req, res) => { if (!guard(req, res)) return; const k = chatStore(req, res); if (!k) return;
-  try { const [settings, defaults, install, stats] = await Promise.all([CHAT.settings(k), CHAT.defaultsFor(k), CHAT.installState(k), CHAT.stats(k)]);
-    res.json({ settings, defaults, install, stats, public: await CHAT.publicConfig(k), icons: CHAT.ICONS, fonts: PT.FONTS, origin: R.linkBase(k, await R.settings()), admin: isAdmin(req) }); } catch (e) { retErr(res, e); } });
+  try { const [settings, defaults, install, stats, catalog] = await Promise.all([CHAT.settings(k), CHAT.defaultsFor(k), CHAT.installState(k), CHAT.stats(k), require("./catalog").status(k)]);
+    res.json({ settings, defaults, install, stats, catalog, public: await CHAT.publicConfig(k), icons: CHAT.ICONS, fonts: PT.FONTS, origin: R.linkBase(k, await R.settings()), admin: isAdmin(req) }); } catch (e) { retErr(res, e); } });
 app.put("/api/chat-admin/:store", async (req, res) => { if (!studioGuard(req, res)) return; const k = chatStore(req, res); if (!k) return; try { res.json({ settings: await CHAT.save(k, req.body || {}, actorOf(req)) }); } catch (e) { retErr(res, e); } });
 app.post("/api/chat-admin/:store/reset", async (req, res) => { if (!studioGuard(req, res)) return; const k = chatStore(req, res); if (!k) return; try { res.json({ settings: await CHAT.reset(k, actorOf(req)) }); } catch (e) { retErr(res, e); } });
 app.get("/api/chat-admin/:store/chats", async (req, res) => { if (!guard(req, res)) return; const k = chatStore(req, res); if (!k) return; try { res.json({ chats: await CHAT.sessions(k) }); } catch (e) { retErr(res, e); } });
+app.post("/api/chat-admin/:store/catalog", async (req, res) => { if (!studioGuard(req, res)) return; const k = chatStore(req, res); if (!k) return; try { res.json(await require("./catalog").refresh(k)); } catch (e) { retErr(res, e); } });
 app.post("/api/chat-admin/:store/install", async (req, res) => { if (!studioGuard(req, res)) return; const k = chatStore(req, res); if (!k) return; try { res.json(await CHAT.install(k, actorOf(req), !!(req.body && req.body.remove))); } catch (e) { retErr(res, e); } });
 
 // Admin: website FAQ page — read, Emily's suggestions, publish, undo (faqs.js)
@@ -923,6 +924,7 @@ const PORT = process.env.PORT || 8080;
   try { await EM.init(); } catch (e) { console.error("Email templates failed to start:", e.message); }
   try { await FAQ.init(); } catch (e) { console.error("FAQs failed to start:", e.message); }
   try { await CHAT.init(); } catch (e) { console.error("Chat widget failed to start:", e.message); }
+  try { await require("./catalog").init(); } catch (e) { console.error("Catalog failed to start:", e.message); }
   // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
   try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
 })();

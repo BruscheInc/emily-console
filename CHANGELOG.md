@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.48.0
+- Shopping assistant in the website chat. Buzzin reads every active product on each store (description, fabric and features, price and sale price, sizes in stock, rating) plus the store's pages, and turns each product's size-chart image into text once. It refreshes a few minutes after start and every 6 hours (Chat Studio → AI helper → "Update now").
+- The chat finds the products that match each question (and the product the shopper is looking at), recommends sizes from the real size chart, and shows up to 3 product cards (photo, price / sale price, sizes in stock, View). With no direct match it suggests popular in-stock items.
+- New default shortcuts: "Help me pick a size", "Find a gift"; new welcome line. Toggle: Chat Studio → AI helper → Shopping assistant.
+- Email Emily gets the same product knowledge (product_info tool) for product, sizing and fabric questions.
+- Fix: order-lookup form and product cards now show when the AI asks for them.
+
 ## 4.47.0
 - Chat order lookup: customers enter their order number + billing ZIP (shipping ZIP if the order has no billing address) and get an order card — status, items, tracking with the latest scan, delivery date, and what they can do next (edit / cancel window, return-by date, defect or Package Protection claim) with a link to the portal. After that the AI can answer follow-ups about that order ("when will it arrive?"). Read-only: no email, street address or payment details, and no changes from chat.
 - When someone asks about their order, the AI shows the lookup form instead of saying it can't see orders. New shortcut type "Order lookup" (default: "Track my order").
