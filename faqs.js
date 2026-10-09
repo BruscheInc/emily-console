@@ -69,60 +69,112 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
+const FACTS_VER = 2;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
   const fee = Number(s.label_fee) || 0, byWeight = s.label_fee_mode !== "flat";
-  const onCredit = s.fee_on_store_credit ? " (also on store credit)" : " (not charged when choosing store credit)";
+  const onCredit = s.fee_on_store_credit ? " It comes off store credit too." : " It isn't charged when the customer chooses store credit.";
+  const days = s.window_days[store], pp = s.pp_claim_window_days, nopp = s.nopp_claim_window_days;
+  const feeLine = byWeight
+    ? `Based on the weight of the return package (it's the real price of the prepaid USPS label), so it changes from return to return. The exact amount is shown in the returns portal before the customer confirms, and it's taken off the refund.${onCredit} Never state a fixed dollar amount.`
+    : fee ? `$${fee.toFixed(2)}, taken off the refund.${onCredit}` : "Free.";
   return {
     store: def.name, support_email: def.support, returns_portal: portal,
-    return_window_days_from_delivery: s.window_days[store],
-    dropoff_days_after_label: s.void_unused_after_days, dropoff_reminder_day: s.dropoff_reminder_days,
-    return_label: "Prepaid USPS label, made in the returns portal (no Loop Returns any more). Customer prints the label and packing slip from the portal or the confirmation email.",
-    label_fee: byWeight
-      ? `Based on the weight of the return package (it's the actual price of the prepaid label), so it varies by return. The exact amount is shown in the returns portal before the customer confirms, and it's taken off the refund${onCredit}. Never state a fixed dollar amount for the label fee.`
-      : fee ? `$${fee.toFixed(2)} taken off the refund${onCredit}` : "free",
-    refund_methods: s.store_credit_enabled ? `Refund to the original payment method, or store credit with a ${s.store_credit_bonus_pct}% bonus` : "Refund to the original payment method",
-    refund_timing: s.auto_refund ? "Issued automatically as soon as the return package is delivered back to us; the bank may take 5–10 business days to show it." : "Issued after the return is received and checked.",
-    final_sale: `Items tagged final sale (${s.final_sale_tags}) can't be returned.`,
-    defective_items: `Report in the returns portal (\"Defective item\") within ${s.claim_window_days} days of delivery, with photos and a short description. The customer keeps the item. Options: free replacement (if in stock), store credit, or a refund (refund only on orders without Package Protection).`,
-    package_protection: `Orders with Package Protection: claims are filed in the returns portal. \"Marked delivered but not received\" and \"arrived damaged\" must be reported within ${s.pp_claim_window_days} days of delivery; \"hasn't arrived\" can be filed once ${s.transit_claim_days} days have passed since shipping with no delivery. Resolution: free replacement or store credit (no cash refunds).`,
-    no_package_protection: `Orders without Package Protection: once a package is marked delivered we can't replace it; the customer files a claim with the carrier (USPS). Damage must be reported within ${s.nopp_claim_window_days} days of delivery.`,
-    order_changes: `In the returns portal, customers can change sizes or the shipping address within ${s.edit_window_minutes} minutes of ordering, and cancel any time before the order ships. After it ships, changes aren't possible.`,
-    exchanges: "There are no direct exchanges. Customers return the item (store credit gets the bonus) and place a new order.",
+    getting_started: `Everything self-serve happens in the returns portal (${portal}). The customer enters their order number (e.g. ${def.prefix}123456) and the email used at checkout, then picks: "Edit or cancel my order", "Start a return", "Defective item", "Package Protection claim" or "Other". Options that don't apply yet (e.g. a return before the order is delivered) show a short reason in the portal.`,
+    returns: {
+      window: `${days} days from the DELIVERY date (not the order date). The return option opens once tracking shows delivered. Local pickup orders: ${days} days from pickup.`,
+      what_you_need: "Order number + checkout email, the items to send back (unwashed, tags attached, original packaging), and a printer for the label and packing slip.",
+      steps: [
+        `Open the returns portal (${portal}) and enter the order number and checkout email`,
+        "Choose \"Start a return\", tick the items, the quantity and a reason for each (\"Other\" needs a short note)",
+        `Choose the refund: original payment${s.store_credit_enabled ? `, or store credit with a ${s.store_credit_bonus_pct}% bonus` : ""}`,
+        "Check the return address and confirm — the label fee and estimated refund are shown before confirming",
+        "Print the prepaid USPS label and packing slip right away (also emailed). Packing slip inside, label on the outside",
+        `Drop the package at any USPS location within ${s.void_unused_after_days} days`,
+      ],
+      dropoff_deadline: `${s.void_unused_after_days} days after the label is made. A reminder email goes out on day ${s.dropoff_reminder_days} if it hasn't been dropped off. After day ${s.void_unused_after_days} the label stops working and the return is closed (the customer can start a new one if still inside the return window).`,
+      label: `Prepaid USPS label made instantly in the portal (Loop Returns is no longer used). One label per return; more items from the same order can be returned later as a separate return while the window is open. US addresses only — customers outside the US email ${def.support}.`,
+      label_fee: feeLine,
+      refund_amount: "The item price and its sales tax, minus the label fee. Original shipping isn't refunded.",
+      refund_methods: s.store_credit_enabled ? `Original payment method, or store credit with a ${s.store_credit_bonus_pct}% bonus (added to the customer's account for the next order).` : "Original payment method.",
+      refund_timing: s.auto_refund ? "Issued automatically as soon as the package is delivered back to us (no need to email). Banks can take 5–10 business days to show it; store credit is instant." : "Issued after the return is received and checked.",
+      track_or_cancel: "The confirmation page (linked in the email) shows the label, tracking and status. A return can be cancelled there until the package is dropped off.",
+      not_returnable: `Final-sale items (tagged ${s.final_sale_tags}) and Package Protection.`,
+      exchanges: "No direct exchanges: return the item (store credit gets the bonus) and place a new order.",
+    },
+    defective_item: {
+      what_it_is: "A manufacturing defect: holes, broken snaps or zippers, seams coming apart, misprints, factory stains.",
+      window: `Report within ${s.claim_window_days} days of delivery.`,
+      what_you_need: "Order number + checkout email, the item(s) and quantity, at least 1 clear photo of the problem (up to 8, JPG or PNG), and a short description.",
+      steps: [
+        `Open the returns portal (${portal}) and choose "Defective item"`,
+        "Pick the item(s), add photos and describe the problem",
+        "Pick the fix you'd like and submit",
+      ],
+      keep_the_item: "No need to send it back.",
+      options: "Free replacement (when that size is in stock), store credit, or a refund to the original payment (refund only on orders without Package Protection).",
+      after: "The customer gets an email with the claim number; we may ask for another photo; the decision is emailed.",
+    },
+    shipping_problems_with_package_protection: {
+      where: `Returns portal (${portal}) → "Package Protection claim".`,
+      hasnt_arrived: `Can be filed once ${s.transit_claim_days} days have passed since the order shipped and tracking still isn't delivered. Before that the portal shows the date it opens.${Number(s.transit_claim_max_days) ? ` Last day: ${s.transit_claim_max_days} days after shipping.` : ""}`,
+      marked_delivered_not_received: `Wait ${s.delivered_wait_hours} hours after the delivery scan (carriers sometimes scan early) and check the mailbox, around the home and with neighbors, then file within ${pp} days of delivery. If the carrier left a notice / attempted delivery, contact the post office first — the portal asks.`,
+      arrived_damaged: `File within ${pp} days of delivery with photos of the damaged package and items.`,
+      resolution: "Free replacement or store credit (no cash refunds on Package Protection claims).",
+    },
+    shipping_problems_without_package_protection: `Once tracking shows delivered we can't replace a lost package; the portal (\"Other\") shows how to file a claim with USPS. Damage has to be reported within ${nopp} days of delivery.`,
+    order_changes: {
+      edit: `Change a size or the shipping address within ${s.edit_window_minutes} minutes of placing the order, in the portal ("Edit or cancel my order"). Shopify emails the updated order; if the new item costs more, that email has a link to pay the difference; if less, the difference is refunded.`,
+      cancel: "Cancel any time before the order ships, in the same place. Once it ships it can't be changed or cancelled — start a return after delivery instead.",
+    },
+    contact: `Questions or anything the portal can't do: ${def.support}.`,
     must_fix: [
       `Any link to Loop Returns (loopreturns.com) → the returns portal ${portal}`,
-      `Any link to /pages/package-protection-claim-center (the old claim page) → the returns portal ${portal}, where Package Protection claims are filed now`,
+      `Any link to /pages/package-protection-claim-center (the old claim page) → the returns portal ${portal}`,
       `Any drop-off time other than ${s.void_unused_after_days} days after the label is made`,
-      `"Email us" for returns, defects or damaged items → use the returns portal (email ${def.support} stays fine as a fallback for questions)`,
-      byWeight
-        ? `Any fixed dollar amount for the return label fee (e.g. "$5.95" or "$7.95") → say the label fee is based on the package's weight and the exact price is shown in the returns portal before confirming, taken off the refund`
-        : `Any label fee other than $${fee.toFixed(2)}`,
-      `Return answers that don't mention the ${byWeight ? "weight-based label fee (shown in the portal)" : fee ? `$${fee.toFixed(2)} label fee` : "free label"}${s.store_credit_enabled ? ` and the ${s.store_credit_bonus_pct}% store-credit bonus` : ""}`,
+      `"Email us" for returns, defects, damaged or missing packages → the returns portal (email ${def.support} stays fine as a fallback)`,
+      byWeight ? `Any fixed dollar amount for the return label fee (e.g. "$5.95" or "$7.95") → weight-based, exact price shown in the portal before confirming` : `Any label fee other than $${fee.toFixed(2)}`,
+      "Return, defect and claim answers missing the day limits, what the customer needs, or the steps",
+    ],
+    must_cover: [
+      "How do I start a return? (steps)", "How long do I have to return? (window from delivery)", "What do I need to start a return?",
+      "How much is the return label / is return shipping free?", "When do I have to drop off my return? (deadline + reminder + what happens after)",
+      "When and how will I get my refund? (timing, methods, store credit bonus, what's refunded)", "Can I cancel my return or check its status?",
+      "What can't be returned?", "Do you offer exchanges?",
+      "My item is defective — what do I do? (window, photos, keep the item, options)", "My package arrived damaged",
+      "My package hasn't arrived", "My package says delivered but I didn't get it", "What does Package Protection cover / how do I file a claim?",
+      "Can I change or cancel my order? (edit window, cancel before shipping)",
     ],
     never_change_policy: "Sale items being store credit only, international/Canada rules, shipping times and carrier choices are business policies Buzzin doesn't control: never rewrite them; if they conflict with the FACTS, add a note for staff instead.",
-    unchanged_policies: "Return condition (unwashed, tags attached, original packaging), merging orders, P.O. boxes, delays, product care and sizing questions are not controlled by Buzzin — leave them as they are unless they mention Loop, a 7-day drop-off, or emailing for returns/defects.",
+    unchanged_policies: "Return condition (unwashed, tags attached, original packaging), merging orders, P.O. boxes, delays, product care and sizing questions are not controlled by Buzzin — leave them as they are unless they mention Loop, a different drop-off time, or emailing for returns/defects.",
   };
 }
 
 /* ---------------- Emily's suggestions ---------------- */
-const SUGGEST_SYS = `You keep a baby-clothing store's FAQ page accurate. You get the FAQ questions (with their current HTML answers) and the FACTS: what the store's systems actually do today.
-Rewrite ONLY answers that are wrong, out of date or missing something important per the FACTS (e.g. old Loop Returns links, wrong day counts, "email us" where there is now a portal flow, missing label fee or store-credit bonus). Leave correct answers alone.
-Keep the brand voice: warm, short, plain, written to parents. Keep answers brief (1–4 short sentences, a list only if it really helps). Use simple HTML only: <p>, <strong>, <a href="...">, <ul><li>. Link the returns portal where customers need it.
-Never invent policies that aren't in the FACTS. If a question can't be answered from the FACTS and its current answer isn't contradicted, leave it.
-Only include questions you are changing. Reply with ONLY JSON, no code fences: {"changes":[{"id":"<question id>","answer":"<new HTML>","why":"<one short sentence for staff>"}],"notes":["anything staff should decide, e.g. a policy the FAQ promises that the system doesn't enforce"]}`;
+const SUGGEST_SYS = `You keep a baby-clothing store's FAQ page accurate, complete and easy for busy parents to follow. You get the FAQ (groups with ids, questions with ids and their current HTML answers) and the FACTS: exactly what the store's systems do today.
+1. FIX: rewrite any answer that is wrong, out of date or missing something from the FACTS (old Loop links, wrong day counts, "email us" where the portal handles it, a fixed label fee, missing deadlines).
+2. COMPLETE: every topic in FACTS.must_cover needs a clear answer with the real numbers — day limits and what they count from (delivery, shipping, label date), what the customer needs, and the steps. Expand the closest existing answer; add a NEW question only when no existing question fits (put it in the group where a customer would look). Don't duplicate a topic another question already covers well.
+Style: warm, friendly and plain, written to a parent on their phone. Short sentences, no jargon, no legal tone. Lead with the answer. Put limits in <strong> (e.g. <strong>7 days from delivery</strong>). Use a short numbered list (<ol><li>) for steps and a short bullet list (<ul><li>) for "what you'll need". Keep each answer under ~120 words. Link the returns portal wherever the customer has to do something (<a href="...">returns portal</a>). Simple HTML only: <p>, <strong>, <a href>, <ul>, <ol>, <li>, <br>.
+Never invent anything that isn't in the FACTS. Leave correct, complete answers alone. Policies in never_change_policy are never rewritten — raise conflicts as notes.
+Reply with ONLY JSON, no code fences: {"changes":[{"id":"<question id>","answer":"<new HTML>","why":"<one short sentence for staff>"}],"new_questions":[{"group":"<group id>","question":"<question>","answer":"<HTML>","why":"<one short sentence>"}],"notes":["anything staff should decide"]}`;
 async function suggest(store) {
   const k = K(); if (!k.anthropic) throw httpError(400, "Emily's AI isn't connected (no ANTHROPIC_API_KEY).");
   const t = await readTemplate(store);
   const groups = itemsOf(t.tpl).filter((g) => !g.hidden);
-  const qs = groups.flatMap((g) => g.items.filter((i) => !i.hidden).map((i) => ({ id: i.id, group: g.title, question: i.title, answer: i.answer })));
+  const faq = groups.map((g) => ({ group_id: g.id, group: g.title, questions: g.items.filter((i) => !i.hidden).map((i) => ({ id: i.id, question: i.title, answer: i.answer })) }));
+  const qs = faq.flatMap((g) => g.questions);
   const f = await facts(store);
-  const resp = await k.anthropic.messages.create({ model: k.model, max_tokens: 16000, system: SUGGEST_SYS, messages: [{ role: "user", content: `FACTS:\n${JSON.stringify(f, null, 2)}\n\nFAQ:\n${JSON.stringify(qs, null, 2)}` }] });
+  const resp = await k.anthropic.messages.stream({ model: k.model, max_tokens: 24000, system: SUGGEST_SYS, messages: [{ role: "user", content: `FACTS:\n${JSON.stringify(f, null, 2)}\n\nFAQ:\n${JSON.stringify(faq, null, 2)}` }] }).finalMessage();
   const txt = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
   let out; try { out = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1)); }
   catch (_) { console.error(`faq suggest: unreadable reply (stop: ${resp.stop_reason}, ${txt.length} chars): ${txt.slice(0, 200)} … ${txt.slice(-200)}`); throw httpError(502, resp.stop_reason === "max_tokens" ? "Emily's suggestion was too long to finish. Try again." : "Emily's suggestion couldn't be read. Try again."); }
-  const ids = new Set(qs.map((q) => q.id));
-  return { changes: (Array.isArray(out.changes) ? out.changes : []).filter((c) => c && ids.has(c.id) && typeof c.answer === "string").map((c) => ({ id: c.id, answer: cleanHtml(c.answer), why: String(c.why || "").slice(0, 300) })),
+  const ids = new Set(qs.map((q) => q.id)), gids = new Set(groups.map((g) => g.id));
+  const changes = (Array.isArray(out.changes) ? out.changes : []).filter((c) => c && ids.has(c.id) && typeof c.answer === "string").map((c) => ({ id: c.id, answer: cleanHtml(c.answer), why: String(c.why || "").slice(0, 300) }));
+  // New questions: id "new:<group>:<n>" until published.
+  (Array.isArray(out.new_questions) ? out.new_questions : []).filter((q) => q && gids.has(q.group) && String(q.question || "").trim() && typeof q.answer === "string").slice(0, 10)
+    .forEach((q, n) => changes.push({ id: `new:${q.group}:${n + 1}`, group: q.group, title: String(q.question).trim().slice(0, 200), answer: cleanHtml(q.answer), why: String(q.why || "").slice(0, 300) }));
+  return { changes,
     notes: (Array.isArray(out.notes) ? out.notes : []).map(String).slice(0, 8), checksum: t.checksum };
 }
 
@@ -164,6 +216,20 @@ async function publish(store, { changes, checksum }, who) {
   if (!list.length) throw httpError(400, "Nothing to publish.");
   const done = [];
   for (const c of list) {
+    if (String(c.id).startsWith("new:")) {
+      const sid = c.group || String(c.id).split(":")[1], sec = t.tpl.sections[sid];
+      if (!sec || sec.type !== "faqs") throw httpError(400, "The FAQ group for a new question no longer exists. Reload and try again.");
+      const title = String(c.title || "").trim().slice(0, 200), html = cleanHtml(c.answer);
+      if (!title || !html) throw httpError(400, "A new question needs both a question and an answer.");
+      const order = sec.block_order || Object.keys(sec.blocks || {});
+      const tmpl = order.map((k) => sec.blocks[k]).find(Boolean);
+      if (!tmpl) throw httpError(400, `The "${(sec.settings && sec.settings.title) || sid}" group has no questions to copy the layout from.`);
+      const nb = JSON.parse(JSON.stringify(tmpl)); delete nb.disabled;
+      nb.settings = { ...(nb.settings || {}), title, answer: html };
+      let bid; do { bid = "buzzin_" + crypto.randomBytes(4).toString("hex"); } while (sec.blocks[bid]);
+      sec.blocks[bid] = nb; sec.block_order = [...order, bid];
+      done.push(`New: ${title}`); continue;
+    }
     const [sid, bid] = String(c.id).split("/");
     const b = t.tpl.sections[sid] && t.tpl.sections[sid].blocks && t.tpl.sections[sid].blocks[bid];
     if (!b || t.tpl.sections[sid].type !== "faqs") throw httpError(400, "One of the questions no longer exists. Reload and try again.");
@@ -201,12 +267,15 @@ const E = () => require("./emily");
 async function stageFaq({ store, checksum, changes, notes = [], reason = "" }) {
   const def = R().STORE_DEFS[store], titles = await titlesFor(store, changes);
   const summary = `${changes.length} answer${changes.length === 1 ? "" : "s"} on the ${def.name} FAQ page don't match how Buzzin works${reason ? ` (${reason})` : ""}:\n${changes.map((c) => `• *${titles[c.id] || c.id}* — ${c.why || "updated"}`).join("\n")}`
-    + (notes.length ? `\n_For you to decide (not changed):_ ${notes.join(" · ")}` : "") + `\nReview or edit the wording first in Buzzin → Content → Website FAQs.`;
-  return E().stageAction({ kind: "faq_publish", input: { store, checksum, changes, notes }, title: `Update the ${def.name} FAQ page`, summary,
+    + (notes.length ? `\n_For you to decide (not changed):_ ${notes.join(" · ")}` : "") + `\nReview or edit the wording first in Buzzin → Content → Website FAQs.`
+  const short = summary.length > 2800 ? summary.slice(0, 2700).replace(/\n[^\n]*$/, "") + "\n…more in Buzzin → Content → Website FAQs." : summary;
+  return E().stageAction({ kind: "faq_publish", input: { store, checksum, changes, notes }, title: `Update the ${def.name} FAQ page`, summary: short,
     exec: async () => { const r = await publish(store, { changes, checksum }, "Emily (approved)"); await clearPending(store); return { note: `Published: ${r.updated.join("; ")}` }; } });
 }
 async function titlesFor(store, changes) {
-  try { const t = await readTemplate(store); const m = {}; for (const g of itemsOf(t.tpl)) for (const i of g.items) m[i.id] = i.title; return m; } catch (_) { return {}; }
+  const m = {}; for (const c of changes || []) if (c.title) m[c.id] = `New question: ${c.title}`;
+  try { const t = await readTemplate(store); for (const g of itemsOf(t.tpl)) for (const i of g.items) m[i.id] = i.title; } catch (_) {}
+  return m;
 }
 async function clearPending(store) {
   const st = await state(); const m = (st.stores || {})[store]; if (!m) return;
@@ -219,7 +288,7 @@ async function autoRun(store, reason = "daily check", { force = false } = {}) {
   const st = await state(); st.stores = st.stores || {}; const mine = st.stores[store] || {};
   try {
     const t = await readTemplate(store), f = await facts(store);
-    const sig = crypto.createHash("md5").update(t.checksum + JSON.stringify(f)).digest("hex");
+    const sig = crypto.createHash("md5").update(FACTS_VER + t.checksum + JSON.stringify(f)).digest("hex");
     if (!force && mine.sig === sig) return { skipped: "nothing changed since the last check" };
     const sug = await suggest(store);
     mine.last_run = new Date().toISOString(); mine.sig = sig; mine.notes = sug.notes; mine.reason = reason;

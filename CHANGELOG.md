@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.43.0
+- Website FAQs, full coverage: Emily now knows every limit and step Buzzin runs — return window (from delivery), what you need, the steps, label and weight-based fee, drop-off deadline and reminder, refunds (timing, methods, what's refunded), cancelling a return, what can't be returned, defective items (window, photos, keep the item, options), Package Protection claims (hasn't arrived, marked delivered, arrived damaged), orders without PP, and editing or cancelling an order.
+- She makes sure each of these has a friendly, plain answer with the real numbers in bold and short numbered steps, and can add a NEW question when nothing on the page covers a topic. New questions show in Buzzin → Content → Website FAQs (question and answer editable) and in the Slack card. Nothing is published until someone approves.
+
 ## 4.42.0
 - Return label fee is now based on weight: the fee is the real price of the prepaid label for the package (packaging + each item's weight). The returns portal gets a live ShipStation quote once the customer picks items and confirms their address, shows it as "Return shipping label · Based on your package weight", and updates the refund totals. Changing the address re-quotes before they can confirm.
 - The customer is never charged more than the price they were shown (signed quote). If a live quote can't be fetched, the flat fee is used as the fallback.

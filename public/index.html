@@ -330,7 +330,7 @@
   .fq-g{margin-top:16px}.fq-gt{font-weight:800;font-size:15px;margin-bottom:6px}
   .fq-item{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px}.fq-item.chg{border-color:var(--honey);box-shadow:0 0 0 1px var(--honey) inset}.fq-item.off{opacity:.55}
   .fq-q{display:flex;align-items:center;gap:8px}.fq-q b{flex:1;min-width:0}.fq-tag{background:var(--honey);color:var(--ink)}
-  .fq-a{font-size:13px;color:#3F3D47;margin-top:4px}.fq-a p{margin:4px 0}.fq-a.old{opacity:.75}
+  .fq-title{width:100%;font-weight:700;margin:6px 0 4px}.fq-item textarea{width:100%;min-height:110px;font:12.5px/1.5 var(--mono)}.fq-prev{font-size:13px;color:#3F3D47;background:#FAFAF7;border:1px solid var(--line,#E7E5E0);border-radius:8px;padding:8px 10px;margin:4px 0 8px}.fq-prev p{margin:4px 0}.fq-a{font-size:13px;color:#3F3D47;margin-top:4px}.fq-a p{margin:4px 0}.fq-a.old{opacity:.75}
   .fq-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}.fq-l{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   .fq-cols textarea{width:100%;min-height:120px;margin:4px 0 6px;font:12.5px/1.5 var(--mono)}.fq-why{font-size:12px;color:var(--honey-ink);margin-bottom:6px}
   @media(max-width:800px){.fq-cols{grid-template-columns:1fr}}
@@ -1435,13 +1435,13 @@ async function retSettings(){
   };
 }
 /* ---- Website FAQs: compare the store's FAQ page with what Buzzin does, let Emily suggest fixes, publish ---- */
-let FQ={store:"lb",d:null,edits:{},why:{},notes:[],busy:false};
+let FQ={store:"lb",d:null,edits:{},why:{},adds:{},notes:[],busy:false};
 async function faqModal(store){
-  if(store) FQ.store=store; closeModal(); FQ.edits={}; FQ.why={}; FQ.notes=[];
+  if(store) FQ.store=store; closeModal(); FQ.edits={}; FQ.why={}; FQ.adds={}; FQ.notes=[];
   const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
   m.innerHTML=`<div class="box fq-box"><div class="fq-load">Loading the FAQ page…</div></div>`; document.body.appendChild(m);
   try{ FQ.d=await api("/api/faqs/"+FQ.store); if(FQ.d.error) throw new Error(FQ.d.error);
-    const au=FQ.d.auto||{}; for(const c of (au.pending||[])){ FQ.edits[c.id]=c.answer; FQ.why[c.id]=c.why; } FQ.notes=au.notes||[]; }catch(e){ m.querySelector(".box").innerHTML=`<h3>Website FAQs</h3><div class="warn">${esc(e.message)}</div><div class="foot"><button class="btn sec" onclick="closeModal()">Close</button></div>`; return; }
+    const au=FQ.d.auto||{}; for(const c of (au.pending||[])) faqTake(c); FQ.notes=au.notes||[]; }catch(e){ m.querySelector(".box").innerHTML=`<h3>Website FAQs</h3><div class="warn">${esc(e.message)}</div><div class="foot"><button class="btn sec" onclick="closeModal()">Close</button></div>`; return; }
   faqRender();
 }
 function faqRender(){
@@ -1461,16 +1461,21 @@ function faqRender(){
       ${d.last&&admin?`<button class="btn sec" onclick="faqUndo()">Undo last publish</button>`:""}
       ${admin?`<button class="btn" ${n&&d.can_publish?"":"disabled"} onclick="faqPublish()">Publish ${n||""} change${n===1?"":"s"}</button>`:""}</div>
     ${FQ.notes.length?`<div class="fq-notes"><b>For you to decide</b>${FQ.notes.map(x=>`<div>• ${esc(x)}</div>`).join("")}</div>`:""}
-    ${d.groups.filter(g=>!g.hidden).map(g=>`<div class="fq-g"><div class="fq-gt">${esc(g.title)}</div>${g.items.map(item).join("")}</div>`).join("")}
+    ${d.groups.filter(g=>!g.hidden).map(g=>`<div class="fq-g"><div class="fq-gt">${esc(g.title)}</div>${g.items.map(item).join("")}${faqNew(g.id)}</div>`).join("")}
     <div class="foot"><button class="btn sec" onclick="closeModal()">Close</button></div>`;
 }
+function faqTake(c){ FQ.edits[c.id]=c.answer; FQ.why[c.id]=c.why; if(String(c.id).startsWith("new:")) FQ.adds[c.id]={group:c.group||c.id.split(":")[1],title:c.title||""}; }
+function faqNew(gid){ return Object.entries(FQ.adds).filter(([id,a])=>a.group===gid&&FQ.edits[id]!=null).map(([id,a])=>`<div class="fq-item chg"><div class="fq-q"><span class="chip fq-tag">new question</span></div>
+    <input class="fq-title" value="${esc(a.title)}" oninput="FQ.adds['${id}'].title=this.value" placeholder="Question">
+    <textarea id="fq-${id.replace(/[/:]/g,"_")}" oninput="FQ.edits['${id}']=this.value">${esc(FQ.edits[id])}</textarea>${FQ.why[id]?`<div class="fq-why">✨ ${esc(FQ.why[id])}</div>`:""}
+    <div class="fq-prev">${FQ.edits[id]}</div><button class="btn sec xs" onclick="faqDrop('${id}')">Don't add this question</button></div>`).join(""); }
 function faqFind(id){ for(const g of FQ.d.groups) for(const i of g.items) if(i.id===id) return i; }
 function faqEdit(id){ if(FQ.edits[id]==null) FQ.edits[id]=faqFind(id).answer; faqRender(); const t=document.getElementById("fq-"+id.replace("/","_")); if(t) t.focus(); }
-function faqDrop(id){ delete FQ.edits[id]; delete FQ.why[id]; faqRender(); }
+function faqDrop(id){ delete FQ.edits[id]; delete FQ.why[id]; delete FQ.adds[id]; faqRender(); }
 async function faqSuggest(){
   const b=$("fq-ask"); if(b){ b.disabled=true; b.textContent="Emily is reading the FAQs…"; }
   try{ const r=await api(`/api/faqs/${FQ.store}/suggest`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error) throw new Error(r.error);
-    for(const c of r.changes){ FQ.edits[c.id]=c.answer; FQ.why[c.id]=c.why; } FQ.notes=r.notes||[];
+    for(const c of r.changes) faqTake(c); FQ.notes=r.notes||[];
     toast(r.changes.length?`Emily suggested ${r.changes.length} change${r.changes.length===1?"":"s"}`:"Emily found nothing to change"); }
   catch(e){ toast(e.message,true); }
   faqRender();
@@ -1484,8 +1489,8 @@ async function faqRunNow(){
 async function faqPublish(){
   const n=Object.keys(FQ.edits).length; if(!n) return;
   if(!confirm(`Publish ${n} FAQ change${n===1?"":"s"} to the live website?`)) return;
-  try{ const r=await api(`/api/faqs/${FQ.store}/publish`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({checksum:FQ.d.checksum,changes:Object.entries(FQ.edits).map(([id,answer])=>({id,answer}))})}); if(r.error) throw new Error(r.error);
-    toast(`Published: ${r.updated.length} answer${r.updated.length===1?"":"s"} updated`); faqModal(); }
+  try{ const r=await api(`/api/faqs/${FQ.store}/publish`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({checksum:FQ.d.checksum,changes:Object.entries(FQ.edits).map(([id,answer])=>FQ.adds[id]?{id,answer,group:FQ.adds[id].group,title:FQ.adds[id].title}:{id,answer})})}); if(r.error) throw new Error(r.error);
+    toast(`Published: ${r.updated.length} FAQ change${r.updated.length===1?"":"s"}`); faqModal(); }
   catch(e){ toast(e.message,true); }
 }
 async function faqUndo(){
