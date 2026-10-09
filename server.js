@@ -794,7 +794,6 @@ app.get("/api/faqs/:store", async (req, res) => { if (!guard(req, res)) return; 
 app.post("/api/faqs/:store/suggest", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.suggest(k)); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/publish", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.publish(k, req.body || {}, actorOf(req))) }); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/check", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.autoRun(k, "run by " + actorOf(req), { force: true })); } catch (e) { retErr(res, e); } });
-app.post("/api/faqs-auto", async (req, res) => { if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "Only admins can make this change." }); try { const st = await FAQ.setAuto(!!(req.body || {}).on, actorOf(req)); res.json({ ok: true, auto: st.auto }); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/undo", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.undo(k, actorOf(req))) }); } catch (e) { retErr(res, e); } });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
 const EXC = require("./exceptions");

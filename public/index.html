@@ -325,6 +325,7 @@
   .modal .box.fq-box{width:min(1100px,100%)}.fq-load{padding:30px;text-align:center;color:var(--muted)}
   .fq-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
   .fq-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+  .fq-auto{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-top:12px;font-size:13px;background:var(--panel2)}.fq-last{color:var(--muted);font-size:12px;margin-top:4px}
   .fq-notes{background:var(--honey-soft);border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:10px}.fq-notes b{display:block;margin-bottom:4px}
   .fq-g{margin-top:16px}.fq-gt{font-weight:800;font-size:15px;margin-bottom:6px}
   .fq-item{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px}.fq-item.chg{border-color:var(--honey);box-shadow:0 0 0 1px var(--honey) inset}.fq-item.off{opacity:.55}
@@ -1142,6 +1143,7 @@ function renderHome(){
     [v.oos,"package-off","Out-of-stock tickets","customers waiting on a sold-out item","oos"],
     [st.never_scanned,"hourglass","Never scanned","labels made but no carrier scan in 4+ days","stuck"],
     [st.undelivered,"truck","Not delivered 15+ days","shipments that may need a claim","undelivered"],
+    [c.faq,"help-circle","FAQ changes waiting for approval","Emily's fixes for the website FAQ page","__faq"],
   ].filter(a=>Number(a[0])>0);
   const pct=(a,b)=>{ if(!b) return ""; const d=Math.round((a-b)/b*100); return `<span class="hm-d ${d>0?"up":d<0?"down":""}"><i class="ti ti-trending-${d>=0?"up":"down"}"></i>${Math.abs(d)}%</span>`; };
   const ra=HOME_RA, S=ra&&ra.summary, P=ra&&ra.previous;
@@ -1149,7 +1151,7 @@ function renderHome(){
   w.innerHTML=`<div class="hm">
     <h1 class="hm-h">Welcome${first?", "+esc(first):""}</h1>
     <section class="hm-card"><div class="hm-ch" onclick="this.parentElement.classList.toggle('shut')"><i class="ti ti-chevron-up hm-cv"></i><b>Needs attention</b>${alerts.length?`<span class="hm-badge">${alerts.length}</span>`:""}</div>
-      <div class="hm-cb">${alerts.length?alerts.map(a=>`<div class="hm-alert ${a[5]||""}"><i class="ti ti-${a[1]}"></i><div class="hm-at"><b>${Number(a[0]).toLocaleString()} ${esc(a[2])}</b><span>${esc(a[3])}</span></div><button class="btn sec" onclick="setView('${a[4]}')">Open</button></div>`).join("")
+      <div class="hm-cb">${alerts.length?alerts.map(a=>`<div class="hm-alert ${a[5]||""}"><i class="ti ti-${a[1]}"></i><div class="hm-at"><b>${Number(a[0]).toLocaleString()} ${esc(a[2])}</b><span>${esc(a[3])}</span></div><button class="btn sec" onclick="${a[4]==="__faq"?"faqModal()":`setView('${a[4]}')`}">Open</button></div>`).join("")
         :`<div class="hm-alert ok"><i class="ti ti-circle-check"></i><div class="hm-at"><b>All caught up</b><span>Nothing is waiting on you right now.</span></div></div>`}</div></section>
     <div class="hm-row"><div class="hm-lbl">Inbox at a glance</div></div>
     <div class="hm-tiles">${tile("lbo_tickets","tag","LBO pending",v.lbo_tickets)}${tile("lb_tickets","tag","LB pending",v.lb_tickets)}${tile("oos","package-off","Out of stock",v.oos)}${tile("returns","arrow-back-up","Returns open",rt.open)}${tile("claims","receipt","Claims open",c.claims)}</div>
@@ -1431,7 +1433,8 @@ async function faqModal(store){
   if(store) FQ.store=store; closeModal(); FQ.edits={}; FQ.why={}; FQ.notes=[];
   const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
   m.innerHTML=`<div class="box fq-box"><div class="fq-load">Loading the FAQ page…</div></div>`; document.body.appendChild(m);
-  try{ FQ.d=await api("/api/faqs/"+FQ.store); if(FQ.d.error) throw new Error(FQ.d.error); }catch(e){ m.querySelector(".box").innerHTML=`<h3>Website FAQs</h3><div class="warn">${esc(e.message)}</div><div class="foot"><button class="btn sec" onclick="closeModal()">Close</button></div>`; return; }
+  try{ FQ.d=await api("/api/faqs/"+FQ.store); if(FQ.d.error) throw new Error(FQ.d.error);
+    const au=FQ.d.auto||{}; for(const c of (au.pending||[])){ FQ.edits[c.id]=c.answer; FQ.why[c.id]=c.why; } FQ.notes=au.notes||[]; }catch(e){ m.querySelector(".box").innerHTML=`<h3>Website FAQs</h3><div class="warn">${esc(e.message)}</div><div class="foot"><button class="btn sec" onclick="closeModal()">Close</button></div>`; return; }
   faqRender();
 }
 function faqRender(){
@@ -1445,7 +1448,9 @@ function faqRender(){
   box.innerHTML=`<div class="fq-head"><div><h3>Website FAQs</h3><div class="sub">The FAQ page on ${d.facts.store}'s website, from the live theme (${esc(d.theme.name)}). Emily checks it against what Buzzin actually does; nothing changes on the site until you publish.</div></div>
       <div class="seg">${["lb","lbo"].map(k=>`<button class="tab ${FQ.store===k?"on":""}" onclick="faqModal('${k}')">${k.toUpperCase()}</button>`).join("")}</div></div>
     ${d.can_publish?"":`<div class="warn">Publishing needs one more Shopify permission for the Emily app: <b>write_themes</b>. You can review and prepare changes now; Publish works once it's added.</div>`}
-    <div class="fq-bar">${admin?`<button class="btn" id="fq-ask" onclick="faqSuggest()">✨ Ask Emily to check the FAQs</button>`:""}<span class="sp" style="flex:1"></span>
+    <div class="fq-auto">🐝 <b>Emily watches this page.</b> She checks it every day and whenever Returns settings change. When something is out of date she rewrites it and asks you in Slack (#cs-approvals) and on Home — nothing is published until someone approves.
+      <div class="fq-last">${d.auto&&d.auto.last_run?`Last check ${fmt(d.auto.last_run)} · ${esc(d.auto.last_result||"")}`:"Emily hasn't checked this page yet."}${(d.auto&&d.auto.pending||[]).length?` · <b>${d.auto.pending.length} change${d.auto.pending.length===1?"":"s"} waiting for approval (shown below)</b>`:""}</div></div>
+    <div class="fq-bar">${admin?`<button class="btn" id="fq-ask" onclick="faqSuggest()">✨ Ask Emily to check the FAQs</button><button class="btn sec" id="fq-run" onclick="faqRunNow()">Check now and ask in Slack</button>`:""}<span class="sp" style="flex:1"></span>
       ${d.last&&admin?`<button class="btn sec" onclick="faqUndo()">Undo last publish</button>`:""}
       ${admin?`<button class="btn" ${n&&d.can_publish?"":"disabled"} onclick="faqPublish()">Publish ${n||""} change${n===1?"":"s"}</button>`:""}</div>
     ${FQ.notes.length?`<div class="fq-notes"><b>For you to decide</b>${FQ.notes.map(x=>`<div>• ${esc(x)}</div>`).join("")}</div>`:""}
@@ -1462,6 +1467,12 @@ async function faqSuggest(){
     toast(r.changes.length?`Emily suggested ${r.changes.length} change${r.changes.length===1?"":"s"}`:"Emily found nothing to change"); }
   catch(e){ toast(e.message,true); }
   faqRender();
+}
+async function faqRunNow(){
+  const b=$("fq-run"); if(b){ b.disabled=true; b.textContent="Emily is checking…"; }
+  try{ const r=await api(`/api/faqs/${FQ.store}/check`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error) throw new Error(r.error);
+    toast(r.pending?`Emily found ${r.pending} change${r.pending===1?"":"s"} and asked for approval`:"The FAQ page already matches Buzzin"); faqModal(); }
+  catch(e){ toast(e.message,true); if(b){ b.disabled=false; b.textContent="Check now and ask in Slack"; } }
 }
 async function faqPublish(){
   const n=Object.keys(FQ.edits).length; if(!n) return;

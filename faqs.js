@@ -139,7 +139,7 @@ async function view(store) {
   const t = await readTemplate(store);
   return { theme: { id: t.theme.id, name: t.theme.name }, checksum: t.checksum, groups: itemsOf(t.tpl), can_publish: canWrite(t.st), facts: await facts(store),
     last: (await db(`SELECT id, created_by, created_at, note FROM hd_faq_versions WHERE store=$1 ORDER BY id DESC LIMIT 1`, [store])).rows[0] || null,
-    auto: await (async () => { const st = await state(); const m = (st.stores || {})[store] || {}; return { on: st.auto !== false, last_run: m.last_run || null, last_result: m.last_result || "", notes: m.notes || [],
+    auto: await (async () => { const st = await state(); const m = (st.stores || {})[store] || {}; return { last_run: m.last_run || null, last_result: m.last_result || "", notes: m.notes || [],
       pending: m.pending && m.pending.checksum === t.checksum ? m.pending.changes : [] }; })() };
 }
 const WRITE_M = `mutation($id: ID!, $files: [OnlineStoreThemeFilesUpsertFileInput!]!){ themeFilesUpsert(themeId: $id, files: $files) { upsertedThemeFiles { filename } userErrors { field message code filename } } }`;
@@ -168,6 +168,7 @@ async function publish(store, { changes, checksum }, who) {
   await db(`INSERT INTO hd_faq_versions (store, theme_id, content, note, created_by) VALUES ($1,$2,$3,$4,$5)`, [store, t.theme.id, t.raw, `Before: ${done.join("; ")}`.slice(0, 1000), who || null]);
   await writeFile(t, next);
   await core.audit({ kind: "faq-publish", detail: `${store.toUpperCase()} FAQ updated: ${done.join("; ")}`.slice(0, 900), who: who || "staff" }).catch(() => {});
+  if (!/^Emily/.test(who || "")) { try { const st = await state(); const m = (st.stores || {})[store]; if (m && m.action_id) { await E().dismissAction(m.action_id, `${who} (published in Buzzin)`).catch(() => {}); } await clearPending(store); } catch (_) {} }
   return { updated: done };
 }
 async function undo(store, who) {
@@ -180,15 +181,30 @@ async function undo(store, who) {
   return { restored: true };
 }
 
-/* ---------------- Emily keeps the FAQ page up to date ----------------
- * Runs once a day and right after Returns settings change. If anything on the page disagrees with
- * Buzzin, Emily rewrites those answers and (with auto-publish on and write_themes granted) publishes
- * them, then posts what changed to Slack. Otherwise the suggestions wait in Buzzin → Website FAQs.
- * Policy calls (like sale items) are never changed automatically — they come back as notes. */
+/* ---------------- Emily keeps an eye on the FAQ page ----------------
+ * Once a day and right after Returns settings change, Emily compares the page with Buzzin. When something
+ * is out of date she rewrites those answers and ASKS: an approval card in Slack (#cs-approvals: Apply / Dismiss)
+ * and "FAQ changes waiting" on Buzzin's Home. Nothing is published until a person approves — Apply in Slack,
+ * or Publish in Buzzin → Content → Website FAQs. Policy calls (like sale items) only ever come back as notes. */
 const STATE_KEY = "faqs";
-async function state() { return (await core.setting(STATE_KEY, null)) || { auto: true, stores: {} }; }
+async function state() { return (await core.setting(STATE_KEY, null)) || { stores: {} }; }
 async function saveState(st) { await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ($1,$2,'Emily',now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`, [STATE_KEY, JSON.stringify(st)]); }
-async function setAuto(on, who) { const st = await state(); st.auto = !!on; await saveState(st); core.audit({ kind: "faq-auto", detail: `Emily auto-updating the FAQ page turned ${on ? "on" : "off"}`, who: who || "staff" }).catch(() => {}); return st; }
+const E = () => require("./emily");
+// The approval card. exec runs only when someone presses Apply (or re-runs it after a restart).
+async function stageFaq({ store, checksum, changes, notes = [], reason = "" }) {
+  const def = R().STORE_DEFS[store], titles = await titlesFor(store, changes);
+  const summary = `${changes.length} answer${changes.length === 1 ? "" : "s"} on the ${def.name} FAQ page don't match how Buzzin works${reason ? ` (${reason})` : ""}:\n${changes.map((c) => `• *${titles[c.id] || c.id}* — ${c.why || "updated"}`).join("\n")}`
+    + (notes.length ? `\n_For you to decide (not changed):_ ${notes.join(" · ")}` : "") + `\nReview or edit the wording first in Buzzin → Content → Website FAQs.`;
+  return E().stageAction({ kind: "faq_publish", input: { store, checksum, changes, notes }, title: `Update the ${def.name} FAQ page`, summary,
+    exec: async () => { const r = await publish(store, { changes, checksum }, "Emily (approved)"); await clearPending(store); return { note: `Published: ${r.updated.join("; ")}` }; } });
+}
+async function titlesFor(store, changes) {
+  try { const t = await readTemplate(store); const m = {}; for (const g of itemsOf(t.tpl)) for (const i of g.items) m[i.id] = i.title; return m; } catch (_) { return {}; }
+}
+async function clearPending(store) {
+  const st = await state(); const m = (st.stores || {})[store]; if (!m) return;
+  m.pending = null; m.action_id = null; m.last_result = "Published"; await saveState(st);
+}
 const running = new Set();
 async function autoRun(store, reason = "daily check", { force = false } = {}) {
   if (running.has(store)) return { skipped: "already running" };
@@ -197,21 +213,17 @@ async function autoRun(store, reason = "daily check", { force = false } = {}) {
   try {
     const t = await readTemplate(store), f = await facts(store);
     const sig = crypto.createHash("md5").update(t.checksum + JSON.stringify(f)).digest("hex");
-    if (!force && mine.sig === sig && !(mine.pending && mine.pending.changes && mine.pending.changes.length && st.auto && canWrite(t.st))) return { skipped: "nothing changed since the last check" };
+    if (!force && mine.sig === sig) return { skipped: "nothing changed since the last check" };
     const sug = await suggest(store);
     mine.last_run = new Date().toISOString(); mine.sig = sig; mine.notes = sug.notes; mine.reason = reason;
+    // An older card for this store is out of date now — take it down before asking again.
+    if (mine.action_id) { try { await E().dismissAction(mine.action_id, "Emily (replaced by a newer check)"); } catch (_) {} mine.action_id = null; }
     if (!sug.changes.length) { mine.pending = null; mine.last_result = "FAQ page matches Buzzin"; return { ok: true, changes: 0 }; }
-    if (st.auto && canWrite(t.st)) {
-      const r = await publish(store, { changes: sug.changes, checksum: sug.checksum }, "Emily");
-      mine.pending = null; mine.last_result = `Emily updated ${r.updated.length} answer(s): ${r.updated.join("; ")}`.slice(0, 600);
-      const def = R().STORE_DEFS[store];
-      core.slackPost(`🐝 Emily updated the ${def.name} FAQ page (${reason}): ${r.updated.map((x) => `“${x}”`).join(", ")}. Review or undo in Buzzin → Content → Website FAQs.${sug.notes.length ? `\nFor you to decide: ${sug.notes.join(" · ")}` : ""}`).catch(() => {});
-      return { ok: true, published: r.updated };
-    }
     mine.pending = { changes: sug.changes, checksum: sug.checksum, at: new Date().toISOString() };
-    mine.last_result = `${sug.changes.length} suggested change(s) waiting${canWrite(t.st) ? "" : " — needs the write_themes permission to publish"}`;
+    mine.action_id = await stageFaq({ store, checksum: sug.checksum, changes: sug.changes, notes: sug.notes, reason });
+    mine.last_result = `Asked for approval: ${sug.changes.length} change(s)${canWrite(t.st) ? "" : " — publishing needs the write_themes permission"}`;
     return { ok: true, pending: sug.changes.length };
-  } catch (e) { mine.last_result = "Check failed: " + e.message; console.error(`faq auto (${store}):`, e.message); return { error: e.message }; }
+  } catch (e) { mine.last_result = "Check failed: " + e.message; console.error(`faq check (${store}):`, e.message); return { error: e.message }; }
   finally { st.stores[store] = mine; await saveState(st).catch(() => {}); running.delete(store); }
 }
 async function autoRunAll(reason) { for (const k of Object.keys(R().STORE_DEFS)) await autoRun(k, reason); }
@@ -222,9 +234,9 @@ function schedule() {
   timer = setInterval(() => autoRunAll("daily check").catch(() => {}), 24 * 3600e3);
 }
 async function status() {
-  const st = await state(); const out = { auto: st.auto !== false, pending: 0, stores: {} };
+  const st = await state(); const out = { pending: 0, stores: {} };
   for (const [k, v] of Object.entries(st.stores || {})) { const n = (v.pending && v.pending.changes && v.pending.changes.length) || 0; out.pending += n; out.stores[k] = { pending: n, last_run: v.last_run, last_result: v.last_result, notes: v.notes || [] }; }
   return out;
 }
 
-module.exports = { init, view, suggest, publish, undo, cleanHtml, itemsOf, splitHeader, autoRun, autoRunAll, setAuto, status, schedule };
+module.exports = { init, view, suggest, publish, undo, cleanHtml, itemsOf, splitHeader, autoRun, autoRunAll, status, schedule, stageFaq, clearPending };

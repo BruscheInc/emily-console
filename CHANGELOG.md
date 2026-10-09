@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.40.0
+- Emily watches the website FAQ page: every day and right after Returns settings change she compares it with Buzzin (Loop links, the old claim-center link, drop-off days, how to report defects and damage, label fee, store-credit bonus, order edits). When something is out of date she rewrites those answers and asks for approval — a card in Slack #cs-approvals (Apply / Dismiss) and "FAQ changes waiting for approval" on Home. Nothing is published until someone approves (Apply in Slack, or Publish in Buzzin → Content → Website FAQs, where her suggested wording can be edited first). Policy calls like sale items only come back as notes.
+
 ## 4.39.0
 - Website FAQs (sidebar → Content → Website FAQs, admins): shows each store's live FAQ page question by question, from the live theme. "Ask Emily to check" compares every answer with what Buzzin actually runs (return window, drop-off days, label fee, store-credit bonus, refund timing, defect and Package Protection claims, order edits, the returns portal link) and suggests rewrites with a reason for each, plus a list of policy calls for you. Review and edit side by side, then Publish writes only the answers you kept; Undo puts the page back. Publishing needs the Emily app's write_themes permission.
 
