@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.44.6
+- FAQ facts: every answer about a late, lost or damaged package names the exact portal option ("My package hasn't arrived", etc.).
+
 ## 4.44.5
 - FAQs explain the portal's "My package hasn't arrived" option (and the other shipping options) wherever it applies — delayed orders and lost packages: when it opens (14 days after shipping), and where it is (under "Package Protection claim", or "Other" for orders without it). No outcomes are written down for orders without Package Protection.
 

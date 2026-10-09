@@ -69,7 +69,7 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
-const FACTS_VER = 8;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
+const FACTS_VER = 9;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
@@ -154,6 +154,7 @@ async function facts(store) {
       "Return, defect and claim answers missing the day limits, what the customer needs, or the steps",
       `Internal wording customers shouldn't see: "tagged", tag names (${s.final_sale_tags}), SKUs, system or app names → plain words like "marked Final Sale"`,
       "Stating that Package Protection itself can't be returned → remove it (it goes without saying)",
+      "Any answer about a late, lost, stolen, missing or damaged package that doesn't name the exact portal option in quotes (\"My package hasn't arrived\", \"My package was marked delivered, but I didn't get it\", \"My package arrived damaged\") and where it is → name it",
       "ANY policy for orders without Package Protection (\"No Package Protection? …\", 5-day damage window, USPS claim steps, \"we can't replace\", refund-only-without-PP) → remove it; at most say \"Something else went wrong? Choose 'Other' in the returns portal and we'll help.\"",
     ],
     must_cover: [
