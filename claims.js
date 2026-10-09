@@ -376,7 +376,8 @@ async function trackingFor(c) {
     const carrier = (guess && guess.name) || t.company || "the carrier", isUsps = /usps/i.test(carrier);
     const sources = { shopify: fromShopify(f) };
     try { const l = guess ? await K().ssV2Track(guess.v2, t.number) : null; if (!l) throw new Error("carrier not recognized");
-      sources.shipstation = { ok: String(l.code || "").toUpperCase() !== "UN", code: l.code, accepted_only: !!l.accepted_only, not_scanned: !!l.not_in_system, delivered: !!l.delivered, delivered_at: l.delivered_at || null, last_at: l.last_event ? l.last_event.at : null, desc: l.description || "", where: l.last_event ? l.last_event.where : "", why: String(l.code || "").toUpperCase() === "UN" ? "ShipStation has no status for this label (unknown)" : null }; }
+      const ssDelivered = !!l.delivered || String(l.code || "").toUpperCase() === "SP" || isDeliveredText(l.description);   // SP = delivered to a collection point (locker / post office)
+      sources.shipstation = { ok: String(l.code || "").toUpperCase() !== "UN", code: l.code, accepted_only: !!l.accepted_only, not_scanned: !!l.not_in_system, delivered: ssDelivered, delivered_at: l.delivered_at || (ssDelivered && l.last_event ? l.last_event.at : null), last_at: l.last_event ? l.last_event.at : null, desc: l.description || "", where: l.last_event ? l.last_event.where : "", why: String(l.code || "").toUpperCase() === "UN" ? "ShipStation has no status for this label (unknown)" : null }; }
     catch (e) { sources.shipstation = { ok: false, why: e.message }; console.error(`claims ShipStation tracking ${t.number}:`, e.message); }
     if (isUsps) {
       if (uspsConfigured()) { try { sources.usps = await uspsTrack(t.number); } catch (e) { sources.usps = { ok: false, why: e.message }; console.error(`claims USPS tracking ${t.number}:`, e.message); } }
@@ -395,7 +396,8 @@ async function trackingFor(c) {
     const carrierSaysDelivered = answered.some(([k, v]) => k !== "shopify" && v.delivered);
     // Shopify's "Delivered" (deliveredAt / DELIVERED event) comes from the carrier's own scans.
     const shopifyScan = sources.shopify.ok && sources.shopify.delivered && (!!f.delivered_at || (f.events[0] && /^DELIVERED$/i.test(f.events[0].status)));
-    const contradicted = answered.some(([k, v]) => k !== "shopify" && !v.delivered && !v.not_scanned);   // a carrier source that answered and says NOT delivered
+    const dScan = Math.max(0, ...answered.filter(([, v]) => v.delivered).map(([, v]) => Date.parse(v.delivered_at || v.last_at) || 0));
+    const contradicted = answered.some(([k, v]) => k !== "shopify" && !v.delivered && !v.not_scanned && (!dScan || (Date.parse(v.last_at) || 0) > dScan));   // a carrier source with a NEWER non-delivered scan
     const carrierDelivered = !contradicted && (carrierSaysDelivered || shopifyScan);
     const ts = (k) => answered.map(([, v]) => v[k]).filter(Boolean).map((x) => Date.parse(x)).filter((x) => !isNaN(x));
     const lastMs = Math.max(new Date(f.at).getTime(), ...ts("last_at"), ...ts("delivered_at"));

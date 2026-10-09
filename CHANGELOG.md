@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.30.2
+- Claims fix: ShipStation status SP ("Delivered to the collection location" — locker or post office) counts as delivered. A not-delivered answer only blocks a claim when it's newer than the delivered scan.
+
 ## 4.30.1
 - Claims fix: ShipStation often returns "unknown" for label tracking, which blocked "marked delivered" claims even when the package was delivered. "Unknown" no longer counts as an answer, and Shopify's carrier-fed delivered scan now confirms delivery — unless ShipStation or USPS says it isn't delivered.
 
