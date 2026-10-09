@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.33.1
+- "Print label and packing slip" and label links now use the store's branded domain (returns.larkspurbaby.com / returns.larkspurbabyoutlet.com) when branded links are on, instead of the Helpdesk's Railway address. Applies to the confirmation page and the return emails.
+
 ## 4.33.0
 - Order exceptions (goodwill): Helpdesk → Returns → ✨ Order exceptions (or ✨ Exception on a ticket's order panel). Pick an order, tick the rules it skips, add an optional end date and a note. Waivable: return window, final sale, return label fee, drop-off deadline, defect claim window, missing/damaged window, 14-day hasn't-arrived wait (and last day), marked-delivered wait, post-office check, Package Protection (treated as if the order had it — shipping claims only), edit window.
 - Applies right away in the portal and Helpdesk. Exceptions are logged on the return / claim history, shown as a chip on returns and in the claim details, and passed to the AI reviewer so waived rules aren't held against the customer. Removing or expiring one restores the normal rules immediately. Every add/remove is in the Activity log.

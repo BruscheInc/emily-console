@@ -33,6 +33,8 @@ const STORE_DEFS = {
   lbo: { key: "lbo", prefix: "LBO", name: "Larkspur Baby Outlet", support: core.BRAND_MAILBOX.outlet, shopUrl: "https://larkspurbabyoutlet.com", faqUrl: "https://larkspurbabyoutlet.com/pages/faqs", host: process.env.RETURNS_HOST_LBO || "returns.larkspurbabyoutlet.com" },
 };
 // Customer-facing portal address: the branded domain once "branded_links" is on (after DNS is live), otherwise the Railway path.
+// Customer-facing label / print links use the store's branded domain once branded links are on.
+const linkBase = (key, s) => (s && s.branded_links && STORE_DEFS[key] && STORE_DEFS[key].host) ? `https://${STORE_DEFS[key].host}` : PUBLIC_URL();
 const portalUrl = (key, s) => (s && s.branded_links && STORE_DEFS[key].host) ? `https://${STORE_DEFS[key].host}` : `${PUBLIC_URL()}/returns/${key}`;
 const storeForHost = (h) => Object.values(STORE_DEFS).find((d) => d.host && d.host === String(h || "").toLowerCase()) || null;
 function shopFor(key) {
@@ -438,7 +440,7 @@ async function counts() {
   out.attention = out.by.needs_attention || 0;
   return out;
 }
-const publicRec = (r) => ({ rma: r.rma, status: r.status, label_url: r.status === "cancelled" ? null : `${PUBLIC_URL()}/returns/label/${r.id}/${labelToken(r.id)}`, tracking_number: r.tracking_number, tracking_url: r.tracking_url, refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity })) });
+const publicRec = (r, s) => ({ rma: r.rma, status: r.status, label_url: r.status === "cancelled" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${labelToken(r.id)}`, tracking_number: r.tracking_number, tracking_url: r.tracking_url, refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity })) });
 // Everything the confirmation page shows (also reachable later from the link in our emails).
 async function publicView(r) {
   const s = await settings();
@@ -452,7 +454,7 @@ async function publicView(r) {
     id: r.id, token: tok, view_url: `${portalUrl(r.store, s)}?r=${r.id}.${tok}`, store: r.store,
     rma: r.rma, status: r.status, order_name: r.order_name, created_at: r.created_at, email: r.email, phone: r.phone || "", address: r.address || null, customer_name: r.customer_name,
     dropoff_days: s.void_unused_after_days, dropoff_by: new Date(new Date(r.created_at).getTime() + s.void_unused_after_days * 86400e3).toISOString(),
-    label_url: r.status === "cancelled" ? null : `${PUBLIC_URL()}/returns/label/${r.id}/${tok}`, print_url: r.status === "cancelled" ? null : `${PUBLIC_URL()}/returns/print/${r.id}/${tok}`,
+    label_url: r.status === "cancelled" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${tok}`, print_url: r.status === "cancelled" ? null : `${linkBase(r.store, s)}/returns/print/${r.id}/${tok}`,
     tracking_number: r.tracking_number, tracking_url: r.tracking_url, label_emailed: r.label_emailed !== false && !r.test_label, test_label: !!r.test_label,
     refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity, unit_price: i.unit_price, image: i.image || null, reason: i.reason })),
     summary: { subtotal: round2(sub), tax: round2(tax), fee: round2(fee), bonus, bonus_pct: Number(s.store_credit_bonus_pct), total: r.status === "refunded" && r.refunded_amount != null ? Number(r.refunded_amount) : round2(net + bonus), final: r.status === "refunded" },
@@ -541,7 +543,7 @@ async function prepare(key, order, s) {
     international: !!(a && a.countryCodeV2 && a.countryCodeV2 !== "US"),
     items: items.map((i) => { const pp = isPP(i, s); const e = pp ? { ok: false, why: "Package Protection isn't returnable" } : eligibility(i, s, key, deliveredAt, ex); return { fulfillmentLineItemId: i.fulfillmentLineItemId, title: i.title, variant: i.variantTitle, sku: i.sku, image: i.image, unit_price: i.unitPrice, returnable_qty: i.returnableQty, eligible: e.ok && i.returnableQty > 0, why: e.ok ? null : e.why }; }),
     reasons: rs,
-    existing: existing.map(publicRec),
+    existing: existing.map((r) => publicRec(r, s)),
     options: { label_fee: ex.has("label_fee") ? 0 : s.label_fee, store_credit_enabled: s.store_credit_enabled, store_credit_bonus_pct: s.store_credit_bonus_pct, fee_on_store_credit: s.fee_on_store_credit, window_days: s.window_days[key] },
   };
 }
