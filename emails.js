@@ -124,21 +124,6 @@ const EMAILS = {
       intro: "Hi {first},\n\nWe're reviewing claim **{claim}** for order {order}. {message}\n\nJust reply to this email — photos are welcome.",
     } },
 
-  /* ---- order edits ---- */
-  order_updated: { step: 5, event: "Customer changes a size or the address in the portal", group: "Order edits", name: "Order updated", sender: "helpdesk",
-    when: "Right after a customer changes a size or the shipping address in the portal. Sent for every edit, on top of any Shopify pay-link or refund email.",
-    fields: [F.subject, F.title, F.intro, { k: "owed_note", label: "Extra line when they owe more", type: "rich", rows: 2, hint: "Only shown when the change costs more. Shopify sends the pay link separately." },
-      { k: "refund_note", label: "Extra line when they get money back", type: "rich", rows: 2, hint: "Only shown when the change lowered the total." }],
-    tokens: [["first", "Customer first name"], ["order", "Order number"], ["owed", "Amount still to pay"], ["refunded", "Amount refunded"], ["store", "Store name"], ["support", "Support email"]],
-    shows: "Also shows: the list of changes and the new shipping address (when it changed).",
-    defaults: {
-      subject: "Your order {order} has been updated",
-      title: "Your order has been updated",
-      intro: "Hi {first},\n\nWe've saved the changes you made to order **{order}**. Here's what changed:",
-      owed_note: "The new total is a little higher, so you'll get a separate email with a secure link to pay the **{owed}** difference. We'll ship your order once it's paid.",
-      refund_note: "The new total is lower, so we've refunded **{refunded}** to your original payment method. It can take 5–10 business days to show up.",
-    } },
-
   /* ---- shared ---- */
   _footer: { step: 99, event: "Bottom of every Helpdesk email", group: "All emails", name: "Footer", sender: "helpdesk",
     when: "The small print at the bottom of every Helpdesk email above.",
@@ -152,8 +137,8 @@ const EMAILS = {
     when: "When the refund is issued after the return is delivered back to us." },
   shopify_credit: { step: 50, event: "Store credit return, bonus added", group: "Returns", name: "Store credit bonus (Shopify)", sender: "shopify", shopify_template: "Store credit",
     when: "When the store credit bonus is added to a store-credit return." },
-  shopify_pay_link: { step: 10, event: "Size change costs more", group: "Order edits", name: "Pay for your changes (Shopify)", sender: "shopify", shopify_template: "Order edited — invoice",
-    when: "When a customer's size change in the portal makes the order cost more." },
+  shopify_pay_link: { step: 10, event: "Customer changes a size in the portal", group: "Order edits", name: "Order edited (Shopify)", sender: "shopify", shopify_template: "Order edited",
+    when: "Every time a customer changes a size in the portal. Lists the updated items and includes a pay link when the new total is higher." },
   shopify_edit_refund: { step: 20, event: "Size change costs less", group: "Order edits", name: "Edit refund (Shopify)", sender: "shopify", shopify_template: "Refund notification",
     when: "When a customer's size change lowers the order total." },
   shopify_cancel: { step: 30, event: "Customer cancels the order", group: "Order edits", name: "Order cancelled (Shopify)", sender: "shopify", shopify_template: "Order canceled",
@@ -323,17 +308,6 @@ function render(kind, { copy, theme, def, base, view, claim, extra }) {
     const items = (kind === "claim_received" || kind === "claim_approved_replacement") ? (c.items || []).map((i) => `• ${i.quantity}× ${i.title}${i.variant ? ` (${i.variant})` : ""}`).join("\n") : "";
     return { subject: tok(C.subject, v), html, text: textOf([C.intro, items, kind === "message_received" ? `"${c.description || ""}"` : "", keep, C.closing], v) };
   }
-  if (kind === "order_updated") {
-    const e = extra || {}, v = { store: def.name, support: def.support, order: String(e.order || "").replace(/^#/, ""), first: firstOf(e.customer_name), owed: money(e.owed), refunded: money(e.refunded) };
-    const title = tok(C.title, v), a = e.address;
-    const addrLines = a ? [a.name, [a.street1, a.street2].filter(Boolean).join(", "), `${a.city}, ${a.state} ${a.postal_code}`].filter(Boolean) : [];
-    const html = layout({ theme, def, base, title, footer: foot, preheader: title, bodyHtml: (k) =>
-      rich(C.intro, v, k.primary) +
-      `<ul style="margin:0 0 16px 0;padding-left:20px;">${(e.changes || []).map((x) => `<li style="margin-bottom:4px;">${esc(x)}</li>`).join("")}</ul>` +
-      (addrLines.length ? `<div style="border:1px solid ${k.border};border-radius:10px;padding:12px 14px;margin:0 0 16px 0;"><div style="font-weight:700;color:${k.heading};margin-bottom:4px;">New shipping address</div>${addrLines.map(esc).join("<br>")}</div>` : "") +
-      (Number(e.owed) > 0 && C.owed_note ? rich(C.owed_note, v, k.primary) : "") + (Number(e.refunded) > 0 && C.refund_note ? rich(C.refund_note, v, k.primary) : "") });
-    return { subject: tok(C.subject, v), html, text: textOf([C.intro, (e.changes || []).map((x) => `• ${x}`).join("\n"), addrLines.length ? "New shipping address:\n" + addrLines.join("\n") : "", Number(e.owed) > 0 ? C.owed_note : "", Number(e.refunded) > 0 ? C.refund_note : ""], v) };
-  }
   if (kind === "_footer") return render("return_reminder", { copy: { ...EMAILS.return_reminder.defaults, _footer: C._footer }, theme, def, base, view });
   throw new Error("unknown email " + kind);
 }
@@ -360,8 +334,6 @@ async function build(store, kind, { def, s, theme, base, over, view, claim, extr
   const copy = await copyFor(store, kind, over);
   if (kind === "_footer") return render("_footer", { copy, theme, def, base, view: view || sampleView(def, s, base) });
   if (kind.startsWith("return_")) return render(kind, { copy, theme, def, base, view: view || sampleView(def, s, base) });
-  if (kind === "order_updated") return render(kind, { copy, theme, def, base, extra: extra || { order: `${def.prefix}190000`, customer_name: "Jane Doe", owed: 4, refunded: 0,
-    changes: ["Zipper Romper: size 6-12 months → 12-18 months", "Shipping address updated"], address: { name: "Jane Doe", street1: "123 Main St", street2: "Apt 4", city: "Plano", state: "TX", postal_code: "75024" } } });
   const smp = claim ? { claim, extra } : sampleClaim(def, kind);
   return render(kind, { copy, theme, def, base, claim: smp.claim, extra: smp.extra });
 }

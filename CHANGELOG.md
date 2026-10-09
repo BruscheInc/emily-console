@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.35.2
+- Portal size changes now always send Shopify's own "Order edited" email (the built-in notification, with the pay link when the total goes up), not only when the customer owes more. The Helpdesk "Order updated" email from 4.35.1 is removed. Email map updated: "Order edited (Shopify)".
+
 ## 4.35.1
 - New Helpdesk email "Order updated": sent to the customer right after they change a size or the shipping address in the portal — lists what changed, the new address, and a line about paying the difference or the refund when the total changed. Threaded into a Helpdesk ticket. Editable in Email Studio (Order edits). Before this, an edit with no price change sent no email at all.
 
