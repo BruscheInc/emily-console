@@ -1069,6 +1069,10 @@ async function loadClaims(silent){
   let d; try{ d=await api(`/api/claims?status=${encodeURIComponent(CLF.status)}&q=${encodeURIComponent(CLF.q)}`); if(d.error) throw new Error(d.error); }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load claims.</div>'; return; }
   CL_D=d; renderClaims();
 }
+async function clReset(){
+  if(!confirm("Clear the Claims screen? Every claim and order edit so far will be hidden from the lists and counts (they're kept in the database, not deleted).")) return;
+  try{ const r=await api("/api/claims/reset",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error) throw new Error(r.error); toast("Claims cleared"); loadClaims(); }catch(e){ toast(e.message,true); }
+}
 function clPhotoUrl(id){ return `/api/claims/photo/${encodeURIComponent(id)}?key=${encodeURIComponent(KEY)}`; }
 function renderClaims(){
   const d=CL_D, w=$("stuckwrap"), c=d.counts||{};
@@ -1077,7 +1081,8 @@ function renderClaims(){
   let h=`<div class="rc"><div class="rc-bar">
     <div class="seg">${seg("open","Needs decision",c.open)}${seg("approved","Approved",c.approved)}${seg("denied","Denied",c.denied)}${seg("info","No PP (carrier steps)",c.info)}${seg("edits","Order edits",c.edits)}${seg("","All")}</div>
     <input type="text" class="rc-in rc-q" placeholder="Search claim #, order, email" value="${esc(CLF.q)}" onkeydown="if(event.key==='Enter'){CLF.q=this.value.trim();loadClaims()}">
-    <button class="btn sec xs" onclick="loadClaims()">↻ Refresh</button></div>
+    <button class="btn sec xs" onclick="loadClaims()">↻ Refresh</button>${d.admin?`<button class="btn sec xs" onclick="clReset()" title="Hide every claim so far — e.g. test claims. Nothing is deleted.">Clear claims</button>`:""}</div>
+    ${d.since?`<div class="muted" style="font-size:12px;margin:-4px 0 8px">Showing claims from ${fmt(d.since)} on.</div>`:""}
     <div class="ra-mut" style="font-size:12.5px">Customers file these in the returns portal. The AI reads the photos, tracking and the customer's history and gives a first opinion; nothing is issued until you approve.</div></div>`;
   if(!d.claims.length){ w.innerHTML=h+'<div class="empty">Nothing here.</div>'; return; }
   h+='<div class="cl-list">';

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.44.0
+- Claims go live: every claim and order edit made during testing is hidden from Claims & edits (lists, tab counts, Home). Nothing is deleted. The screen shows "Showing claims from …", and admins have a "Clear claims" button to do it again.
+
 ## 4.43.1
 - FAQ facts: photo limits (at least 1, up to 8) and a plain "defective vs. arrived damaged" explanation with both windows side by side; clearer edit vs. cancel wording. Emily will ask in Slack before publishing.
 

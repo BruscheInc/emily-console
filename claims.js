@@ -736,17 +736,21 @@ async function review(c) {
 }
 
 /* ---------------- staff: list / approve / deny ---------------- */
+// Claims made before claims_since (testing) are hidden everywhere in Buzzin.
+async function sinceClause(args) { const t = (await R().settings()).claims_since; if (!t) return "TRUE"; args.push(t); return `created_at >= $${args.length}`; }
 async function list({ status = "pending", q = "", limit = 200 } = {}) {
   const where = [`type<>'edit'`], args = [];
   if (status === "open") where.push(`status IN ('pending','info_requested')`);
   else if (status === "edits") { where.length = 0; where.push(`type='edit'`); }
   else if (status) { args.push(status); where.push(`status=$${args.length}`); }
+  where.push(await sinceClause(args));
   if (q) { args.push(`%${String(q).toLowerCase()}%`); where.push(`(lower(number) LIKE $${args.length} OR lower(order_name) LIKE $${args.length} OR lower(email) LIKE $${args.length})`); }
   args.push(Math.min(Number(limit) || 200, 500));
   return (await db(`SELECT * FROM hd_claims WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT $${args.length}`, args)).rows.map(rowToClaim);
 }
 async function counts() {
-  const r = (await db(`SELECT CASE WHEN type='edit' THEN 'edits' ELSE status END k, count(*)::int n FROM hd_claims GROUP BY 1`)).rows;
+  const args = [], since = await sinceClause(args);
+  const r = (await db(`SELECT CASE WHEN type='edit' THEN 'edits' ELSE status END k, count(*)::int n FROM hd_claims WHERE ${since} GROUP BY 1`, args)).rows;
   const o = {}; for (const x of r) o[x.k] = x.n; o.open = (o.pending || 0) + (o.info_requested || 0); return o;
 }
 // Branded claim emails — wording from Email Studio (emails.js), look from the store's portal theme.

@@ -55,6 +55,7 @@ function keyForOrderName(name) {
 const DEFAULTS = {
   portal_live: false,              // when on, Emily sends customers to this portal instead of Loop
   branded_links: false,
+  claims_since: null,              // claims + order edits before this are hidden from Buzzin's Claims screen and counts (test data). "Clear claims" moves it
   stats_since: "2026-10-07T23:10:00Z", // returns before this (testing) are left out of spend/analytics; "Reset stats" moves it            // when on, links use returns.larkspurbaby.com / returns.larkspurbabyoutlet.com (turn on once DNS is live)
   window_days: { lb: 7, lbo: 7 },
   label_fee: 7.95,                 // flat fee — only used when label_fee_mode is "flat", or as the fallback if a live quote fails
@@ -1020,6 +1021,8 @@ async function init() {
   const mins = Number(process.env.RETURNS_POLL_MIN || 60);
   setTimeout(() => poll().catch(() => {}), 30e3); setInterval(() => poll().catch(() => {}), mins * 60e3);
   try { if (!(await core.syncGet("returns_windows_v4_29"))) { await saveSettings({ window_days: { lb: 7, lbo: 7 }, claim_window_days: 30, marked_delivered_window_days: 5 }, "system (v4.29 windows)"); await core.syncSet("returns_windows_v4_29", "done", {}); console.log("↩️  Returns: windows set — returns 7 days, defects 30 days, marked-delivered 5 days (from delivery)"); } } catch (e) { console.error("returns windows:", e.message); }
+  // Portal is fully live: hide every claim / order edit made during testing (kept in the database, just not shown or counted).
+  try { if (!(await core.syncGet("claims_reset_live_v1"))) { const at = new Date().toISOString(); await saveSettings({ claims_since: at }, "system (claims go-live reset)"); await core.syncSet("claims_reset_live_v1", "done", {}); console.log(`🧾 Claims: test data hidden — showing claims from ${at}`); } } catch (e) { console.error("claims reset:", e.message); }
   const s = await settings();
   const p = setupProblems(s);
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);

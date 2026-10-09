@@ -778,7 +778,12 @@ app.post("/api/returns/public/claim/submit", pub((b) => CL.claimSubmit(b.token, 
 // Staff: claims queue
 app.get("/api/claims", async (req, res) => {
   if (!guard(req, res)) return;
-  try { res.json({ claims: await CL.list({ status: req.query.status == null ? "open" : String(req.query.status), q: String(req.query.q || "") }), counts: await CL.counts(), admin: isAdmin(req) }); } catch (e) { retErr(res, e); }
+  try { res.json({ claims: await CL.list({ status: req.query.status == null ? "open" : String(req.query.status), q: String(req.query.q || "") }), counts: await CL.counts(), admin: isAdmin(req), since: (await R.settings()).claims_since }); } catch (e) { retErr(res, e); }
+});
+// Admin: hide every claim made so far (e.g. after testing). Nothing is deleted.
+app.post("/api/claims/reset", async (req, res) => {
+  if (!studioGuard(req, res)) return;
+  try { const s = await R.saveSettings({ claims_since: new Date().toISOString() }, actorOf(req)); await core.audit({ kind: "claims-reset", detail: "Claims screen cleared (older claims hidden)", who: actorOf(req) }).catch(() => {}); res.json({ ok: true, since: s.claims_since }); } catch (e) { retErr(res, e); }
 });
 app.get("/api/claims/photo/:id", async (req, res) => {
   if (!guard(req, res)) return;
