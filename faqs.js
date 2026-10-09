@@ -69,7 +69,7 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
-const FACTS_VER = 4;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
+const FACTS_VER = 5;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
@@ -123,6 +123,12 @@ async function facts(store) {
       arrived_damaged: `File within ${pp} days of delivery with photos of the damaged package and items.`,
       resolution: "Free replacement or store credit (no cash refunds on Package Protection claims).",
     },
+    delayed_order: {
+      not_shipped_yet: `Use the tracking link from the shipping email once it ships. Orders that haven't shipped can still be cancelled in the portal ("Edit or cancel my order"). Keep the page's existing processing-time wording (e.g. new releases and sales taking longer to process) — that's store policy.`,
+      shipped_but_slow: `Check the tracking link first. If the package still isn't delivered <strong>${s.transit_claim_days} days after it shipped</strong>, open the returns portal (${portal}), enter the order number + checkout email and choose: with Package Protection → "Package Protection claim" → "My package hasn't arrived" (free replacement or store credit); without Package Protection → "Other" → "My package hasn't arrived" (our team looks into it with the carrier).`,
+      too_early: `Before day ${s.transit_claim_days} the portal shows the latest tracking status and the exact date the claim opens, so the customer can come back then.${Number(s.transit_claim_max_days) ? ` Last day to file: ${s.transit_claim_max_days} days after shipping.` : ""}`,
+      marked_delivered: `If tracking says delivered but it isn't there, that's the "marked delivered" claim (wait ${s.delivered_wait_hours} hours, check around, then file within ${pp} days with Package Protection).`,
+    },
     defective_vs_damaged: `"Defective item" = something wrong with how the item was made (${s.claim_window_days} days from delivery). "Arrived damaged" = the package or items were damaged in shipping (with Package Protection: ${pp} days from delivery in "Package Protection claim"; without it: ${nopp} days). If unsure, pick the one that fits best — our team sorts it out.`,
     photos: "Defective and damaged claims need at least 1 photo (up to 8, JPG or PNG). Clear, well-lit photos of the problem — and for shipping damage, the outside of the box too — get claims approved fastest.",
     shipping_problems_without_package_protection: `Once tracking shows delivered we can't replace a lost package; the portal (\"Other\") shows how to file a claim with USPS. Damage has to be reported within ${nopp} days of delivery.`,
@@ -145,7 +151,8 @@ async function facts(store) {
       "When and how will I get my refund? (timing, methods, store credit bonus, what's refunded)", "Can I cancel my return or check its status?",
       "What can't be returned?", "Do you offer exchanges?",
       "My item is defective — what do I do? (window, photos, keep the item, options)", "My package arrived damaged",
-      "My package hasn't arrived", "My package says delivered but I didn't get it", "What does Package Protection cover / how do I file a claim?",
+      "My package hasn't arrived",
+      "What if my order is delayed? (check tracking; exactly when the portal claim opens — 14 days after shipping — which option to pick with and without Package Protection, and that the portal shows the date if it's too early)", "My package says delivered but I didn't get it", "What does Package Protection cover / how do I file a claim?",
       "Can I change or cancel my order? (size/address changes only in the first minutes; cancelling allowed until it ships — say both clearly and that both are done in the portal)",
       "Defective vs. arrived damaged — which do I pick? (the two windows side by side)", "How many photos do I need? (at least 1, up to 8)",
     ],
