@@ -839,9 +839,9 @@ async function pollAll() {
   finally { pollBusy = false; }
 }
 // Send a reply through Gmail, threaded onto the existing conversation.
-async function gmailSend({ mailbox, to, subject, text, threadId, inReplyTo, references, fromName, attachments = [], reply = true }) {
+async function gmailSend({ mailbox, to, subject, text, html: htmlIn, threadId, inReplyTo, references, fromName, attachments = [], reply = true }) {
   const boundaryText = String(text || "");
-  const html = boundaryText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+  const html = htmlIn ? String(htmlIn) : boundaryText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
   // Our own Message-ID so later replies/follow-ups can reference it and thread properly in the customer's mail client.
   const messageId = `<hd-${crypto.randomUUID()}@${String(mailbox).split("@")[1] || "helpdesk"}>`;
   const top = [
@@ -878,7 +878,7 @@ function emitInbound(ticketId, messageId) { for (const fn of inboundListeners) {
  * One path for every outbound email, whoever triggers it: a person in the UI, Emily after approval,
  * or an out-of-stock notice from the warehouse. Gmail when the mailbox is connected; Gorgias as the
  * fallback while history is still being migrated. */
-async function sendReply({ ticketId, text, who, via, files = [] }) {
+async function sendReply({ ticketId, text, html: htmlIn, who, via, files = [] }) {
   const t = (await db(`SELECT * FROM hd_tickets WHERE id=$1`, [ticketId])).rows[0];
   if (!t) throw new Error("ticket not found");
   if (!t.customer_email) throw new Error("no customer email on this ticket");
@@ -892,13 +892,13 @@ async function sendReply({ ticketId, text, who, via, files = [] }) {
   const attachments = [];
   for (const fid of files) { const f = await getFile(String(fid)); if (f) attachments.push({ file_id: String(fid), name: f.name, content_type: f.content_type, buffer: f.buffer, size: f.buffer.length }); }
   if (connected && gmailConfigured()) {
-    const r = await gmailSend({ mailbox, to: t.customer_email, subject: t.subject, text, threadId: t.gmail_thread_id,
+    const r = await gmailSend({ mailbox, to: t.customer_email, subject: t.subject, text, html: htmlIn, threadId: t.gmail_thread_id,
       inReplyTo: last && last.rfc_message_id, references: chain || (last && last.rfc_message_id), fromName: t.brand, attachments });
     externalId = `gmail:${r.id}`; ourId = r.messageId || null;
     if (!t.gmail_thread_id && r.threadId) await db(`UPDATE hd_tickets SET gmail_thread_id=$2 WHERE id=$1`, [ticketId, r.threadId]);
   } else if (G_DOMAIN && t.gorgias_id) {
     sentVia = "gorgias";
-    const html = htmlify(text);
+    const html = htmlIn || htmlify(text);
     const rr = await gorgias("POST", `/tickets/${t.gorgias_id}/messages`, {
       channel: "email", via: "api", from_agent: true,
       subject: /^re:/i.test(t.subject || "") ? t.subject : `Re: ${t.subject || ""}`,
@@ -926,18 +926,18 @@ async function sendReply({ ticketId, text, who, via, files = [] }) {
 const htmlify = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
 // A brand-new outbound conversation (the warehouse's out-of-stock notice). Creates the ticket here first
 // so the customer's reply threads straight back onto it.
-async function sendNewEmail({ mailbox, to, subject, text, who, tags, name }) {
+async function sendNewEmail({ mailbox, to, subject, text, html: htmlIn, who, tags, name }) {
   const brand = brandForAddress(mailbox);
   const connected = (await db(`SELECT 1 FROM hd_mailboxes WHERE lower(address)=lower($1) AND refresh_token IS NOT NULL`, [mailbox])).rows.length > 0;
   const id = (await db(`SELECT nextval('hd_local_ticket_seq')::bigint AS id`)).rows[0].id;
   const at = new Date().toISOString();
   let threadId = null, externalId = null, via = "gmail", ourId = null;
   if (connected && gmailConfigured()) {
-    const r = await gmailSend({ mailbox, to, subject, text, fromName: brand, reply: false });
+    const r = await gmailSend({ mailbox, to, subject, text, html: htmlIn, fromName: brand, reply: false });
     threadId = r.threadId || null; externalId = `gmail:${r.id}`; ourId = r.messageId || null;
   } else if (G_DOMAIN) {
     via = "gorgias";
-    const html = htmlify(text);
+    const html = htmlIn || htmlify(text);
     const rr = await gorgias("POST", "/tickets", {
       subject, channel: "email", via: "api", customer: { email: to },
       messages: [{ channel: "email", via: "api", from_agent: true, sender: { email: process.env.GORGIAS_AGENT_EMAIL || process.env.GORGIAS_EMAIL }, receiver: { email: to },

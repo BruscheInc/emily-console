@@ -673,6 +673,28 @@ app.get("/api/portal/:store/version/:id", async (req, res) => {
   if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
   try { const t = await PT.versionTheme(k, Number(req.params.id)); if (!t) return res.status(404).json({ error: "not found" }); res.json({ theme: t }); } catch (e) { retErr(res, e); }
 });
+// Email previews (Portal Studio → Emails): render with the theme being edited, or send a test to yourself.
+const EM = require("./emails");
+async function emailFor(k, kind, themeIn) {
+  if (!EM.KINDS.includes(kind)) throw Object.assign(new Error("unknown email"), { status: 400 });
+  const s = await R.settings(), def = R.STORE_DEFS[k];
+  const theme = themeIn ? PT.sanitize(themeIn, k) : await PT.draft(k);
+  const base = R.portalUrl(k, s).replace(/\/returns\/\w+$/, "");
+  return { def, m: EM.render(kind, { view: EM.sampleView(def, s, base), theme, def, base }) };
+}
+app.post("/api/portal/:store/email-preview", async (req, res) => {
+  if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try { const { m } = await emailFor(k, String(req.body.kind || ""), req.body.theme); res.json({ subject: m.subject, html: m.html }); } catch (e) { retErr(res, e); }
+});
+app.post("/api/portal/:store/email-test", async (req, res) => {
+  if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
+  try {
+    const to = String(req.body.to || "").trim(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: "Enter an email address." });
+    const { def, m } = await emailFor(k, String(req.body.kind || ""), req.body.theme);
+    await core.gmailSend({ mailbox: def.support, to, subject: "[TEST] " + m.subject, text: m.text, html: m.html, fromName: def.name, reply: false });
+    res.json({ ok: true });
+  } catch (e) { retErr(res, e); }
+});
 app.put("/api/portal/:store/draft", async (req, res) => {
   if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return;
   try { const t = await PT.saveDraft(k, (req.body || {}).theme, actorOf(req)); res.json({ ok: true, theme: t, saved_at: new Date().toISOString() }); } catch (e) { retErr(res, e); }

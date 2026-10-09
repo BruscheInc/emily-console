@@ -70,6 +70,7 @@ const DEFAULTS = {
   void_unused_after_days: 28,      // customers have this many days to drop off; the label is voided and the return closed the day after
   dropoff_reminder_days: 21,       // reminder email if the package hasn't been dropped off by this day
   test_labels: true,
+  own_return_email: true,          // send our own branded return email (Portal Studio → Emails) instead of Shopify's label email
   // Portal options beyond returns (edit order, defective, Package Protection, not delivered)
   edit_window_minutes: 15,         // customers can edit an unshipped order for this long after placing it
   claim_window_days: 30,           // defective and arrived-damaged claims: this many days after delivery
@@ -167,8 +168,8 @@ const RETURN_CREATE = `mutation ReturnCreate($input: ReturnInput!) { returnCreat
 const RETURN_DETAIL = `query R($id: ID!) { return(id: $id) { id status order { id customer { id } }
   returnLineItems(first: 100) { nodes { id quantity ... on ReturnLineItem { fulfillmentLineItem { id lineItem { id } } } } }
   reverseFulfillmentOrders(first: 5) { nodes { id lineItems(first: 100) { nodes { id totalQuantity fulfillmentLineItem { id } } } } } } }`;
-const REVERSE_DELIVERY = `mutation RD($rfo: ID!, $url: URL!, $num: String!, $turl: URL) {
-  reverseDeliveryCreateWithShipping(reverseFulfillmentOrderId: $rfo, reverseDeliveryLineItems: [], notifyCustomer: true,
+const REVERSE_DELIVERY = `mutation RD($rfo: ID!, $url: URL!, $num: String!, $turl: URL, $notify: Boolean) {
+  reverseDeliveryCreateWithShipping(reverseFulfillmentOrderId: $rfo, reverseDeliveryLineItems: [], notifyCustomer: $notify,
     labelInput: { fileUrl: $url }, trackingInput: { number: $num, url: $turl }) { reverseDelivery { id } userErrors { field message } } }`;
 const SUGGEST = `query S($id: ID!, $items: [SuggestedOutcomeReturnLineItemInput!]!) { return(id: $id) {
   suggestedFinancialOutcome(returnLineItems: $items, exchangeLineItems: [], refundMethodAllocation: ORIGINAL_PAYMENT_METHODS) {
@@ -637,14 +638,20 @@ async function create({ key, orderId, lines, refundMethod, address, source, tick
   }, `Return ${sret.name} created (${source}${who ? " · " + who : ""}); ${label.carrier || ""} label ${label.trackingNumber}${label.cost != null ? ` ($${label.cost}${label.test ? " quote" : ""})` : ""}${label.test ? " — TEST MODE: no label bought, nothing charged, customer not emailed" : ""}`);
 
   if (!label.test && linkNotes.length) await update(rec.id, {}, "ShipStation: " + linkNotes.join("; "));
+  // Our branded confirmation email (portal returns). If it can't be sent, Shopify's own label email goes out instead.
+  let ownSent = false;
+  if (!label.test && source === "portal" && s.own_return_email !== false) {
+    try { const r = await sendBranded("return_created", await getRec(rec.id)); ownSent = true; await update(rec.id, { ticket_id: r.ticket_id || null, own_email: true }, "Return email sent to the customer"); }
+    catch (e) { console.error("return email:", e.message); await update(rec.id, {}, "Our return email failed (" + e.message + ") — Shopify's label email sent instead"); }
+  }
   // c) Hand the label to Shopify → Shopify emails it to the customer. (Not in test mode — no real label exists.)
   if (!label.test) try {
     const det = await gql(st, RETURN_DETAIL, { id: sret.id });
     const rfo = det.return.reverseFulfillmentOrders.nodes[0];
     if (rfo) {
-      const rd = await gql(st, REVERSE_DELIVERY, { rfo: rfo.id, url: label.labelUrl, num: label.trackingNumber, turl });
+      const rd = await gql(st, REVERSE_DELIVERY, { rfo: rfo.id, url: label.labelUrl, num: label.trackingNumber, turl, notify: !ownSent });
       userErrors(rd.reverseDeliveryCreateWithShipping, "attach label");
-      await update(rec.id, { label_emailed: true }, "Label emailed to the customer by Shopify");
+      await update(rec.id, { label_emailed: true }, ownSent ? "Label attached to the Shopify return" : "Label emailed to the customer by Shopify");
     }
   } catch (e) { await update(rec.id, { label_emailed: false }, "Shopify didn't email the label: " + e.message); }
 
@@ -768,17 +775,17 @@ async function checkOne(rec) {
   }
 }
 // Customer emails for an unused return label: a reminder before the deadline, and a note when the return is closed.
-async function dropoffEmail(rec, kind) {
+// Render + send one of the branded emails (emails.js) for a return, threaded into its Helpdesk ticket when it has one.
+async function sendBranded(kind, rec, opts = {}) {
   const s = await settings(), def = STORE_DEFS[rec.store];
-  const first = String(rec.customer_name || "").split(" ")[0] || "there";
-  const deadline = new Date(new Date(rec.created_at).getTime() + s.void_unused_after_days * 86400e3).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/Chicago" });
-  const label = `${portalUrl(rec.store, s)}?r=${rec.id}.${labelToken(rec.id)}`;
-  const text = kind === "reminder"
-    ? `Hi ${first},\n\nJust a reminder: your return ${rec.rma} for order ${rec.order_name} hasn't been dropped off yet. Please drop it off by ${deadline}. After that the return label expires and the return will be closed.\n\nPrint your label and packing slip: ${label}\n\nAlready sent it? Thank you — tracking can take a day to update.\n\n— The ${def.name} Team`
-    : `Hi ${first},\n\nYour return ${rec.rma} for order ${rec.order_name} has been closed because the package wasn't dropped off within ${s.void_unused_after_days} days, and the return label is no longer valid. Nothing was charged.\n\nIf you still need help, just reply to this email.\n\n— The ${def.name} Team`;
-  const subject = kind === "reminder" ? `Reminder: drop off your return ${rec.rma} by ${deadline}` : `Your return ${rec.rma} has been closed`;
-  if (rec.ticket_id) { try { await core.sendReply({ ticketId: String(rec.ticket_id), text, who: "Returns" }); return; } catch (_) {} }
-  const r = await core.sendNewEmail({ mailbox: def.support, to: rec.email, subject, text, who: "Returns", tags: ["return", kind === "reminder" ? "return-reminder" : "return-closed"], name: rec.customer_name });
+  const theme = opts.theme || await require("./returns-theme").published(rec.store);
+  const view = await publicView(rec);
+  const m = require("./emails").render(kind, { view, theme, def, base: portalUrl(rec.store, s).replace(/\/returns\/\w+$/, "") });
+  if (rec.ticket_id && !opts.fresh) { try { await core.sendReply({ ticketId: String(rec.ticket_id), text: m.text, html: m.html, who: "Returns" }); return { ticket_id: rec.ticket_id }; } catch (_) {} }
+  return core.sendNewEmail({ mailbox: def.support, to: rec.email, subject: m.subject, text: m.text, html: m.html, who: "Returns", tags: ["return", kind.replace("_", "-")], name: rec.customer_name });
+}
+async function dropoffEmail(rec, kind) {
+  const r = await sendBranded(kind === "reminder" ? "return_reminder" : "return_closed", rec);
   if (!rec.ticket_id && r && r.ticket_id) await update(rec.id, { ticket_id: r.ticket_id });
 }
 let polling = false;
@@ -935,4 +942,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

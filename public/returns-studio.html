@@ -458,6 +458,27 @@ const SECTIONS = [
     { p: 'footer.text', type: 'rich', label: 'Footer text' },
     { p: 'footer.links', type: 'links', label: 'Links', hint: 'Up to 8 — e.g. Return policy, FAQ, Size guide, Contact us.' },
   ] },
+  { id: 'emails', icon: '✉', title: 'Emails', desc: 'What customers get in their inbox — wording, preview, test send', fields: [
+    { type: 'emailtools' },
+    { grp: 'Return submitted (sent right after the return)' },
+    { p: 'copy.email_created_subject', type: 'text', label: 'Subject' },
+    { p: 'copy.email_created_title', type: 'text', label: 'Heading' },
+    { p: 'copy.email_created_intro', type: 'rich', label: 'Message', rows: 5, hint: 'Tokens: {first} {order} {rma} {deadline} {dropoff} {refund} {store} {support}' },
+    { p: 'copy.email_created_button', type: 'text', label: 'Button' },
+    { p: 'copy.email_created_view', type: 'text', label: 'Link under the button' },
+    { p: 'copy.email_created_steps', type: 'rich', label: 'How-to-ship steps (one per line)', rows: 4 },
+    { grp: 'Drop-off reminder (day 21)' },
+    { p: 'copy.email_reminder_subject', type: 'text', label: 'Subject' },
+    { p: 'copy.email_reminder_title', type: 'text', label: 'Heading' },
+    { p: 'copy.email_reminder_intro', type: 'rich', label: 'Message', rows: 5 },
+    { p: 'copy.email_reminder_button', type: 'text', label: 'Button' },
+    { grp: 'Return closed (not dropped off in time)' },
+    { p: 'copy.email_closed_subject', type: 'text', label: 'Subject' },
+    { p: 'copy.email_closed_title', type: 'text', label: 'Heading' },
+    { p: 'copy.email_closed_intro', type: 'rich', label: 'Message', rows: 5 },
+    { grp: 'All emails' },
+    { p: 'copy.email_footer', type: 'rich', label: 'Footer', rows: 2 },
+  ] },
   { id: 'meta', icon: '🔖', title: 'Browser tab & search', desc: 'Tab title, icon, search engine settings', fields: [
     { p: 'meta.title', type: 'text', label: 'Browser tab title' },
     { p: 'meta.favicon', type: 'image', label: 'Tab icon (favicon)', kind: 'favicon', hint: 'Square PNG, 64×64 or bigger.' },
@@ -670,6 +691,7 @@ function fieldHtml(f, s) {
   if (f.grp) return `<div class="grp">${esc(f.grp)}</div>`;
   if (f.tokens) return `<div class="f"><div class="hint">Use these and they fill in for each customer — click to copy:</div><div class="tokens">${['{store}', '{support}', '{order}', '{rma}', '{days}', '{fee}', '{bonus}', '{prefix}'].map((t) => `<code onclick="navigator.clipboard&&navigator.clipboard.writeText('${t}');toast('Copied ${t}')">${t}</code>`).join('')}</div><div class="hint">Formatting: **bold**, *italic*, [link text](https://…). Emails become links by themselves.</div></div>`;
   if (f.type === 'presets') return `<div class="presets">${PRESETS.map((p, i) => `<div class="preset" onclick="applyPreset(${i})"><div class="pv" style="background:${p.bg || '#f3f0ea'}">${p.card ? `<i style="background:${p.card};box-shadow:0 2px 6px rgba(0,0,0,.12)"></i><i style="width:20px;height:8px;background:${p.ink}"></i>` : `<img src="${esc(ST.defaults.brand.logo)}" style="max-height:30px;max-width:80%" alt="">`}</div><b>${esc(p.name)}</b></div>`).join('')}</div><div class="hint">Presets change colors, fonts and layout — your logo, uploaded photos and wording are kept (switch Background type back to Photo any time). "Original" brings back the Loop look. Undo with ⌘Z.</div>`;
+  if (f.type === 'emailtools') return `<div class="f"><div class="hint" style="margin-bottom:8px">Logo, colors and button shape come from this theme. Previews use a sample return and your unsaved changes.</div><div class="row" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" onclick="emailPreview('return_created')">👁 Return submitted</button><button class="btn small" onclick="emailPreview('return_reminder')">👁 Reminder</button><button class="btn small" onclick="emailPreview('return_closed')">👁 Closed</button></div></div>`;
   if (f.type === 'pair') {
     const [pd, pm] = f.pair;
     return `<div class="f ${isChanged(pd) || isChanged(pm) ? 'changed' : ''}" data-path="${pd}"><div class="lbl">${esc(f.label)}${resetBtn(pd)}</div>
@@ -842,6 +864,19 @@ async function delAsset(id, p) {
   const used = JSON.stringify([T, ST.published]).includes(id);
   if (!confirm(used ? 'This image is used in a portal. Delete it anyway? It will disappear from the page.' : 'Delete this image?')) return;
   try { await api('/api/portal/assets/' + id, { method: 'DELETE' }); closeModal(); openLibrary(p || null); } catch (e) { toast(e.message, true); }
+}
+
+/* ---------------- email preview / test ---------------- */
+async function emailPreview(kind) {
+  let r; try { r = await api(`/api/portal/${STORE}/email-preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, theme: T }) }); } catch (e) { toast(e.message, true); return; }
+  if (r.error) { toast(r.error, true); return; }
+  modal({ title: 'Email preview', sub: 'Subject: ' + r.subject, wide: true,
+    body: `<iframe id="emframe" style="width:100%;height:62vh;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe><div style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="email" id="emto" placeholder="you@larkspurbaby.com" style="flex:1"><span class="hint">Send a test to yourself (uses your unsaved changes)</span></div>`,
+    buttons: [{ label: 'Close' }, { label: 'Send test', primary: true, onClick: async () => {
+      const to = $('emto').value.trim(); if (!to) { toast('Enter your email', true); return true; }
+      const x = await api(`/api/portal/${STORE}/email-test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, to, theme: T }) }); if (x.error) throw new Error(x.error);
+      toast('Test sent to ' + to); return true; } }] });
+  $('emframe').srcdoc = r.html;
 }
 
 /* ---------------- modal helper ---------------- */
