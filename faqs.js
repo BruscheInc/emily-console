@@ -69,7 +69,7 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
-const FACTS_VER = 2;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
+const FACTS_VER = 3;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
@@ -123,6 +123,8 @@ async function facts(store) {
       arrived_damaged: `File within ${pp} days of delivery with photos of the damaged package and items.`,
       resolution: "Free replacement or store credit (no cash refunds on Package Protection claims).",
     },
+    defective_vs_damaged: `"Defective item" = something wrong with how the item was made (${s.claim_window_days} days from delivery). "Arrived damaged" = the package or items were damaged in shipping (with Package Protection: ${pp} days from delivery in "Package Protection claim"; without it: ${nopp} days). If unsure, pick the one that fits best — our team sorts it out.`,
+    photos: "Defective and damaged claims need at least 1 photo (up to 8, JPG or PNG). Clear, well-lit photos of the problem — and for shipping damage, the outside of the box too — get claims approved fastest.",
     shipping_problems_without_package_protection: `Once tracking shows delivered we can't replace a lost package; the portal (\"Other\") shows how to file a claim with USPS. Damage has to be reported within ${nopp} days of delivery.`,
     order_changes: {
       edit: `Change a size or the shipping address within ${s.edit_window_minutes} minutes of placing the order, in the portal ("Edit or cancel my order"). Shopify emails the updated order; if the new item costs more, that email has a link to pay the difference; if less, the difference is refunded.`,
@@ -144,7 +146,8 @@ async function facts(store) {
       "What can't be returned?", "Do you offer exchanges?",
       "My item is defective — what do I do? (window, photos, keep the item, options)", "My package arrived damaged",
       "My package hasn't arrived", "My package says delivered but I didn't get it", "What does Package Protection cover / how do I file a claim?",
-      "Can I change or cancel my order? (edit window, cancel before shipping)",
+      "Can I change or cancel my order? (size/address changes only in the first minutes; cancelling allowed until it ships — say both clearly and that both are done in the portal)",
+      "Defective vs. arrived damaged — which do I pick? (the two windows side by side)", "How many photos do I need? (at least 1, up to 8)",
     ],
     never_change_policy: "Sale items being store credit only, international/Canada rules, shipping times and carrier choices are business policies Buzzin doesn't control: never rewrite them; if they conflict with the FACTS, add a note for staff instead.",
     unchanged_policies: "Return condition (unwashed, tags attached, original packaging), merging orders, P.O. boxes, delays, product care and sizing questions are not controlled by Buzzin — leave them as they are unless they mention Loop, a different drop-off time, or emailing for returns/defects.",

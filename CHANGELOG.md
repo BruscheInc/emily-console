@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.43.1
+- FAQ facts: photo limits (at least 1, up to 8) and a plain "defective vs. arrived damaged" explanation with both windows side by side; clearer edit vs. cancel wording. Emily will ask in Slack before publishing.
+
 ## 4.43.0
 - Website FAQs, full coverage: Emily now knows every limit and step Buzzin runs — return window (from delivery), what you need, the steps, label and weight-based fee, drop-off deadline and reminder, refunds (timing, methods, what's refunded), cancelling a return, what can't be returned, defective items (window, photos, keep the item, options), Package Protection claims (hasn't arrived, marked delivered, arrived damaged), orders without PP, and editing or cancelling an order.
 - She makes sure each of these has a friendly, plain answer with the real numbers in bold and short numbered steps, and can add a NEW question when nothing on the page covers a topic. New questions show in Buzzin → Content → Website FAQs (question and answer editable) and in the Slack card. Nothing is published until someone approves.
