@@ -82,6 +82,25 @@ button,input,select,textarea{font:inherit;color:inherit}
 .prev .test{flex:none;display:flex;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel)}
 .prev .test input{flex:1;max-width:320px;border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:var(--panel2)}
 .prev .test small{color:var(--muted)}
+/* map */
+.map{flex:1;overflow:auto;padding:22px 24px 40px}
+.map .wrap{max-width:980px;margin:0 auto}
+.map .intro{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;color:var(--muted)}
+.map .intro b{color:var(--ink);font-size:16px}
+.flow{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 18px 10px;margin-bottom:16px}
+.flow .fh{font-weight:800;font-size:14px;padding:12px 0 8px;display:flex;align-items:center;gap:8px}
+.flow .fh small{font-weight:500;color:var(--muted);font-size:12px}
+.mrow{display:grid;grid-template-columns:minmax(180px,1fr) 24px minmax(240px,1.3fr);align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.mrow .ev{color:var(--muted)}
+.mrow .ar{color:var(--muted);text-align:center}
+.mrow .chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid;border-radius:9px;padding:6px 11px;font-weight:600;cursor:pointer;font-size:13px;text-align:left}
+.chip.helpdesk{background:var(--hd-soft);border-color:#b9cbfb;color:#2349b8}
+.chip.shopify{background:var(--sh-soft);border-color:#a9d6bb;border-style:dashed;color:#1f5e3a}
+.chip:hover{filter:brightness(.96)}
+.chip .go{font-size:11px;font-weight:600;opacity:.75}
+.chip .ed{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+@media (max-width:700px){.mrow{grid-template-columns:1fr}.mrow .ar{display:none}.map{padding:14px}}
 .empty{margin:auto;color:var(--muted);text-align:center;max-width:380px;padding:30px}
 .gate{margin:auto;max-width:420px;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;z-index:50;box-shadow:0 8px 30px rgba(0,0,0,.25)}
@@ -94,10 +113,12 @@ button,input,select,textarea{font:inherit;color:inherit}
 <div class="top">
   <a class="back" href="/">← Helpdesk</a>
   <div class="title">✉️ Email Studio</div>
+  <div class="seg" id="view"><button data-v="map">🗺 Email map</button><button data-v="edit">✏️ Edit</button></div>
   <div class="seg" id="stores"></div>
   <div class="sp"></div>
   <a class="btn" href="#" id="portalLink" target="_blank" rel="noopener">🎨 Logo &amp; colors (Portal Studio)</a>
 </div>
+<div class="map hidden" id="map"></div>
 <div class="main" id="main">
   <div class="list">
     <div class="filt">
@@ -125,7 +146,7 @@ function toast(msg, bad) { const t = document.createElement('div'); t.className 
 const store_get = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
 const store_set = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
-let STORE = 'lb', DATA = null, CUR = null, EDITS = {}, FILTER = 'all', ADMIN = false, lastField = null, prevTimer = null, MOBILE = false;
+let VIEW = 'map', STORE = 'lb', DATA = null, CUR = null, EDITS = {}, FILTER = 'all', ADMIN = false, lastField = null, prevTimer = null, MOBILE = false;
 const SENDER = { helpdesk: 'Helpdesk', shopify: 'Shopify' };
 const badge = (s) => `<span class="badge ${s}">${SENDER[s]}</span>`;
 const fmtWhen = (d) => new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -141,7 +162,24 @@ async function load(keepKind) {
   $('portalLink').href = `/returns-studio?store=${STORE}`;
   const want = keepKind || store_get('es_kind', 'return_created');
   CUR = DATA.emails.some((e) => e.kind === want) ? want : DATA.emails[0].kind;
-  EDITS = {}; renderList(); renderEdit(); renderPrev();
+  EDITS = {}; renderList(); renderEdit(); renderPrev(); renderMap(); setView(VIEW);
+}
+const FLOW_ICON = { Returns: '↩️', Claims: '🧾', 'Order edits': '✏️', 'All emails': '✉️' };
+function renderMap() {
+  const flows = [];
+  for (const e of [...DATA.emails].sort((a, b) => a.step - b.step)) { let f = flows.find((x) => x.n === e.group); if (!f) flows.push(f = { n: e.group, rows: [] }); let r = f.rows.find((x) => x.ev === e.event); if (!r) f.rows.push(r = { ev: e.event, list: [] }); r.list.push(e); }
+  const order = ['Returns', 'Claims', 'Order edits', 'All emails']; flows.sort((a, b) => order.indexOf(a.n) - order.indexOf(b.n));
+  const chip = (e) => `<button class="chip ${e.sender}" data-open="${e.kind}" title="${esc(e.sender === 'shopify' ? 'Sent by Shopify — see where to edit it' : 'Sent by Helpdesk — click to edit')}">${e.sender === 'shopify' ? '🛍' : '✉️'} ${esc(e.name.replace(/ \(Shopify\)$/, '').replace(/^Claim approved — /, 'Approved: '))}${e.edited ? '<span class="ed" title="Edited"></span>' : ''}<span class="go">${e.sender === 'shopify' ? 'Shopify' : 'Edit →'}</span></button>`;
+  const hd = DATA.emails.filter((e) => e.sender === 'helpdesk').length, sh = DATA.emails.length - hd;
+  $('map').innerHTML = `<div class="wrap"><div class="intro"><b>Every customer email for ${esc(DATA.stores[STORE].name)}</b><span class="badge helpdesk">Helpdesk · ${hd}</span><span class="badge shopify">Shopify · ${sh}</span><span>Click an email to edit it.</span></div>
+    ${flows.map((f) => `<div class="flow"><div class="fh">${FLOW_ICON[f.n] || ''} ${esc(f.n)}<small>${f.n === 'All emails' ? 'shared by every Helpdesk email' : 'what happens → email the customer gets'}</small></div>
+      ${f.rows.map((r) => `<div class="mrow"><span class="ev">${esc(r.ev)}</span><span class="ar">→</span><span class="chips">${r.list.map(chip).join('')}</span></div>`).join('')}</div>`).join('')}</div>`;
+}
+function setView(v) {
+  VIEW = v; store_set('es_view', v);
+  $('map').classList.toggle('hidden', v !== 'map'); $('main').classList.toggle('hidden', v === 'map');
+  document.querySelectorAll('#view button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  if (v === 'edit' && $('frame') && !$('frame').srcdoc) preview();
 }
 function renderList() {
   const groups = [];
@@ -225,6 +263,8 @@ async function sendTest() {
 
 document.addEventListener('click', (ev) => {
   const t = ev.target.closest('button'); if (!t) return;
+  if (t.dataset.v) { setView(t.dataset.v); return; }
+  if (t.dataset.open) { const k = t.dataset.open; if (k !== CUR) { if (dirty() && !confirm('You have unsaved changes to this email. Leave without saving?')) return; CUR = k; EDITS = {}; store_set('es_kind', k); renderList(); renderEdit(); renderPrev(); } setView('edit'); return; }
   if (t.dataset.s && t.dataset.s !== STORE) { if (dirty() && !confirm('You have unsaved changes. Switch store without saving?')) return; STORE = t.dataset.s; store_set('es_store', STORE); load(CUR); }
   else if (t.dataset.f && t.closest('#filt')) { FILTER = t.dataset.f; document.querySelectorAll('#filt button').forEach((b) => b.classList.toggle('on', b === t)); renderList(); }
   else if (t.dataset.k) pick(t.dataset.k);
@@ -253,10 +293,11 @@ window.addEventListener('beforeunload', (ev) => { if (dirty()) { ev.preventDefau
 document.addEventListener('keydown', (ev) => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 's') { ev.preventDefault(); if ($('save') && !$('save').disabled) save(); } });
 
 (function start() {
-  if (!KEY) { $('main').classList.add('hidden'); document.querySelector('.top .seg').classList.add('hidden'); $('gate').classList.remove('hidden'); return; }
+  if (!KEY) { $('main').classList.add('hidden'); $('map').classList.add('hidden'); $('view').classList.add('hidden'); document.querySelector('.top .seg').classList.add('hidden'); $('gate').classList.remove('hidden'); return; }
   const q = new URLSearchParams(location.search);
   STORE = ['lb', 'lbo'].includes(q.get('store')) ? q.get('store') : store_get('es_store', 'lb');
   if (q.get('email')) store_set('es_kind', q.get('email'));
+  VIEW = q.get('email') ? 'edit' : store_get('es_view', 'map');
   load();
 })();
 </script>

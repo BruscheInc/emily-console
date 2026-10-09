@@ -685,7 +685,7 @@ async function emailBuild(k, kind, over) {
 }
 app.get("/api/emails/:store", async (req, res) => {
   if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;
-  try { res.json({ emails: await EM.listFor(k), stores: Object.fromEntries(Object.entries(R.STORE_DEFS).map(([x, d]) => [x, { name: d.name, support: d.support }])), admin: isAdmin(req) }); } catch (e) { retErr(res, e); }
+  try { res.json({ emails: await EM.listFor(k, await R.settings()), stores: Object.fromEntries(Object.entries(R.STORE_DEFS).map(([x, d]) => [x, { name: d.name, support: d.support }])), admin: isAdmin(req) }); } catch (e) { retErr(res, e); }
 });
 app.post("/api/emails/:store/preview", async (req, res) => {
   if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return;

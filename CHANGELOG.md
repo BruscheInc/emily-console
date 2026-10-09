@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.34.1
+- Email Studio opens on an Email map: every customer email grouped by Returns / Claims / Order edits / All emails, showing what triggers it, who sends it (Helpdesk or Shopify), and a dot on ones you've edited. Click any email to jump straight to its editor. Switch with "🗺 Email map" / "✏️ Edit" at the top. Day numbers follow Returns → Settings.
+
 ## 4.34.0
 - Email Studio (/email-studio, Helpdesk → Returns → ✉️ Customer emails or ✉️ Emails on a portal card): every customer email from returns, claims and order edits on one page, each with its own editor and a live preview (desktop / mobile), test send, save, discard and reset to default. Per store.
 - Every email is marked with who sends it: Helpdesk (edit here) or Shopify (edited in Shopify Admin → Settings → Notifications — listed for reference with the Shopify template name). Filter by sender.
