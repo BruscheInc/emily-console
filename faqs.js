@@ -69,7 +69,7 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
-const FACTS_VER = 7;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
+const FACTS_VER = 8;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
@@ -125,9 +125,17 @@ async function facts(store) {
     },
     delayed_order: {
       not_shipped_yet: `Use the tracking link from the shipping email once it ships. Orders that haven't shipped can still be cancelled in the portal ("Edit or cancel my order"). Keep the page's existing processing-time wording (e.g. new releases and sales taking longer to process) — that's store policy.`,
-      shipped_but_slow: `Check the tracking link first. If the package still isn't delivered <strong>${s.transit_claim_days} days after it shipped</strong>, open the returns portal (${portal}), enter the order number + checkout email and choose "Package Protection claim" → "My package hasn't arrived" (free replacement or store credit). Any other situation: choose "Other" in the portal and our team will help.`,
+      shipped_but_slow: `Check the tracking link first. If the package still isn't delivered <strong>${s.transit_claim_days} days after it shipped</strong>, open the returns portal (${portal}), enter the order number + checkout email and pick <strong>"My package hasn't arrived"</strong> — it's under "Package Protection claim" if the order has Package Protection, otherwise under "Other". Package Protection orders get a free replacement or store credit; for any other order our team looks into it and follows up (don't promise an outcome).`,
       too_early: `Before day ${s.transit_claim_days} the portal shows the latest tracking status and the exact date the claim opens, so the customer can come back then.${Number(s.transit_claim_max_days) ? ` Last day to file: ${s.transit_claim_max_days} days after shipping.` : ""}`,
       marked_delivered: `If tracking says delivered but it isn't there, that's the "marked delivered" claim (wait ${s.delivered_wait_hours} hours, check around, then file within ${pp} days with Package Protection).`,
+    },
+    portal_shipping_options: {
+      where: `Returns portal (${portal}) → "Package Protection claim" (orders with Package Protection) or "Other" (all other orders). Both show the same choices:`,
+      "My package hasn't arrived": `Tracking hasn't shown delivered. Opens ${s.transit_claim_days} days after shipping; before that the portal shows the latest tracking and the date it opens. Use this in the delayed-order and lost-package answers.`,
+      "My package was marked delivered, but I didn't get it": `Tracking says delivered but it isn't there. Wait ${s.delivered_wait_hours} hours and check around first.`,
+      "My package arrived damaged": "Damaged in shipping — add photos.",
+      "Something else": "Anything else; our team replies by email.",
+      wording: "Name these options in quotes exactly as written so the customer can find them. Explaining where an option is isn't a policy — it's fine for every order, but outcomes for orders without Package Protection are never written down.",
     },
     defective_vs_damaged: `"Defective item" = something wrong with how the item was made (${s.claim_window_days} days from delivery). "Arrived damaged" = the package or items were damaged in shipping (file within ${pp} days of delivery under "Package Protection claim"). If unsure, pick the one that fits best — our team sorts it out.`,
     photos: "Defective and damaged claims need at least 1 photo (up to 8, JPG or PNG). Clear, well-lit photos of the problem — and for shipping damage, the outside of the box too — get claims approved fastest.",
@@ -154,8 +162,8 @@ async function facts(store) {
       "When and how will I get my refund? (timing, methods, store credit bonus, what's refunded)", "Can I cancel my return or check its status?",
       "What can't be returned?", "Do you offer exchanges?",
       "My item is defective — what do I do? (window, photos, keep the item, options)", "My package arrived damaged",
-      "My package hasn't arrived",
-      "What if my order is delayed? (check tracking; exactly when the portal claim opens — 14 days after shipping — which option to pick, and that the portal shows the date if it's too early)", "My package says delivered but I didn't get it", "What does Package Protection cover / how do I file a claim?",
+      "My package hasn't arrived (name the portal option \"My package hasn't arrived\", when it opens, and where to find it)",
+      "What if my order is delayed? (check tracking; point to the \"My package hasn't arrived\" option; exactly when it opens — 14 days after shipping — which option to pick, and that the portal shows the date if it's too early)", "My package says delivered but I didn't get it", "What does Package Protection cover / how do I file a claim?",
       "Can I change or cancel my order? (size/address changes only in the first minutes; cancelling allowed until it ships — say both clearly and that both are done in the portal)",
       "Defective vs. arrived damaged — which do I pick? (the two windows side by side)", "How many photos do I need? (at least 1, up to 8)",
     ],
