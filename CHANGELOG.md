@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.49.0
+- The returns portal now runs inside the website chat — no new page. Every portal link in the chat opens it in place (with "← Back to chat"): the header "Track or return" button, the AI's buttons ("Start a return", "Edit or cancel my order", "Report a defective item", "Package Protection claim", "Package problem / something else"), and the action buttons on a looked-up order card. It jumps straight to the right option after the customer confirms their checkout email, and the order number is filled in when they've already looked it up in the chat. The chat window widens a little on desktop while the portal is open; on phones it stays in the bottom sheet.
+- Portal "embed" mode (?embed=1): just the form, no page header, footer or background; outside links open in a new tab. The portal can be framed only by the store websites.
+
 ## 4.48.0
 - Shopping assistant in the website chat. Buzzin reads every active product on each store (description, fabric and features, price and sale price, sizes in stock, rating) plus the store's pages, and turns each product's size-chart image into text once. It refreshes a few minutes after start and every 6 hours (Chat Studio → AI helper → "Update now").
 - The chat finds the products that match each question (and the product the shopper is looking at), recommends sizes from the real size chart, and shows up to 3 product cards (photo, price / sale price, sizes in stock, View). With no direct match it suggests popular in-stock items.

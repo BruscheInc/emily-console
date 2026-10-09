@@ -638,7 +638,9 @@ app.get("/returns/:store", async (req, res, next) => {
     const ctx = await portalCtx(d.key);
     const tk = (x) => String(x || "").replace(/\{(\w+)\}/g, (m, k) => ({ store: ctx.name, support: ctx.support, days: ctx.days }[k] ?? m));
     res.setHeader("Cache-Control", "no-store");
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    // Inside the website chat (?embed=1) the portal is framed by the chat on the store's own site.
+    if (req.query.embed === "1") res.setHeader("Content-Security-Policy", `frame-ancestors 'self' ${Object.values(R.STORE_DEFS).map((x) => { const h = new URL(x.shopUrl).host; return `https://${h} https://www.${h.replace(/^www\./, "")}`; }).join(" ")} https://*.myshopify.com ${process.env.EXTRA_FRAME_ANCESTORS || ""}`.trim());
+    else res.setHeader("X-Frame-Options", "SAMEORIGIN");
     // One pass with a function: "$'" or "__BOOT_JSON__" inside the copy can't corrupt the page.
     const vals = {
       TITLE: escH(tk(theme.meta.title)), DESCRIPTION: escH(tk(theme.meta.description)),

@@ -283,6 +283,15 @@ body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
 @media (max-width:480px){.grid2{grid-template-columns:1fr}}
 </style>
 <style id="customcss"></style>
+<style id="embedcss">
+/* Inside the website chat (?embed=1): just the card, no page chrome */
+html.embed body{background:#fff!important}
+html.embed .bg,html.embed .media,html.embed .announce,html.embed .topbar,html.embed .pagelogo,html.embed .logowrap,html.embed .foot{display:none!important}
+html.embed .page{padding:0!important;min-height:0!important;display:block!important;grid-template-columns:none!important}
+html.embed .formside{padding:0!important;width:100%!important;max-width:none!important;min-height:0!important;display:block!important}
+html.embed .shell{max-width:none!important;width:100%!important;padding:0!important;margin:0!important}
+html.embed .card,html.embed body.wide .card{max-width:none!important;width:100%!important;border:0!important;box-shadow:none!important;border-radius:0!important;padding:14px 16px 28px!important;background:#fff!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+</style>
 </head>
 <body>
 <div class="bg" data-sec="background"><div class="bg-img"></div><div class="bg-ov"></div></div>
@@ -414,6 +423,10 @@ body.picking [data-sec]:hover{outline:2px dashed #3b6ef5;outline-offset:3px}
 
 <script>
 const B = window.__BOOT__;          // { store, ctx, theme, preview }
+// Opened inside the website chat: ?embed=1, optional &order=LB123 (prefilled) and &do=return|edit|defective|pp|other (opens that option after lookup).
+const QP = new URLSearchParams(location.search), EMBED = QP.get('embed') === '1', DO = (QP.get('do') || '').toLowerCase();
+if (EMBED) document.documentElement.classList.add('embed');
+const toChat = (m) => { if (EMBED && window.parent !== window) try { window.parent.postMessage(Object.assign({ buzzinPortal: 1 }, m), '*'); } catch (e) {} };
 let T = B.theme;                    // the active theme (published, or the draft in preview)
 const CTX = B.ctx;                  // { name, support, prefix, shop_url, days, fee, bonus, credit_enabled, fee_on_credit }
 let S = {}, method = 'original', addr = null, STEP = 1, PICK = false;
@@ -629,6 +642,8 @@ $('f1').addEventListener('submit', async (e) => {
     S = await api(`/api/returns/public/${B.store}/lookup`, { order_number: $('on').value, email: $('em').value });
     addr = S.address ? { ...S.address } : null; method = 'original';
     renderItems(); go('sMenu');
+    toChat({ type: 'lookup', order: S.order && S.order.name });
+    if (DO) { const b = document.querySelector(`#mopts .mopt[onclick*="'${DO}'"]:not([disabled])`); if (b) b.click(); }
   } catch (err) { showErr('e1', err.status === 404 ? C('not_found') : err.message); }
   busy($('b1'), false, C('lookup_button'));
 });
@@ -1158,6 +1173,12 @@ if (B.preview) {
 applyTheme(T);
 go(1);
 openFromLink();
+if (EMBED) {
+  // Pages outside the portal (the store's Returns page, tracking, shop) open in a new tab, not inside the chat.
+  document.addEventListener('click', (e) => { const l = e.target.closest('a[href]'); if (!l) return; try { const u = new URL(l.href, location.href); if (u.origin !== location.origin || /\/returns\/(label|print)\//.test(u.pathname)) { l.target = '_blank'; l.rel = 'noopener'; } } catch (_) {} }, true);
+  const o = QP.get('order'); if (o && $('on')) $('on').value = o.replace(/[^0-9A-Za-z#]/g, '').slice(0, 20);
+  setTimeout(() => { const f = o ? $('em') : $('on'); if (f) f.focus(); }, 60);
+}
 window.addEventListener('resize', renderChrome);
 </script>
 </body>

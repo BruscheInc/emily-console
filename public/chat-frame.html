@@ -80,6 +80,13 @@ button,input,textarea{font:inherit;color:inherit}
 .vf input:focus{border-color:var(--accent)}
 .vf button{margin-top:8px;width:100%;border:0;border-radius:10px;padding:10px;background:var(--accent);color:var(--accentfg);font-weight:700;cursor:pointer}
 .vf button:disabled{opacity:.5}.vf .e{color:#B42318;font-size:.84em;margin-top:6px}
+#portalView:not(.hidden){display:flex}
+.pbar{flex:none;display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(0,0,0,.08);background:var(--bg)}
+.pbar button{border:0;background:none;color:var(--accent);font-weight:700;cursor:pointer;padding:4px 2px}
+.pbar span{margin-left:auto;font-size:.82em;color:var(--muted);font-weight:600}
+#pFrame{flex:1;width:100%;border:0;background:#fff}
+.oc .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.oc .acts button{border:1px solid var(--chipbd);background:var(--chipbg);color:var(--chipfg);border-radius:999px;padding:6px 11px;font-weight:700;font-size:.86em;cursor:pointer}
 .ok{text-align:center;padding:40px 10px}.ok .ic{width:56px;height:56px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);display:grid;place-items:center;margin:0 auto 14px}
 </style>
 <style id="custom"></style>
@@ -95,6 +102,10 @@ button,input,textarea{font:inherit;color:inherit}
       <button class="send" id="send" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
     <div class="meta"><span id="disc"></span><button id="toTeam" class="hidden"></button></div>
   </div>
+</div>
+<div id="portalView" class="hidden" style="flex:1;flex-direction:column;min-height:0">
+  <div class="pbar"><button id="pBack">← Back to chat</button><span id="pTitle">Orders & returns</span></div>
+  <iframe id="pFrame" title="Orders and returns"></iframe>
 </div>
 <div class="form hidden" id="form">
   <h3 id="fTitle"></h3><p id="fIntro"></p>
@@ -146,7 +157,7 @@ function orderCard(o) {
     <div class="om">Placed ${esc(o.placed)}${o.ship_to ? ` · ${o.pickup ? 'Pickup' : 'Shipping to'} ${esc(o.ship_to)}` : ''}</div>`;
   h += `<div class="sec"><div class="lab">Items</div>${o.items.map((i) => `<div class="li"><span>${i.quantity}×</span><span>${esc(i.title)}${i.variant ? ` — ${esc(i.variant)}` : ''}</span></div>`).join('')}</div>`;
   if (o.shipments.length) h += `<div class="sec"><div class="lab">Tracking</div>${o.shipments.map((x) => `<div>${esc(x.carrier || '')} ${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.number || 'Track')} ↗</a>` : esc(x.number || '')}<div class="om">${esc(x.status || '')}${x.last_update ? ` · ${esc(x.last_update)}` : ''}</div></div>`).join('')}</div>`;
-  if (o.can_do_now.length) h += `<div class="sec"><div class="lab">You can</div>${o.can_do_now.map((x) => `<div class="do">${esc(x)}</div>`).join('')}<div style="margin-top:6px"><a href="${esc(o.portal)}" target="_blank" rel="noopener">Open the returns portal ↗</a></div></div>`;
+  if (o.can_do_now.length) h += `<div class="sec"><div class="lab">You can</div>${o.can_do_now.map((x) => `<div class="do">${esc(x)}</div>`).join('')}${(o.actions || []).length ? `<div class="acts">${o.actions.map((a) => `<button data-portal="${esc(a.do)}" data-order="${esc(o.order)}">${esc(a.label)}</button>`).join('')}</div>` : ''}</div>`;
   return h + '</div>';
 }
 function verifyForm() {
@@ -198,7 +209,22 @@ async function ask(text) {
   busy = false; keep(); render(); $('in').focus();
 }
 function grow() { const t = $('in'); t.style.height = 'auto'; t.style.height = Math.min(110, t.scrollHeight) + 'px'; $('send').disabled = busy || !t.value.trim(); }
-function view(v) { $('chat').classList.toggle('hidden', v !== 'chat'); $('form').classList.toggle('hidden', v !== 'form'); $('done').classList.toggle('hidden', v !== 'done'); }
+function view(v) { $('chat').classList.toggle('hidden', v !== 'chat'); $('form').classList.toggle('hidden', v !== 'form'); $('done').classList.toggle('hidden', v !== 'done'); $('portalView').classList.toggle('hidden', v !== 'portal');
+  parent.postMessage({ buzzinChat: 1, type: 'wide', on: v === 'portal' }, '*'); }
+// The returns portal opens right inside the chat (no new tab). opts: { do: return|edit|defective|pp|other, order }
+function portalUrl(href, opts = {}) {
+  const u = new URL(href || C.portal, location.href); u.searchParams.set('embed', '1');
+  if (opts.do) u.searchParams.set('do', opts.do); if (opts.order) u.searchParams.set('order', opts.order); return u.toString();
+}
+function isPortal(href) {
+  try { const u = new URL(href, location.href), p = new URL(C.portal, location.href); const norm = (x) => x.replace(/\/+$/, '') || '/';
+    return u.origin === p.origin && norm(u.pathname) === norm(p.pathname); } catch (e) { return false; }
+}
+function openPortal(href, opts) {
+  const src = portalUrl(href, opts);
+  if ($('pFrame').dataset.src !== src) { $('pFrame').dataset.src = src; $('pFrame').src = src; }
+  view('portal');
+}
 function openForm() {
   const last = [...S.msgs].reverse().find((m) => m.role === 'user');
   if (!$('fMsg').value && last) $('fMsg').value = last.text;
@@ -208,6 +234,8 @@ $('body').addEventListener('click', (e) => {
   const q = e.target.closest('[data-q]');
   if (q) { const it = C.quick[+q.dataset.q]; if (it.type === 'lookup') { S.msgs.push({ role: 'user', text: it.label }); S.ask = true; keep(); render(); setTimeout(() => $('vOrder') && $('vOrder').focus(), 30); return; } return ask(it.value); }
   if (e.target.closest('#vGo')) return verify();
+  const pb = e.target.closest('[data-portal]'); if (pb) return openPortal(C.portal, { do: pb.dataset.portal, order: pb.dataset.order });
+  const a = e.target.closest('a[href]'); if (a && isPortal(a.href)) { e.preventDefault(); return openPortal(a.href); }
   if (e.target.closest('[data-team]')) openForm();
 });
 $('body').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.id === 'vOrder' || e.target.id === 'vZip')) { e.preventDefault(); verify(); } });
@@ -216,6 +244,8 @@ $('in').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKe
 $('send').onclick = () => ask($('in').value);
 $('toTeam').onclick = openForm; $('fBack').onclick = () => view('chat'); $('dBack').onclick = () => view('chat');
 $('close').onclick = () => parent.postMessage({ buzzinChat: 1, type: 'close' }, '*');
+$('pBack').onclick = () => view('chat');
+$('act').addEventListener('click', (e) => { if (isPortal($('act').href)) { e.preventDefault(); const vo = [...S.msgs].reverse().find((m) => m.order); openPortal($('act').href, vo ? { order: vo.order.order } : {}); } });
 $('fSend').onclick = async () => {
   const b = $('fSend'); b.disabled = true; $('fErr').classList.add('hidden');
   try { const r = await api('handoff', { session: S.id, name: $('fName').value, email: $('fEmail').value, order: $('fOrder').value, message: $('fMsg').value });
@@ -228,6 +258,7 @@ window.addEventListener('message', (e) => {
   if (d.type === 'config' && PREVIEW) apply(d.config);
   if (d.type === 'page') page = String(d.page || '').slice(0, 300);
 });
+window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.buzzinPortal || e.source !== $('pFrame').contentWindow) return; if (d.type === 'lookup') $('pTitle').textContent = 'Order ' + String(d.order || '').replace(/^#/, ''); });
 if (!PREVIEW) fetch('/api/chat/' + STORE + '/config').then((r) => r.json()).then(apply).catch(() => {});
 </script>
 </body>
