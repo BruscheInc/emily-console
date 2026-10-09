@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.44.1
+- FAQ formatting fix: the store theme shows numbered lists as "1TH, 2TH…" and hides bullets. Lists in FAQ answers are now written as plain numbered lines (1., 2.) and • bullets, Emily no longer uses lists, and every live answer that still has one is sent for approval as a formatting-only fix (same words).
+
 ## 4.44.0
 - Claims go live: every claim and order edit made during testing is hidden from Claims & edits (lists, tab counts, Home). Nothing is deleted. The screen shows "Showing claims from …", and admins have a "Clear claims" button to do it again.
 

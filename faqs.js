@@ -69,7 +69,7 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
-const FACTS_VER = 3;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
+const FACTS_VER = 4;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
@@ -158,7 +158,7 @@ async function facts(store) {
 const SUGGEST_SYS = `You keep a baby-clothing store's FAQ page accurate, complete and easy for busy parents to follow. You get the FAQ (groups with ids, questions with ids and their current HTML answers) and the FACTS: exactly what the store's systems do today.
 1. FIX: rewrite any answer that is wrong, out of date or missing something from the FACTS (old Loop links, wrong day counts, "email us" where the portal handles it, a fixed label fee, missing deadlines).
 2. COMPLETE: every topic in FACTS.must_cover needs a clear answer with the real numbers — day limits and what they count from (delivery, shipping, label date), what the customer needs, and the steps. Expand the closest existing answer; add a NEW question only when no existing question fits (put it in the group where a customer would look). Don't duplicate a topic another question already covers well.
-Style: warm, friendly and plain, written to a parent on their phone. Short sentences, no jargon, no legal tone. Lead with the answer. Put limits in <strong> (e.g. <strong>7 days from delivery</strong>). Use a short numbered list (<ol><li>) for steps and a short bullet list (<ul><li>) for "what you'll need". Keep each answer under ~120 words. Link the returns portal wherever the customer has to do something (<a href="...">returns portal</a>). Simple HTML only: <p>, <strong>, <a href>, <ul>, <ol>, <li>, <br>.
+Style: warm, friendly and plain, written to a parent on their phone. Short sentences, no jargon, no legal tone. Lead with the answer. Put limits in <strong> (e.g. <strong>7 days from delivery</strong>). NEVER use <ol>, <ul> or <li> — the store's theme displays them wrong. Write steps as numbered lines inside one paragraph: <p><strong>1.</strong> First step<br><strong>2.</strong> Second step</p>, and "what you'll need" as <p>You'll need:<br>• one thing<br>• another</p>. Keep each answer under ~120 words. Link the returns portal wherever the customer has to do something (<a href="...">returns portal</a>). Simple HTML only: <p>, <strong>, <a href>, <br>.
 Never invent anything that isn't in the FACTS. Leave correct, complete answers alone. Policies in never_change_policy are never rewritten — raise conflicts as notes.
 Reply with ONLY JSON, no code fences: {"changes":[{"id":"<question id>","answer":"<new HTML>","why":"<one short sentence for staff>"}],"new_questions":[{"group":"<group id>","question":"<question>","answer":"<HTML>","why":"<one short sentence>"}],"notes":["anything staff should decide"]}`;
 async function suggest(store) {
@@ -182,13 +182,30 @@ async function suggest(store) {
 }
 
 // Answers only ever contain simple formatting; strip anything else (scripts, styles, event handlers).
+// The FAQ theme styles <ol>/<ul> badly (markers like "1TH", no bullets), so lists become numbered / bulleted lines.
+function flattenLists(h) {
+  const items = (body) => [...body.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li\s*>/gi)].map((m) => m[1].replace(/<\/?p\b[^>]*>/gi, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+  let out = String(h || "");
+  for (let guard = 0; guard < 20 && /<(ol|ul)\b/i.test(out); guard++) {
+    out = out.replace(/<(ol|ul)\b[^>]*>((?:(?!<(?:ol|ul)\b)[\s\S])*?)<\/\1\s*>/gi, (m, tag, body) => {
+      const li = items(body); if (!li.length) return "";
+      return "<p>" + li.map((x, i) => (tag.toLowerCase() === "ol" ? `<strong>${i + 1}.</strong> ` : "• ") + x).join("<br>") + "</p>";
+    });
+  }
+  // A list that sat inside a paragraph would now nest <p> in <p>: close the outer one first, drop stray closers.
+  let depth = 0;
+  return out.replace(/<(\/?)p\b[^>]*>/gi, (m, close) => {
+    if (!close) { const r = depth ? "</p><p>" : "<p>"; depth = 1; return r; }
+    if (!depth) return ""; depth = 0; return "</p>";
+  }).replace(/<p>\s*<\/p>/gi, "");
+}
 function cleanHtml(h) {
-  let s = String(h || "").slice(0, 6000);
+  let s = flattenLists(String(h || "").slice(0, 6000));
   s = s.replace(/<\s*(script|style|iframe|object|embed)[\s\S]*?<\s*\/\s*\1\s*>/gi, "").replace(/<\s*(script|style|iframe|object|embed)[^>]*>/gi, "");
   s = s.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "").replace(/javascript:/gi, "");
   s = s.replace(/<(\/?)([a-z0-9]+)([^>]*)>/gi, (m, slash, tag, attrs) => {
     tag = tag.toLowerCase();
-    if (!["p", "strong", "b", "em", "i", "a", "ul", "ol", "li", "br"].includes(tag)) return "";
+    if (!["p", "strong", "b", "em", "i", "a", "br"].includes(tag)) return "";
     if (tag !== "a" || slash) return `<${slash}${tag}>`;
     const href = (attrs.match(/href\s*=\s*"([^"]*)"/i) || attrs.match(/href\s*=\s*'([^']*)'/i) || [])[1];
     return href && /^(https?:\/\/|\/|mailto:)/i.test(href) ? `<a href="${href.replace(/"/g, "&quot;")}">` : "<a>";
@@ -294,6 +311,10 @@ async function autoRun(store, reason = "daily check", { force = false } = {}) {
     const sig = crypto.createHash("md5").update(FACTS_VER + t.checksum + JSON.stringify(f)).digest("hex");
     if (!force && mine.sig === sig) return { skipped: "nothing changed since the last check" };
     const sug = await suggest(store);
+    // Any live answer still using a list gets the same text as numbered / bulleted lines (no wording change).
+    const have = new Set(sug.changes.map((c) => c.id));
+    for (const g of itemsOf(t.tpl)) for (const i of g.items)
+      if (!i.hidden && !have.has(i.id) && /<(ol|ul|li)\b/i.test(i.answer)) sug.changes.push({ id: i.id, answer: cleanHtml(i.answer), why: "Formatting only: the list showed as \"1TH…\" on the site, now plain numbered lines" });
     mine.last_run = new Date().toISOString(); mine.sig = sig; mine.notes = sug.notes; mine.reason = reason;
     // An older card for this store is out of date now — take it down before asking again.
     if (mine.action_id) { try { await E().dismissAction(mine.action_id, "Emily (replaced by a newer check)"); } catch (_) {} mine.action_id = null; }
