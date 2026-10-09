@@ -34,7 +34,7 @@ const canWrite = (st) => /\bwrite_themes\b/.test((st.tok && st.tok.scope) || "")
 async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS hd_faq_versions (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, theme_id TEXT, content TEXT NOT NULL, note TEXT, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
 }
-async function init() { try { await migrate(); } catch (e) { console.error("faqs migrate:", e.message); } }
+async function init() { try { await migrate(); } catch (e) { console.error("faqs migrate:", e.message); } schedule(); }
 
 /* ---------------- reading the template ---------------- */
 const READ_Q = `query($f:[String!]!){ themes(first: 1, roles: [MAIN]) { nodes { id name files(filenames: $f, first: 1) { nodes { filename checksumMd5 body { ... on OnlineStoreThemeFileBodyText { content } } } } } } }`;
@@ -87,6 +87,14 @@ async function facts(store) {
     no_package_protection: `Orders without Package Protection: once a package is marked delivered we can't replace it; the customer files a claim with the carrier (USPS). Damage must be reported within ${s.nopp_claim_window_days} days of delivery.`,
     order_changes: `In the returns portal, customers can change sizes or the shipping address within ${s.edit_window_minutes} minutes of ordering, and cancel any time before the order ships. After it ships, changes aren't possible.`,
     exchanges: "There are no direct exchanges. Customers return the item (store credit gets the bonus) and place a new order.",
+    must_fix: [
+      `Any link to Loop Returns (loopreturns.com) → the returns portal ${portal}`,
+      `Any link to /pages/package-protection-claim-center (the old claim page) → the returns portal ${portal}, where Package Protection claims are filed now`,
+      `Any drop-off time other than ${s.void_unused_after_days} days after the label is made`,
+      `"Email us" for returns, defects or damaged items → use the returns portal (email ${def.support} stays fine as a fallback for questions)`,
+      `Return answers that don't mention the ${fee ? `$${fee.toFixed(2)} label fee` : "free label"}${s.store_credit_enabled ? ` and the ${s.store_credit_bonus_pct}% store-credit bonus` : ""}`,
+    ],
+    never_change_policy: "Sale items being store credit only, international/Canada rules, shipping times and carrier choices are business policies Buzzin doesn't control: never rewrite them; if they conflict with the FACTS, add a note for staff instead.",
     unchanged_policies: "Return condition (unwashed, tags attached, original packaging), merging orders, P.O. boxes, delays, product care and sizing questions are not controlled by Buzzin — leave them as they are unless they mention Loop, a 7-day drop-off, or emailing for returns/defects.",
   };
 }
@@ -130,7 +138,9 @@ function cleanHtml(h) {
 async function view(store) {
   const t = await readTemplate(store);
   return { theme: { id: t.theme.id, name: t.theme.name }, checksum: t.checksum, groups: itemsOf(t.tpl), can_publish: canWrite(t.st), facts: await facts(store),
-    last: (await db(`SELECT id, created_by, created_at, note FROM hd_faq_versions WHERE store=$1 ORDER BY id DESC LIMIT 1`, [store])).rows[0] || null };
+    last: (await db(`SELECT id, created_by, created_at, note FROM hd_faq_versions WHERE store=$1 ORDER BY id DESC LIMIT 1`, [store])).rows[0] || null,
+    auto: await (async () => { const st = await state(); const m = (st.stores || {})[store] || {}; return { on: st.auto !== false, last_run: m.last_run || null, last_result: m.last_result || "", notes: m.notes || [],
+      pending: m.pending && m.pending.checksum === t.checksum ? m.pending.changes : [] }; })() };
 }
 const WRITE_M = `mutation($id: ID!, $files: [OnlineStoreThemeFilesUpsertFileInput!]!){ themeFilesUpsert(themeId: $id, files: $files) { upsertedThemeFiles { filename } userErrors { field message code filename } } }`;
 async function writeFile(t, content) {
@@ -170,4 +180,51 @@ async function undo(store, who) {
   return { restored: true };
 }
 
-module.exports = { init, view, suggest, publish, undo, cleanHtml, itemsOf, splitHeader };
+/* ---------------- Emily keeps the FAQ page up to date ----------------
+ * Runs once a day and right after Returns settings change. If anything on the page disagrees with
+ * Buzzin, Emily rewrites those answers and (with auto-publish on and write_themes granted) publishes
+ * them, then posts what changed to Slack. Otherwise the suggestions wait in Buzzin → Website FAQs.
+ * Policy calls (like sale items) are never changed automatically — they come back as notes. */
+const STATE_KEY = "faqs";
+async function state() { return (await core.setting(STATE_KEY, null)) || { auto: true, stores: {} }; }
+async function saveState(st) { await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ($1,$2,'Emily',now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`, [STATE_KEY, JSON.stringify(st)]); }
+async function setAuto(on, who) { const st = await state(); st.auto = !!on; await saveState(st); core.audit({ kind: "faq-auto", detail: `Emily auto-updating the FAQ page turned ${on ? "on" : "off"}`, who: who || "staff" }).catch(() => {}); return st; }
+const running = new Set();
+async function autoRun(store, reason = "daily check", { force = false } = {}) {
+  if (running.has(store)) return { skipped: "already running" };
+  running.add(store);
+  const st = await state(); st.stores = st.stores || {}; const mine = st.stores[store] || {};
+  try {
+    const t = await readTemplate(store), f = await facts(store);
+    const sig = crypto.createHash("md5").update(t.checksum + JSON.stringify(f)).digest("hex");
+    if (!force && mine.sig === sig && !(mine.pending && mine.pending.changes && mine.pending.changes.length && st.auto && canWrite(t.st))) return { skipped: "nothing changed since the last check" };
+    const sug = await suggest(store);
+    mine.last_run = new Date().toISOString(); mine.sig = sig; mine.notes = sug.notes; mine.reason = reason;
+    if (!sug.changes.length) { mine.pending = null; mine.last_result = "FAQ page matches Buzzin"; return { ok: true, changes: 0 }; }
+    if (st.auto && canWrite(t.st)) {
+      const r = await publish(store, { changes: sug.changes, checksum: sug.checksum }, "Emily");
+      mine.pending = null; mine.last_result = `Emily updated ${r.updated.length} answer(s): ${r.updated.join("; ")}`.slice(0, 600);
+      const def = R().STORE_DEFS[store];
+      core.slackPost(`🐝 Emily updated the ${def.name} FAQ page (${reason}): ${r.updated.map((x) => `“${x}”`).join(", ")}. Review or undo in Buzzin → Content → Website FAQs.${sug.notes.length ? `\nFor you to decide: ${sug.notes.join(" · ")}` : ""}`).catch(() => {});
+      return { ok: true, published: r.updated };
+    }
+    mine.pending = { changes: sug.changes, checksum: sug.checksum, at: new Date().toISOString() };
+    mine.last_result = `${sug.changes.length} suggested change(s) waiting${canWrite(t.st) ? "" : " — needs the write_themes permission to publish"}`;
+    return { ok: true, pending: sug.changes.length };
+  } catch (e) { mine.last_result = "Check failed: " + e.message; console.error(`faq auto (${store}):`, e.message); return { error: e.message }; }
+  finally { st.stores[store] = mine; await saveState(st).catch(() => {}); running.delete(store); }
+}
+async function autoRunAll(reason) { for (const k of Object.keys(R().STORE_DEFS)) await autoRun(k, reason); }
+let timer = null;
+function schedule() {
+  if (timer) return;
+  setTimeout(() => autoRunAll("daily check").catch(() => {}), 3 * 60e3);           // shortly after start
+  timer = setInterval(() => autoRunAll("daily check").catch(() => {}), 24 * 3600e3);
+}
+async function status() {
+  const st = await state(); const out = { auto: st.auto !== false, pending: 0, stores: {} };
+  for (const [k, v] of Object.entries(st.stores || {})) { const n = (v.pending && v.pending.changes && v.pending.changes.length) || 0; out.pending += n; out.stores[k] = { pending: n, last_run: v.last_run, last_result: v.last_result, notes: v.notes || [] }; }
+  return out;
+}
+
+module.exports = { init, view, suggest, publish, undo, cleanHtml, itemsOf, splitHeader, autoRun, autoRunAll, setAuto, status, schedule };

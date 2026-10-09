@@ -274,7 +274,8 @@ app.get("/api/counts", async (req, res) => {
     let stuck = { never_scanned: 0, undelivered: 0 }; try { stuck = await require("./emily").stuckCounts(); } catch (_) {}
     let returns = null; try { const rc = await require("./returns").counts(); returns = { open: rc.open, attention: rc.attention }; } catch (_) {}
     let claims = null; try { claims = (await require("./claims").counts()).open || 0; } catch (_) {}
-    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns, claims });
+    let faq = null; try { faq = (await require("./faqs").status()).pending || 0; } catch (_) {}
+    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns, claims, faq });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 /* ---- one conversation ---- */
@@ -792,6 +793,8 @@ const FAQ = require("./faqs");
 app.get("/api/faqs/:store", async (req, res) => { if (!guard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.view(k)); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/suggest", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.suggest(k)); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/publish", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.publish(k, req.body || {}, actorOf(req))) }); } catch (e) { retErr(res, e); } });
+app.post("/api/faqs/:store/check", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.autoRun(k, "run by " + actorOf(req), { force: true })); } catch (e) { retErr(res, e); } });
+app.post("/api/faqs-auto", async (req, res) => { if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "Only admins can make this change." }); try { const st = await FAQ.setAuto(!!(req.body || {}).on, actorOf(req)); res.json({ ok: true, auto: st.auto }); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/undo", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.undo(k, actorOf(req))) }); } catch (e) { retErr(res, e); } });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
 const EXC = require("./exceptions");
@@ -844,7 +847,8 @@ app.get("/api/returns/ss-stores", async (req, res) => { if (!guard(req, res)) re
 app.get("/api/returns/carriers", async (req, res) => { if (!guard(req, res)) return; try { res.json({ carriers: await R.carriers() }); } catch (e) { retErr(res, e); } });
 app.put("/api/returns/settings", async (req, res) => {
   if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "admins only" });
-  try { res.json({ settings: await R.saveSettings(req.body || {}, actorOf(req)) }); } catch (e) { retErr(res, e); }
+  try { const saved = await R.saveSettings(req.body || {}, actorOf(req)); res.json({ settings: saved });
+    setTimeout(() => require("./faqs").autoRunAll("Returns settings changed").catch(() => {}), 5000); } catch (e) { retErr(res, e); }
 });
 app.post("/api/returns/:id/:act", async (req, res) => {
   if (!guard(req, res)) return;
