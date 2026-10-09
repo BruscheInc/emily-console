@@ -9,6 +9,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <title>Helpdesk</title>
+<link rel="stylesheet" href="tabler-icons.css">
 <style>
   :root{--bg:#f4f6fb;--panel:#ffffff;--panel2:#eef2f8;--line:#d8e0ec;--ink:#1a2433;--muted:#647087;--accent:#3b6ef5;--in:#1a8f5a;--out:#1f6fb0;--warn:#b7791f;--bad:#d84a4a;--mono:ui-monospace,Menlo,Consolas,monospace}
   *{box-sizing:border-box}html,body{margin:0;height:100%}
@@ -19,6 +20,26 @@
   .brand{display:flex;gap:10px;align-items:center;padding:4px 8px 14px}
   .brand .mark{width:34px;height:34px;border-radius:9px;flex:none;box-shadow:0 2px 6px rgba(30,70,184,.25)}.ver{font-size:10.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.08);border-radius:5px;padding:1px 5px;vertical-align:middle;margin-left:2px}.brand .name{font-weight:800;font-size:16px;letter-spacing:-.01em}.brand .subname{font-size:11px;color:var(--muted)}
   .navsec{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:12px 10px 4px;font-weight:700}
+  .side .ti{font-size:18px;line-height:1}
+  .side .nav .n:empty{display:none}
+  .nav-search{display:flex;align-items:center;gap:8px;margin:0 2px 10px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);cursor:pointer;font-size:13.5px;text-align:left}
+  .nav-search:hover{border-color:#b9c4d6}.nav-search .ti{font-size:16px}.nav-search kbd{margin-left:auto;font:600 11px system-ui;color:var(--muted)}
+  .nav .i.ti{width:20px;opacity:.75;font-size:18px}
+  .nav.top,.nav.gh{font-weight:600}
+  .nav .chev{margin-left:6px;font-size:15px!important;color:var(--muted);transition:transform .15s;flex:none}
+  .grp.closed .chev{transform:rotate(-90deg)}
+  .nav.gh .chev{margin-left:auto}.grp.closed .nav.gh .gt:not(:empty)~.chev{margin-left:6px}
+  .grp .gt{display:none}.grp.closed .gt:not(:empty){display:inline-block}
+  .grp .gb{position:relative;margin:1px 0 6px 19px;padding-left:9px;border-left:1px solid var(--line)}
+  .grp.closed .gb{display:none}
+  .nav.sub{padding:6px 10px;font-size:13.5px;color:#3b4658}
+  .nav.sub .si{display:none}
+  .nav .ext{margin-left:auto;font-size:13px!important;color:var(--muted)}
+  .navline{border-top:1px solid var(--line);margin:8px 6px}
+  .acct{position:relative;margin-top:4px}
+  .acct-b{font-weight:600}.acct-b .av{width:24px;height:24px;border-radius:50%;background:#2451c8;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;flex:none}
+  .acct-b .chev{margin-left:auto!important}
+  .acct-m{position:absolute;bottom:42px;left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(20,30,50,.15);padding:4px;z-index:30}
   .nav{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;border:none;color:var(--ink);padding:7px 10px;border-radius:8px;font-size:13.5px;font-weight:500;cursor:pointer;text-decoration:none;min-width:0}
   .nav .i{width:18px;text-align:center;opacity:.8;font-size:13px;flex:none}
   .nav .n{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.06);border-radius:6px;padding:1px 7px;flex:none}
@@ -200,6 +221,26 @@
   .modal{position:fixed;inset:0;z-index:60;background:rgba(3,8,16,.55);display:flex;align-items:center;justify-content:center;padding:20px}
   .exr{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);font-size:13px}.exr.off{opacity:.55}
   .exg{border:1px solid var(--line);border-radius:10px;padding:6px 10px 8px;margin-top:6px;background:var(--panel2)}.exgt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:4px}
+  .hm{max-width:980px;margin:0 auto;padding:22px 26px 50px}
+  .hm-h{font-size:30px;font-weight:700;text-align:center;margin:10px 0 22px;letter-spacing:-.01em}
+  .hm-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin-bottom:18px}
+  .hm-ch{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:16px;user-select:none}.hm-cv{transition:transform .15s;color:var(--muted)}.hm-card.shut .hm-cv{transform:rotate(180deg)}.hm-card.shut .hm-cb{display:none}
+  .hm-badge{background:#d84a4a;color:#fff;font-size:11px;font-weight:700;border-radius:999px;min-width:19px;height:19px;display:inline-grid;place-items:center;padding:0 6px}
+  .hm-cb{margin-top:12px;display:grid;gap:8px}
+  .hm-alert{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:11px 14px}.hm-alert>.ti{font-size:20px;color:#2451c8}.hm-alert.bad>.ti{color:#d84a4a}.hm-alert.ok>.ti{color:#1a8f5a}
+  .hm-at{flex:1;min-width:0;display:flex;flex-direction:column}.hm-at span{color:var(--muted);font-size:12.5px}
+  .hm-row{display:flex;align-items:center;margin:4px 2px 8px}.hm-lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .hm-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px}
+  .hm-tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:left;cursor:pointer}.hm-tile:hover{border-color:#b9c4d6}.hm-tile .ti{font-size:18px;color:var(--muted)}
+  .hm-tn{font-size:24px;font-weight:700;margin-top:6px}.hm-tl{font-size:12.5px;color:var(--muted)}
+  .hm-ch2{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;font-size:16px}.hm-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .hm-big{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:12px;margin-top:14px}.hm-big>div{padding:16px 20px}.hm-big>div+div{border-left:1px solid var(--line)}
+  .hm-bn{font-size:32px;font-weight:700;letter-spacing:-.01em}.hm-bl{color:var(--muted);display:flex;align-items:center;gap:8px;margin-top:2px}
+  .hm-d{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:700;border-radius:999px;padding:2px 8px;background:var(--panel2);color:var(--muted)}.hm-d.up{background:#fdecec;color:#c0392b}.hm-d.down{background:#e3f3ea;color:#1a7a45}
+  .hm-small{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px}.hm-small>div{display:flex;flex-direction:column;gap:2px}.hm-small span{font-size:12px;color:var(--muted)}.hm-small b{font-size:16px}
+  .hm-reasons{margin-top:16px}.hm-rr{display:grid;grid-template-columns:minmax(140px,240px) 1fr 48px;align-items:center;gap:10px;font-size:13px;padding:4px 0}.hm-rr b{text-align:right}
+  .hm-bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden}.hm-bar i{display:block;height:100%;background:#3b6ef5;border-radius:99px}
+  @media(max-width:900px){.hm-tiles{grid-template-columns:repeat(2,1fr)}.hm-small{grid-template-columns:repeat(2,1fr)}.hm-big{grid-template-columns:1fr}.hm-big>div+div{border-left:0;border-top:1px solid var(--line)}}
   .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(520px,100%);max-height:90vh;overflow:auto;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
   .modal h3{margin:0 0 4px;font-size:17px}.modal .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
   .modal label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:10px 0 4px}
@@ -230,7 +271,8 @@
   .keyprompt{margin:16vh auto;max-width:400px;padding:0 22px;text-align:center}.keyprompt input{width:100%;margin:12px 0;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:14px;font-size:16px}
   @media(max-width:1040px){ .rail{display:none} }
   @media(max-width:920px){
-    .side{width:64px;padding:10px 6px} .side .brand div,.side .navsec,.side .nav span:not(.i){display:none} .side .nav{justify-content:center;padding:10px 0} .side .brand{justify-content:center;padding-bottom:10px}
+    .side{width:64px;padding:10px 6px} .side .brand div,.side .navsec,.side .nav span:not(.i):not(.av),.side .nav .chev,.side .nav .ext,.side .nav-search span,.side .nav-search kbd,.side .nav.gh{display:none} .side .nav{justify-content:center;padding:10px 0} .side .brand{justify-content:center;padding-bottom:10px}
+    .side .grp .gb,.side .grp.closed .gb{display:block;margin:0;padding:0;border:0} .side .nav.sub .si{display:inline-block;font-size:18px} .side .nav-search{justify-content:center;padding:8px 0} .side .acct-m{left:0;right:auto;width:200px}
     td.c-tags,th.c-tags,td.c-ost,th.c-ost{display:none}
   }
   .hidden{display:none!important}
@@ -257,27 +299,49 @@
 <div id="app" class="hidden" style="display:flex;height:100%">
 <aside class="side">
   <div class="brand"><img class="mark" src="logo.svg" alt="" width="34" height="34"><div><div class="name">Helpdesk <span id="ver" class="ver"></span></div><div class="subname">Larkspur Baby · Outlet</div></div></div>
-  <div class="navsec">Views</div>
-  <button class="nav view on" data-view="lbo_tickets" onclick="setView('lbo_tickets')"><span class="i">🏷</span>LBO Tickets<span class="n" id="v-lbo_tickets"></span></button>
-  <button class="nav view" data-view="lb_tickets" onclick="setView('lb_tickets')"><span class="i">🏷</span>LB Tickets<span class="n" id="v-lb_tickets"></span></button>
-  <button class="nav view" data-view="oos" onclick="setView('oos')"><span class="i">📦</span>Out of stock<span class="n" id="v-oos"></span></button>
-  <div class="navsec">Shipments</div>
-  <button class="nav view" data-view="stuck" onclick="setView('stuck')"><span class="i">⏳</span>Never scanned<span class="n" id="v-stuck"></span></button>
-  <button class="nav view" data-view="undelivered" onclick="setView('undelivered')"><span class="i">🚚</span>Not delivered 15+ days<span class="n" id="v-undelivered"></span></button>
-  <button class="nav view" data-view="returns" onclick="setView('returns')"><span class="i">↩️</span>Returns<span class="n" id="v-returns"></span></button>
-  <button class="nav view" data-view="claims" onclick="setView('claims')"><span class="i">🧾</span>Claims<span class="n" id="v-claims"></span></button>
-  <button class="nav view" data-view="returns_analytics" onclick="setView('returns_analytics')"><span class="i">📊</span>Return analytics</button>
-  <a class="nav" href="https://returns.larkspurbaby.com" target="_blank" rel="noopener"><span class="i">🔗</span><span>LB return portal</span><span class="n">↗</span></a>
-  <a class="nav" href="https://returns.larkspurbabyoutlet.com" target="_blank" rel="noopener"><span class="i">🔗</span><span>LBO return portal</span><span class="n">↗</span></a>
-  <div class="navsec">Mailboxes</div>
-  <button class="nav view" data-view="lbo" onclick="setView('lbo')"><span class="i">✉️</span>Outlet · all mail<span class="n" id="v-lbo"></span></button>
-  <button class="nav view" data-view="lb" onclick="setView('lb')"><span class="i">✉️</span>Larkspur · all mail<span class="n" id="v-lb"></span></button>
-  <button class="nav view" data-view="all" onclick="setView('all')"><span class="i">🗂</span>Everything<span class="n" id="v-all"></span></button>
-  <div class="navsec">Records</div>
-  <button class="nav view" data-view="activity" onclick="setView('activity')"><span class="i">🕘</span>Activity log</button>
+  <button class="nav-search" onclick="sideSearch()" title="Search tickets (⌘K)"><i class="ti ti-search"></i><span>Search</span><kbd>⌘K</kbd></button>
+  <button class="nav view top" data-view="home" onclick="setView('home')"><i class="i ti ti-home"></i><span>Home</span></button>
+  <div class="grp" data-g="inbox"><button class="nav gh" onclick="toggleGrp('inbox')"><i class="i ti ti-inbox"></i><span>Inbox</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <button class="nav view sub" data-view="lbo_tickets" onclick="setView('lbo_tickets')"><i class="si ti ti-tag"></i><span>LBO tickets</span><span class="n" id="v-lbo_tickets"></span></button>
+    <button class="nav view sub" data-view="lb_tickets" onclick="setView('lb_tickets')"><i class="si ti ti-tag"></i><span>LB tickets</span><span class="n" id="v-lb_tickets"></span></button>
+    <button class="nav view sub" data-view="oos" onclick="setView('oos')"><i class="si ti ti-package-off"></i><span>Out of stock</span><span class="n" id="v-oos"></span></button>
+  </div></div>
+  <div class="grp" data-g="mail"><button class="nav gh" onclick="toggleGrp('mail')"><i class="i ti ti-mail"></i><span>Mailboxes</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <button class="nav view sub" data-view="lbo" onclick="setView('lbo')"><i class="si ti ti-mail"></i><span>Outlet · all mail</span><span class="n" id="v-lbo"></span></button>
+    <button class="nav view sub" data-view="lb" onclick="setView('lb')"><i class="si ti ti-mail"></i><span>Larkspur · all mail</span><span class="n" id="v-lb"></span></button>
+    <button class="nav view sub" data-view="all" onclick="setView('all')"><i class="si ti ti-stack-2"></i><span>Everything</span><span class="n" id="v-all"></span></button>
+  </div></div>
+  <div class="grp" data-g="ship"><button class="nav gh" onclick="toggleGrp('ship')"><i class="i ti ti-truck-delivery"></i><span>Shipments</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <button class="nav view sub" data-view="stuck" onclick="setView('stuck')"><i class="si ti ti-hourglass"></i><span>Never scanned</span><span class="n" id="v-stuck"></span></button>
+    <button class="nav view sub" data-view="undelivered" onclick="setView('undelivered')"><i class="si ti ti-truck"></i><span>Not delivered 15+ days</span><span class="n" id="v-undelivered"></span></button>
+  </div></div>
+  <div class="grp" data-g="returns"><button class="nav gh" onclick="toggleGrp('returns')"><i class="i ti ti-arrow-back-up"></i><span>Returns & claims</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <button class="nav view sub" data-view="returns" onclick="setView('returns')"><i class="si ti ti-arrow-back-up"></i><span>Returns</span><span class="n" id="v-returns"></span></button>
+    <button class="nav view sub" data-view="claims" onclick="setView('claims')"><i class="si ti ti-receipt"></i><span>Claims</span><span class="n" id="v-claims"></span></button>
+    <button class="nav sub" onclick="retExceptions()"><i class="si ti ti-sparkles"></i><span>Order exceptions</span></button>
+    <a class="nav sub" href="https://returns.larkspurbaby.com" target="_blank" rel="noopener"><i class="si ti ti-external-link"></i><span>LB return portal</span><i class="ext ti ti-arrow-up-right"></i></a>
+    <a class="nav sub" href="https://returns.larkspurbabyoutlet.com" target="_blank" rel="noopener"><i class="si ti ti-external-link"></i><span>LBO return portal</span><i class="ext ti ti-arrow-up-right"></i></a>
+  </div></div>
+  <div class="grp" data-g="content"><button class="nav gh" onclick="toggleGrp('content')"><i class="i ti ti-layout-board"></i><span>Content</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <a class="nav sub" href="/email-studio" target="_blank" rel="noopener"><i class="si ti ti-mail-cog"></i><span>Customer emails</span><i class="ext ti ti-arrow-up-right"></i></a>
+    <a class="nav sub" href="/returns-studio?store=lb" target="_blank" rel="noopener"><i class="si ti ti-palette"></i><span>LB portal design</span><i class="ext ti ti-arrow-up-right"></i></a>
+    <a class="nav sub" href="/returns-studio?store=lbo" target="_blank" rel="noopener"><i class="si ti ti-palette"></i><span>LBO portal design</span><i class="ext ti ti-arrow-up-right"></i></a>
+  </div></div>
+  <div class="grp" data-g="analytics"><button class="nav gh" onclick="toggleGrp('analytics')"><i class="i ti ti-chart-pie"></i><span>Analytics</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <button class="nav view sub" data-view="returns_analytics" onclick="setView('returns_analytics')"><i class="si ti ti-chart-bar"></i><span>Return analytics</span></button>
+    <button class="nav view sub" data-view="activity" onclick="setView('activity')"><i class="si ti ti-history"></i><span>Activity log</span></button>
+  </div></div>
   <div class="navsp"></div>
-  <button class="nav" onclick="openSettings()"><span class="i">⚙︎</span>Settings</button>
-  <a class="nav" href="#" onclick="signOut();return false"><span class="i">⎋</span>Sign out</a>
+  <div class="navline"></div>
+  <button class="nav" onclick="openSettings()"><i class="i ti ti-settings"></i><span>Settings</span></button>
+  <div class="acct" id="acct"><button class="nav acct-b" onclick="$('acctMenu').classList.toggle('hidden')"><span class="av" id="acctAv">·</span><span id="acctName">Signed in</span><i class="chev ti ti-selector"></i></button>
+    <div class="acct-m hidden" id="acctMenu"><button class="nav" onclick="$('acctMenu').classList.add('hidden');openSettings()"><i class="i ti ti-user-cog"></i><span>Account &amp; password</span></button><button class="nav" onclick="signOut()"><i class="i ti ti-logout"></i><span>Sign out</span></button></div></div>
 </aside>
 <div class="mainarea">
   <div class="listcol" id="listcol">
@@ -363,7 +427,7 @@ async function doLogin(){
 let ME=null;
 async function api(p,opts){opts=opts||{};const u=p+(p.includes("?")?"&":"?")+"key="+encodeURIComponent(KEY);const r=await fetch(u,opts);if(r.status===401){toast("Unauthorized",true);throw new Error("401");}return r.json();}
 let TAB="pending", CUR=null, tickets=[];
-let VIEW=(function(){try{return localStorage.getItem("ec_view")||"lbo_tickets";}catch(e){return "lbo_tickets";}})();
+let VIEW=(function(){try{return localStorage.getItem("ec_view")||"home";}catch(e){return "lbo_tickets";}})();
 function fmt(ts){try{const d=new Date(ts),now=new Date();const sameDay=d.toDateString()===now.toDateString();return sameDay?d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):d.toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch(e){return"";}}
 function fmtShort(ts){try{const d=new Date(ts),n=new Date();return d.toLocaleDateString([],d.getFullYear()===n.getFullYear()?{month:"short",day:"numeric"}:{month:"short",day:"numeric",year:"2-digit"});}catch(e){return"—";}}
 function fmtDay(ts){try{return new Date(ts).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"});}catch(e){return"—";}}
@@ -371,14 +435,23 @@ function fmtDay(ts){try{return new Date(ts).toLocaleDateString([],{month:"short"
 if(!KEY){ $("keygate").classList.remove("hidden"); }
 else {(async()=>{
   let role=null; try{ role=await (await fetch("/api/role?key="+encodeURIComponent(KEY))).json(); }catch(e){}
-  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); const so=document.querySelector('a.nav[onclick*="signOut"]'); if(so&&role.user) so.innerHTML='<span class="i">⎋</span>Sign out · '+role.user; if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); checkVersion(true).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
+  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); if(role.user){ $("acctName").textContent=role.user; $("acctAv").textContent=String(role.user).trim().split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase(); } if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); checkVersion(true).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
   else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="Your session has ended — sign in again."; try{localStorage.removeItem("ec_key");}catch(e){} }
 })();}
 
-function applyView(){document.querySelectorAll(".nav.view").forEach(b=>b.classList.toggle("on",b.dataset.view===VIEW));}
+function applyView(){document.querySelectorAll(".nav.view").forEach(b=>b.classList.toggle("on",b.dataset.view===VIEW)); initGroups();}
+/* ---- sidebar groups (Klaviyo-style categories, Gorgias-style view counts) ---- */
+function grpState(){ try{ return JSON.parse(localStorage.getItem("ec_groups")||"{}"); }catch(e){ return {}; } }
+function initGroups(){ const st=grpState(); document.querySelectorAll(".side .grp").forEach(g=>{ const hasOn=!!g.querySelector(".nav.view.on"); g.classList.toggle("closed", st[g.dataset.g]===false && !hasOn); }); }
+function toggleGrp(id){ const g=document.querySelector(`.side .grp[data-g="${id}"]`); if(!g)return; const closed=!g.classList.contains("closed"); g.classList.toggle("closed",closed); const st=grpState(); st[id]=!closed; try{localStorage.setItem("ec_groups",JSON.stringify(st));}catch(e){} }
+function groupTotals(){ document.querySelectorAll(".side .grp").forEach(g=>{ let t=0; g.querySelectorAll(".gb .n").forEach(n=>{ t+=Number(n.textContent)||0; }); const el=g.querySelector(".gt"); if(el) el.textContent=t?t.toLocaleString():""; }); }
+function sideSearch(){ const ticketViews=["lb","lbo","lb_tickets","lbo_tickets","oos","all"]; if(document.body.classList.contains("viewing")) closeThread(); if(!ticketViews.includes(VIEW)) setView("all"); setTimeout(()=>{ const q=$("q"); if(q){ q.focus(); q.select(); } },60); }
+document.addEventListener("keydown",(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){ e.preventDefault(); sideSearch(); } });
+document.addEventListener("click",(e)=>{ const m=$("acctMenu"); if(m&&!m.classList.contains("hidden")&&!e.target.closest(".acct")) m.classList.add("hidden"); });
 function setTab(t){TAB=t;OFFSET=0;document.querySelectorAll(".tab[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));loadList();}
 function setView(v){VIEW=v;OFFSET=0;try{localStorage.setItem("ec_view",v);}catch(e){}
   document.querySelectorAll(".nav.view").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
+  const g=document.querySelector(`.side .nav.view[data-view="${v}"]`); const gp=g&&g.closest(".grp"); if(gp) gp.classList.remove("closed");
   loadList(true);loadCounts();}
 let _dt=null; function debouncedList(){clearTimeout(_dt);OFFSET=0;_dt=setTimeout(loadList,300);}
 async function loadCounts(){try{
@@ -388,9 +461,10 @@ async function loadCounts(){try{
   const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||"";
   // tab title carries the pending count, like a real inbox
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Helpdesk`:"Helpdesk";
+  groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -483,12 +557,13 @@ let STUCK_STATE="open";
 let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';_listSig="";}
-  $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW;
-  const isStuck=VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="returns_analytics"||VIEW==="claims";
+  $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
+  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
+  if(VIEW==="home") return loadHome(silent);
   if(VIEW==="activity") return loadActivity(silent);
   if(VIEW==="returns") return loadReturns(silent);
   if(VIEW==="claims") return loadClaims(silent);
@@ -982,6 +1057,44 @@ async function clAct(id,act,b){
   b.disabled=true; const t=b.textContent; b.textContent="Working…";
   try{ const r=await api(`/api/claims/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(r.error) throw new Error(r.error); toast(act==="approve"?"Approved":act==="deny"?"Denied":act==="info"?"Question sent":act==="rerun"?"AI re-ran":"Closed"); loadClaims(true); loadCounts(); }
   catch(e){ toast(e.message,true); b.disabled=false; b.textContent=t; }
+}
+/* ---------------- Home (Klaviyo-style welcome: what needs attention + how returns are doing) ---------------- */
+let HOME_C=null, HOME_RA=null, HOME_RA_AT=0, HOME_RA_ERR=false;
+async function loadHome(silent){
+  $("showing").textContent="";
+  if(!HOME_C){ try{ HOME_C=await api("/api/counts?view=all"); }catch(e){} }
+  renderHome();
+  if(!HOME_RA||Date.now()-HOME_RA_AT>120000){ try{ const d=await api("/api/returns/analytics"); if(!d.error){ HOME_RA=d; HOME_RA_AT=Date.now(); } else HOME_RA_ERR=true; }catch(e){ HOME_RA_ERR=true; } renderHome(); }
+}
+function renderHome(){
+  const w=$("stuckwrap"); if(!w||VIEW!=="home") return;
+  const c=HOME_C||{}, v=c.views||{}, st=c.stuck||{}, rt=c.returns||{};
+  const first=String((ME&&ME.user)||"").split(" ")[0];
+  const alerts=[
+    [v.lbo_tickets,"inbox","LBO tickets waiting","pending replies in Larkspur Baby Outlet","lbo_tickets"],
+    [v.lb_tickets,"inbox","LB tickets waiting","pending replies in Larkspur Baby","lb_tickets"],
+    [rt.attention,"alert-triangle","Returns need attention","refund or label problems to check","returns","bad"],
+    [c.claims,"receipt","Claims to review","waiting for approve / deny","claims"],
+    [v.oos,"package-off","Out-of-stock tickets","customers waiting on a sold-out item","oos"],
+    [st.never_scanned,"hourglass","Never scanned","labels made but no carrier scan in 4+ days","stuck"],
+    [st.undelivered,"truck","Not delivered 15+ days","shipments that may need a claim","undelivered"],
+  ].filter(a=>Number(a[0])>0);
+  const pct=(a,b)=>{ if(!b) return ""; const d=Math.round((a-b)/b*100); return `<span class="hm-d ${d>0?"up":d<0?"down":""}"><i class="ti ti-trending-${d>=0?"up":"down"}"></i>${Math.abs(d)}%</span>`; };
+  const ra=HOME_RA, S=ra&&ra.summary, P=ra&&ra.previous;
+  const tile=(view,icon,label,n)=>`<button class="hm-tile" onclick="setView('${view}')"><i class="ti ti-${icon}"></i><div class="hm-tn">${Number(n||0).toLocaleString()}</div><div class="hm-tl">${label}</div></button>`;
+  w.innerHTML=`<div class="hm">
+    <h1 class="hm-h">Welcome${first?", "+esc(first):""}</h1>
+    <section class="hm-card"><div class="hm-ch" onclick="this.parentElement.classList.toggle('shut')"><i class="ti ti-chevron-up hm-cv"></i><b>Needs attention</b>${alerts.length?`<span class="hm-badge">${alerts.length}</span>`:""}</div>
+      <div class="hm-cb">${alerts.length?alerts.map(a=>`<div class="hm-alert ${a[5]||""}"><i class="ti ti-${a[1]}"></i><div class="hm-at"><b>${Number(a[0]).toLocaleString()} ${esc(a[2])}</b><span>${esc(a[3])}</span></div><button class="btn sec" onclick="setView('${a[4]}')">Open</button></div>`).join("")
+        :`<div class="hm-alert ok"><i class="ti ti-circle-check"></i><div class="hm-at"><b>All caught up</b><span>Nothing is waiting on you right now.</span></div></div>`}</div></section>
+    <div class="hm-row"><div class="hm-lbl">Inbox at a glance</div></div>
+    <div class="hm-tiles">${tile("lbo_tickets","tag","LBO pending",v.lbo_tickets)}${tile("lb_tickets","tag","LB pending",v.lb_tickets)}${tile("oos","package-off","Out of stock",v.oos)}${tile("returns","arrow-back-up","Returns open",rt.open)}${tile("claims","receipt","Claims open",c.claims)}</div>
+    <section class="hm-card"><div class="hm-ch2"><div><b>Returns summary</b><div class="hm-sub">${ra?`${fmtDay(ra.from+"T12:00:00")} – ${fmtDay(ra.to+"T12:00:00")} · compared to the previous ${ra.days} days`:"Last 30 days"}</div></div><button class="btn sec" onclick="setView('returns_analytics')">View analytics</button></div>
+      ${S?`<div class="hm-big"><div><div class="hm-bn">${S.returns.toLocaleString()}</div><div class="hm-bl">Returns started ${pct(S.returns,P&&P.returns)}</div></div><div><div class="hm-bn">${money(S.refunded)}</div><div class="hm-bl">Refunded to cards ${pct(S.refunded,P&&P.refunded)}</div></div></div>
+      <div class="hm-small"><div><span>Store credit</span><b>${money(S.store_credit)}</b></div><div><span>Items returned</span><b>${S.units.toLocaleString()}</b></div><div><span>Label spend</span><b>${money(S.label_spend)}</b></div><div><span>Fees kept</span><b>${money(S.fees)}</b></div><div><span>Avg days to refund</span><b>${S.avg_days_to_refund!=null?S.avg_days_to_refund:"—"}</b></div></div>
+      ${(ra.reasons||[]).filter(r=>r.units).length?`<div class="hm-reasons"><div class="hm-lbl">Top return reasons</div>${ra.reasons.filter(r=>r.units).slice(0,4).map(r=>`<div class="hm-rr"><span>${esc(r.reason)}</span><div class="hm-bar"><i style="width:${Math.max(3,r.share)}%"></i></div><b>${r.share}%</b></div>`).join("")}</div>`:""}`
+      :`<div class="empty" style="padding:24px">${HOME_RA_ERR?"Couldn't load return stats right now.":"Loading…"}</div>`}</section>
+  </div>`;
 }
 /* ---------------- Return analytics ---------------- */
 let RA={preset:"30d",from:"",to:"",store:"",metric:"returns",reason:"",product:"",d:null};

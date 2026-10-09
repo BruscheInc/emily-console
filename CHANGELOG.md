@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.35.0
+- New sidebar, Klaviyo-style categories with Gorgias-style inbox counts: Search (⌘K), Home, Inbox, Mailboxes, Shipments, Returns & claims, Content, Analytics, then Settings and your account at the bottom. Groups open/close (remembered), show a total when closed, and the group with the page you're on always opens. Line icons; on narrow screens it collapses to an icon rail.
+- Home page: "Welcome, {name}", a Needs attention list (tickets waiting, returns with problems, claims to review, out of stock, never scanned, not delivered 15+ days — each with Open), Inbox at a glance tiles, and a 30-day Returns summary (returns started, refunded, store credit, label spend, fees, days to refund, top reasons) vs the previous period. Home is the default page.
+- Content group links Customer emails (Email Studio) and both portal designs; Returns & claims includes Order exceptions and both portals.
+
 ## 4.34.1
 - Email Studio opens on an Email map: every customer email grouped by Returns / Claims / Order edits / All emails, showing what triggers it, who sends it (Helpdesk or Shopify), and a dot on ones you've edited. Click any email to jump straight to its editor. Switch with "🗺 Email map" / "✏️ Edit" at the top. Day numbers follow Returns → Settings.
 
