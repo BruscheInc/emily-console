@@ -69,13 +69,13 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
-const FACTS_VER = 9;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
+const FACTS_VER = 10;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
   const fee = Number(s.label_fee) || 0, byWeight = s.label_fee_mode !== "flat";
   const onCredit = s.fee_on_store_credit ? " It comes off store credit too." : " It isn't charged when the customer chooses store credit.";
-  const days = s.window_days[store], pp = s.pp_claim_window_days;
+  const days = s.window_days[store], pp = s.pp_claim_window_days, nopp = s.nopp_claim_window_days;
   const feeLine = byWeight
     ? `Based on the weight of the return package (it's the real price of the prepaid USPS label), so it changes from return to return. The exact amount is shown in the returns portal before the customer confirms, and it's taken off the refund.${onCredit} Never state a fixed dollar amount.`
     : fee ? `$${fee.toFixed(2)}, taken off the refund.${onCredit}` : "Free.";
@@ -139,7 +139,7 @@ async function facts(store) {
     },
     defective_vs_damaged: `"Defective item" = something wrong with how the item was made (${s.claim_window_days} days from delivery). "Arrived damaged" = the package or items were damaged in shipping (file within ${pp} days of delivery under "Package Protection claim"). If unsure, pick the one that fits best — our team sorts it out.`,
     photos: "Defective and damaged claims need at least 1 photo (up to 8, JPG or PNG). Clear, well-lit photos of the problem — and for shipping damage, the outside of the box too — get claims approved fastest.",
-    orders_without_package_protection: `NEVER describe what happens for orders without Package Protection (no windows, no "we can't replace", no carrier-claim steps) — those are handled case by case and written rules get exploited. Only say: if something else went wrong, choose "Other" in the returns portal and our team will help.`,
+    orders_without_package_protection: `Customers WITHOUT Package Protection must know their time limits: "marked delivered but not received" and "arrived damaged" have to be reported within <strong>${nopp} days of delivery</strong> (vs ${pp} days with Package Protection); "hasn't arrived" opens ${s.transit_claim_days} days after shipping, same as everyone. They use "Other" in the portal and pick the same options. Give the LIMITS, but never the outcome — no "we can't replace", no carrier-claim steps, no refund rules (each case is reviewed individually; just say "our team will review it and get back to you").`,
     order_changes: {
       edit: `Change a size or the shipping address within ${s.edit_window_minutes} minutes of placing the order, in the portal ("Edit or cancel my order"). Shopify emails the updated order; if the new item costs more, that email has a link to pay the difference; if less, the difference is refunded.`,
       cancel: "Cancel any time before the order ships, in the same place. Once it ships it can't be changed or cancelled — start a return after delivery instead.",
@@ -155,7 +155,9 @@ async function facts(store) {
       `Internal wording customers shouldn't see: "tagged", tag names (${s.final_sale_tags}), SKUs, system or app names → plain words like "marked Final Sale"`,
       "Stating that Package Protection itself can't be returned → remove it (it goes without saying)",
       "Any answer about a late, lost, stolen, missing or damaged package that doesn't name the exact portal option in quotes (\"My package hasn't arrived\", \"My package was marked delivered, but I didn't get it\", \"My package arrived damaged\") and where it is → name it",
-      "ANY policy for orders without Package Protection (\"No Package Protection? …\", 5-day damage window, USPS claim steps, \"we can't replace\", refund-only-without-PP) → remove it; at most say \"Something else went wrong? Choose 'Other' in the returns portal and we'll help.\"",
+      "Outcomes for orders without Package Protection (\"we can't replace\", USPS claim steps, refund rules) → remove; keep only their time limits and \"our team will review it and get back to you\"",
+      `Any ${pp}-day limit stated without saying it's for orders WITH Package Protection → label it, and give the ${nopp}-day limit for orders without it next to it`,
+      "The lost / stolen / missing package answer must cover all three situations, each with its limits for orders with and without Package Protection: (1) still in transit / hasn't arrived — \"My package hasn't arrived\"; (2) marked delivered but not received; (3) arrived damaged",
     ],
     must_cover: [
       "How do I start a return? (steps)", "How long do I have to return? (window from delivery)", "What do I need to start a return?",

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.44.7
+- FAQs give customers without Package Protection their time limits: report "marked delivered" or "arrived damaged" within 5 days of delivery (7 days with Package Protection); "hasn't arrived" opens 14 days after shipping for everyone. Outcomes stay unwritten ("our team will review it"). Every 7-day limit is labeled as the Package Protection limit. The lost/stolen answer now covers packages still in transit / not arrived, marked delivered, and damaged. Emily will ask in Slack before publishing.
+
 ## 4.44.6
 - FAQ facts: every answer about a late, lost or damaged package names the exact portal option ("My package hasn't arrived", etc.).
 
