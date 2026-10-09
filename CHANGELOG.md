@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.44.4
+- FAQs no longer describe anything for orders without Package Protection (no windows, no carrier-claim steps, no refund rules) — those are handled case by case. Emily removes that wording and only points to "Other" in the portal. She'll ask in Slack before publishing.
+
 ## 4.44.3
 - FAQ tone: mom-friendly — clear, warm and empathetic. No internal words ("tagged", tag names, system names). "What can't be returned?" now says items marked Final Sale and no longer mentions Package Protection. Emily will ask in Slack before publishing.
 

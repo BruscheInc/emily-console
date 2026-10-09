@@ -69,13 +69,13 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
-const FACTS_VER = 6;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
+const FACTS_VER = 7;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
   const fee = Number(s.label_fee) || 0, byWeight = s.label_fee_mode !== "flat";
   const onCredit = s.fee_on_store_credit ? " It comes off store credit too." : " It isn't charged when the customer chooses store credit.";
-  const days = s.window_days[store], pp = s.pp_claim_window_days, nopp = s.nopp_claim_window_days;
+  const days = s.window_days[store], pp = s.pp_claim_window_days;
   const feeLine = byWeight
     ? `Based on the weight of the return package (it's the real price of the prepaid USPS label), so it changes from return to return. The exact amount is shown in the returns portal before the customer confirms, and it's taken off the refund.${onCredit} Never state a fixed dollar amount.`
     : fee ? `$${fee.toFixed(2)}, taken off the refund.${onCredit}` : "Free.";
@@ -113,7 +113,7 @@ async function facts(store) {
         "Pick the fix you'd like and submit",
       ],
       keep_the_item: "No need to send it back.",
-      options: "Free replacement (when that size is in stock), store credit, or a refund to the original payment (refund only on orders without Package Protection).",
+      options: "A free replacement (when that size is in stock) or another fix — the options for the order are shown in the portal. Don't spell out when a refund is or isn't offered.",
       after: "The customer gets an email with the claim number; we may ask for another photo; the decision is emailed.",
     },
     shipping_problems_with_package_protection: {
@@ -125,13 +125,13 @@ async function facts(store) {
     },
     delayed_order: {
       not_shipped_yet: `Use the tracking link from the shipping email once it ships. Orders that haven't shipped can still be cancelled in the portal ("Edit or cancel my order"). Keep the page's existing processing-time wording (e.g. new releases and sales taking longer to process) — that's store policy.`,
-      shipped_but_slow: `Check the tracking link first. If the package still isn't delivered <strong>${s.transit_claim_days} days after it shipped</strong>, open the returns portal (${portal}), enter the order number + checkout email and choose: with Package Protection → "Package Protection claim" → "My package hasn't arrived" (free replacement or store credit); without Package Protection → "Other" → "My package hasn't arrived" (our team looks into it with the carrier).`,
+      shipped_but_slow: `Check the tracking link first. If the package still isn't delivered <strong>${s.transit_claim_days} days after it shipped</strong>, open the returns portal (${portal}), enter the order number + checkout email and choose "Package Protection claim" → "My package hasn't arrived" (free replacement or store credit). Any other situation: choose "Other" in the portal and our team will help.`,
       too_early: `Before day ${s.transit_claim_days} the portal shows the latest tracking status and the exact date the claim opens, so the customer can come back then.${Number(s.transit_claim_max_days) ? ` Last day to file: ${s.transit_claim_max_days} days after shipping.` : ""}`,
       marked_delivered: `If tracking says delivered but it isn't there, that's the "marked delivered" claim (wait ${s.delivered_wait_hours} hours, check around, then file within ${pp} days with Package Protection).`,
     },
-    defective_vs_damaged: `"Defective item" = something wrong with how the item was made (${s.claim_window_days} days from delivery). "Arrived damaged" = the package or items were damaged in shipping (with Package Protection: ${pp} days from delivery in "Package Protection claim"; without it: ${nopp} days). If unsure, pick the one that fits best — our team sorts it out.`,
+    defective_vs_damaged: `"Defective item" = something wrong with how the item was made (${s.claim_window_days} days from delivery). "Arrived damaged" = the package or items were damaged in shipping (file within ${pp} days of delivery under "Package Protection claim"). If unsure, pick the one that fits best — our team sorts it out.`,
     photos: "Defective and damaged claims need at least 1 photo (up to 8, JPG or PNG). Clear, well-lit photos of the problem — and for shipping damage, the outside of the box too — get claims approved fastest.",
-    shipping_problems_without_package_protection: `Once tracking shows delivered we can't replace a lost package; the portal (\"Other\") shows how to file a claim with USPS. Damage has to be reported within ${nopp} days of delivery.`,
+    orders_without_package_protection: `NEVER describe what happens for orders without Package Protection (no windows, no "we can't replace", no carrier-claim steps) — those are handled case by case and written rules get exploited. Only say: if something else went wrong, choose "Other" in the returns portal and our team will help.`,
     order_changes: {
       edit: `Change a size or the shipping address within ${s.edit_window_minutes} minutes of placing the order, in the portal ("Edit or cancel my order"). Shopify emails the updated order; if the new item costs more, that email has a link to pay the difference; if less, the difference is refunded.`,
       cancel: "Cancel any time before the order ships, in the same place. Once it ships it can't be changed or cancelled — start a return after delivery instead.",
@@ -146,6 +146,7 @@ async function facts(store) {
       "Return, defect and claim answers missing the day limits, what the customer needs, or the steps",
       `Internal wording customers shouldn't see: "tagged", tag names (${s.final_sale_tags}), SKUs, system or app names → plain words like "marked Final Sale"`,
       "Stating that Package Protection itself can't be returned → remove it (it goes without saying)",
+      "ANY policy for orders without Package Protection (\"No Package Protection? …\", 5-day damage window, USPS claim steps, \"we can't replace\", refund-only-without-PP) → remove it; at most say \"Something else went wrong? Choose 'Other' in the returns portal and we'll help.\"",
     ],
     must_cover: [
       "How do I start a return? (steps)", "How long do I have to return? (window from delivery)", "What do I need to start a return?",
@@ -154,7 +155,7 @@ async function facts(store) {
       "What can't be returned?", "Do you offer exchanges?",
       "My item is defective — what do I do? (window, photos, keep the item, options)", "My package arrived damaged",
       "My package hasn't arrived",
-      "What if my order is delayed? (check tracking; exactly when the portal claim opens — 14 days after shipping — which option to pick with and without Package Protection, and that the portal shows the date if it's too early)", "My package says delivered but I didn't get it", "What does Package Protection cover / how do I file a claim?",
+      "What if my order is delayed? (check tracking; exactly when the portal claim opens — 14 days after shipping — which option to pick, and that the portal shows the date if it's too early)", "My package says delivered but I didn't get it", "What does Package Protection cover / how do I file a claim?",
       "Can I change or cancel my order? (size/address changes only in the first minutes; cancelling allowed until it ships — say both clearly and that both are done in the portal)",
       "Defective vs. arrived damaged — which do I pick? (the two windows side by side)", "How many photos do I need? (at least 1, up to 8)",
     ],
