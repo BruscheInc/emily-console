@@ -69,7 +69,7 @@ function itemsOf(tpl) {
 }
 
 /* ---------------- what Buzzin actually does (the facts the FAQ must match) ---------------- */
-const FACTS_VER = 5;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
+const FACTS_VER = 6;   // bump when the facts or Emily's FAQ instructions change, so she re-checks both pages
 async function facts(store) {
   const s = await R().settings(), def = R().STORE_DEFS[store];
   const portal = R().portalUrl(store, s);
@@ -100,7 +100,7 @@ async function facts(store) {
       refund_methods: s.store_credit_enabled ? `Original payment method, or store credit with a ${s.store_credit_bonus_pct}% bonus (added to the customer's account for the next order).` : "Original payment method.",
       refund_timing: s.auto_refund ? "Issued automatically as soon as the package is delivered back to us (no need to email). Banks can take 5–10 business days to show it; store credit is instant." : "Issued after the return is received and checked.",
       track_or_cancel: "The confirmation page (linked in the email) shows the label, tracking and status. A return can be cancelled there until the package is dropped off.",
-      not_returnable: `Final-sale items (tagged ${s.final_sale_tags}) and Package Protection.`,
+      not_returnable: `Items marked "Final Sale" can't be returned. (Say "marked Final Sale" — never "tagged", never list tag names, and don't mention Package Protection here; it goes without saying.)`,
       exchanges: "No direct exchanges: return the item (store credit gets the bonus) and place a new order.",
     },
     defective_item: {
@@ -144,6 +144,8 @@ async function facts(store) {
       `"Email us" for returns, defects, damaged or missing packages → the returns portal (email ${def.support} stays fine as a fallback)`,
       byWeight ? `Any fixed dollar amount for the return label fee (e.g. "$5.95" or "$7.95") → weight-based, exact price shown in the portal before confirming` : `Any label fee other than $${fee.toFixed(2)}`,
       "Return, defect and claim answers missing the day limits, what the customer needs, or the steps",
+      `Internal wording customers shouldn't see: "tagged", tag names (${s.final_sale_tags}), SKUs, system or app names → plain words like "marked Final Sale"`,
+      "Stating that Package Protection itself can't be returned → remove it (it goes without saying)",
     ],
     must_cover: [
       "How do I start a return? (steps)", "How long do I have to return? (window from delivery)", "What do I need to start a return?",
@@ -165,7 +167,7 @@ async function facts(store) {
 const SUGGEST_SYS = `You keep a baby-clothing store's FAQ page accurate, complete and easy for busy parents to follow. You get the FAQ (groups with ids, questions with ids and their current HTML answers) and the FACTS: exactly what the store's systems do today.
 1. FIX: rewrite any answer that is wrong, out of date or missing something from the FACTS (old Loop links, wrong day counts, "email us" where the portal handles it, a fixed label fee, missing deadlines).
 2. COMPLETE: every topic in FACTS.must_cover needs a clear answer with the real numbers — day limits and what they count from (delivery, shipping, label date), what the customer needs, and the steps. Expand the closest existing answer; add a NEW question only when no existing question fits (put it in the group where a customer would look). Don't duplicate a topic another question already covers well.
-Style: warm, friendly and plain, written to a parent on their phone. Short sentences, no jargon, no legal tone. Lead with the answer. Put limits in <strong> (e.g. <strong>7 days from delivery</strong>). NEVER use <ol>, <ul> or <li> — the store's theme displays them wrong. Write steps as numbered lines inside one paragraph: <p><strong>1.</strong> First step<br><strong>2.</strong> Second step</p>, and "what you'll need" as <p>You'll need:<br>• one thing<br>• another</p>. Keep each answer under ~120 words. Link the returns portal wherever the customer has to do something (<a href="...">returns portal</a>). Simple HTML only: <p>, <strong>, <a href>, <br>.
+Style: mom-friendly — clear, warm and empathetic, written to a busy parent on their phone (acknowledge the hassle when something went wrong, e.g. "We're so sorry your package is late"). Never use internal or technical words (tags, SKUs, system names, "claim gate", etc.). Short sentences, no jargon, no legal tone. Lead with the answer. Put limits in <strong> (e.g. <strong>7 days from delivery</strong>). NEVER use <ol>, <ul> or <li> — the store's theme displays them wrong. Write steps as numbered lines inside one paragraph: <p><strong>1.</strong> First step<br><strong>2.</strong> Second step</p>, and "what you'll need" as <p>You'll need:<br>• one thing<br>• another</p>. Keep each answer under ~120 words. Link the returns portal wherever the customer has to do something (<a href="...">returns portal</a>). Simple HTML only: <p>, <strong>, <a href>, <br>.
 Never invent anything that isn't in the FACTS. Leave correct, complete answers alone. Policies in never_change_policy are never rewritten — raise conflicts as notes.
 Reply with ONLY JSON, no code fences: {"changes":[{"id":"<question id>","answer":"<new HTML>","why":"<one short sentence for staff>"}],"new_questions":[{"group":"<group id>","question":"<question>","answer":"<HTML>","why":"<one short sentence>"}],"notes":["anything staff should decide"]}`;
 async function suggest(store) {

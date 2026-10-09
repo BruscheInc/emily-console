@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.44.3
+- FAQ tone: mom-friendly — clear, warm and empathetic. No internal words ("tagged", tag names, system names). "What can't be returned?" now says items marked Final Sale and no longer mentions Package Protection. Emily will ask in Slack before publishing.
+
 ## 4.44.2
 - FAQ "What if my order is delayed?": Emily's facts now spell out when a delay becomes a claim (14 days after shipping with no delivery), which portal option to pick with and without Package Protection, and that the portal shows the date the claim opens if it's too early. She'll ask in Slack before publishing.
 
