@@ -360,4 +360,4 @@ async function status() {
   return out;
 }
 
-module.exports = { init, view, suggest, publish, undo, cleanHtml, itemsOf, splitHeader, autoRun, autoRunAll, status, schedule, stageFaq, clearPending };
+module.exports = { facts, readTemplate, init, view, suggest, publish, undo, cleanHtml, itemsOf, splitHeader, autoRun, autoRunAll, status, schedule, stageFaq, clearPending };

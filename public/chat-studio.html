@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat Widget · Buzzin</title>
+<link rel="icon" href="/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+:root{--bg:#F6F5F2;--panel:#fff;--panel2:#F2F1EE;--line:#E7E5E0;--ink:#17161F;--muted:#6E6B76;--honey:#FFC21A;--honey-soft:#FFF3CC;--honey-ink:#7A5600;--ok:#158048;--ok-soft:#E3F3EA;--bad:#d14343}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 "Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+.top{flex:none;height:58px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top .back{color:var(--muted);text-decoration:none;font-weight:600;white-space:nowrap}.top .title{font-weight:800;font-size:15px;white-space:nowrap}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;padding:5px 12px;border-radius:7px;cursor:pointer;font-weight:600;color:var(--muted);white-space:nowrap}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(20,30,50,.14)}
+.sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 13px;font-weight:600;cursor:pointer;white-space:nowrap;text-decoration:none;color:var(--ink)}
+.btn:hover{background:var(--panel2)}.btn.pri{background:var(--ink);border-color:var(--ink);color:#fff}.btn.pri:hover{filter:brightness(1.15)}
+.btn:disabled{opacity:.45;cursor:default}.btn.xs{padding:4px 9px;font-size:12px;border-radius:7px}.btn.danger{color:var(--bad)}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-weight:700;font-size:12px}
+.pill.on{background:var(--ok-soft);color:var(--ok)}.pill.off{background:var(--panel2);color:var(--muted)}
+.pill i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.main{flex:1;display:flex;min-height:0}
+.side{width:420px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding-bottom:60px}
+.sec{border-bottom:1px solid var(--line)}
+.sec>summary{list-style:none;cursor:pointer;padding:14px 18px;font-weight:700;display:flex;align-items:center;gap:10px}
+.sec>summary::-webkit-details-marker{display:none}
+.sec>summary .em{width:26px;height:26px;border-radius:8px;background:var(--panel2);display:grid;place-items:center;font-size:14px;flex:none}
+.sec>summary .ch{margin-left:auto;color:var(--muted);transition:transform .15s}.sec[open]>summary .ch{transform:rotate(90deg)}
+.sec .in{padding:0 18px 16px}
+.f{margin-top:12px}.f>label,.lab{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
+.f .hint{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+input[type=text],input[type=number],input[type=url],select,textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff;outline:0}
+input:focus,select:focus,textarea:focus{border-color:#B9B5AC;box-shadow:0 0 0 3px rgba(255,194,26,.25)}
+textarea{min-height:70px;resize:vertical;line-height:1.4}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.col{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:4px 8px 4px 4px;background:#fff}
+.col input[type=color]{width:30px;height:28px;border:0;padding:0;background:none;cursor:pointer;flex:none}
+.col input[type=text]{border:0;padding:4px 2px;box-shadow:none;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.rng{display:flex;align-items:center;gap:10px}.rng input[type=range]{flex:1;accent-color:var(--ink)}.rng output{width:46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px}
+.tog{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+.tog .t{font-weight:600}.tog .h{font-size:11.5px;color:var(--muted)}
+.sw{position:relative;width:40px;height:23px;flex:none}.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;background:#D9D6CF;border-radius:999px;cursor:pointer;transition:.15s}
+.sw span:before{content:"";position:absolute;width:17px;height:17px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw input:checked+span{background:var(--ok)}.sw input:checked+span:before{transform:translateX(17px)}
+.icons{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.icons button{border:1px solid var(--line);background:#fff;border-radius:9px;height:42px;cursor:pointer;display:grid;place-items:center;font-size:11px;color:var(--muted)}
+.icons button.on{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink) inset;color:var(--ink)}
+.lst .it{border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:8px;background:#FCFBF9}
+.lst .it .row{display:flex;gap:6px;align-items:center}.lst .it .row+.row{margin-top:6px}
+.lst .it .row select{width:110px;flex:none}
+.img{display:flex;gap:8px;align-items:center}.img .th{width:42px;height:42px;border-radius:10px;border:1px solid var(--line);background:#fff center/contain no-repeat;flex:none}
+.stage{flex:1;display:flex;flex-direction:column;min-width:0}
+.stage .bar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.canvas{flex:1;overflow:auto;display:grid;place-items:center;padding:24px}
+.site{position:relative;background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 12px 40px rgba(0,0,0,.08);overflow:hidden;transition:width .2s,height .2s}
+.site.desk{width:min(1100px,100%);height:min(760px,calc(100vh - 170px))}.site.mob{width:390px;height:min(780px,calc(100vh - 170px))}
+.site .nav{height:58px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:18px;padding:0 22px}
+.site .logo{font-weight:800;letter-spacing:.02em}.site .nav i{display:block;height:9px;width:54px;border-radius:5px;background:#eee}
+.site .hero{margin:22px;height:38%;border-radius:12px;background:linear-gradient(135deg,#F3EEE6,#E9EEF3)}
+.site .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:0 22px}.site.mob .grid{grid-template-columns:1fr 1fr}
+.site .grid div{height:120px;border-radius:10px;background:#F5F4F1}
+.chats .c{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px;cursor:pointer;background:#fff}
+.chats .c:hover{background:var(--panel2)}.chats .c .m{font-size:12px;color:var(--muted)}
+.tr{max-height:60vh;overflow:auto}.tr .u,.tr .bt{padding:8px 11px;border-radius:12px;margin:6px 0;max-width:85%;white-space:pre-wrap}
+.tr .u{background:var(--ink);color:#fff;margin-left:auto}.tr .bt{background:var(--panel2)}
+.code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px;word-break:break-all;user-select:all}
+.note{background:var(--honey-soft);color:var(--honey-ink);border-radius:10px;padding:10px 12px;font-size:12.5px;margin-top:10px;line-height:1.45}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.stat div{background:var(--panel2);border-radius:10px;padding:10px}.stat b{display:block;font-size:18px}.stat span{font-size:11.5px;color:var(--muted)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+.toast.bad{background:var(--bad)}
+.modal{position:fixed;inset:0;background:rgba(20,20,30,.4);display:grid;place-items:center;z-index:90}
+.modal .box{background:#fff;border-radius:16px;width:min(560px,94vw);padding:20px;max-height:86vh;overflow:auto}
+.gate{max-width:420px;margin:12vh auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px;text-align:center}
+.dirty{color:var(--honey-ink);font-weight:700;font-size:12px}
+@media (max-width:900px){.main{flex-direction:column}.side{width:100%;height:50%}.top .title{display:none}}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="back" href="/">← Buzzin</a><span class="title">💬 Chat widget</span>
+  <div class="seg" id="stores"><button data-s="lb">Larkspur Baby</button><button data-s="lbo">Outlet</button></div>
+  <span id="live"></span><span class="sp"></span><span class="dirty hidden" id="dirty">Unsaved changes</span>
+  <button class="btn" id="revert">Discard</button><button class="btn pri" id="save">Save</button>
+</div>
+<div class="gate hidden" id="gate"><h2>Sign in to Buzzin first</h2><p>Open Buzzin, sign in, then come back to this page.</p><a class="btn pri" href="/">Open Buzzin</a></div>
+<div class="main" id="main">
+  <div class="side" id="side"></div>
+  <div class="stage">
+    <div class="bar"><div class="seg" id="dev"><button data-d="desk" class="on">Desktop</button><button data-d="mob">Mobile</button></div>
+      <button class="btn xs" id="openP">Open chat</button><button class="btn xs" id="resetChat">Clear test chat</button><span class="sp"></span>
+      <span style="color:var(--muted);font-size:12px">Preview uses your unsaved changes · test messages use the real AI</span></div>
+    <div class="canvas"><div class="site desk" id="site"><div class="nav"><span class="logo" id="siteName"></span><i></i><i></i><i></i></div><div class="hero"></div><div class="grid"><div></div><div></div><div></div><div></div></div></div></div>
+  </div>
+</div>
+<script src="/chat/loader.js"></script>
+<script>
+const KEY = (() => { try { return localStorage.getItem('ec_key') || ''; } catch (e) { return ''; } })();
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function api(p, o = {}) { const r = await fetch(p, { ...o, headers: { ...(o.headers || {}), Authorization: 'Bearer ' + KEY, ...(o.body && typeof o.body === 'string' ? { 'Content-Type': 'application/json' } : {}) } }); const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || 'Request failed'); return j; }
+function toast(m, bad) { const t = document.createElement('div'); t.className = 'toast' + (bad ? ' bad' : ''); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+let STORE = new URLSearchParams(location.search).get('store') || 'lb', D = null, V = null, SAVED = '', W = null, previewOpen = true, DEV = 'desk';
+const get = (p) => p.split('.').reduce((o, k) => (o == null ? o : o[k]), V);
+const set = (p, val) => { const ks = p.split('.'), last = ks.pop(); ks.reduce((o, k) => o[k], V)[last] = val; changed(); };
+
+/* ---------- field builders ---------- */
+const F = {
+  text: (p, l, h) => `<div class="f"><label>${l}</label><input type="text" data-p="${p}" value="${esc(get(p))}">${h ? `<div class="hint">${h}</div>` : ''}</div>`,
+  area: (p, l, h, rows) => `<div class="f"><label>${l}</label><textarea data-p="${p}" rows="${rows || 3}">${esc(get(p))}</textarea>${h ? `<div class="hint">${h}</div>` : ''}</div>`,
+  color: (p, l) => `<div class="f"><label>${l}</label><div class="col"><input type="color" data-p="${p}" data-c="1" value="${esc(get(p)).slice(0, 7)}"><input type="text" data-p="${p}" value="${esc(get(p))}"></div></div>`,
+  range: (p, l, min, max, unit) => `<div class="f"><label>${l}</label><div class="rng"><input type="range" data-p="${p}" data-n="1" min="${min}" max="${max}" value="${get(p)}"><output>${get(p)}${unit || ''}</output></div></div>`,
+  num: (p, l, min, max) => `<div class="f"><label>${l}</label><input type="number" data-p="${p}" data-n="1" min="${min}" max="${max}" value="${get(p)}"></div>`,
+  sel: (p, l, opts) => `<div class="f"><label>${l}</label><select data-p="${p}">${opts.map((o) => { const [v, t] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}" ${String(get(p)) === String(v) ? 'selected' : ''}>${esc(t)}</option>`; }).join('')}</select></div>`,
+  tog: (p, l, h) => `<label class="tog"><span><span class="t">${l}</span>${h ? `<div class="h">${h}</div>` : ''}</span><span class="sw"><input type="checkbox" data-p="${p}" data-b="1" ${get(p) ? 'checked' : ''}><span></span></span></label>`,
+  img: (p, l, h) => `<div class="f"><label>${l}</label><div class="img"><div class="th" style="background-image:url('${esc(get(p))}')"></div><input type="text" data-p="${p}" value="${esc(get(p))}" placeholder="https://… or upload"><button class="btn xs" data-up="${p}">Upload</button></div>${h ? `<div class="hint">${h}</div>` : ''}</div>`,
+};
+const sec = (id, em, title, body, open) => `<details class="sec" data-sec="${id}" ${open ? 'open' : ''}><summary><span class="em">${em}</span>${title}<span class="ch">›</span></summary><div class="in">${body}</div></details>`;
+const ICON_SVG = { chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/>', bubbles: '<path d="M14 9a5 5 0 0 1-7.2 4.5L3 14.5l.9-3.1A5 5 0 1 1 14 9z"/><path d="M10 17.5a5 5 0 0 0 7.2 1l3.8 1-.9-3.1A5 5 0 0 0 17 9.6"/>', bee: '<ellipse cx="12" cy="13" rx="5" ry="6"/><path d="M7.5 11h9M7.5 14.5h9"/><path d="M9.5 7.5C8 4.5 5 4.5 4.5 6.5S7 9.5 9.5 8M14.5 7.5c1.5-3 4.5-3 5-1s-2.5 3-5 1.5"/>', heart: '<path d="M12 20s-7-4.4-9-9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c-2 4.6-9 9-9 9z"/>', question: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.2v.1"/>', sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', headset: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/>', mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>', custom: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.6"/><path d="m20 15-5-5L5 20"/>' };
+const svg = (k) => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON_SVG[k] || ''}</svg>`;
+
+function renderSide() {
+  const ins = D.install || {}, st = D.stats || {}, shop = { lb: 'https://larkspurbaby.com', lbo: 'https://larkspurbabyoutlet.com' }[STORE];
+  const snippet = `<script src="${D.origin}/chat/${STORE}/widget.js" async><\/script>`;
+  let h = '';
+  h += sec('status', '🟢', 'Status & install', `
+    ${F.tog('enabled', 'Show the chat on the website', 'Customers only see it when this is on and you Save.')}
+    <div class="stat"><div><b>${st.chats || 0}</b><span>chats (30 days)</span></div><div><b>${st.handoffs || 0}</b><span>sent to the team</span></div><div><b>${st.messages || 0}</b><span>messages</span></div></div>
+    <div class="f"><span class="lab">On the live website</span>${ins.installed == null ? `<div class="hint">${esc(ins.error || "Couldn't check the theme.")}</div>` : ins.installed
+      ? `<div class="pill on"><i></i>Installed on ${esc(ins.theme)}</div> ${D.admin ? '<button class="btn xs danger" id="uninstall" style="margin-left:6px">Remove from website</button>' : ''}`
+      : `<div class="pill off"><i></i>Not on the website yet</div> ${D.admin ? '<button class="btn xs pri" id="install" style="margin-left:6px">Add to website</button>' : ''}`}
+      <div class="hint">Adds one line to the live theme (layout/theme.liquid). Nothing shows to customers until the switch above is on.</div></div>
+    ${ins.installed ? `<div class="f"><a class="btn xs" href="${shop}/?buzzin_chat=preview" target="_blank" rel="noopener">Preview on the live site ↗</a><div class="hint">Shows the chat only to you (this browser tab), even while it's off.</div></div>` : ''}
+    <details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Install by hand instead</summary><div class="code" style="margin-top:6px">${esc(snippet)}</div><div class="hint">Paste just before &lt;/body&gt; in the theme layout.</div></details>`, true);
+  h += sec('launcher', '🔘', 'Chat button', `
+    <div class="f"><span class="lab">Icon</span><div class="icons">${D.icons.map((k) => `<button data-icon="${k}" class="${V.launcher.icon === k ? 'on' : ''}" title="${k}">${svg(k)}</button>`).join('')}</div></div>
+    ${V.launcher.icon === 'custom' ? F.img('launcher.icon_url', 'Custom icon image') : ''}
+    ${F.text('launcher.text', 'Button text (optional)', 'e.g. "Need help?" — leave empty for an icon-only bubble.')}
+    <div class="g2">${F.color('launcher.bg', 'Background')}${F.color('launcher.fg', 'Icon & text')}</div>
+    ${F.range('launcher.size', 'Size', 40, 90, 'px')}${F.range('launcher.radius', 'Corner roundness', 0, 45, 'px')}
+    ${F.tog('launcher.shadow', 'Shadow')}
+    ${F.sel('launcher.position', 'Position', [['right', 'Bottom right'], ['left', 'Bottom left']])}
+    <div class="g2">${F.num('launcher.offset_x', 'Side gap (desktop)', 0, 200)}${F.num('launcher.offset_y', 'Bottom gap (desktop)', 0, 300)}</div>
+    <div class="g2">${F.num('launcher.offset_x_m', 'Side gap (mobile)', 0, 200)}${F.num('launcher.offset_y_m', 'Bottom gap (mobile)', 0, 300)}</div>
+    ${F.tog('launcher.show_mobile', 'Show on phones')}${F.num('launcher.z', 'Stacking order (z-index)', 1, 2147483647)}`);
+  h += sec('teaser', '💬', 'Greeting pop-up & auto-open', `
+    ${F.tog('launcher.teaser_on', 'Show a greeting bubble', 'A small message next to the button, once per visit.')}
+    ${F.area('launcher.teaser', 'Greeting text', '', 2)}
+    ${F.range('launcher.teaser_delay', 'Show after', 0, 120, 's')}
+    ${F.tog('launcher.badge', 'Red dot on the button while the greeting is unread')}
+    ${F.range('launcher.auto_open', 'Open the chat by itself after (0 = never)', 0, 300, 's')}`);
+  h += sec('panel', '🎨', 'Chat window look', `
+    <div class="g2">${F.range('panel.width', 'Width', 280, 520, 'px')}${F.range('panel.height', 'Height', 380, 900, 'px')}</div>
+    ${F.range('panel.radius', 'Corner roundness', 0, 32, 'px')}
+    <div class="g2">${F.sel('panel.font', 'Font', [['inherit', 'Website font'], ...D.fonts])}${F.range('panel.font_size', 'Text size', 12, 20, 'px')}</div>
+    <div class="g2">${F.color('panel.header_bg', 'Header background')}${F.color('panel.header_fg', 'Header text')}</div>
+    <div class="g2">${F.color('panel.bg', 'Window background')}${F.color('panel.text', 'Text')}</div>
+    <div class="g2">${F.color('panel.bot_bg', 'Helper bubble')}${F.color('panel.bot_fg', 'Helper bubble text')}</div>
+    <div class="g2">${F.color('panel.user_bg', 'Customer bubble')}${F.color('panel.user_fg', 'Customer bubble text')}</div>
+    <div class="g2">${F.color('panel.accent', 'Buttons & send')}${F.color('panel.accent_fg', 'Button text')}</div>
+    <div class="g3">${F.color('panel.chip_bg', 'Shortcut bg')}${F.color('panel.chip_fg', 'Shortcut text')}${F.color('panel.chip_border', 'Shortcut border')}</div>
+    ${F.color('panel.muted', 'Small print')}`);
+  h += sec('header', '🪪', 'Header', `${F.text('header.title', 'Title')}${F.text('header.subtitle', 'Subtitle')}${F.tog('header.show_avatar', 'Show picture')}${F.img('header.avatar', 'Picture / logo')}${F.tog('header.status_dot', 'Green "online" dot')}`);
+  h += sec('copy', '✍️', 'Messages & wording', `${F.area('copy.welcome', 'Welcome message', 'The first thing customers see.', 3)}${F.text('copy.placeholder', 'Message box placeholder')}${F.area('copy.disclaimer', 'Small print under the message box', '', 2)}${F.text('copy.thinking', 'Typing indicator label')}${F.area('copy.error', 'When something goes wrong', '', 2)}${F.area('copy.limit', 'When a chat reaches the message limit', '', 2)}`);
+  h += sec('quick', '⚡', 'Shortcut buttons', `<div class="hint" style="margin-top:4px">Shown under the welcome message. "Ask" sends the text as the customer's question; "Link" opens a page. Use {portal} for the returns portal.</div>
+    <div class="lst">${V.quick.map((q, i) => `<div class="it"><div class="row"><input type="text" data-q="${i}" data-k="label" value="${esc(q.label)}" placeholder="Button label"><select data-q="${i}" data-k="type"><option value="message" ${q.type === 'message' ? 'selected' : ''}>Ask</option><option value="link" ${q.type === 'link' ? 'selected' : ''}>Link</option></select></div>
+      <div class="row"><input type="text" data-q="${i}" data-k="value" value="${esc(q.value)}" placeholder="${q.type === 'link' ? 'https://…' : 'Question to ask'}"><button class="btn xs" data-qup="${i}" title="Move up">↑</button><button class="btn xs danger" data-qdel="${i}">✕</button></div></div>`).join('')}</div>
+    ${V.quick.length < 8 ? '<button class="btn xs" id="qadd" style="margin-top:8px">+ Add shortcut</button>' : ''}`);
+  h += sec('links', '🔗', 'Links the helper can show', `<div class="hint" style="margin-top:4px">The AI can only link to these pages (as buttons). Use {portal} for the returns portal.</div>
+    <div class="lst">${V.links.map((l, i) => `<div class="it"><div class="row"><input type="text" data-l="${i}" data-k="label" value="${esc(l.label)}" placeholder="Label" style="width:38%"><input type="text" data-l="${i}" data-k="url" value="${esc(l.url)}" placeholder="https://…"><button class="btn xs danger" data-ldel="${i}">✕</button></div></div>`).join('')}</div>
+    ${V.links.length < 12 ? '<button class="btn xs" id="ladd" style="margin-top:8px">+ Add link</button>' : ''}`);
+  h += sec('handoff', '📨', 'Email our team', `${F.tog('handoff.enabled', 'Let customers send a message to the team', 'Creates a Buzzin ticket (tag "chat") with the chat attached — Emily drafts the reply as usual.')}
+    ${F.text('handoff.label', 'Button label')}${F.text('handoff.title', 'Form title')}${F.area('handoff.intro', 'Form intro', '', 2)}${F.tog('handoff.ask_order', 'Ask for the order number')}${F.area('handoff.success', 'Thank-you message', 'Use {email} for their email.', 2)}`);
+  h += sec('ai', '✨', 'AI helper', `${F.tog('ai.enabled', 'Answer with AI', 'Off = shortcuts, links and "Email our team" only.')}
+    <div class="note">The helper only guides: it answers from your FAQ page and return / claim rules, and points people to the right place (mostly the returns portal and the exact option to pick). It can't see orders and never promises refunds, credits, replacements or exceptions — anything else goes to "Email our team".</div>
+    ${F.text('ai.tone', 'Tone')}${F.area('ai.knowledge', 'Extra things it should know', 'e.g. shipping times, sizing tips, current promos. Plain sentences.', 5)}${F.area('ai.instructions', 'Extra instructions', 'e.g. "Always mention our size chart for fit questions."', 3)}
+    ${F.range('ai.max_messages', 'Max questions per chat', 4, 60, '')}`);
+  h += sec('pages', '📄', 'Where it shows', `${F.area('pages.hide_paths', 'Hide on these pages', 'One per line. End with * for a whole section, e.g. /pages/contact or /blogs/*', 2)}${F.area('pages.only_paths', 'Only show on these pages (optional)', 'Leave empty to show everywhere.', 2)}`);
+  h += sec('css', '🧩', 'Custom CSS', `${F.area('custom_css', 'CSS for the chat window', 'Applies inside the chat window, e.g. .b{border-radius:8px}', 6)}`);
+  h += sec('chats', '🗂️', 'Conversations', `<div class="chats" id="chats"><div class="hint">Loading…</div></div>`);
+  h += `<div style="padding:16px 18px"><button class="btn xs danger" id="defaults">Reset everything to defaults</button></div>`;
+  const open = [...document.querySelectorAll('.sec[open]')].map((x) => x.dataset.sec), scroll = $('side').scrollTop;
+  $('side').innerHTML = h;
+  if (open.length) document.querySelectorAll('.sec').forEach((x) => { x.open = open.includes(x.dataset.sec); });
+  $('side').scrollTop = scroll;
+  if (open.includes('chats')) loadChats();
+}
+
+/* ---------- events ---------- */
+$('side').addEventListener('input', (e) => {
+  const t = e.target, p = t.dataset.p;
+  if (p) {
+    let v = t.dataset.b ? t.checked : t.dataset.n ? Number(t.value) : t.value;
+    if (t.dataset.c) { const twin = t.parentElement.querySelector('input[type=text]'); if (twin) twin.value = v; }
+    else if (t.type === 'text' && t.parentElement.classList.contains('col')) { const c = t.parentElement.querySelector('input[type=color]'); if (/^#[0-9a-f]{6}$/i.test(v)) c.value = v; }
+    if (t.type === 'range') t.nextElementSibling.textContent = v + (t.nextElementSibling.textContent.replace(/[\d.]+/, '') || '');
+    if (t.closest('.img')) t.parentElement.querySelector('.th').style.backgroundImage = `url('${v}')`;
+    set(p, v); return;
+  }
+  if (t.dataset.q) { V.quick[+t.dataset.q][t.dataset.k] = t.value; changed(); if (t.dataset.k === 'type') renderSide(); return; }
+  if (t.dataset.l) { V.links[+t.dataset.l][t.dataset.k] = t.value; changed(); }
+});
+$('side').addEventListener('change', (e) => { const t = e.target; if (t.dataset.b || t.tagName === 'SELECT' && t.dataset.p) renderSide(); });
+$('side').addEventListener('click', async (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.icon) { set('launcher.icon', b.dataset.icon); renderSide(); return; }
+  if (b.dataset.up) return upload(b.dataset.up);
+  if (b.dataset.qdel != null) { V.quick.splice(+b.dataset.qdel, 1); changed(); renderSide(); return; }
+  if (b.dataset.qup != null) { const i = +b.dataset.qup; if (i > 0) { [V.quick[i - 1], V.quick[i]] = [V.quick[i], V.quick[i - 1]]; changed(); renderSide(); } return; }
+  if (b.dataset.ldel != null) { V.links.splice(+b.dataset.ldel, 1); changed(); renderSide(); return; }
+  if (b.id === 'qadd') { V.quick.push({ label: 'New shortcut', type: 'message', value: '' }); changed(); renderSide(); return; }
+  if (b.id === 'ladd') { V.links.push({ label: 'New link', url: 'https://' }); changed(); renderSide(); return; }
+  if (b.id === 'install' || b.id === 'uninstall') {
+    const rm = b.id === 'uninstall';
+    if (!confirm(rm ? 'Remove the chat from the live website?' : `Add the chat to the live ${STORE === 'lb' ? 'Larkspur Baby' : 'Outlet'} website? It stays hidden until "Show the chat on the website" is on.`)) return;
+    b.disabled = true; try { await api(`/api/chat-admin/${STORE}/install`, { method: 'POST', body: JSON.stringify({ remove: rm }) }); toast(rm ? 'Removed from the website' : 'Added to the website'); await load(true); } catch (err) { toast(err.message, true); b.disabled = false; } return;
+  }
+  if (b.id === 'defaults') { if (!confirm('Reset every setting for this store back to the defaults?')) return; try { await api(`/api/chat-admin/${STORE}/reset`, { method: 'POST', body: '{}' }); toast('Reset'); load(true); } catch (err) { toast(err.message, true); } return; }
+});
+$('side').addEventListener('toggle', (e) => { if (e.target.dataset && e.target.dataset.sec === 'chats' && e.target.open) loadChats(); }, true);
+
+function upload(p) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => { const f = inp.files[0]; if (!f) return;
+    try { const r = await fetch(`/api/portal/assets?store=${STORE}&name=${encodeURIComponent(f.name)}`, { method: 'POST', headers: { 'Content-Type': f.type, Authorization: 'Bearer ' + KEY }, body: f });
+      const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || 'Upload failed'); set(p, j.url); renderSide(); toast('Uploaded'); } catch (e) { toast(e.message, true); } };
+  inp.click();
+}
+async function loadChats() {
+  const w = $('chats'); if (!w) return;
+  try { const { chats } = await api(`/api/chat-admin/${STORE}/chats`);
+    w.innerHTML = chats.length ? chats.map((c, i) => { const first = (c.messages || []).find((m) => m.role === 'user'); return `<div class="c" data-ci="${i}"><div><b>${esc(first ? first.text.slice(0, 70) : '(no messages)')}</b></div><div class="m">${new Date(c.updated_at).toLocaleString()} · ${(c.messages || []).filter((m) => m.role === 'user').length} question(s)${c.preview ? ' · test' : ''}${c.ticket_id ? ` · <a href="/?ticket=${c.ticket_id}" target="_blank">ticket ${c.ticket_id}</a>` : ''}${c.page ? ' · ' + esc(c.page) : ''}</div></div>`; }).join('') : '<div class="hint">No conversations yet.</div>';
+    w.onclick = (e) => { const el = e.target.closest('[data-ci]'); if (!el || e.target.tagName === 'A') return; const c = chats[+el.dataset.ci];
+      const m = document.createElement('div'); m.className = 'modal'; m.onclick = (ev) => { if (ev.target === m) m.remove(); };
+      m.innerHTML = `<div class="box"><h3 style="margin:0 0 6px">Conversation</h3><div class="hint">${new Date(c.created_at).toLocaleString()}${c.handoff_email ? ' · sent to the team from ' + esc(c.handoff_email) : ''}</div><div class="tr">${(c.messages || []).map((x) => `<div class="${x.role === 'user' ? 'u' : 'bt'}">${esc(x.text)}${(x.buttons || []).length ? `<div class="hint">→ ${x.buttons.map((b) => esc(b.label)).join(' · ')}</div>` : ''}</div>`).join('')}</div><div style="text-align:right;margin-top:12px"><button class="btn" onclick="this.closest('.modal').remove()">Close</button></div></div>`;
+      document.body.appendChild(m); };
+  } catch (e) { w.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
+}
+
+/* ---------- preview ---------- */
+let pv = null;
+function previewConfig() {
+  const p = D.public.portal, fill = (u) => String(u || '').replace('{portal}', p), abs = (u) => (u && u.startsWith('/') ? D.origin + u : u);
+  return { ...JSON.parse(JSON.stringify(V)), store: STORE, portal: p, fonts: D.public.fonts, header: { ...V.header, avatar: abs(V.header.avatar) }, launcher: { ...V.launcher, icon_url: abs(V.launcher.icon_url), teaser_on: V.launcher.teaser_on && !previewOpen },
+    links: V.links.map((l) => ({ ...l, url: fill(l.url) })), quick: V.quick.map((q) => (q.type === 'link' ? { ...q, value: fill(q.value) } : q)) };
+}
+function mount() {
+  if (pv) pv.destroy();
+  pv = window.BuzzinChatMount(previewConfig(), { container: $('site'), origin: location.origin, store: STORE, preview: true, mobile: DEV === 'mob' });
+  if (previewOpen && pv) pv.open();
+}
+let tm = null;
+function changed() {
+  const dirty = JSON.stringify(V) !== SAVED; $('dirty').classList.toggle('hidden', !dirty); $('save').disabled = !dirty || !D.admin; $('revert').disabled = !dirty;
+  clearTimeout(tm); tm = setTimeout(() => { const structural = pv && pv._sig !== sig(); if (structural || !pv) { mount(); if (pv) pv._sig = sig(); } else pv.config(previewConfig()); }, 150);
+}
+const sig = () => JSON.stringify([V.launcher, V.panel.width, V.panel.height, V.panel.radius, V.panel.bg, DEV, previewOpen]);
+$('dev').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; DEV = b.dataset.d; document.querySelectorAll('#dev button').forEach((x) => x.classList.toggle('on', x === b)); $('site').className = 'site ' + DEV; mount(); if (pv) pv._sig = sig(); };
+$('openP').onclick = () => { previewOpen = !previewOpen; $('openP').textContent = previewOpen ? 'Close chat' : 'Open chat'; mount(); if (pv) pv._sig = sig(); };
+$('resetChat').onclick = () => { try { localStorage.removeItem('buzzin_chat_' + STORE + '_preview'); } catch (e) {} mount(); };
+
+/* ---------- load / save ---------- */
+async function load(keepView) {
+  try { D = await api(`/api/chat-admin/${STORE}`); } catch (e) { toast(e.message, true); return; }
+  V = JSON.parse(JSON.stringify(D.settings)); SAVED = JSON.stringify(V);
+  document.querySelectorAll('#stores button').forEach((b) => b.classList.toggle('on', b.dataset.s === STORE));
+  $('siteName').textContent = STORE === 'lb' ? 'Larkspur Baby' : 'Larkspur Baby Outlet';
+  $('live').innerHTML = D.settings.enabled ? '<span class="pill on"><i></i>Live</span>' : '<span class="pill off"><i></i>Off</span>';
+  if (!D.admin) $('save').title = 'Only admins can save';
+  renderSide(); changed(); mount(); if (pv) pv._sig = sig();
+  $('openP').textContent = previewOpen ? 'Close chat' : 'Open chat';
+}
+$('stores').onclick = (e) => { const b = e.target.closest('button'); if (!b || b.dataset.s === STORE) return; if (JSON.stringify(V) !== SAVED && !confirm('Discard unsaved changes?')) return; STORE = b.dataset.s; history.replaceState(null, '', '?store=' + STORE); load(); };
+$('save').onclick = async () => { try { const r = await api(`/api/chat-admin/${STORE}`, { method: 'PUT', body: JSON.stringify(V) }); toast(r.settings.enabled ? 'Saved — live on the website' : 'Saved'); await load(true); } catch (e) { toast(e.message, true); } };
+$('revert').onclick = () => { V = JSON.parse(SAVED); renderSide(); changed(); };
+window.addEventListener('beforeunload', (e) => { if (V && JSON.stringify(V) !== SAVED) { e.preventDefault(); e.returnValue = ''; } });
+if (!KEY) { $('main').classList.add('hidden'); $('gate').classList.remove('hidden'); } else load();
+</script>
+</body>
+</html>

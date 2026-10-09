@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.46.0
+- Website chat widget for Larkspur Baby and the Outlet. A chat bubble on the store website with an AI helper that only guides: it answers from the FAQ page and the return / claim rules and sends people to the right place (mostly the returns portal and the exact option to pick). It can't see orders and never promises refunds, credits, replacements or exceptions. "Email our team" turns the chat into a Buzzin ticket (tag "chat") with the conversation attached, and Emily drafts the reply.
+- Chat Studio (Content → Website chat): customise everything per store with a live desktop / mobile preview — button icon (or your own image), text, colors, size, corners, position and gaps, greeting pop-up and auto-open, window size, font, every color, header title / picture, all wording, shortcut buttons, the links the AI may show, the "Email our team" form, AI tone, extra knowledge and instructions, message limit, pages to hide / show on, and custom CSS. Read every conversation. "Add to website" puts one line in the live theme; nothing shows until "Show the chat on the website" is on. "Preview on the live site" shows it only to you.
+
 ## 4.45.1
 - No double payouts from old cards: when a ticket is redrafted, or a newer draft is sent, any action still waiting from an older draft (e.g. a $24.99 credit next to the corrected $22.74 one) is retired. Its Slack card says "Replaced by a newer draft", and Apply on an old card does nothing. Existing leftovers were cleaned up once.
 

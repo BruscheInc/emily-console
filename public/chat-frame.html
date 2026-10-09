@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex">
+<title>Chat</title>
+<style id="base">
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:var(--fs)/1.45 var(--font);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+.hd{flex:none;display:flex;align-items:center;gap:12px;padding:16px 16px 16px 18px;background:var(--hbg);color:var(--hfg)}
+.hd .av{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.95);flex:none;display:grid;place-items:center;overflow:hidden;position:relative}
+.hd .av img{width:100%;height:100%;object-fit:contain;padding:5px}.hd .av b{color:var(--hbg);font-size:1.1em}
+.hd .av .st{position:absolute;right:0;bottom:0;width:11px;height:11px;border-radius:50%;background:#22C55E;border:2px solid var(--hbg)}
+.hd .tt{flex:1;min-width:0}.hd .t1{font-weight:700;font-size:1.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hd .t2{font-size:.84em;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd .x{border:0;background:rgba(255,255,255,.14);color:inherit;width:34px;height:34px;border-radius:50%;cursor:pointer;display:grid;place-items:center;flex:none}
+.hd .x:hover{background:rgba(255,255,255,.24)}
+.body{flex:1;overflow-y:auto;padding:16px 14px 8px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
+.row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:100%}
+.row.me{align-items:flex-end}
+.b{max-width:86%;padding:10px 13px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word}
+.row.bot .b{background:var(--botbg);color:var(--botfg);border-bottom-left-radius:5px}
+.row.me .b{background:var(--userbg);color:var(--userfg);border-bottom-right-radius:5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-width:94%}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--chipbd);background:var(--chipbg);color:var(--chipfg);border-radius:999px;padding:7px 13px;font-size:.9em;font-weight:600;cursor:pointer;text-decoration:none;line-height:1.2}
+.chip:hover{filter:brightness(.97);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.chip svg{flex:none}
+.typing{display:inline-flex;gap:4px;align-items:center;padding:13px 14px}
+.typing i{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.35;animation:bl 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes bl{0%,60%,100%{opacity:.25;transform:none}30%{opacity:.8;transform:translateY(-3px)}}
+.foot{flex:none;border-top:1px solid rgba(0,0,0,.07);padding:10px 12px 8px;background:var(--bg)}
+.bar{display:flex;align-items:flex-end;gap:8px;background:rgba(0,0,0,.035);border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:6px 6px 6px 12px}
+.bar:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.bar textarea{flex:1;border:0;background:transparent;resize:none;outline:0;max-height:110px;min-height:24px;padding:6px 0;line-height:1.4}
+.send{flex:none;width:38px;height:38px;border:0;border-radius:11px;background:var(--accent);color:var(--accentfg);cursor:pointer;display:grid;place-items:center}
+.send:disabled{opacity:.4;cursor:default}
+.meta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:7px;font-size:.74em;color:var(--muted)}
+.meta button{border:0;background:none;color:var(--accent);font-weight:700;cursor:pointer;padding:0;font-size:1em;white-space:nowrap}
+.form{flex:1;overflow-y:auto;padding:18px}
+.form h3{margin:0 0 4px;font-size:1.1em}.form p{margin:0 0 14px;color:var(--muted);font-size:.92em}
+.form label{display:block;font-size:.82em;font-weight:700;margin:10px 0 4px}
+.form input,.form textarea{width:100%;border:1px solid rgba(0,0,0,.14);border-radius:10px;padding:10px 12px;background:#fff;outline:0}
+.form input:focus,.form textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.form textarea{min-height:110px;resize:vertical}
+.btn{display:flex;width:100%;justify-content:center;align-items:center;gap:8px;margin-top:16px;border:0;border-radius:12px;padding:12px 16px;background:var(--accent);color:var(--accentfg);font-weight:700;cursor:pointer}
+.btn:disabled{opacity:.5}
+.lnk{display:block;margin:12px auto 0;border:0;background:none;color:var(--muted);cursor:pointer;font-weight:600}
+.err{color:#B42318;font-size:.88em;margin-top:10px}
+.ok{text-align:center;padding:40px 10px}.ok .ic{width:56px;height:56px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);display:grid;place-items:center;margin:0 auto 14px}
+</style>
+<style id="custom"></style>
+</head>
+<body>
+<div class="hd"><div class="av" id="av"><img id="avImg" alt=""><b id="avTxt" class="hidden"></b><span class="st" id="st"></span></div><div class="tt"><div class="t1" id="t1"></div><div class="t2" id="t2"></div></div>
+  <button class="x" id="close" aria-label="Close chat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div id="chat" style="flex:1;display:flex;flex-direction:column;min-height:0">
+  <div class="body" id="body" aria-live="polite"></div>
+  <div class="foot">
+    <div class="bar"><textarea id="in" rows="1" aria-label="Message"></textarea>
+      <button class="send" id="send" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+    <div class="meta"><span id="disc"></span><button id="toTeam" class="hidden"></button></div>
+  </div>
+</div>
+<div class="form hidden" id="form">
+  <h3 id="fTitle"></h3><p id="fIntro"></p>
+  <label for="fName">Name</label><input id="fName" autocomplete="name">
+  <label for="fEmail">Email</label><input id="fEmail" type="email" autocomplete="email" inputmode="email">
+  <div id="fOrderWrap"><label for="fOrder">Order number (optional)</label><input id="fOrder" placeholder="e.g. LB123456"></div>
+  <label for="fMsg">How can we help?</label><textarea id="fMsg"></textarea>
+  <div class="err hidden" id="fErr"></div>
+  <button class="btn" id="fSend">Send message</button>
+  <button class="lnk" id="fBack">← Back to chat</button>
+</div>
+<div class="form hidden" id="done"><div class="ok"><div class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div id="doneMsg"></div><button class="lnk" id="dBack">← Back to chat</button></div></div>
+<script>
+const STORE = '__STORE__', Q = new URLSearchParams(location.search), PREVIEW = Q.has('preview'), SITE_PREVIEW = Q.has('site_preview');
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let C = null, page = '', busy = false;
+const SKEY = 'buzzin_chat_' + STORE + (PREVIEW ? '_preview' : '');
+let S = (() => { try { const v = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (v && Date.now() - v.at < 24 * 3600e3) return v; } catch (e) {} return { id: null, msgs: [], at: Date.now() }; })();
+const keep = () => { S.at = Date.now(); try { localStorage.setItem(SKEY, JSON.stringify(S)); } catch (e) {} };
+const ARROW = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg>';
+const MAIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>';
+
+function apply(c) {
+  C = c; const P = c.panel, r = document.documentElement.style;
+  const font = P.font === 'inherit' || P.font === 'System' ? 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif' : `"${P.font}",system-ui,sans-serif`;
+  if (P.font && P.font !== 'inherit' && P.font !== 'System' && !document.querySelector(`link[data-f="${P.font}"]`)) {
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.dataset.f = P.font;
+    l.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(P.font).replace(/%20/g, '+') + ':wght@' + ((c.fonts && c.fonts[P.font]) || '400;700') + '&display=swap'; document.head.appendChild(l);
+  }
+  const set = { '--font': font, '--fs': P.font_size + 'px', '--bg': P.bg, '--text': P.text, '--muted': P.muted, '--hbg': P.header_bg, '--hfg': P.header_fg, '--accent': P.accent, '--accentfg': P.accent_fg,
+    '--botbg': P.bot_bg, '--botfg': P.bot_fg, '--userbg': P.user_bg, '--userfg': P.user_fg, '--chipbg': P.chip_bg, '--chipfg': P.chip_fg, '--chipbd': P.chip_border };
+  for (const k in set) r.setProperty(k, set[k]);
+  $('t1').textContent = c.header.title; $('t2').textContent = c.header.subtitle;
+  $('av').classList.toggle('hidden', !c.header.show_avatar); $('avTxt').textContent = (c.header.title || c.store_name || '?').trim().charAt(0).toUpperCase();
+  const img = $('avImg'), noImg = () => { img.classList.add('hidden'); $('avTxt').classList.remove('hidden'); };
+  img.onerror = noImg; img.onload = () => { img.classList.remove('hidden'); $('avTxt').classList.add('hidden'); };
+  if (c.header.avatar) { if (img.getAttribute('src') !== c.header.avatar) img.src = c.header.avatar; } else { img.removeAttribute('src'); noImg(); } $('st').classList.toggle('hidden', !c.header.status_dot);
+  $('in').placeholder = c.copy.placeholder; $('disc').textContent = c.copy.disclaimer;
+  $('toTeam').textContent = c.handoff.label; $('toTeam').classList.toggle('hidden', !c.handoff.enabled);
+  $('fTitle').textContent = c.handoff.title; $('fIntro').textContent = c.handoff.intro; $('fOrderWrap').classList.toggle('hidden', !c.handoff.ask_order);
+  $('custom').textContent = c.custom_css || '';
+  render();
+}
+function bubble(m) {
+  let h = `<div class="row ${m.role === 'user' ? 'me' : 'bot'}"><div class="b">${esc(m.text)}</div>`;
+  const chips = (m.buttons || []).map((b) => `<a class="chip" href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.label)} ${ARROW}</a>`);
+  if (m.handoff && C.handoff.enabled) chips.push(`<button class="chip" data-team="1">${MAIL} ${esc(C.handoff.label)}</button>`);
+  if (chips.length) h += `<div class="chips">${chips.join('')}</div>`;
+  return h + '</div>';
+}
+function render() {
+  if (!C) return;
+  let h = bubble({ role: 'bot', text: C.copy.welcome });
+  if (!S.msgs.some((m) => m.role === 'user') && C.quick.length) h += `<div class="chips">${C.quick.map((q, i) => q.type === 'link' ? `<a class="chip" href="${esc(q.value)}" target="_blank" rel="noopener">${esc(q.label)} ${ARROW}</a>` : `<button class="chip" data-q="${i}">${esc(q.label)}</button>`).join('')}</div>`;
+  h += S.msgs.map(bubble).join('');
+  if (busy) h += `<div class="row bot"><div class="b typing" aria-label="${esc(C.copy.thinking)}"><i></i><i></i><i></i></div></div>`;
+  $('body').innerHTML = h;
+  $('body').scrollTop = $('body').scrollHeight;
+  $('send').disabled = busy || !$('in').value.trim();
+}
+async function api(path, body) {
+  const r = await fetch('/api/chat/' + STORE + '/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, preview: PREVIEW, site_preview: SITE_PREVIEW, page }) });
+  const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || C.copy.error); return j;
+}
+async function ask(text) {
+  text = String(text || '').trim(); if (!text || busy) return;
+  S.msgs.push({ role: 'user', text }); busy = true; $('in').value = ''; grow(); render(); keep();
+  try { const r = await api('message', { session: S.id, text }); S.id = r.session || S.id; S.msgs.push({ role: 'bot', text: r.reply, buttons: r.buttons || [], handoff: !!r.handoff }); }
+  catch (e) { S.msgs.push({ role: 'bot', text: e.message || C.copy.error, handoff: C.handoff.enabled }); }
+  busy = false; keep(); render(); $('in').focus();
+}
+function grow() { const t = $('in'); t.style.height = 'auto'; t.style.height = Math.min(110, t.scrollHeight) + 'px'; $('send').disabled = busy || !t.value.trim(); }
+function view(v) { $('chat').classList.toggle('hidden', v !== 'chat'); $('form').classList.toggle('hidden', v !== 'form'); $('done').classList.toggle('hidden', v !== 'done'); }
+function openForm() {
+  const last = [...S.msgs].reverse().find((m) => m.role === 'user');
+  if (!$('fMsg').value && last) $('fMsg').value = last.text;
+  $('fErr').classList.add('hidden'); view('form'); setTimeout(() => $(($('fEmail').value ? 'fMsg' : 'fName')).focus(), 50);
+}
+$('body').addEventListener('click', (e) => { const q = e.target.closest('[data-q]'); if (q) return ask(C.quick[+q.dataset.q].value); if (e.target.closest('[data-team]')) openForm(); });
+$('in').addEventListener('input', grow);
+$('in').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask($('in').value); } });
+$('send').onclick = () => ask($('in').value);
+$('toTeam').onclick = openForm; $('fBack').onclick = () => view('chat'); $('dBack').onclick = () => view('chat');
+$('close').onclick = () => parent.postMessage({ buzzinChat: 1, type: 'close' }, '*');
+$('fSend').onclick = async () => {
+  const b = $('fSend'); b.disabled = true; $('fErr').classList.add('hidden');
+  try { const r = await api('handoff', { session: S.id, name: $('fName').value, email: $('fEmail').value, order: $('fOrder').value, message: $('fMsg').value });
+    $('doneMsg').textContent = r.message; $('fMsg').value = ''; view('done'); }
+  catch (e) { $('fErr').textContent = e.message; $('fErr').classList.remove('hidden'); }
+  b.disabled = false;
+};
+window.addEventListener('message', (e) => {
+  const d = e.data; if (!d || !d.buzzinChat) return;
+  if (d.type === 'config' && PREVIEW) apply(d.config);
+  if (d.type === 'page') page = String(d.page || '').slice(0, 300);
+});
+if (!PREVIEW) fetch('/api/chat/' + STORE + '/config').then((r) => r.json()).then(apply).catch(() => {});
+</script>
+</body>
+</html>
