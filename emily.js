@@ -493,6 +493,27 @@ async function setTodo(draftId, index, state, who) {
   return d.todo;
 }
 
+// Actions left over from an older draft on the same ticket are stale once a newer draft is sent or the ticket is
+// redrafted (e.g. a $24.99 credit card next to the corrected $22.74 one) — retire them so nobody applies both.
+// all=true: every still-staged action on the ticket (redraft). Otherwise only those staged before the previous draft.
+async function supersedeStale(ticketId, who, { all = false } = {}) {
+  if (!pool || !ticketId) return 0;
+  try {
+    let cutoff = null;
+    if (!all) {
+      const prev = (await db(`SELECT created_at FROM emily_drafts WHERE ticket_id=$1 ORDER BY id DESC OFFSET 1 LIMIT 1`, [String(ticketId)])).rows[0];
+      if (!prev) return 0; cutoff = prev.created_at;
+    }
+    const rows = (await db(`UPDATE emily_actions SET status='superseded', decided_by=$2, decided_at=now(), result='Replaced by a newer draft on this ticket'
+      WHERE ticket_id=$1 AND status='staged' ${cutoff ? "AND created_at <= $3" : ""} RETURNING id, title`, cutoff ? [String(ticketId), who || "Emily", cutoff] : [String(ticketId), who || "Emily"])).rows;
+    for (const r of rows) {
+      const p = pendingAct.get(r.id); pendingAct.delete(r.id);
+      if (p && p.ts && app) { try { await app.client.chat.update({ channel: APPROVALS_CH, ts: p.ts, text: "Replaced", blocks: [{ type: "section", text: { type: "mrkdwn", text: `↪️ *Replaced by a newer draft* — ${r.title}. Nothing was done.` } }] }); } catch (_) {} }
+      await core.audit({ ticketId, kind: "action-superseded", detail: r.title, who: who || "Emily", target: r.id }).catch(() => {});
+    }
+    return rows.length;
+  } catch (e) { console.error("supersede actions:", e.message); return 0; }
+}
 async function dismissAction(id, who) {
   const rec = (await db(`SELECT * FROM emily_actions WHERE id=$1`, [id])).rows[0];
   if (!rec) throw new Error("that action no longer exists");
@@ -1820,6 +1841,7 @@ async function decide({ ticketId, action, text, who, applyActions = [], override
   const id = String(ticketId);
   const d = await latestDraft(id);
   if (action === "redraft") {
+    await supersedeStale(id, who, { all: true });
     if (d) await updateCard(d, "Redrafted", [{ type: "section", text: { type: "mrkdwn", text: `🔁 *Redrafted* · ticket ${id}${text ? ` — notes: "${String(text).slice(0, 160)}"` : ""} → new card below.` } }]);
     if (d && !d.outcome) await recordOutcome(id, "redrafted", null, who);
     const r = await handleTicket(id, { force: true, guidance: text || "" });
@@ -1848,6 +1870,7 @@ async function decide({ ticketId, action, text, who, applyActions = [], override
   if (pf.length) await markFilesSent(id);
   await core.addTags(id, ["emily-sent"]);
   await recordOutcome(id, action === "edit" ? "edited" : "approved", body, who);
+  await supersedeStale(id, who);
   try { const tg = (await db(`SELECT tags FROM hd_tickets WHERE id=$1`, [String(id)])).rows[0]; if (tg && (tg.tags || []).includes("portal-redirect") && /returns\.larkspurbaby(outlet)?\.com/i.test(body)) await closeTicket(id, `customer sent to the self-serve portal (approved by ${who})`); } catch (_) {}
   await updateCard(d, `Sent to ${s.to}`, [
     { type: "section", text: { type: "mrkdwn", text: `✅ *Sent* → ${s.to} · from ${s.mailbox} · ticket ${id} · by ${who}` } },
@@ -2053,6 +2076,7 @@ async function maybeRedraftCommand(text) {
   const id = m[1], guidance = (m[2] || "").trim();
   const t = await loadTicket(id);
   if (!t) return `I can't find ticket ${id} in Buzzin.`;
+  await supersedeStale(id, "slack redraft", { all: true });
   const r = await handleTicket(id, { force: true, guidance });
   return r && r.category === "cs" ? `🔁 Redrafted ticket ${id}${guidance ? ` with your notes` : ""} — new card in <#${APPROVALS_CH}>.` : `Looked at ticket ${id} — ${r && (r.skipped || r.category) || "nothing to draft"}.`;
 }
@@ -2228,6 +2252,11 @@ async function start() {
   if (STORES.length && pool) { setTimeout(() => refreshOrderCache().catch(() => {}), 20000); setInterval(() => refreshOrderCache().catch(() => {}), 90 * 1000); }
   if (STORES.length && pool) { setTimeout(() => scanStuck().catch(() => {}), 60000); setInterval(() => scanStuck().catch(() => {}), 6 * 3600 * 1000); console.log(`📦⏳ Shipment watch: every 6h (never scanned ${STUCK_DAYS}+ d · not delivered ${UNDELIVERED_DAYS}+ d · orders since ${STUCK_SINCE})`); }
   if (OOS_ON) { setTimeout(runOosLoop, 20000); setInterval(runOosLoop, OOS_INTERVAL); console.log(`📦❌ Out-of-stock hand-off: on (every ${OOS_INTERVAL / 1000}s · ${OOS_AUTO_SEND ? "auto-send" : "Slack approval"} · follow-up after ${OOS_FOLLOWUP_HOURS}h)`); }
+  // One-time: retire actions left over from older drafts on tickets that have since been answered.
+  if (pool) setTimeout(async () => { try { if (await core.syncGet("supersede_stale_v1")) return;
+    const ts = (await db(`SELECT DISTINCT a.ticket_id FROM emily_actions a WHERE a.status='staged' AND a.ticket_id IS NOT NULL`)).rows;
+    let n = 0; for (const t of ts) { const d = await latestDraft(t.ticket_id); if (d && d.outcome) n += await supersedeStale(t.ticket_id, "Emily (cleanup)"); }
+    await core.syncSet("supersede_stale_v1", "done", {}); console.log(`↪️  Retired ${n} stale staged action(s) from older drafts`); } catch (e) { console.error("stale cleanup:", e.message); } }, 10000);
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.45.1
+- No double payouts from old cards: when a ticket is redrafted, or a newer draft is sent, any action still waiting from an older draft (e.g. a $24.99 credit next to the corrected $22.74 one) is retired. Its Slack card says "Replaced by a newer draft", and Apply on an old card does nothing. Existing leftovers were cleaned up once.
+
 ## 4.45.0
 - Store credit now includes sales tax, the same as returns and refunds. Emily's store-credit tool takes the order + items (and a percent, e.g. 50%) and prices them at what the customer actually paid — after discounts, plus that item's tax — instead of Emily typing an amount. The Slack card shows the math (e.g. "1× Pajamas $22.74 = $21.00 + $1.74 tax"). Order lookups now show each item's paid price, tax and total.
 - Claims: the claim value (what store credit and refunds pay) now includes the items' sales tax. Open claims filed before this get their tax added automatically; staff see "incl. $X tax". The portal's claim estimate includes tax too.
