@@ -695,7 +695,7 @@ async function createForTicket({ orderName, lines, refundMethod, ticketId, who, 
     if (!it) throw httpError(400, `"${l.title || l.sku}" isn't returnable on ${order.name}.`);
     return { fulfillmentLineItemId: it.fulfillmentLineItemId, quantity: l.quantity || 1, reasonId: pickReason(l.reasonId || l.reason).id, note: l.note };
   });
-  const rec = await create({ key, orderId: order.id, lines: mapped, refundMethod: refundMethod || "original", source: "helpdesk", ticketId, who, staffOverride });
+  const rec = await create({ key, orderId: order.id, lines: mapped, refundMethod: refundMethod || "original", source: "staff", ticketId, who, staffOverride });
   let file = null;
   if (ticketId && rec.label_src) {
     try {

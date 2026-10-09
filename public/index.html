@@ -1284,7 +1284,7 @@ async function loadReturns(silent){
     for(const r of d.returns){
       const n=r.items.reduce((a,i)=>a+i.quantity,0);
       h+=`<tr class="row" onclick="RET_OPEN.has('${r.id}')?RET_OPEN.delete('${r.id}'):RET_OPEN.add('${r.id}');loadReturns(true)">
-        <td class="c-t" style="width:18%"><div class="subj">${esc(r.rma)}</div><div class="exc">${esc(r.order_name)} · ${fmtDay(r.created_at)}${r.source==="helpdesk"?" · by staff":""}</div></td>
+        <td class="c-t" style="width:18%"><div class="subj">${esc(r.rma)}</div><div class="exc">${esc(r.order_name)} · ${fmtDay(r.created_at)}${r.source!=="portal"?" · by staff":""}</div></td>
         <td style="width:20%">${esc(r.customer_name||"")}<div class="exc">${esc(r.email||"")}</div></td>
         <td style="width:24%">${n} item${n===1?"":"s"}<div class="exc">${esc(r.items.map(i=>i.title).join(", "))}</div></td>
         <td style="width:12%">${r.refund_method==="store_credit"?"Store credit":"Original payment"}</td>

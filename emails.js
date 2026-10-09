@@ -26,7 +26,7 @@ const T_CLAIM = [["first", "Customer first name"], ["order", "Order number"], ["
 
 const EMAILS = {
   /* ---- returns ---- */
-  return_created: { step: 10, event: "Customer starts a return", group: "Returns", name: "Return submitted", sender: "helpdesk",
+  return_created: { step: 10, event: "Customer starts a return", group: "Returns", name: "Return submitted", sender: "buzzin",
     when: "Right after a customer starts a return in the portal. Replaces Shopify's label email.",
     fields: [F.subject, F.title, F.intro, { k: "button", label: "Button", type: "text" }, { k: "view", label: "Link under the button", type: "text" }, { k: "steps", label: "How-to-ship steps (one per line)", type: "lines", rows: 5 }],
     tokens: T_RETURN, shows: "Also shows: return + order number, the items with photos, and the refund summary.",
@@ -38,7 +38,7 @@ const EMAILS = {
       view: "View your return",
       steps: "Securely pack your items. If you have it, use the original packaging.\nPut the packing slip inside and attach your return label to the outside of the package.\nDrop off the package within {dropoff} days at your nearest USPS location.\nWe'll issue your {refund} as soon as the package is delivered back to us.",
     } },
-  return_reminder: { step: 20, event: "Day {remind}, not dropped off yet", group: "Returns", name: "Drop-off reminder", sender: "helpdesk",
+  return_reminder: { step: 20, event: "Day {remind}, not dropped off yet", group: "Returns", name: "Drop-off reminder", sender: "buzzin",
     when: "When a return label still hasn't been dropped off (day set in Returns → Settings, default day 21).",
     fields: [F.subject, F.title, F.intro, { k: "button", label: "Button", type: "text" }], tokens: T_RETURN,
     defaults: {
@@ -47,7 +47,7 @@ const EMAILS = {
       intro: "Hi {first},\n\nYour return **{rma}** for order {order} hasn't been dropped off yet. Please drop it off at any USPS location by **{deadline}**. After that the label expires and the return will be closed.\n\nAlready sent it? Thank you — tracking can take a day to update.",
       button: "Print label and packing slip",
     } },
-  return_closed: { step: 30, event: "Day {close}, label voided", group: "Returns", name: "Return closed", sender: "helpdesk",
+  return_closed: { step: 30, event: "Day {close}, label voided", group: "Returns", name: "Return closed", sender: "buzzin",
     when: "When the drop-off deadline passes — the label is voided and the return closed (default day 29).",
     fields: [F.subject, F.title, F.intro], tokens: T_RETURN,
     defaults: {
@@ -57,7 +57,7 @@ const EMAILS = {
     } },
 
   /* ---- claims ---- */
-  claim_received: { step: 10, event: "Defective or shipping claim filed", group: "Claims", name: "Claim received", sender: "helpdesk",
+  claim_received: { step: 10, event: "Defective or shipping claim filed", group: "Claims", name: "Claim received", sender: "buzzin",
     when: "When a customer submits a defective-item or shipping claim in the portal.",
     fields: [F.subject, F.title, F.intro], tokens: T_CLAIM, shows: "Also shows: claim + order number and the items claimed.",
     defaults: {
@@ -65,7 +65,7 @@ const EMAILS = {
       title: "We received your claim",
       intro: "Hi {first},\n\nWe received your {claim_type} for order {order}. Your claim number is **{claim}**.\n\nYou asked for: **{resolution}**. We'll email you here with the result, usually within one business day. If you have more photos or details, just reply to this email.",
     } },
-  message_received: { step: 20, event: '"Something else" message sent', group: "Claims", name: "Message received", sender: "helpdesk",
+  message_received: { step: 20, event: '"Something else" message sent', group: "Claims", name: "Message received", sender: "buzzin",
     when: "When a customer sends a message with \"Something else\" in the portal.",
     fields: [F.subject, F.title, F.intro], tokens: [["first", "Customer first name"], ["order", "Order number"], ["claim", "Reference number"], ["store", "Store name"], ["support", "Support email"]],
     shows: "Also shows: a copy of the customer's message.",
@@ -74,7 +74,7 @@ const EMAILS = {
       title: "We got your message",
       intro: "Hi {first},\n\nThanks for reaching out about order {order}. We got your message (reference **{claim}**) and our team will reply to this email soon.",
     } },
-  claim_approved_replacement: { step: 40, event: "Approved (auto or staff)", group: "Claims", name: "Claim approved — replacement", sender: "helpdesk",
+  claim_approved_replacement: { step: 40, event: "Approved (auto or staff)", group: "Claims", name: "Claim approved — replacement", sender: "buzzin",
     when: "When a claim is approved as a free replacement (automatically or by staff).",
     fields: [F.subject, F.title, F.intro, { k: "keep_note", label: "Extra line for defective items", type: "text", hint: "Only shown on defective-item claims." }, { k: "closing", label: "Closing line", type: "text" }],
     tokens: [...T_CLAIM, ["replacement_order", "Replacement order number"], ["ship_to", "Where it ships"]], shows: "Also shows: the items being replaced.",
@@ -85,7 +85,7 @@ const EMAILS = {
       keep_note: "There's no need to send the item back.",
       closing: "Thank you for your patience, and sorry for the trouble.",
     } },
-  claim_approved_credit: { step: 41, event: "Approved (auto or staff)", group: "Claims", name: "Claim approved — store credit", sender: "helpdesk",
+  claim_approved_credit: { step: 41, event: "Approved (auto or staff)", group: "Claims", name: "Claim approved — store credit", sender: "buzzin",
     when: "When a claim is approved as store credit.",
     fields: [F.subject, F.title, F.intro, { k: "keep_note", label: "Extra line for defective items", type: "text", hint: "Only shown on defective-item claims." }, { k: "closing", label: "Closing line", type: "text" }],
     tokens: [...T_CLAIM, ["amount", "Store credit amount"], ["email", "Customer email"]],
@@ -96,7 +96,7 @@ const EMAILS = {
       keep_note: "There's no need to send the item back.",
       closing: "Thank you for your patience, and sorry for the trouble.",
     } },
-  claim_approved_refund: { step: 42, event: "Approved (auto or staff)", group: "Claims", name: "Claim approved — refund", sender: "helpdesk",
+  claim_approved_refund: { step: 42, event: "Approved (auto or staff)", group: "Claims", name: "Claim approved — refund", sender: "buzzin",
     when: "When a claim is approved as a refund (defective items on orders without Package Protection).",
     fields: [F.subject, F.title, F.intro, { k: "keep_note", label: "Extra line for defective items", type: "text", hint: "Only shown on defective-item claims." }, { k: "closing", label: "Closing line", type: "text" }],
     tokens: [...T_CLAIM, ["amount", "Refund amount"]],
@@ -107,7 +107,7 @@ const EMAILS = {
       keep_note: "There's no need to send the item back.",
       closing: "Thank you for your patience, and sorry for the trouble.",
     } },
-  claim_denied: { step: 50, event: "Denied by staff", group: "Claims", name: "Claim denied", sender: "helpdesk",
+  claim_denied: { step: 50, event: "Denied by staff", group: "Claims", name: "Claim denied", sender: "buzzin",
     when: "When staff deny a claim in Buzzin → Claims. {message} is the note staff write.",
     fields: [F.subject, F.title, F.intro], tokens: [...T_CLAIM, ["message", "Staff's note to the customer"]],
     defaults: {
@@ -115,7 +115,7 @@ const EMAILS = {
       title: "About your claim",
       intro: "Hi {first},\n\nThank you for your patience while we reviewed claim **{claim}** for order {order}.\n\n{message}",
     } },
-  claim_question: { step: 30, event: "Staff ask for more info", group: "Claims", name: "Quick question", sender: "helpdesk",
+  claim_question: { step: 30, event: "Staff ask for more info", group: "Claims", name: "Quick question", sender: "buzzin",
     when: "When staff ask the customer for more information on a claim. {message} is the question staff write.",
     fields: [F.subject, F.title, F.intro], tokens: [...T_CLAIM, ["message", "Staff's question"]],
     defaults: {
@@ -125,7 +125,7 @@ const EMAILS = {
     } },
 
   /* ---- shared ---- */
-  _footer: { step: 99, event: "Bottom of every Buzzin email", group: "All emails", name: "Footer", sender: "helpdesk",
+  _footer: { step: 99, event: "Bottom of every Buzzin email", group: "All emails", name: "Footer", sender: "buzzin",
     when: "The small print at the bottom of every Buzzin email above.",
     fields: [{ k: "text", label: "Footer text", type: "rich", rows: 3 }], tokens: [["store", "Store name"], ["support", "Support email"]],
     defaults: { text: "Questions? Just reply to this email or write to {support}." } },
@@ -144,7 +144,7 @@ const EMAILS = {
   shopify_cancel: { step: 30, event: "Customer cancels the order", group: "Order edits", name: "Order cancelled (Shopify)", sender: "shopify", shopify_template: "Order canceled",
     when: "When a customer cancels their order in the portal." },
 };
-const EDITABLE = Object.keys(EMAILS).filter((k) => EMAILS[k].sender === "helpdesk");
+const EDITABLE = Object.keys(EMAILS).filter((k) => EMAILS[k].sender === "buzzin");
 
 /* ---------------- saved wording ---------------- */
 async function migrate() {

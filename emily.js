@@ -1190,7 +1190,7 @@ async function applyOrderAction({ kind, order, input = {}, who = "Buzzin", ticke
     result = await createReplacementOrder(p.st, { email: p.email, shippingAddress: p.shippingAddress, lineItems: p.lineItems, origOrder: o.name, reason: input.reason });
   } else throw new Error(`Unknown order action "${kind}".`);
   const id = "act_" + crypto.randomUUID();
-  await recordAction(id, { kind: `helpdesk_${kind}`, title, summary, ticketId, input: { order: o.name, ...input } });
+  await recordAction(id, { kind: `buzzin_${kind}`, title, summary, ticketId, input: { order: o.name, ...input } });
   await markAction(id, "applied", { by: who, result: result && result.note });
   if (ticketId) { try { await core.addNote({ ticketId: String(ticketId), text: `⚙️ ${title} — by ${who}\n${summary}\n→ ${result && result.note ? result.note : "done"}`, who }); } catch (e) { console.error("order action note:", e.message); } }
   try { core.slackPost(`⚙️ *${title}* · by ${who}${ticketId ? ` · ticket ${ticketId}` : ""}\n${summary}\n→ ${result && result.note ? result.note : "done"}`); } catch (_) {}
@@ -1420,9 +1420,9 @@ const TOOLS = [
     input_schema: { type: "object", properties: { order: { type: "string" }, items: { type: "array", items: { type: "object", properties: { title: { type: "string" }, sku: { type: "string" }, quantity: { type: "number" }, reason: { type: "string" } } } }, refund_method: { type: "string" }, ticket_id: { type: "number" } }, required: ["order", "items"] } },
   { name: "customer_history", description: "What we already know about THIS customer across every past ticket: previous conversations (subject, date, outcome), every store credit / replacement / discount already given, and how many goodwill credits they have received. CALL THIS before offering any goodwill credit, replacement, or refund, and whenever a customer says 'again', 'last time', 'second time', or references a previous order or issue. The non-PP 50% missing-items credit is ONE TIME per customer — if goodwill_credits_given is 1 or more, do NOT offer it again; escalate instead.",
     input_schema: { type: "object", properties: { email: { type: "string" } }, required: ["email"] } },
-  { name: "helpdesk_recent_tickets", description: "List recent Buzzin tickets (newest first): id, subject, customer, brand, status, whether the customer is waiting.",
+  { name: "buzzin_recent_tickets", description: "List recent Buzzin tickets (newest first): id, subject, customer, brand, status, whether the customer is waiting.",
     input_schema: { type: "object", properties: { limit: { type: "number" } } } },
-  { name: "helpdesk_ticket_conversation", description: "Read the full message thread of one Buzzin ticket by id.",
+  { name: "buzzin_ticket_conversation", description: "Read the full message thread of one Buzzin ticket by id.",
     input_schema: { type: "object", properties: { ticket_id: { type: "string" } }, required: ["ticket_id"] } },
 ];
 async function runTool(name, input) {
@@ -1440,13 +1440,13 @@ async function runTool(name, input) {
     if (name === "shopify_propose_store_credit") return await shopifyProposeStoreCredit(input);
     if (name === "customer_history") return await customerHistory(input.email);
     if (name === "return_propose") return await returnPropose(input);
-    if (name === "helpdesk_recent_tickets") {
+    if (name === "buzzin_recent_tickets") {
       const d = await db(`SELECT id, subject, brand, status, customer_email, last_message_at,
                                  (last_inbound_at IS NOT NULL AND (last_outbound_at IS NULL OR last_inbound_at > last_outbound_at)) AS customer_waiting
                             FROM hd_tickets WHERE NOT spam ORDER BY last_message_at DESC NULLS LAST LIMIT $1`, [Math.min(Number(input.limit) || 10, 50)]);
       return d.rows.map((t) => ({ id: String(t.id), subject: t.subject, brand: t.brand, status: t.status, customer: t.customer_email, last: t.last_message_at, customer_waiting: t.customer_waiting }));
     }
-    if (name === "helpdesk_ticket_conversation") {
+    if (name === "buzzin_ticket_conversation") {
       const d = await db(`SELECT from_agent, internal, sender_email, body_text, at FROM hd_messages WHERE ticket_id=$1 ORDER BY at ASC`, [String(input.ticket_id)]);
       return d.rows.map((m) => ({ from: m.sender_email, from_agent: m.from_agent, internal: m.internal, at: m.at, text: core.stripQuoted(m.body_text).text.slice(0, 2500) }));
     }

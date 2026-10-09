@@ -319,7 +319,7 @@ app.post("/api/reply", async (req, res) => {
     try { const f = await require("./emily").fillPlaceholders(id, body); if (f.pending) return res.status(400).json({ error: "Your reply still has a {{DISCOUNT_CODE}} placeholder — apply the discount on Emily's card first, or replace it." }); body = f.text; } catch (e) {}
     let files = [];
     try { files = (await require("./emily").pendingFiles(id)).map((f) => f.file_id); } catch (e) {}
-    const r = await sendReply({ ticketId: id, text: body, who, via: "helpdesk", files });
+    const r = await sendReply({ ticketId: id, text: body, who, via: "buzzin", files });
     if (files.length) { try { await require("./emily").markFilesSent(id); } catch (e) {} }
     // If Emily had a draft waiting on this ticket, a human reply settles it.
     try { const emily = require("./emily"); await emily.onHumanReply(id, String(text), who); } catch (e) {}
@@ -855,7 +855,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

@@ -40,7 +40,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .it .nm{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .it .ed{width:7px;height:7px;border-radius:50%;background:var(--warn);flex:none}
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;flex:none}
-.badge.helpdesk{background:var(--hd-soft);color:var(--hd)}
+.badge.buzzin{background:var(--hd-soft);color:var(--hd)}
 .badge.shopify{background:var(--sh-soft);color:var(--sh)}
 /* editor */
 .edit{width:460px;flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
@@ -95,7 +95,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .mrow .ar{color:var(--muted);text-align:center}
 .mrow .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{display:inline-flex;align-items:center;gap:7px;border:1px solid;border-radius:9px;padding:6px 11px;font-weight:600;cursor:pointer;font-size:13px;text-align:left}
-.chip.helpdesk{background:var(--hd-soft);border-color:#b9cbfb;color:#2349b8}
+.chip.buzzin{background:var(--hd-soft);border-color:#b9cbfb;color:#2349b8}
 .chip.shopify{background:var(--sh-soft);border-color:#a9d6bb;border-style:dashed;color:#1f5e3a}
 .chip:hover{filter:brightness(.96)}
 .chip .go{font-size:11px;font-weight:600;opacity:.75}
@@ -122,8 +122,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 <div class="main" id="main">
   <div class="list">
     <div class="filt">
-      <div class="seg" id="filt"><button data-f="all" class="on">All</button><button data-f="helpdesk">Buzzin</button><button data-f="shopify">Shopify</button></div>
-      <div class="legend"><span class="badge helpdesk">Buzzin</span> sent by us — edit here.<br><span class="badge shopify">Shopify</span> sent by Shopify — edit in Shopify.</div>
+      <div class="seg" id="filt"><button data-f="all" class="on">All</button><button data-f="buzzin">Buzzin</button><button data-f="shopify">Shopify</button></div>
+      <div class="legend"><span class="badge buzzin">Buzzin</span> sent by us — edit here.<br><span class="badge shopify">Shopify</span> sent by Shopify — edit in Shopify.</div>
     </div>
     <div class="items" id="items"></div>
   </div>
@@ -147,12 +147,12 @@ const store_get = (k, d) => { try { return localStorage.getItem(k) || d; } catch
 const store_set = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
 let VIEW = 'map', STORE = 'lb', DATA = null, CUR = null, EDITS = {}, FILTER = 'all', ADMIN = false, lastField = null, prevTimer = null, MOBILE = false;
-const SENDER = { helpdesk: 'Buzzin', shopify: 'Shopify' };
+const SENDER = { buzzin: 'Buzzin', shopify: 'Shopify' };
 const badge = (s) => `<span class="badge ${s}">${SENDER[s]}</span>`;
 const fmtWhen = (d) => new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 function email() { return DATA.emails.find((e) => e.kind === CUR); }
-function dirty() { const e = email(); if (!e || e.sender !== 'helpdesk') return false; return e.fields.some((f) => (EDITS[f.k] ?? e.copy[f.k] ?? '') !== (e.copy[f.k] ?? '')); }
+function dirty() { const e = email(); if (!e || e.sender !== 'buzzin') return false; return e.fields.some((f) => (EDITS[f.k] ?? e.copy[f.k] ?? '') !== (e.copy[f.k] ?? '')); }
 function value(f) { const e = email(); return EDITS[f.k] ?? e.copy[f.k] ?? ''; }
 
 async function load(keepKind) {
@@ -170,8 +170,8 @@ function renderMap() {
   for (const e of [...DATA.emails].sort((a, b) => a.step - b.step)) { let f = flows.find((x) => x.n === e.group); if (!f) flows.push(f = { n: e.group, rows: [] }); let r = f.rows.find((x) => x.ev === e.event); if (!r) f.rows.push(r = { ev: e.event, list: [] }); r.list.push(e); }
   const order = ['Returns', 'Claims', 'Order edits', 'All emails']; flows.sort((a, b) => order.indexOf(a.n) - order.indexOf(b.n));
   const chip = (e) => `<button class="chip ${e.sender}" data-open="${e.kind}" title="${esc(e.sender === 'shopify' ? 'Sent by Shopify — see where to edit it' : 'Sent by Buzzin — click to edit')}">${e.sender === 'shopify' ? '🛍' : '✉️'} ${esc(e.name.replace(/ \(Shopify\)$/, '').replace(/^Claim approved — /, 'Approved: '))}${e.edited ? '<span class="ed" title="Edited"></span>' : ''}<span class="go">${e.sender === 'shopify' ? 'Shopify' : 'Edit →'}</span></button>`;
-  const hd = DATA.emails.filter((e) => e.sender === 'helpdesk').length, sh = DATA.emails.length - hd;
-  $('map').innerHTML = `<div class="wrap"><div class="intro"><b>Every customer email for ${esc(DATA.stores[STORE].name)}</b><span class="badge helpdesk">Buzzin · ${hd}</span><span class="badge shopify">Shopify · ${sh}</span><span>Click an email to edit it.</span></div>
+  const hd = DATA.emails.filter((e) => e.sender === 'buzzin').length, sh = DATA.emails.length - hd;
+  $('map').innerHTML = `<div class="wrap"><div class="intro"><b>Every customer email for ${esc(DATA.stores[STORE].name)}</b><span class="badge buzzin">Buzzin · ${hd}</span><span class="badge shopify">Shopify · ${sh}</span><span>Click an email to edit it.</span></div>
     ${flows.map((f) => `<div class="flow"><div class="fh">${FLOW_ICON[f.n] || ''} ${esc(f.n)}<small>${f.n === 'All emails' ? 'shared by every Buzzin email' : 'what happens → email the customer gets'}</small></div>
       ${f.rows.map((r) => `<div class="mrow"><span class="ev">${esc(r.ev)}</span><span class="ar">→</span><span class="chips">${r.list.map(chip).join('')}</span></div>`).join('')}</div>`).join('')}</div>`;
 }
@@ -208,7 +208,7 @@ function renderEdit() {
   status();
 }
 function status() {
-  const e = email(); if (!e || e.sender !== 'helpdesk' || !$('st')) return;
+  const e = email(); if (!e || e.sender !== 'buzzin' || !$('st')) return;
   const d = dirty();
   $('st').className = 'st' + (d ? ' dirty' : '');
   $('st').textContent = d ? 'Unsaved changes — preview shows them' : e.updated_at ? `Live · saved by ${e.updated_by || 'staff'} ${fmtWhen(e.updated_at)}` : e.edited ? 'Live · edited' : 'Live · using the default wording';
@@ -225,7 +225,7 @@ function renderPrev() {
   preview();
 }
 async function preview() {
-  const e = email(); if (e.sender !== 'helpdesk') return;
+  const e = email(); if (e.sender !== 'buzzin') return;
   const copy = {}; for (const f of e.fields) copy[f.k] = value(f);
   try { const r = await api(`/api/emails/${STORE}/preview`, { method: 'POST', body: JSON.stringify({ kind: e.kind, copy }) });
     if (CUR !== e.kind) return;

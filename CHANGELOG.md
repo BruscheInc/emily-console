@@ -1,20 +1,23 @@
-# Helpdesk — version history
+# Buzzin — version history
 
-Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
-(top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
+Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
+(top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
+
+## 4.37.1
+- The old app name is gone from the code and the app: Emily's tool names, email sender labels, the return "source" for staff-started returns (now "staff"), the package name, the offline cache name, and a one-time update of stored text (internal notes, Activity log, Emily's actions and policies, returns and claims history).
 
 ## 4.37.0
-- Helpdesk is now **Buzzin**: new name everywhere staff see it (app title, sidebar, browser tab, home-screen app, Email Studio, Portal Studio, Slack/Emily messages, logs). Customers never saw the old name and see nothing new.
+- New name: **Buzzin**, everywhere staff see it (app title, sidebar, browser tab, home-screen app, Email Studio, Portal Studio, Slack/Emily messages, logs). Customers see nothing new.
 - New minimalist bee logo (yellow bee on near-black, with buzz lines) for the favicon, app icons and sidebar.
 
 ## 4.36.0
 - Test customers: Returns → Settings → Claims has a "Test customers" list (default jimmy@bruscheinc.com). Claims from these emails are judged with a blank history: no past claims, returns, tickets, credits or reused-photo flag go to the AI reviewer, and the "too many approved claims" auto-approve limit is skipped. Emily's customer-history lookup also returns nothing for them, so test runs never shape how she treats the account.
 
 ## 4.35.2
-- Portal size changes now always send Shopify's own "Order edited" email (the built-in notification, with the pay link when the total goes up), not only when the customer owes more. The Helpdesk "Order updated" email from 4.35.1 is removed. Email map updated: "Order edited (Shopify)".
+- Portal size changes now always send Shopify's own "Order edited" email (the built-in notification, with the pay link when the total goes up), not only when the customer owes more. The Buzzin "Order updated" email from 4.35.1 is removed. Email map updated: "Order edited (Shopify)".
 
 ## 4.35.1
-- New Helpdesk email "Order updated": sent to the customer right after they change a size or the shipping address in the portal — lists what changed, the new address, and a line about paying the difference or the refund when the total changed. Threaded into a Helpdesk ticket. Editable in Email Studio (Order edits). Before this, an edit with no price change sent no email at all.
+- New Buzzin email "Order updated": sent to the customer right after they change a size or the shipping address in the portal — lists what changed, the new address, and a line about paying the difference or the refund when the total changed. Threaded into a Buzzin ticket. Editable in Email Studio (Order edits). Before this, an edit with no price change sent no email at all.
 
 ## 4.35.0
 - New sidebar, Klaviyo-style categories with Gorgias-style inbox counts: Search (⌘K), Home, Inbox, Mailboxes, Shipments, Returns & claims, Content, Analytics, then Settings and your account at the bottom. Groups open/close (remembered), show a total when closed, and the group with the page you're on always opens. Line icons; on narrow screens it collapses to an icon rail.
@@ -22,33 +25,33 @@ Every upload to the emily-console repo is one version. The number shows in the a
 - Content group links Customer emails (Email Studio) and both portal designs; Returns & claims includes Order exceptions and both portals.
 
 ## 4.34.1
-- Email Studio opens on an Email map: every customer email grouped by Returns / Claims / Order edits / All emails, showing what triggers it, who sends it (Helpdesk or Shopify), and a dot on ones you've edited. Click any email to jump straight to its editor. Switch with "🗺 Email map" / "✏️ Edit" at the top. Day numbers follow Returns → Settings.
+- Email Studio opens on an Email map: every customer email grouped by Returns / Claims / Order edits / All emails, showing what triggers it, who sends it (Buzzin or Shopify), and a dot on ones you've edited. Click any email to jump straight to its editor. Switch with "🗺 Email map" / "✏️ Edit" at the top. Day numbers follow Returns → Settings.
 
 ## 4.34.0
-- Email Studio (/email-studio, Helpdesk → Returns → ✉️ Customer emails or ✉️ Emails on a portal card): every customer email from returns, claims and order edits on one page, each with its own editor and a live preview (desktop / mobile), test send, save, discard and reset to default. Per store.
-- Every email is marked with who sends it: Helpdesk (edit here) or Shopify (edited in Shopify Admin → Settings → Notifications — listed for reference with the Shopify template name). Filter by sender.
-- Claim emails (received, message received, approved — replacement / store credit / refund, denied, quick question) are now branded like the return emails and editable. Footer is its own item and applies to every Helpdesk email.
+- Email Studio (/email-studio, Buzzin → Returns → ✉️ Customer emails or ✉️ Emails on a portal card): every customer email from returns, claims and order edits on one page, each with its own editor and a live preview (desktop / mobile), test send, save, discard and reset to default. Per store.
+- Every email is marked with who sends it: Buzzin (edit here) or Shopify (edited in Shopify Admin → Settings → Notifications — listed for reference with the Shopify template name). Filter by sender.
+- Claim emails (received, message received, approved — replacement / store credit / refund, denied, quick question) are now branded like the return emails and editable. Footer is its own item and applies to every Buzzin email.
 - Saved wording goes live right away (no Portal Studio publish needed). Logo, colors and button shape still come from Portal Studio. Email wording already edited in Portal Studio moved over automatically; the Emails section there now links to Email Studio.
 
 ## 4.33.1
-- "Print label and packing slip" and label links now use the store's branded domain (returns.larkspurbaby.com / returns.larkspurbabyoutlet.com) when branded links are on, instead of the Helpdesk's Railway address. Applies to the confirmation page and the return emails.
+- "Print label and packing slip" and label links now use the store's branded domain (returns.larkspurbaby.com / returns.larkspurbabyoutlet.com) when branded links are on, instead of Buzzin's Railway address. Applies to the confirmation page and the return emails.
 
 ## 4.33.0
-- Order exceptions (goodwill): Helpdesk → Returns → ✨ Order exceptions (or ✨ Exception on a ticket's order panel). Pick an order, tick the rules it skips, add an optional end date and a note. Waivable: return window, final sale, return label fee, drop-off deadline, defect claim window, missing/damaged window, 14-day hasn't-arrived wait (and last day), marked-delivered wait, post-office check, Package Protection (treated as if the order had it — shipping claims only), edit window.
-- Applies right away in the portal and Helpdesk. Exceptions are logged on the return / claim history, shown as a chip on returns and in the claim details, and passed to the AI reviewer so waived rules aren't held against the customer. Removing or expiring one restores the normal rules immediately. Every add/remove is in the Activity log.
+- Order exceptions (goodwill): Buzzin → Returns → ✨ Order exceptions (or ✨ Exception on a ticket's order panel). Pick an order, tick the rules it skips, add an optional end date and a note. Waivable: return window, final sale, return label fee, drop-off deadline, defect claim window, missing/damaged window, 14-day hasn't-arrived wait (and last day), marked-delivered wait, post-office check, Package Protection (treated as if the order had it — shipping claims only), edit window.
+- Applies right away in the portal and Buzzin. Exceptions are logged on the return / claim history, shown as a chip on returns and in the claim details, and passed to the AI reviewer so waived rules aren't held against the customer. Removing or expiring one restores the normal rules immediately. Every add/remove is in the Activity log.
 
 ## 4.32.1
 - Returns → Settings: every time limit in one "Time limits" section with plain labels (return window, drop-off deadline and reminder, edit window, defect window, hasn't-arrived open day and new last day, marked-delivered wait, attempted-delivery lock, PP / no-PP damaged & marked-delivered windows). New: last day to file "hasn't arrived" (0 = no limit) and the post-office lock length.
 
 ## 4.32.0
-- Branded return emails, sent from the store's support mailbox and threaded into a Helpdesk ticket: "Return submitted" (print label + packing slip button, view-your-return link, items, refund summary, how-to-ship steps), "Drop-off reminder" (day 21) and "Return closed" (day 29). Logo, colors and button shape come from the portal theme.
+- Branded return emails, sent from the store's support mailbox and threaded into a Buzzin ticket: "Return submitted" (print label + packing slip button, view-your-return link, items, refund summary, how-to-ship steps), "Drop-off reminder" (day 21) and "Return closed" (day 29). Logo, colors and button shape come from the portal theme.
 - Portal Studio → Emails: edit every line (subject, heading, message, button, steps, footer), preview each email with unsaved changes, and send a test to yourself.
-- Portal returns no longer trigger Shopify's label email (ours replaces it); if ours fails to send, Shopify's goes out instead. Returns started from Helpdesk still use Shopify's. Setting: own_return_email.
+- Portal returns no longer trigger Shopify's label email (ours replaces it); if ours fails to send, Shopify's goes out instead. Returns started from Buzzin still use Shopify's. Setting: own_return_email.
 
 ## 4.31.0
 - New return confirmation page (Loop-style, two columns): label card with "Print label and packing slip" (one PDF: the label, then a 4x6 packing slip), drop-off deadline, tracking link and how-to-ship steps; items to pack with photos; cancel return (until the package is scanned); customer information; return summary with item subtotal, tax, label fee and estimated refund / store credit; a 2-question feedback survey; other returns from the same order; contact.
 - The page has its own link (…?r=…) so customers can come back to it; the drop-off reminder email links to it.
-- Feedback shows on the return in Helpdesk → Returns.
+- Feedback shows on the return in Buzzin → Returns.
 
 ## 4.30.3
 - Attempted delivery: instead of a 24-hour wait, the customer is asked "Have you contacted your local post office?" Yes → they can file (goes to staff review). No → they're asked to contact the post office and the claim is locked for 30 minutes.
@@ -81,7 +84,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
 - Portal tabs follow the order: not shipped → Edit or cancel + Other (message only); shipped, in transit → Start a return and Defective greyed; delivered → everything.
 - Edit or cancel: stays available until the order ships. Cancel (full refund) any time before shipping; size changes (in-stock sizes only) and address changes within 15 minutes. Adding items and quantity changes removed.
 - Package Protection claim: "My package hasn't arrived", "My package was marked delivered, but I didn't get it", "My package arrived damaged" (missing items removed). Damaged and marked-delivered greyed until delivered.
-- "Package not delivered" tab is now "Other": the same three options plus "Something else" (message + optional photos → Helpdesk ticket). Without Package Protection: hasn't arrived and damaged work like PP; marked delivered → carrier claim steps.
+- "Package not delivered" tab is now "Other": the same three options plus "Something else" (message + optional photos → Buzzin ticket). Without Package Protection: hasn't arrived and damaged work like PP; marked delivered → carrier claim steps.
 - Hasn't arrived is days-based: opens 14 days after shipping if verified tracking still isn't delivered (setting).
 - Auto-approval: hasn't arrived (14-day rule), marked delivered (AI on history), damaged and defective (AI checks photos are genuine) approve automatically when every check passes — value limit, AI confidence, no more than N approved claims per customer in 12 months, no reused/stock photos. Otherwise the claim waits in Claims with the reason. All limits in Returns → Settings.
 - Return reasons: Too small, Too large, Didn't like the fit, Color or print wasn't as expected, Fabric or material wasn't as expected, Item arrived damaged or defective, Received the wrong item, Changed my mind, Arrived too late, Other (requires a note).
@@ -104,7 +107,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
 - Defective item: pick items, describe the problem, upload photos (resized in the browser). AI reviews photos, timing and the customer's history (earlier claims, returns, credits, reused photos) and gives staff an approve / deny / needs-info opinion. Customer keeps the item. Options: replacement, store credit, or refund (refund only without Package Protection).
 - Package Protection claim: live tracking decides when a claim can be filed — "hasn't arrived" once tracking hasn't moved for 5 days, "marked delivered" 24 hours after the delivery scan; damaged (photos required) and missing items too. Replacement or store credit only. Covers just the items in the affected shipment.
 - Package not delivered without Package Protection: carrier claim steps and links, no credit. Emily's policy updated to match (the 50% goodwill credit now applies only to missing items).
-- New Helpdesk → Claims queue: photos, tracking, AI opinion, customer history; Approve (replacement order, store credit or refund, capped at the claim value, locked against double clicks), Deny, Ask customer, Re-run AI. Every claim opens a ticket and emails the customer at each step. Claimed items can't also be returned or claimed twice.
+- New Buzzin → Claims queue: photos, tracking, AI opinion, customer history; Approve (replacement order, store credit or refund, capped at the claim value, locked against double clicks), Deny, Ask customer, Re-run AI. Every claim opens a ticket and emails the customer at each step. Claimed items can't also be returned or claimed twice.
 - Settings: edit window, claim window, stall days, delivered-wait hours, and the Package Protection line-item match.
 
 ## 4.25.0
@@ -121,7 +124,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
 - Returns: return numbers now use the original order number plus a count — LB191494-R1, then LB191494-R2 if the same order is returned again. Replaces the running LB-R1001 style numbers.
 
 ## 4.23.0
-- Returns: branded portal addresses — returns.larkspurbaby.com and returns.larkspurbabyoutlet.com open that store's portal directly and show nothing else from the Helpdesk. New Settings switch "Use branded links" makes Emily and the Helpdesk use them once DNS is live.
+- Returns: branded portal addresses — returns.larkspurbaby.com and returns.larkspurbabyoutlet.com open that store's portal directly and show nothing else from Buzzin. New Settings switch "Use branded links" makes Emily and Buzzin use them once DNS is live.
 
 ## 4.22.10
 - Returns: customers now pick from six reasons only (wrong item, damaged, bad experience, didn't fit, found something else, didn't like it). The list is editable in Returns → Settings. Each maps to Shopify's closest standard reason, and the exact wording is saved as the return's reason note.
@@ -131,7 +134,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
   (no tracking number on the order, no ShipStation label with that tracking number, lookup error). Same detail in the log.
 
 ## v4.22.8 — Oct 7, 2026
-- **Return labels are tied to the original ShipStation order.** Helpdesk finds the order's original shipping
+- **Return labels are tied to the original ShipStation order.** Buzzin finds the order's original shipping
   label by its tracking number, links the return label to it, and uses that shipment's store and order number —
   the same way ShipStation's own returns are linked. This replaces matching the store by name, which ShipStation
   didn't connect to the order ("store not active"). If the original label can't be found, it falls back as before.
@@ -177,7 +180,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
 
 ## v4.22.1 — Oct 7, 2026
 - The returns portal no longer shows raw Shopify errors to customers. They see a plain "we can't look up orders
-  right now — email us" message; the exact cause goes to the Helpdesk log.
+  right now — email us" message; the exact cause goes to Buzzin log.
 - Staff screens name every Shopify permission returns need when one is missing, and the boot log now checks them:
   read_returns, write_returns, read_merchant_managed_fulfillment_orders, read_assigned_fulfillment_orders,
   read_third_party_fulfillment_orders, read_store_credit_account_transactions, read_inventory (plus the order,
@@ -231,7 +234,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
   and the boot log lists every scope each store's app is missing and what it's for.
 
 ## v4.17 — Oct 6, 2026
-- **+ New ticket.** Start an email conversation with a customer from Helpdesk. Pick the store (Larkspur Baby or
+- **+ New ticket.** Start an email conversation with a customer from Buzzin. Pick the store (Larkspur Baby or
   Larkspur Baby Outlet) — that's the mailbox it's sent from, so the customer sees the right brand and their reply
   lands back on this ticket. Optional customer name and order number.
 - **Draft with Emily.** Type what you want to say in your own words; Emily looks up the order and customer, writes
@@ -383,7 +386,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
   4+ days (STUCK_DAYS). Lists order, customer, tracking link, days since tracking was added, Shopify status, with
   Email customer (pre-written note, opens a ticket from the brand mailbox), Contacted, Resolved, Ignore. A package
   drops off automatically once Shopify sees it move or get delivered. Count shows in the sidebar.
-- **Logo.** Helpdesk has its own mark (inbox tray with a letter dropping in) in the sidebar, the browser tab, and the
+- **Logo.** Buzzin has its own mark (inbox tray with a letter dropping in) in the sidebar, the browser tab, and the
   home-screen icon; the tab title shows the pending-ticket count.
 
 ## v3.6 — Sep 28, 2026  (v3.5 skipped — its automated returns were dropped; returns stay with a person)
@@ -424,7 +427,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
   already stored are skipped, at most 120 new ones are fetched per poll (the rest follow on the next polls, shown
   as "catching up — N more"), and a Gmail quota error pauses that mailbox for two minutes instead of retrying
   the same burst every 45 seconds.
-- **One Google client per mailbox.** `GOOGLE_OAUTH_CLIENTS` now carries both projects (brusche-helpdesk for
+- **One Google client per mailbox.** `GOOGLE_OAUTH_CLIENTS` now carries both projects (brusche-buzzin for
   larkspurbabyoutlet.com, skilled-acolyte for larkspurbaby.com) so each mailbox signs in through its own
   Workspace's project. Google sign-in errors now come back with a plain-English explanation of what to fix.
 
@@ -443,7 +446,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
 - Version number in the sidebar and boot log; `/api/version`.
 
 ## v2.2 — Sep 28, 2026
-- Emily only sweeps mail that arrived after she went live in the Helpdesk (no more re-posting the whole backlog on
+- Emily only sweeps mail that arrived after she went live in Buzzin (no more re-posting the whole backlog on
   every deploy); out-of-stock cards no longer re-post on restart.
 
 ## v2.1 — Sep 28, 2026
@@ -451,7 +454,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
   text" on every message; `(mailto:…)` leftovers removed. Emily reads only the new part of each message too.
 
 ## v2 — Sep 28, 2026
-- Emily (Slack bot) and the console merged into one app: **Helpdesk** is the app, **Emily** is the agent.
+- Emily (Slack bot) and the console merged into one app: **Buzzin** is the app, **Emily** is the agent.
 - Gorgias-style inbox: views and mailboxes in the left sidebar with counts, ticket table (subject + preview, tags,
   customer, last message), 20 per page, Pending / Sent / Closed / Collabs / All.
 - Emily drafts appear in the ticket with Approve / Edit / Redraft / Skip; approvals from Slack and the app share

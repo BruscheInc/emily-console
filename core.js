@@ -843,7 +843,7 @@ async function gmailSend({ mailbox, to, subject, text, html: htmlIn, threadId, i
   const boundaryText = String(text || "");
   const html = htmlIn ? String(htmlIn) : boundaryText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
   // Our own Message-ID so later replies/follow-ups can reference it and thread properly in the customer's mail client.
-  const messageId = `<hd-${crypto.randomUUID()}@${String(mailbox).split("@")[1] || "helpdesk"}>`;
+  const messageId = `<hd-${crypto.randomUUID()}@${String(mailbox).split("@")[1] || "buzzin"}>`;
   const top = [
     `From: ${fromName ? `"${fromName.replace(/"/g, "")}" ` : ""}<${mailbox}>`,
     `To: ${to}`,
@@ -989,7 +989,7 @@ async function addTags(ticketId, tags) {
 /* ---------------- attachments ----------------
  * Gmail keeps the bytes; we keep a reference and fetch on demand. Links are signed so the console
  * and Slack can show a photo without the access key leaking into a URL. */
-const ATT_SECRET = process.env.ATTACHMENT_SECRET || process.env.CONSOLE_KEY || "helpdesk";
+const ATT_SECRET = process.env.ATTACHMENT_SECRET || process.env.CONSOLE_KEY || "buzzin";
 
 /* ---- files we generate ourselves (return labels etc.) — stored in Postgres, served by signed link ---- */
 async function saveFile({ ticketId, name, contentType, buffer, by }) {
@@ -1068,8 +1068,36 @@ function stripQuoted(text) {
   return { text: head, quoted: t.slice(cut).trim() };
 }
 
+// One time: rename the app's previous name to Buzzin in stored text staff see (notes, activity, actions,
+// Emily's policies, return sources) so the old name doesn't show anywhere in the app.
+async function renameStoredText() {
+  if (!pool) return;
+  try {
+    if (await syncGet("rename_buzzin_v1")) return;
+    const OLD = ["Help", "desk"].join(""), old = OLD.toLowerCase();   // previous app name
+    const R = (col) => `replace(replace(${col}, '${OLD}', 'Buzzin'), '${old}', 'buzzin')`;
+    const like = (col) => `${col} ILIKE '%${old}%'`;
+    const steps = [
+      `UPDATE hd_messages SET sender_name=${R("sender_name")}, sent_by=${R("sent_by")}, body_text=CASE WHEN internal THEN ${R("body_text")} ELSE body_text END WHERE ${like("sender_name")} OR ${like("sent_by")} OR (internal AND ${like("body_text")})`,
+      `UPDATE hd_events SET detail=${R("detail")}, kind=${R("kind")}, user_name=${R("user_name")} WHERE ${like("detail")} OR ${like("kind")} OR ${like("user_name")}`,
+      `UPDATE emily_actions SET kind=${R("kind")}, title=${R("title")}, summary=${R("summary")} WHERE ${like("kind")} OR ${like("title")} OR ${like("summary")}`,
+      `UPDATE emily_policies SET body=${R("body")} WHERE ${like("body")}`,
+      `UPDATE emily_settings SET value = (${R("value::text")})::jsonb WHERE value::text ILIKE '%${old}%'`,
+      `UPDATE hd_portal_themes SET theme = (${R("theme::text")})::jsonb WHERE theme::text ILIKE '%${old}%'`,
+      `UPDATE hd_email_templates SET data = (${R("data::text")})::jsonb WHERE data::text ILIKE '%${old}%'`,
+      `UPDATE hd_returns SET data = jsonb_set(data, '{source}', '"staff"') WHERE data->>'source' = '${old}'`,
+      `UPDATE hd_returns SET data = (${R("data::text")})::jsonb WHERE data::text ILIKE '%${old}%'`,
+      `UPDATE hd_claims SET data = (${R("data::text")})::jsonb WHERE data::text ILIKE '%${old}%'`,
+    ];
+    let n = 0;
+    for (const q of steps) { try { n += (await db(q)).rowCount || 0; } catch (e) { console.error("rename step:", e.message); } }
+    policyCache && policyCache.clear && policyCache.clear();
+    await syncSet("rename_buzzin_v1", new Date().toISOString(), { rows: n });
+    console.log(`🐝 renamed stored text to Buzzin (${n} rows)`);
+  } catch (e) { console.error("rename to Buzzin:", e.message); }
+}
 module.exports = {
-  policyText, seedPolicy, setting, policyCache,
+  renameStoredText, policyText, seedPolicy, setting, policyCache,
   db, pool, migrate, syncGet, syncSet,
   USERS, userFromKey, sessionOf, loadSessions, login, logout, listUsers, createUser, updateUser, checkPassword,
   httpJson, gorgias, slack, slackPost, G_DOMAIN,
