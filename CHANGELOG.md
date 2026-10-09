@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Helpdesk" name
 (top-left) and in the Railway boot log ("📨 Helpdesk v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.30.3
+- Attempted delivery: instead of a 24-hour wait, the customer is asked "Have you contacted your local post office?" Yes → they can file (goes to staff review). No → they're asked to contact the post office and the claim is locked for 30 minutes.
+
 ## 4.30.2
 - Claims fix: ShipStation status SP ("Delivered to the collection location" — locker or post office) counts as delivered. A not-delivered answer only blocks a claim when it's newer than the delivered scan.
 

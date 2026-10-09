@@ -426,10 +426,10 @@ function gates(c, ship) {
   else if (tracked.some((x) => x.returned)) g.not_arrived = { ok: false, why: "Tracking shows your package is being returned to us by the carrier. We'll email you as soon as it arrives back. If you have questions, choose \"Something else\"." };
   else if (tracked.some((x) => x.attempted)) {
     // Attempted delivery (not returned to sender): the post office is usually holding it.
-    const x = tracked.find((y) => y.attempted), at = new Date(x.last_update_at).getTime(), open = at + s.attempted_wait_hours * 3600e3;
-    g.not_arrived = now < open
-      ? { ok: true, wait: true, why: `The carrier tried to deliver your package on ${fmtWhen(at)}. Please check with your local post office — they're usually holding it for pickup. If you still can't get it, come back after ${fmtWhen(open)} and file your claim.` }
-      : { ok: true, rule: false, attempted: true, note: `Delivery attempted ${fmtWhen(at)}; customer was told to check with the post office first. Needs review.` };
+    // Ask "did you contact the post office?" — yes → file (staff review); no → contact them, locked for 30 minutes.
+    const x = tracked.find((y) => y.attempted), at = new Date(x.last_update_at).getTime();
+    g.not_arrived = { ok: true, rule: false, attempted: true, ask_po: true, attempted_at: new Date(at).toISOString(),
+      note: `Delivery attempted ${fmtWhen(at)}; customer confirmed they contacted the post office. Needs review.` };
   } else {
     // Days since shipping decide it — "Accepted" or no new scans still counts as not delivered.
     const shipped = Math.min(...tracked.map((x) => new Date(x.shipped_at).getTime()));
@@ -474,7 +474,8 @@ function subOptions(c, m, g, tab) {
   const out = {};
   for (const k of ["not_arrived", "delivered_missing", "damaged", "something_else"]) {
     const st = m.subs[k];
-    out[k] = !st.ok ? st : g && g[k] && !g[k].ok ? g[k] : { ok: true, wait: !!(g && g[k] && g[k].wait), why: g && g[k] && g[k].wait ? g[k].why : undefined, rule: !!(g && g[k] && g[k].rule), note: (g && g[k] && g[k].note) || "" };
+    out[k] = !st.ok ? st : g && g[k] && !g[k].ok ? g[k] : { ok: true, wait: !!(g && g[k] && g[k].wait), why: g && g[k] && g[k].wait ? g[k].why : undefined, rule: !!(g && g[k] && g[k].rule), note: (g && g[k] && g[k].note) || "",
+      ask_po: !!(g && g[k] && g[k].ask_po), attempted_at: g && g[k] && g[k].attempted_at };
   }
   if (tab === "other" && c.has_pp)
     for (const k of ["not_arrived", "delivered_missing", "damaged"]) out[k] = { ok: false, why: "Your order has Package Protection — please use the Package Protection claim tab" };
@@ -482,6 +483,14 @@ function subOptions(c, m, g, tab) {
   return out;
 }
 
+// "Did you contact the post office?" → "No" locks the attempted-delivery claim for 30 minutes (per order).
+const PO_LOCK_MIN = 30;
+async function poLockedUntil(orderId) { const r = await core.syncGet(`po_lock:${orderId}`); const t = r && r.cursor ? Date.parse(r.cursor) : 0; return t > Date.now() ? new Date(t).toISOString() : null; }
+async function poAnswer(token, body) {
+  const p = session(token);
+  if (body.answer === "no") { const until = new Date(Date.now() + PO_LOCK_MIN * 60000).toISOString(); await core.syncSet(`po_lock:${p.o}`, until, {}); return { locked_until: until }; }
+  return { locked_until: await poLockedUntil(p.o) };
+}
 async function claimStart(token, type) {
   const p = session(token), c = await loadOrder(p.k, p.o), st = await orderState(c), m = menuFor(c, st);
   if (type === "not_delivered") type = "other";
@@ -491,11 +500,12 @@ async function claimStart(token, type) {
   const open = (await db(`SELECT number, type FROM hd_claims WHERE order_name=$1 AND status IN ('pending','info_requested','processing') AND type=$2 ORDER BY created_at DESC LIMIT 1`, [c.o.name, type === "defective" ? "defective" : "pp"])).rows[0];
   if (type === "defective") return { type, state: st.state, has_pp: c.has_pp, items: claimItems(c, type, await usedQty(c)), resolutions: resolutionsFor(type, c), open_claim: open ? open.number : null, currency: c.currency };
   const ship = st.ship, g = st.state === "unshipped" ? null : gates(c, ship);
+  const poLock = await poLockedUntil(c.o.id);
   const avail = claimItems(c, "pp", await claimedQty(c.o.name));
   const carrier = (ship.find((x) => x.number) || {}).carrier || "USPS";
   return { type, state: st.state, has_pp: c.has_pp, shipments: ship, subs: subOptions(c, m, g, type), items: avail,
     subs_tab: type, shipment_items: g ? { not_arrived: shipmentItems(c, ship, "not_arrived", avail).map((i) => ({ id: i.id, quantity: i.quantity })), delivered_missing: shipmentItems(c, ship, "delivered_missing", avail).map((i) => ({ id: i.id, quantity: i.quantity })) } : {},
-    resolutions: resolutionsFor("pp", c), open_claim: open ? open.number : null, currency: c.currency,
+    resolutions: resolutionsFor("pp", c), open_claim: open ? open.number : null, currency: c.currency, po_locked_until: poLock,
     carrier_links: CARRIER_CLAIMS[/ups/i.test(carrier) ? "UPS" : /fedex/i.test(carrier) ? "FedEx" : "USPS"], carrier, support: c.def.support };
 }
 
@@ -535,6 +545,11 @@ async function claimSubmit(token, body) {
     if (!["not_arrived", "delivered_missing", "damaged"].includes(subtype)) throw httpError(400, "Tell us what happened to the package.");
     ship = st.ship; const opt = subOptions(c, m, gates(c, ship), body.type === "other" ? "other" : "pp")[subtype];
     if (!opt.ok || opt.wait) throw httpError(400, opt.why);
+    if (opt.ask_po) {
+      const lock = await poLockedUntil(c.o.id);
+      if (lock) throw httpError(400, `Please contact your local post office first. You can file this claim after ${fmtWhen(lock)}.`);
+      if (body.po_contacted !== true) throw httpError(400, "Please confirm you've contacted your local post office.");
+    }
     if (opt.carrier_only) throw httpError(400, "Your order didn't include Package Protection, so please file a claim with the carrier for a package marked delivered.");
     gate = opt;
   }
@@ -619,6 +634,7 @@ async function autoDecide(c) {
   if (c.resolution === "replacement" && (c.items || []).some((i) => !i.in_stock)) return no("replacement item out of stock");
   const sure = ai.verdict === "approve" && Number(ai.confidence) >= Number(s.auto_approve_confidence);
   if (c.type === "pp" && c.subtype === "not_arrived") {
+    if (c.gate && /attempted/i.test(c.gate.note || "")) return no("attempted delivery — customer says they contacted the post office; please review");
     if (!(c.gate && c.gate.rule)) return no("tracking rule not met");
     if (ai.verdict === "deny" && Number(ai.confidence) >= 0.7) return no("AI flagged it: " + (ai.summary || ""));
     return { approve: true, why: "not delivered after the transit window, verified tracking" };
@@ -784,5 +800,5 @@ async function close(id, who) { const c = await getClaim(id); if (!c) throw http
 
 async function init() { try { await migrate(); } catch (e) { console.error("claims migrate:", e.message); } }
 
-module.exports = { deliveredAt, claimedQty, init, menu, editOptions, editSearch, editSubmit, editCancel, claimStart, savePhoto, getPhoto, claimSubmit, list, counts, getClaim, approve, deny, askInfo, rerun, close, review,
+module.exports = { poAnswer, deliveredAt, claimedQty, init, menu, editOptions, editSearch, editSubmit, editCancel, claimStart, savePhoto, getPhoto, claimSubmit, list, counts, getClaim, approve, deny, askInfo, rerun, close, review,
   _t: { gates, menuFor, loadOrder, TYPE_LABEL, SUBTYPE_LABEL, RES_LABEL } };

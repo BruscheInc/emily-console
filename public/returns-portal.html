@@ -884,6 +884,11 @@ function renderClaim() {
     if (sub === 'something_else') {
       h += `<h2 class="label">Tell us what’s going on</h2><textarea id="clDesc" rows="4" placeholder="Write your message here">${esc(CL.desc || '')}</textarea>${photosHtml(false)}`;
       canSubmit = (CL.desc || '').trim().length >= 10 && PH.every((p) => p.id);
+    } else if (sub && o && o.ok && o.ask_po && (CL.po !== 'yes' || poLocked())) {
+      const when = new Date(o.attempted_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      if (poLocked()) h += `<div class="gate" style="margin-top:12px">Please contact your local post office — they're usually holding a package after a missed delivery. You can file this claim after ${esc(new Date(CL.po_locked_until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}.</div>`;
+      else h += `<div class="gate" style="margin-top:12px">The carrier tried to deliver your package on ${esc(when)}. <strong>Have you contacted your local post office about it?</strong>
+        <div style="display:flex;gap:10px;margin-top:10px"><button class="btn sm" onclick="poAnswer('yes')">Yes, I contacted them</button><button class="btn2" onclick="poAnswer('no')">No, not yet</button></div></div>`;
     } else if (sub && o && o.ok && o.wait) {
       h += `<div class="gate" style="margin-top:12px">${esc(o.why)}</div>`;
     } else if (sub && o && o.ok && o.carrier_only) {
@@ -905,6 +910,12 @@ function renderClaim() {
   const d = $('clDesc'); if (d) d.addEventListener('input', () => { CL.desc = d.value; if (CL.sub === 'something_else') $('bClaim').disabled = !(CL.desc.trim().length >= 10 && PH.every((p) => p.id)); });
   $('bClaim').textContent = CL.sub === 'something_else' ? 'Send message' : 'Submit claim';
   $('bClaim').disabled = !canSubmit;
+}
+function poLocked() { return !!(CL.po_locked_until && new Date(CL.po_locked_until).getTime() > Date.now()); }
+async function poAnswer(a) {
+  if (a === 'yes') { CL.po = 'yes'; renderClaim(); return; }
+  try { const r = await api('/api/returns/public/claim/po', { token: S.token, answer: 'no' }); CL.po_locked_until = r.locked_until; CL.po = 'no'; } catch (e) { showErr('eClaim', e.message); }
+  renderClaim();
 }
 function rmPhoto(i) { PH.splice(i, 1); renderClaim(); }
 function shrink(file) {
@@ -934,7 +945,7 @@ async function submitClaim() {
   const other = CL.sub === 'something_else';
   busy($('bClaim'), true);
   try {
-    const r = await api('/api/returns/public/claim/submit', { token: S.token, type: other ? 'other' : CL.type === 'defective' ? 'defective' : 'pp', subtype: CL.sub, lines, description: desc, photo_ids: PH.map((p) => p.id), resolution: CL.res });
+    const r = await api('/api/returns/public/claim/submit', { token: S.token, type: other ? 'other' : CL.type === 'defective' ? 'defective' : 'pp', subtype: CL.sub, lines, description: desc, photo_ids: PH.map((p) => p.id), resolution: CL.res, po_contacted: CL.po === 'yes' });
     S.done2 = r; CL = null; PH = [];
     if (other) {
       $('d2Title').textContent = 'Message sent'; $('d2Sub').textContent = `Reference ${r.number}`;
