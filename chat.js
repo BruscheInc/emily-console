@@ -363,7 +363,7 @@ async function widgetJs(store) {
   if (window.__buzzinChat) return; window.__buzzinChat = 1;
   var ORIGIN = ${JSON.stringify(o)}, STORE = ${JSON.stringify(store)};
   var q = location.search, sitePreview = /[?&]buzzin_chat=(preview|debug)/.test(q), DEBUG = /[?&]buzzin_chat=debug/.test(q);
-  var dbg = function(msg){ if (!DEBUG) return; var d = document.getElementById('buzzin-dbg'); if (!d) { d = document.createElement('pre'); d.id = 'buzzin-dbg'; d.setAttribute('style', 'position:fixed;top:8px;left:8px;right:8px;z-index:2147483647;background:#111;color:#0f0;font:11px/1.35 monospace;padding:8px;margin:0;border-radius:8px;white-space:pre-wrap;opacity:.92;pointer-events:none'); document.documentElement.appendChild(d); } d.textContent += msg + '\n'; };
+  var dbg = function(msg){ if (!DEBUG) return; var d = document.getElementById('buzzin-dbg'); if (!d) { d = document.createElement('pre'); d.id = 'buzzin-dbg'; d.setAttribute('style', 'position:fixed;top:8px;left:8px;right:8px;z-index:2147483647;background:#111;color:#0f0;font:11px/1.35 monospace;padding:8px;margin:0;border-radius:8px;white-space:pre-wrap;opacity:.92;pointer-events:none'); document.documentElement.appendChild(d); } d.textContent += msg + '\\n'; };
   dbg('Buzzin chat debug · script loaded');
   try { if (sitePreview) sessionStorage.setItem('buzzin_chat_preview','1'); else sitePreview = sessionStorage.getItem('buzzin_chat_preview') === '1'; } catch(e){}
   fetch(ORIGIN + '/api/chat/' + STORE + '/config').then(function(r){ return r.json(); }).then(function(c){
@@ -378,8 +378,8 @@ async function widgetJs(store) {
     if (c.hide_others !== false) { var hs = document.createElement('style'); hs.textContent = '#gorgias-chat-container,#chat-button,iframe#chat-button,#gorgias-chat-messenger-button{display:none!important}'; document.head.appendChild(hs); }
     var api = window.BuzzinChatMount(c, { origin: ORIGIN, store: STORE, sitePreview: sitePreview });
     if (DEBUG) setTimeout(function(){ try { var h = document.querySelector('[data-buzzin-chat]'), b = h && h.shadowRoot && h.shadowRoot.querySelector('.btn'), r = b && b.getBoundingClientRect(), vv = window.visualViewport;
-      dbg('mounted: ' + !!api + ' · host display=' + (h ? getComputedStyle(h).display : 'none') + '\nbutton: ' + (r ? Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' · shown=' + (b && getComputedStyle(b).display) : 'none')
-        + '\nscreen: inner ' + innerWidth + 'x' + innerHeight + ' · visible ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' @' + Math.round(vv.offsetLeft) + ',' + Math.round(vv.offsetTop) : '?') + ' · page width ' + document.documentElement.scrollWidth); } catch (e) { dbg('debug error: ' + e.message); } }, 1500);
+      dbg('mounted: ' + !!api + ' · host display=' + (h ? getComputedStyle(h).display : 'none') + '\\nbutton: ' + (r ? Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' · shown=' + (b && getComputedStyle(b).display) : 'none')
+        + '\\nscreen: inner ' + innerWidth + 'x' + innerHeight + ' · visible ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' @' + Math.round(vv.offsetLeft) + ',' + Math.round(vv.offsetTop) : '?') + ' · page width ' + document.documentElement.scrollWidth); } catch (e) { dbg('debug error: ' + e.message); } }, 1500);
   }).catch(function(e){ dbg('config fetch failed: ' + (e && e.message)); });
 })();
 ${LOADER}`;
