@@ -29,7 +29,7 @@ const bool = (v, d) => (v === undefined ? d : !!v);
 const url = (v) => { const s = String(v || "").trim(); return /^(https?:\/\/|\/)/i.test(s) ? s.slice(0, 600) : ""; };
 
 /* ---------------- settings (everything the studio can change) ---------------- */
-const ICONS = ["chat", "bubbles", "bee", "heart", "question", "sparkle", "headset", "mail", "custom"];
+const ICONS = ["chat", "dots", "bubbles", "bee", "heart", "question", "sparkle", "headset", "mail", "custom"];
 const FONTS = () => require("./returns-theme").FONTS;
 // The Larkspur flower on its own (the chat header picture), not the full wordmark.
 const FLOWER = process.env.CHAT_FLOWER_URL || "/brand/larkspur-flower.svg";   // the flower from the store header logo, cut out on its own
@@ -158,6 +158,11 @@ async function init() {
     for (const k of Object.keys(R().STORE_DEFS)) { const v = await core.setting(KEY(k), null);
       if (v && v.header && (!v.header.avatar || /logo_75x75|RR_Logo/.test(v.header.avatar))) { v.header.avatar = FLOWER; await db(`UPDATE emily_settings SET value=$2, updated_at=now() WHERE key=$1`, [KEY(k), JSON.stringify(v)]); cache.delete(k); } }
     await core.syncSet("chat_avatar_flower_v2", "done", {}); } } catch (e) { console.error("chat avatar update:", e.message); }
+  // One-time (v4.60): launcher becomes the filled speech bubble with three dots on a soft light button.
+  try { if (!(await core.syncGet("chat_launcher_dots_v1"))) {
+    for (const k of Object.keys(R().STORE_DEFS)) { const cur = await settings(k);
+      await save(k, { ...cur, launcher: { ...cur.launcher, icon: "dots", bg: "#F1F5F5", fg: "#97CFCC", shadow: true, size: Math.max(cur.launcher.size, 64), radius: 45 } }, "system (v4.60 launcher icon)"); }
+    await core.syncSet("chat_launcher_dots_v1", "done", {}); console.log("💬 Chat: launcher switched to the speech-bubble icon"); } } catch (e) { console.error("chat launcher update:", e.message); }
 }
 const ipHash = (ip) => crypto.createHash("sha256").update(String(ip || "") + (process.env.CONSOLE_KEY || "")).digest("hex").slice(0, 16);
 async function getChat(id, store) { const r = (await db(`SELECT * FROM hd_chats WHERE id=$1 AND store=$2`, [id, store])).rows[0]; return r || null; }
@@ -407,6 +412,7 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
   var side = L.position === 'left' ? 'left' : 'right', pos = inBox ? 'absolute' : 'fixed';
   var ICON = {
     chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/>',
+    dots: '<path fill="currentColor" stroke="none" d="M12.5 3.5a8 8 0 1 1-3.9 15c-1 1.1-2.6 1.9-4.6 2c1-.9 1.7-2.4 2-4.3A8 8 0 0 1 12.5 3.5z"/><circle cx="8.9" cy="11.5" r="1.05" fill="__BG__" stroke="none"/><circle cx="12.5" cy="11.5" r="1.05" fill="__BG__" stroke="none"/><circle cx="16.1" cy="11.5" r="1.05" fill="__BG__" stroke="none"/>',
     bubbles: '<path d="M14 9a5 5 0 0 1-7.2 4.5L3 14.5l.9-3.1A5 5 0 1 1 14 9z"/><path d="M10 17.5a5 5 0 0 0 7.2 1l3.8 1-0.9-3.1A5 5 0 0 0 17 9.6"/>',
     bee: '<ellipse cx="12" cy="13" rx="5" ry="6"/><path d="M7.5 11h9M7.5 14.5h9"/><path d="M9.5 7.5C8 4.5 5 4.5 4.5 6.5S7 9.5 9.5 8M14.5 7.5c1.5-3 4.5-3 5-1s-2.5 3-5 1.5"/>',
     heart: '<path d="M12 20s-7-4.4-9-9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c-2 4.6-9 9-9 9z"/>',
@@ -416,10 +422,11 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>'
   };
-  var svg = function(k, s){ return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICON[k]||ICON.chat)+'</svg>'; };
+  var svg = function(k, s){ if (k === 'dots') s = Math.round(s * 1.6); return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICON[k]||ICON.chat).replace(/__BG__/g, L.bg)+'</svg>'; };
   var ox = function(){ return (mobile() ? L.offset_x_m : L.offset_x) + 'px'; }, oy = function(){ return (mobile() ? L.offset_y_m : L.offset_y) + 'px'; };
   var css = ':host{all:initial}*{box-sizing:border-box}'
     + '.btn{position:'+pos+';'+side+':var(--ox);bottom:var(--oy);z-index:'+L.z+';height:'+L.size+'px;min-width:'+L.size+'px;padding:'+(L.text?'0 20px 0 16px':'0')+';border:0;border-radius:'+L.radius+'px;background:'+L.bg+';color:'+L.fg+';display:flex;align-items:center;justify-content:center;gap:9px;cursor:pointer;'+(L.shadow?'box-shadow:0 8px 24px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.12);':'')+'font:600 15px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;transition:transform .15s ease}'
+    + (L.icon === 'dots' ? '.btn{background-image:radial-gradient(circle at 42% 34%,rgba(255,255,255,.95),rgba(255,255,255,0) 68%);'+(L.shadow?'box-shadow:0 14px 34px rgba(0,0,0,.16),0 3px 8px rgba(0,0,0,.08);':'')+'}' : '')
     + '.btn:hover{transform:scale(1.05)}.btn:focus-visible{outline:3px solid '+L.bg+';outline-offset:3px}.btn img{width:'+Math.round(L.size*.62)+'px;height:'+Math.round(L.size*.62)+'px;object-fit:contain;border-radius:'+Math.max(0,L.radius-8)+'px}'
     + '.dot{position:absolute;top:2px;'+(side==='left'?'left':'right')+':2px;width:14px;height:14px;border-radius:50%;background:#E5484D;border:2px solid #fff}'
     + '.teaser{position:'+pos+';'+side+':var(--ox);bottom:calc(var(--oy) + '+(L.size+12)+'px);z-index:'+L.z+';max-width:260px;background:#fff;color:#1f2430;border-radius:14px;padding:12px 30px 12px 14px;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.16);cursor:pointer;animation:pop .25s ease}'

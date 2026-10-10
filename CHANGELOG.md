@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.60.0
+- **Chat widget: new launcher icon.** A filled speech bubble with three dots on a soft, light round button. Both stores switched to it (light button, soft teal bubble, 64px). It's also in Chat Studio's icon picker as "dots", and the colors can be changed there like any other icon.
+
 ## 4.59.0
 - **Returns: refund when a return is lost on the way back.** Once tracking shows USPS accepted the package, Buzzin records that date. If it still isn't delivered back 14 days later, the return is approved and refunded automatically (same refund rules and label fee as a delivered return). The days are editable in Returns → Settings (0 turns it off). If the refund fails, the return goes to Needs attention.
 - **Returns: $7.99 fallback label fee.** When a live label quote isn't available, the portal shows $7.99 and that's the most the customer is charged (if the real label ends up cheaper, they pay the lower amount, same as today).
