@@ -100,7 +100,7 @@ button,input,textarea{font:inherit;color:inherit}
   <div class="foot">
     <div class="bar"><textarea id="in" rows="1" aria-label="Message"></textarea>
       <button class="send" id="send" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
-    <div class="meta"><span id="disc"></span><button id="toTeam" class="hidden"></button></div>
+    <div class="meta"><span id="disc"></span><span style="display:flex;gap:12px;flex:none"><button id="restart2" class="hidden">Start over</button><button id="toTeam" class="hidden"></button></span></div>
   </div>
 </div>
 <div id="portalView" class="hidden" style="flex:1;flex-direction:column;min-height:0">
@@ -195,6 +195,8 @@ function render() {
   if (busy) h += `<div class="row bot"><div class="b typing" aria-label="${esc(C.copy.thinking)}"><i></i><i></i><i></i></div></div>`;
   $('body').innerHTML = h;
   $('body').scrollTop = $('body').scrollHeight;
+  const started = S.msgs.length > 0 || !!S.ask;
+  $('restart2').classList.toggle('hidden', !started);
   $('send').disabled = busy || !$('in').value.trim();
 }
 async function api(path, body) {
@@ -245,6 +247,14 @@ $('send').onclick = () => ask($('in').value);
 $('toTeam').onclick = openForm; $('fBack').onclick = () => view('chat'); $('dBack').onclick = () => view('chat');
 $('close').onclick = () => parent.postMessage({ buzzinChat: 1, type: 'close' }, '*');
 $('pBack').onclick = () => view('chat');
+// Start over: a brand-new conversation (new session, so any looked-up order is forgotten too).
+function restart() {
+  if (busy) return;
+  S = { id: null, msgs: [], at: Date.now() }; keep();
+  $('in').value = ''; grow(); $('fMsg').value = ''; $('pFrame').removeAttribute('src'); delete $('pFrame').dataset.src; $('pTitle').textContent = 'Orders & returns';
+  view('chat'); render(); $('in').focus();
+}
+$('restart2').onclick = restart;
 $('act').addEventListener('click', (e) => { if (isPortal($('act').href)) { e.preventDefault(); const vo = [...S.msgs].reverse().find((m) => m.order); openPortal($('act').href, vo ? { order: vo.order.order } : {}); } });
 $('fSend').onclick = async () => {
   const b = $('fSend'); b.disabled = true; $('fErr').classList.add('hidden');

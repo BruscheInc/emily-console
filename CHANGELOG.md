@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.49.3
+- Chat: "Start over" (link under the message box, shown once a chat has started) clears the conversation, any looked-up order and the portal, and shows the welcome and shortcuts again.
+
 ## 4.49.2
 - Fix: the chat didn't appear on the live sites. The store theme hides empty <div>s ("div:empty { display: none }"), and the chat's container looks empty from outside. It now uses its own element that the theme can't hide.
 
