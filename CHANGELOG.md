@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.65.0
+- **Marketing → Domain & DNS (admins).** Reads each store's GoDaddy DNS records and labels what each one is for (Shopify store, Shopify emails, Google email, Amazon SES, returns portal, unknown). Adds records you approve: paste Amazon's rows or upload its .csv, or tick a ready-made set (SES bounce address on "send", Google SPF). Shows exactly what will change first, and needs a second click to apply.
+- It only ever adds. It skips records that are already there and refuses anything that would clash (a second DMARC or SPF record, a CNAME on a name that's in use, an MX on the main domain). Every change is logged and posted to Slack. "Is it live?" checks the public DNS.
+- Needs GODADDY_API_KEY and GODADDY_API_SECRET (a Production key from developer.godaddy.com) in Railway.
+
 ## 4.64.0
 - Marketing emails send from **hello@larkspurbaby.com** (and hello@larkspurbabyoutlet.com), the addresses customers already know, instead of hello@mail.… Replies still go to the same inbox.
 
