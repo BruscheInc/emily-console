@@ -111,7 +111,9 @@ async function get(kind, id) {
 }
 async function status() {
   const r = await db(`SELECT kind, count(*)::int AS n, max(fetched_at) AS at FROM hd_klaviyo GROUP BY kind`);
-  return { configured: !!KEY(), running: !!running, last, stored: r.rows };
+  const p = await db(`SELECT count(*)::int AS n FROM hd_klaviyo_profiles`).catch(() => ({ rows: [{ n: 0 }] }));
+  const ps = await core.syncGet("klaviyo_profiles_v1").catch(() => null);
+  return { configured: !!KEY(), running: !!running, last, stored: r.rows, profiles: p.rows[0].n, profiles_export: ps ? ps.state : null };
 }
 
 /** One readable line per step, so a flow can be reviewed from the logs. Long message bodies are cut short. */
@@ -128,8 +130,62 @@ async function logOutlines() {
   }
 }
 
+/* ---------------- Profiles, consent and memberships (read-only, resumable) ----------------
+ * Klaviyo has been cancelled, so its API may stop answering. This copies every profile with its email and
+ * SMS consent, properties and location, plus who is on each list and segment, into Buzzin. It saves its
+ * place after every page, so a restart picks up where it stopped. */
+let profRun = null;
+async function exportProfiles() {
+  if (profRun) return profRun;
+  profRun = (async () => {
+    const st = await core.syncGet("klaviyo_profiles_v1").catch(() => null);
+    if (st && st.state && st.state.done) return st.state;
+    let next = (st && st.cursor) || "/profiles/?additional-fields[profile]=subscriptions&page[size]=100";
+    let n = (st && st.state && st.state.profiles) || 0, pages = 0;
+    while (next) {
+      const j = await kget(next);
+      for (const p of j.data || []) {
+        const a = p.attributes || {};
+        await db(`INSERT INTO hd_klaviyo_profiles (id, email, phone, data, fetched_at) VALUES ($1,$2,$3,$4,now())
+                  ON CONFLICT (id) DO UPDATE SET email=EXCLUDED.email, phone=EXCLUDED.phone, data=EXCLUDED.data, fetched_at=now()`,
+          [p.id, a.email ? String(a.email).toLowerCase() : null, a.phone_number || null, JSON.stringify(a)]);
+        n++;
+      }
+      next = (j.links && j.links.next) || null;
+      pages++;
+      await core.syncSet("klaviyo_profiles_v1", next, { profiles: n, done: false });
+      if (pages % 50 === 0) console.log(`📥 Klaviyo profiles · ${n} saved so far`);
+      await sleep(120);
+    }
+    // Who is on each list and segment
+    let memberships = 0;
+    for (const kind of ["list", "segment"]) {
+      const groups = (await db(`SELECT id, name FROM hd_klaviyo WHERE kind=$1`, [kind])).rows;
+      for (const g of groups) {
+        let url = `/${kind}s/${g.id}/profiles/?fields[profile]=email&page[size]=100`;
+        while (url) {
+          const j = await kget(url);
+          for (const p of j.data || []) { await db(`INSERT INTO hd_klaviyo_members (kind, group_id, profile_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [kind, g.id, p.id]); memberships++; }
+          url = (j.links && j.links.next) || null;
+          await sleep(120);
+        }
+      }
+    }
+    const out = { profiles: n, memberships, done: true, at: new Date().toISOString() };
+    await core.syncSet("klaviyo_profiles_v1", null, out);
+    console.log(`📥 Klaviyo profiles done · ${JSON.stringify(out)}`);
+    return out;
+  })().catch((e) => { console.error("Klaviyo profiles export stopped (will resume on next start):", e.message); throw e; })
+    .finally(() => { profRun = null; });
+  return profRun;
+}
+
 async function init() {
   await db(`CREATE TABLE IF NOT EXISTS hd_klaviyo (kind TEXT NOT NULL, id TEXT NOT NULL, name TEXT, data JSONB, fetched_at TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (kind, id))`);
+  await db(`CREATE TABLE IF NOT EXISTS hd_klaviyo_profiles (id TEXT PRIMARY KEY, email TEXT, phone TEXT, data JSONB, fetched_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`CREATE INDEX IF NOT EXISTS hd_klaviyo_profiles_email ON hd_klaviyo_profiles (email)`);
+  await db(`CREATE TABLE IF NOT EXISTS hd_klaviyo_members (kind TEXT NOT NULL, group_id TEXT NOT NULL, profile_id TEXT NOT NULL, PRIMARY KEY (kind, group_id, profile_id))`);
+  if (KEY()) setTimeout(() => exportProfiles().catch(() => {}), 40000);
   if (!KEY()) { console.log("📥 Klaviyo: no API key — import off"); return; }
   // First run after the key is added: import once, in the background.
   const done = await core.syncGet("klaviyo_import").catch(() => null);
@@ -150,4 +206,4 @@ async function init() {
   }
 }
 
-module.exports = { init, importAll, list, get, status };
+module.exports = { init, importAll, exportProfiles, list, get, status };

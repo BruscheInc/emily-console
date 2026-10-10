@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.51.0
+- Klaviyo profiles saved into Buzzin (read-only): every profile with its email and SMS consent, properties and location, plus list and segment memberships. Resumes where it stopped after a restart. Done first because the cancelled Klaviyo account may stop answering.
+
 ## 4.50.2
 - Klaviyo import: also reads the names of Klaviyo's events (Placed Order, Opened Email…), read-only, so imported flow splits can be shown in plain words.
 
