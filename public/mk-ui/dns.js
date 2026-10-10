@@ -11,7 +11,7 @@ async function renderDns(el) {
   const meta = await api('/api/mk/dns');
   const st = STORE || 'lb', domain = meta.domains[st];
   el.innerHTML = `<h1>Domain &amp; DNS</h1><p class="sub">${esc(domain)}${STORE ? '' : ' (pick a store at the top to switch)'} · your GoDaddy records and what each one is for. Buzzin can add records you approve; it never edits or deletes one. Admins only.</p>
-  ${meta.connected ? '' : `<div class="note"><b>GoDaddy isn't connected.</b> Create a <b>Production</b> key at developer.godaddy.com → API Keys, then add <b>GODADDY_API_KEY</b> and <b>GODADDY_API_SECRET</b> in Railway → emily-console → Variables and deploy.</div>`}
+  ${meta.connected ? '' : `<div class="note"><b>GoDaddy isn't connected.</b> On developer.godaddy.com, click the key icon (top right) and create a <b>Personal Access Token</b> with DNS read and update access. Add it in Railway → emily-console → Variables as <b>GODADDY_PAT</b>, then deploy.</div>`}
   <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px;align-items:start;margin-top:12px">
     <div class="card" style="padding:6px"><div style="padding:8px 10px;display:flex;align-items:center"><b style="font-size:15px">Current records</b><span class="sp"></span><button class="btn xs" id="dnsr"${meta.connected ? '' : ' disabled'}><i class="ti ti-refresh"></i> Reload</button></div><div id="dnslist" class="tw"><div class="empty">${meta.connected ? 'Loading…' : 'Connect GoDaddy to see records.'}</div></div></div>
     <div><div class="card"><b style="font-size:15px">Add records</b>

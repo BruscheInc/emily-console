@@ -12,11 +12,14 @@ const core = require("./core");
 const DOMAINS = { lb: "larkspurbaby.com", lbo: "larkspurbabyoutlet.com" };
 const ALLOWED = new Set(Object.values(DOMAINS));
 const BASE = "https://api.godaddy.com";
-const configured = () => !!(process.env.GODADDY_API_KEY && process.env.GODADDY_API_SECRET);
+// GoDaddy's new developer site issues a Personal Access Token (GODADDY_PAT, sent as "Bearer");
+// older accounts may still have a key + secret (sent as "sso-key"). Either works.
+const configured = () => !!(process.env.GODADDY_PAT || (process.env.GODADDY_API_KEY && process.env.GODADDY_API_SECRET));
+const authHeader = () => (process.env.GODADDY_PAT ? `Bearer ${process.env.GODADDY_PAT}` : `sso-key ${process.env.GODADDY_API_KEY}:${process.env.GODADDY_API_SECRET}`);
 
 async function gd(method, path, body) {
-  if (!configured()) throw Object.assign(new Error("GoDaddy isn't connected yet: add GODADDY_API_KEY and GODADDY_API_SECRET in Railway."), { status: 400 });
-  const r = await fetch(BASE + path, { method, headers: { Authorization: `sso-key ${process.env.GODADDY_API_KEY}:${process.env.GODADDY_API_SECRET}`, Accept: "application/json", "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  if (!configured()) throw Object.assign(new Error("GoDaddy isn't connected yet: add GODADDY_PAT (your Personal Access Token) in Railway."), { status: 400 });
+  const r = await fetch(BASE + path, { method, headers: { Authorization: authHeader(), Accept: "application/json", "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const t = await r.text(); let j = null; try { j = t ? JSON.parse(t) : null; } catch (_) { j = { raw: t }; }
   if (!r.ok) throw Object.assign(new Error(`GoDaddy ${r.status}: ${(j && (j.message || (j.fields || []).map((f) => f.message).join("; "))) || t.slice(0, 200)}`), { status: r.status === 401 || r.status === 403 ? 400 : 502 });
   return j;
@@ -44,9 +47,19 @@ function purpose(r, domain) {
   return "Unknown";
 }
 
+async function listAll(domain) {
+  try { return await gd("GET", `/v1/domains/${domain}/records`); }
+  catch (e) {   // some tokens only allow the per-type listing
+    if (e.status === 400 && /GoDaddy 40[13]/.test(e.message)) throw e;
+    const out = [];
+    for (const t of ["A", "CNAME", "MX", "TXT", "NS", "SRV", "CAA", "AAAA"]) { try { out.push(...(await gd("GET", `/v1/domains/${domain}/records/${t}`))); } catch (_) {} }
+    if (!out.length) throw e;
+    return out;
+  }
+}
 async function records(domain) {
   domain = checkDomain(domain);
-  const list = await gd("GET", `/v1/domains/${domain}/records`);
+  const list = await listAll(domain);
   return (list || []).map((r) => ({ type: r.type, name: r.name, data: r.data, ttl: r.ttl, priority: r.priority, purpose: purpose(r, domain) }))
     .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
 }
@@ -91,7 +104,7 @@ function preset(key, domain, region = "us-east-2") {
 /** Check a proposed set against what's there: skip exact duplicates, refuse anything that would clash. */
 async function plan(domain, proposed) {
   domain = checkDomain(domain);
-  const cur = await gd("GET", `/v1/domains/${domain}/records`);
+  const cur = await listAll(domain);
   const norm = (s) => String(s || "").toLowerCase().replace(/\.$/, "").replace(/^"|"$/g, "");
   return (proposed || []).map((p) => {
     const r = { type: String(p.type).toUpperCase(), name: relName(p.name, domain), data: String(p.data || "").trim(), ttl: 3600, ...(p.priority != null ? { priority: Number(p.priority) } : {}) };
