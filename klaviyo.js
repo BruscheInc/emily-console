@@ -136,6 +136,15 @@ async function init() {
   if (!done || !done.cursor) setTimeout(() => importAll("boot").catch(() => {}), 30000);
   else console.log(`📥 Klaviyo: last import ${done.cursor}`);
   // One-time: print each imported flow step by step (read from Buzzin's copy, nothing is fetched).
+  // One-time: the names of Klaviyo's events (metrics), so flow splits like "metric WFY52h" can be read in plain words.
+  if (done && done.cursor && !(await core.syncGet("klaviyo_metrics_v1").catch(() => null))) {
+    setTimeout(async () => { try {
+      const ms = await kall("/metrics/");
+      for (const m of ms) await save("metric", m.id, m.attributes.name, m);
+      console.log(`📋 Klaviyo metrics · ${ms.map((m) => `${m.id}=${m.attributes.name}${m.attributes.integration ? ` (${m.attributes.integration.name})` : ""}`).join(" | ")}`);
+      await core.syncSet("klaviyo_metrics_v1", new Date().toISOString(), { n: ms.length });
+    } catch (e) { console.error("Klaviyo metrics:", e.message); } }, 25000);
+  }
   if (done && done.cursor && !(await core.syncGet("klaviyo_outline_v1").catch(() => null))) {
     setTimeout(async () => { try { await logOutlines(); await core.syncSet("klaviyo_outline_v1", new Date().toISOString(), {}); } catch (e) { console.error("Klaviyo outline:", e.message); } }, 20000);
   }

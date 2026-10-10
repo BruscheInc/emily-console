@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.50.2
+- Klaviyo import: also reads the names of Klaviyo's events (Placed Order, Opened Email…), read-only, so imported flow splits can be shown in plain words.
+
 ## 4.50.1
 - Klaviyo import: prints each imported flow step by step in the server log once, read from Buzzin's own copy, so the Buzzin versions can be matched exactly.
 

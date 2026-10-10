@@ -890,7 +890,7 @@ app.post("/api/klaviyo/import", async (req, res) => {
   KL.importAll(actorOf(req)).catch(() => {}); res.json({ ok: true, started: true });
 });
 app.get("/api/klaviyo/:kind", async (req, res) => {
-  if (!guard(req, res)) return; if (!["flow", "template", "list", "segment", "form"].includes(req.params.kind)) return res.status(404).json({ error: "unknown kind" });
+  if (!guard(req, res)) return; if (!["flow", "template", "list", "segment", "form", "metric"].includes(req.params.kind)) return res.status(404).json({ error: "unknown kind" });
   try { const rows = await KL.list(req.params.kind); res.json({ items: rows.map((r) => ({ id: r.id, name: r.name, fetched_at: r.fetched_at, ...(req.query.full ? { data: r.data } : {}) })) }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.get("/api/klaviyo/:kind/:id", async (req, res) => { if (!guard(req, res)) return; try { const r = await KL.get(req.params.kind, req.params.id); if (!r) return res.status(404).json({ error: "not found" }); res.json(r); } catch (e) { res.status(500).json({ error: e.message }); } });
