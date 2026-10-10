@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.62.0
+- **Chat widget on phones: no more jumping.** While the chat is open on a phone, the store page behind it is frozen, so swiping the dimmed area or the chat no longer scrolls the page. iPhone Safari's toolbar stays put and the chat sheet doesn't twitch. Closing the chat puts the page back exactly where the customer left it.
+
 ## 4.61.0
 - Chat launcher bubble is now Larkspur blue (#242F3F) on both stores.
 
