@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.52.0
+- **Marketing, phase 1 — contacts and consent.** New Marketing page (link in the left menu): one profile per person per store, merged from the Klaviyo copy and both Shopify stores (customers and orders since 2023), with email and text consent, a full consent history, engagement tiers, sizes last bought, lists, and that person's customer-service tickets. People Klaviyo "suppressed" to save on billing keep their consent and start as lapsed.
+- Sending switches and an internal test list. Nothing can be sent: the switches refuse to turn on until an email sender or texting number is connected and approved.
+
 ## 4.51.0
 - Klaviyo profiles saved into Buzzin (read-only): every profile with its email and SMS consent, properties and location, plus list and segment memberships. Resumes where it stopped after a restart. Done first because the cancelled Klaviyo account may stop answering.
 

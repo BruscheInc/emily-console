@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketing · Buzzin</title>
+<link rel="icon" type="image/svg+xml" href="/logo.svg?v=bee2"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=bee2">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/tabler-icons.css">
+<style>
+:root{--bg:#F6F5F2;--panel:#fff;--panel2:#F2F1EE;--line:#E7E5E0;--line2:#D8D5CE;--ink:#17161F;--muted:#6E6B76;--honey:#FFC21A;--honey-soft:#FFF3CC;--honey-ink:#7A5600;--ok:#158048;--ok-soft:#E3F3EA;--bad:#d14343;--bad-soft:#FBE7E7;--blue:#2F5FB3;--blue-soft:#E4EDFB;--clay:#B4532A;--clay-soft:#FCE6DC}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 "Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}a{color:inherit}
+.hidden{display:none!important}
+.top{flex:none;height:58px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top .back{color:var(--muted);text-decoration:none;font-weight:600;white-space:nowrap}.top .title{font-weight:800;font-size:15px;white-space:nowrap}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;padding:5px 12px;border-radius:7px;cursor:pointer;font-weight:600;color:var(--muted);white-space:nowrap}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(20,30,50,.14)}
+.sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 13px;font-weight:600;cursor:pointer;white-space:nowrap;text-decoration:none;color:var(--ink)}
+.btn:hover{background:var(--panel2)}.btn.pri{background:var(--ink);border-color:var(--ink);color:#fff}.btn.pri:hover{filter:brightness(1.15)}
+.btn:disabled{opacity:.45;cursor:default}.btn.xs{padding:4px 9px;font-size:12px;border-radius:7px}.btn.danger{color:var(--bad)}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-weight:700;font-size:11.5px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.off{background:var(--panel2);color:var(--muted)}.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.hon{background:var(--honey-soft);color:var(--honey-ink)}.pill.blue{background:var(--blue-soft);color:var(--blue)}
+.main{flex:1;display:flex;min-height:0}
+.nav{width:220px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:12px 10px}
+.nav .h{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:14px 8px 6px}
+.nav a{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;text-decoration:none;color:var(--ink);font-weight:500;cursor:pointer}
+.nav a i{font-size:17px;color:var(--muted)}.nav a:hover{background:var(--panel2)}.nav a.on{background:var(--honey-soft);font-weight:700}.nav a.on i{color:var(--honey-ink)}
+.nav a .soon{margin-left:auto;font-size:10.5px;color:var(--muted);font-weight:600}
+.view{flex:1;overflow-y:auto;padding:22px 24px 60px;min-width:0}
+.view h1{font-size:22px;margin:0 0 4px;font-weight:800}.view .sub{color:var(--muted);margin:0 0 18px;max-width:72ch}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.grid{display:grid;gap:12px}.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.kpi .l{font-size:12px;color:var(--muted)}.kpi .v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}.kpi .s{font-size:12px;color:var(--muted)}
+table{width:100%;border-collapse:collapse}th{font-size:12px;color:var(--muted);font-weight:700;text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--panel2);vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.click{cursor:pointer}tr.click:hover td{background:#FBFAF8}
+.tw{overflow-x:auto}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+input[type=text],input[type=search],input[type=number],input[type=email],input[type=time],select,textarea{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff;outline:0}
+input:focus,select:focus,textarea:focus{border-color:#B9B5AC;box-shadow:0 0 0 3px rgba(255,194,26,.25)}
+.lab{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:12px 0 5px}
+.note{background:var(--honey-soft);color:var(--honey-ink);border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.45}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100vw);background:#fff;border-left:1px solid var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.08);z-index:50;display:flex;flex-direction:column}
+.drawer .hd{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}.drawer .bd{flex:1;overflow-y:auto;padding:16px 18px}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:6px 12px;font-size:13px}.kv div:nth-child(odd){color:var(--muted)}
+.tl{border-left:2px solid var(--line);margin-left:6px;padding-left:14px}.tl .e{position:relative;margin:0 0 12px}.tl .e:before{content:"";position:absolute;left:-20px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--line2)}
+.tl .e .t{font-weight:600}.tl .e .m{font-size:12px;color:var(--muted)}
+.log{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:var(--panel2);border-radius:10px;padding:10px;white-space:pre-wrap;max-height:220px;overflow:auto}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;z-index:99}
+.toast.bad{background:var(--bad)}
+.gate{max-width:420px;margin:12vh auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px;text-align:center}
+.empty{color:var(--muted);text-align:center;padding:28px}
+.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;color:var(--muted)}
+.sw{position:relative;width:40px;height:23px;flex:none;display:inline-block}.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;background:#D9D6CF;border-radius:999px;cursor:pointer;transition:.15s}
+.sw span:before{content:"";position:absolute;width:17px;height:17px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw input:checked+span{background:var(--ok)}.sw input:checked+span:before{transform:translateX(17px)}.sw input:disabled+span{opacity:.5;cursor:not-allowed}
+@media (max-width:860px){.nav{display:none}.view{padding:16px}}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="back" href="/">← Buzzin</a>
+  <span class="title"><img src="/logo.svg?v=bee2" alt="" width="22" height="22" style="vertical-align:-5px;border-radius:6px;margin-right:6px">Marketing</span>
+  <div class="seg" id="stores"><button data-s="">Both stores</button><button data-s="lb">Larkspur Baby</button><button data-s="lbo">Outlet</button></div>
+  <span class="sp"></span>
+  <span class="pill off" id="sendState" title="Nothing is sent until a sender is connected and turned on"><i class="ti ti-player-pause"></i> Sending off</span>
+</div>
+<div class="gate hidden" id="gate"><h2>Sign in to Buzzin first</h2><p>Open Buzzin, sign in, then come back to this page.</p><a class="btn pri" href="/">Open Buzzin</a></div>
+<div class="main" id="main">
+  <nav class="nav" id="nav" aria-label="Marketing"></nav>
+  <section class="view" id="view" aria-live="polite"></section>
+</div>
+<script>
+const KEY = (() => { try { return localStorage.getItem('ec_key') || ''; } catch (e) { return ''; } })();
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtN = (n) => Number(n || 0).toLocaleString('en-US');
+const fmt$ = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+const fmtDT = (d) => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+async function api(p, o = {}) { const r = await fetch(p, { ...o, headers: { ...(o.headers || {}), Authorization: 'Bearer ' + KEY, ...(o.body && typeof o.body === 'string' ? { 'Content-Type': 'application/json' } : {}) } }); const j = await r.json().catch(() => ({})); if (r.status === 401) { $('gate').classList.remove('hidden'); $('main').classList.add('hidden'); } if (!r.ok || j.error) throw new Error(j.error || 'Request failed'); return j; }
+function toast(m, bad) { const t = document.createElement('div'); t.className = 'toast' + (bad ? ' bad' : ''); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 3200); }
+let STORE = (() => { try { return localStorage.getItem('mk_store') || ''; } catch (e) { return ''; } })();
+const STORE_NAME = { lb: 'Larkspur Baby', lbo: 'Larkspur Baby Outlet', '': 'Both stores' };
+const CONSENT = { subscribed: ['ok', 'Subscribed'], unsubscribed: ['bad', 'Unsubscribed'], stopped: ['bad', 'Stopped'], never: ['off', 'Never subscribed'] };
+const TIER = { vip: ['hon', 'VIP'], engaged: ['ok', 'Engaged'], cooling: ['blue', 'Cooling'], lapsed: ['off', 'Lapsed'], new: ['blue', 'New'], stopped: ['bad', 'Stopped'] };
+const pill = (map, k) => { const [c, l] = map[k] || ['off', k || '—']; return `<span class="pill ${c}">${esc(l)}</span>`; };
+
+/* Sections. Later phases add theirs to this list. */
+const SECTIONS = [
+  { h: 'Audience' },
+  { id: 'overview', icon: 'layout-dashboard', label: 'Overview', render: renderOverview },
+  { id: 'profiles', icon: 'users', label: 'Profiles', render: renderProfiles },
+  { id: 'lists', icon: 'list-details', label: 'Lists', render: renderLists },
+  { h: 'Build' },
+  { id: 'settings', icon: 'settings', label: 'Settings', render: renderSettings },
+];
+window.MK_SECTIONS = SECTIONS;
+let current = (location.hash || '#overview').slice(1).split('/')[0];
+function drawNav() {
+  $('nav').innerHTML = SECTIONS.map((s) => s.h ? `<div class="h">${esc(s.h)}</div>` : `<a data-id="${s.id}" class="${s.id === current ? 'on' : ''}" href="#${s.id}"><i class="ti ti-${s.icon}"></i><span>${esc(s.label)}</span>${s.soon ? '<span class="soon">soon</span>' : ''}</a>`).join('');
+}
+function go() {
+  current = (location.hash || '#overview').slice(1).split('/')[0];
+  const s = SECTIONS.find((x) => x.id === current) || SECTIONS[1];
+  drawNav();
+  $('view').innerHTML = '<div class="empty">Loading…</div>';
+  Promise.resolve(s.render($('view'), (location.hash.slice(1).split('/')[1] || ''))).catch((e) => { $('view').innerHTML = `<div class="card"><b>Couldn't load this page.</b><p>${esc(e.message)}</p></div>`; });
+}
+window.addEventListener('hashchange', go);
+document.querySelectorAll('#stores button').forEach((b) => { b.classList.toggle('on', b.dataset.s === STORE); b.onclick = () => { STORE = b.dataset.s; try { localStorage.setItem('mk_store', STORE); } catch (e) {} document.querySelectorAll('#stores button').forEach((x) => x.classList.toggle('on', x === b)); go(); }; });
+const qs = (o) => Object.entries(o).filter(([, v]) => v !== '' && v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+
+/* ---------- Overview ---------- */
+const SYNC_LABEL = { klaviyo: 'Klaviyo profiles and consent', shopify_customers_lb: 'Larkspur Baby customers', shopify_customers_lbo: 'Outlet customers', shopify_orders_lb: 'Larkspur Baby orders since 2023', shopify_orders_lbo: 'Outlet orders since 2023', tiers: 'Engagement tiers' };
+async function renderOverview(el) {
+  const o = await api('/api/mk/overview?' + qs({ store: STORE }));
+  const kc = o.klaviyo_copy;
+  el.innerHTML = `<h1>Audience</h1><p class="sub">Everyone Buzzin can market to, built from Klaviyo and Shopify. Nobody is billed per profile, so nobody needs to be removed to save money.</p>
+  <div class="grid g4">
+    <div class="card kpi"><div class="l">Profiles</div><div class="v">${fmtN(o.total)}</div><div class="s">${fmtN(o.buyers)} have ordered</div></div>
+    <div class="card kpi"><div class="l">Can get email</div><div class="v">${fmtN(o.email_ok)}</div><div class="s">${fmtN(o.email_unsub)} unsubscribed · ${fmtN(o.email_stopped)} stopped</div></div>
+    <div class="card kpi"><div class="l">Can get texts</div><div class="v">${fmtN(o.sms_ok)}</div><div class="s">subscribed to texts</div></div>
+    <div class="card kpi"><div class="l">Were suppressed in Klaviyo</div><div class="v">${fmtN(o.klaviyo_suppressed)}</div><div class="s">kept, consent intact, start as lapsed</div></div>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><b>Engagement tiers</b><p class="sub" style="margin:4px 0 10px">Paces how often each person is emailed. Recomputed every 6 hours.</p>
+      <table><tbody>${o.tiers.map((t) => `<tr><td>${pill(TIER, t.tier)}</td><td class="n">${fmtN(t.n)}</td></tr>`).join('') || '<tr><td class="empty">No profiles yet</td></tr>'}</tbody></table></div>
+    <div class="card"><div style="display:flex;align-items:center;gap:8px"><b>Data sync</b><span class="sp"></span>${o.syncing ? '<span class="pill hon">Running</span>' : ''}<button class="btn xs" id="resync">Run again</button></div>
+      <table style="margin-top:8px"><tbody>
+        <tr><td>Klaviyo copy (profiles, consent, lists)</td><td>${kc && kc.done ? `<span class="pill ok">${fmtN(kc.profiles)} saved</span>` : kc ? `<span class="pill hon">${fmtN(kc.profiles)} so far</span>` : '<span class="pill off">Not started</span>'}</td></tr>
+        ${Object.entries(SYNC_LABEL).map(([k, l]) => `<tr><td>${esc(l)}</td><td>${o.sync[k] ? `<span class="pill ok" title="${esc(o.sync[k].out || '')}">${esc(o.sync[k].out || 'done')}</span>` : '<span class="pill off">Waiting</span>'}</td></tr>`).join('')}
+      </tbody></table>
+      ${o.log && o.log.length ? `<div class="log" style="margin-top:10px">${esc(o.log.join('\n'))}</div>` : ''}</div>
+  </div>`;
+  $('resync').onclick = async () => { try { await api('/api/mk/sync', { method: 'POST', body: JSON.stringify({}) }); toast('Sync started'); setTimeout(go, 1500); } catch (e) { toast(e.message, 1); } };
+  if (o.syncing || !(kc && kc.done)) setTimeout(() => { if (current === 'overview') go(); }, 20000);
+}
+
+/* ---------- Profiles ---------- */
+let PQ = { q: '', consent: '', tier: '', list: '', offset: 0 };
+async function renderProfiles(el, openId) {
+  const lists = (await api('/api/mk/lists?' + qs({ store: STORE }))).lists;
+  el.innerHTML = `<h1>Profiles</h1><p class="sub">Search anyone, see their consent history, orders, lists and customer-service tickets in one place.</p>
+  <div class="bar"><input type="search" id="pq" placeholder="Name, email or phone" value="${esc(PQ.q)}" style="min-width:240px">
+    <select id="pc"><option value="">Any consent</option><option value="email">Can get email</option><option value="sms">Can get texts</option><option value="none">Neither</option></select>
+    <select id="pt"><option value="">Any tier</option>${Object.entries(TIER).map(([k, [, l]]) => `<option value="${k}">${l}</option>`).join('')}</select>
+    <select id="pl"><option value="">Any list</option>${lists.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Store</th><th>Email</th><th>Texts</th><th>Tier</th><th class="n">Orders</th><th class="n">Spent</th><th>Last order</th></tr></thead><tbody id="pr"></tbody></table></div>
+  <div class="pager"><span id="pn"></span><button class="btn xs" id="pp">Previous</button><button class="btn xs" id="px">Next</button></div></div>`;
+  $('pc').value = PQ.consent; $('pt').value = PQ.tier; $('pl').value = PQ.list;
+  const load = async () => {
+    const r = await api('/api/mk/profiles?' + qs({ store: STORE, ...PQ, limit: 50 }));
+    $('pr').innerHTML = r.rows.map((p) => `<tr class="click" data-id="${p.id}"><td>${esc([p.first_name, p.last_name].filter(Boolean).join(' ') || '—')}</td><td>${esc(p.email || p.phone || '')}</td><td>${p.store === 'lbo' ? 'Outlet' : 'LB'}</td><td>${pill(CONSENT, p.email_consent)}</td><td>${pill(CONSENT, p.sms_consent)}</td><td>${pill(TIER, p.tier)}</td><td class="n">${fmtN(p.orders_count)}</td><td class="n">${fmt$(p.total_spent)}</td><td>${fmtD(p.last_order_at)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty">No one matches.</td></tr>';
+    $('pn').textContent = r.total ? `${fmtN(PQ.offset + 1)}–${fmtN(Math.min(PQ.offset + 50, r.total))} of ${fmtN(r.total)}` : '';
+    $('pp').disabled = PQ.offset <= 0; $('px').disabled = PQ.offset + 50 >= r.total;
+    document.querySelectorAll('#pr tr.click').forEach((tr) => tr.onclick = () => openProfile(tr.dataset.id));
+  };
+  let t; $('pq').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { PQ.q = e.target.value.trim(); PQ.offset = 0; load(); }, 300); };
+  $('pc').onchange = (e) => { PQ.consent = e.target.value; PQ.offset = 0; load(); };
+  $('pt').onchange = (e) => { PQ.tier = e.target.value; PQ.offset = 0; load(); };
+  $('pl').onchange = (e) => { PQ.list = e.target.value; PQ.offset = 0; load(); };
+  $('pp').onclick = () => { PQ.offset = Math.max(0, PQ.offset - 50); load(); };
+  $('px').onclick = () => { PQ.offset += 50; load(); };
+  await load();
+  if (openId) openProfile(openId);
+}
+const EVENT_LABEL = { placed_order: 'Placed order', viewed_product: 'Viewed product', added_to_cart: 'Added to cart', started_checkout: 'Started checkout', submitted_form: 'Signed up', opened_email: 'Opened email', clicked_email: 'Clicked email', received_email: 'Got email', received_sms: 'Got text', clicked_sms: 'Clicked text' };
+async function openProfile(id) {
+  document.querySelectorAll('.drawer').forEach((d) => d.remove());
+  const p = await api('/api/mk/profiles/' + id);
+  const d = document.createElement('aside'); d.className = 'drawer'; d.setAttribute('aria-label', 'Profile');
+  const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || p.phone;
+  d.innerHTML = `<div class="hd"><b style="font-size:16px">${esc(name)}</b>${pill(TIER, p.tier)}<span class="sp"></span><button class="btn xs" id="dx" aria-label="Close"><i class="ti ti-x"></i></button></div>
+  <div class="bd">
+    <div class="kv"><div>Email</div><div>${esc(p.email || '—')} ${pill(CONSENT, p.email_consent)}</div><div>Phone</div><div>${esc(p.phone || '—')} ${pill(CONSENT, p.sms_consent)}</div>
+      <div>Store</div><div>${p.store === 'lbo' ? 'Larkspur Baby Outlet' : 'Larkspur Baby'}</div><div>Location</div><div>${esc([p.city, p.region, p.country].filter(Boolean).join(', ') || '—')}</div>
+      <div>Orders</div><div>${fmtN(p.orders_count)} · ${fmt$(p.total_spent)} · last ${fmtD(p.last_order_at)}</div><div>Last activity</div><div>${fmtD(p.last_engaged_at)}</div>
+      <div>Sizes last bought</div><div>${esc(((p.props || {}).last_sizes || []).join(', ') || '—')}</div><div>Came from</div><div>${esc((p.sources || []).join(', '))}</div></div>
+    <div style="display:flex;gap:8px;margin-top:12px">${p.email_consent === 'subscribed' ? '<button class="btn xs danger" data-un="email">Unsubscribe from email</button>' : ''}${p.sms_consent === 'subscribed' ? '<button class="btn xs danger" data-un="sms">Unsubscribe from texts</button>' : ''}</div>
+    <h3 style="margin:20px 0 8px">Lists</h3>${p.lists.length ? p.lists.map((l) => `<span class="pill off" style="margin:0 6px 6px 0">${esc(l.name)}</span>`).join('') : '<span style="color:var(--muted)">None</span>'}
+    <h3 style="margin:20px 0 8px">Open with customer service</h3>${p.tickets.length ? p.tickets.map((t) => `<div><a href="/#t/${t.id}" target="_blank">${esc(t.subject || 'Ticket ' + t.id)}</a> <span class="pill ${t.status === 'closed' ? 'off' : 'hon'}">${esc(t.status)}</span></div>`).join('') : '<span style="color:var(--muted)">No tickets</span>'}
+    <h3 style="margin:20px 0 8px">Activity</h3><div class="tl">${p.events.map((e) => `<div class="e"><div class="t">${esc(EVENT_LABEL[e.type] || e.type)}${e.value != null ? ' · ' + fmt$(e.value) : ''}</div><div class="m">${fmtDT(e.at)}${e.props && e.props.name ? ' · ' + esc(e.props.name) : ''}${e.props && e.props.items ? ' · ' + esc(e.props.items.map((i) => `${i.qty}× ${i.title}${i.variant ? ' (' + i.variant + ')' : ''}`).join(', ')).slice(0, 220) : ''}</div></div>`).join('') || '<span style="color:var(--muted)">Nothing yet</span>'}</div>
+    <h3 style="margin:20px 0 8px">Consent history</h3><div class="tl">${p.consent.map((c) => `<div class="e"><div class="t">${c.channel === 'sms' ? 'Texts' : 'Email'}: ${esc(CONSENT[c.state] ? CONSENT[c.state][1] : c.state)}</div><div class="m">${fmtDT(c.at)} · from ${esc(c.source || '?')}${c.detail ? ' · ' + esc(c.detail) : ''}</div></div>`).join('') || '<span style="color:var(--muted)">No changes recorded</span>'}</div>
+  </div>`;
+  document.body.appendChild(d);
+  $('dx').onclick = () => d.remove();
+  d.querySelectorAll('[data-un]').forEach((b) => b.onclick = async () => { if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Click again to confirm'; return; } try { await api(`/api/mk/profiles/${id}/consent`, { method: 'POST', body: JSON.stringify({ channel: b.dataset.un, state: 'unsubscribed' }) }); toast('Unsubscribed'); openProfile(id); } catch (e) { toast(e.message, 1); } });
+}
+
+/* ---------- Lists ---------- */
+async function renderLists(el) {
+  const { lists } = await api('/api/mk/lists?' + qs({ store: STORE }));
+  el.innerHTML = `<h1>Lists</h1><p class="sub">Lists are who signed up for what. Segments, which update on their own, come with campaigns.</p>
+  <div class="bar"><input type="text" id="ln" placeholder="New list name" style="min-width:240px"><button class="btn" id="la"${STORE ? '' : ' disabled title="Pick a store first"'}>Add list</button></div>
+  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>List</th><th>Store</th><th>From</th><th class="n">Members</th><th class="n">Can get email</th></tr></thead><tbody>
+  ${lists.map((l) => `<tr class="click" data-id="${l.id}"><td>${esc(l.name)}</td><td>${l.store === 'lbo' ? 'Outlet' : 'LB'}</td><td>${esc(l.source || '')}</td><td class="n">${fmtN(l.members)}</td><td class="n">${fmtN(l.email_ok)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No lists yet.</td></tr>'}
+  </tbody></table></div></div>`;
+  el.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => { PQ = { q: '', consent: '', tier: '', list: tr.dataset.id, offset: 0 }; location.hash = '#profiles'; });
+  $('la').onclick = async () => { const name = $('ln').value.trim(); if (!name) return; try { await api('/api/mk/lists', { method: 'POST', body: JSON.stringify({ store: STORE, name }) }); toast('List added'); go(); } catch (e) { toast(e.message, 1); } };
+}
+
+/* ---------- Settings ---------- */
+async function renderSettings(el) {
+  const s = await api('/api/mk/settings');
+  const sw = (k, ch) => `<label class="sw" title="Turns on once a sender is connected and approved"><input type="checkbox" data-k="${k}" data-ch="${ch}" ${s.sending[k] && s.sending[k][ch] ? 'checked' : ''}><span></span></label>`;
+  el.innerHTML = `<h1>Settings</h1><p class="sub">Rules every flow, campaign and test follows.</p>
+  <div class="grid g2">
+    <div class="card"><b>Sending</b><p class="sub" style="margin:4px 0 10px">Off until an email sender (Amazon SES) and a texting number are connected and approved. Turning one on without a sender is refused.</p>
+      <table><thead><tr><th>Store</th><th>Email</th><th>Texts</th></tr></thead><tbody><tr><td>Larkspur Baby</td><td>${sw('lb', 'email')}</td><td>${sw('lb', 'sms')}</td></tr><tr><td>Outlet</td><td>${sw('lbo', 'email')}</td><td>${sw('lbo', 'sms')}</td></tr></tbody></table></div>
+    <div class="card"><b>Internal test list</b><p class="sub" style="margin:4px 0 10px">Only these emails and phone numbers can receive tests while sending is off. One per line.</p>
+      <textarea id="tl" rows="5" style="width:100%">${esc((s.test_list || []).join('\n'))}</textarea></div>
+    <div class="card"><b>Texts: quiet hours</b><p class="sub" style="margin:4px 0 10px">No marketing texts between these times, in each person's time zone.</p>
+      <div style="display:flex;gap:8px;align-items:center"><input type="time" id="qs" value="${esc(s.quiet_hours.start)}"> to <input type="time" id="qe" value="${esc(s.quiet_hours.end)}"></div></div>
+    <div class="card"><b>Smart sending</b><p class="sub" style="margin:4px 0 10px">Skip anyone who got a marketing message within this many hours.</p>
+      <div style="display:flex;gap:8px;align-items:center">Email <input type="number" id="se" min="0" max="168" value="${s.smart_sending_hours.email}" style="width:80px"> hours · Texts <input type="number" id="ss" min="0" max="168" value="${s.smart_sending_hours.sms}" style="width:80px"> hours</div></div>
+    <div class="card"><b>Revenue credit</b><p class="sub" style="margin:4px 0 10px">An order counts for a message if it comes within this many days of a click.</p>
+      <div style="display:flex;gap:8px;align-items:center">Email <input type="number" id="ae" min="1" max="30" value="${s.attribution.email_click_days}" style="width:80px"> days · Texts <input type="number" id="as" min="1" max="30" value="${s.attribution.sms_click_days}" style="width:80px"> days</div></div>
+  </div>
+  <div style="margin-top:14px"><button class="btn pri" id="save">Save settings</button></div>`;
+  $('save').onclick = async () => {
+    const sending = { lb: {}, lbo: {} };
+    el.querySelectorAll('.sw input').forEach((i) => { sending[i.dataset.k][i.dataset.ch] = i.checked; });
+    try {
+      await api('/api/mk/settings', { method: 'PUT', body: JSON.stringify({ sending, test_list: $('tl').value.split(/\n|,/).map((x) => x.trim()).filter(Boolean), quiet_hours: { start: $('qs').value, end: $('qe').value }, smart_sending_hours: { email: $('se').value, sms: $('ss').value }, attribution: { email_click_days: $('ae').value, sms_click_days: $('as').value } }) });
+      toast('Saved'); go();
+    } catch (e) { toast(e.message, 1); go(); }
+  };
+}
+
+(async () => {
+  if (!KEY) { $('gate').classList.remove('hidden'); $('main').classList.add('hidden'); return; }
+  try { const s = await api('/api/mk/settings'); const on = ['lb', 'lbo'].some((k) => s.sending[k] && (s.sending[k].email || s.sending[k].sms)); $('sendState').className = 'pill ' + (on ? 'ok' : 'off'); $('sendState').innerHTML = on ? '<i class="ti ti-send"></i> Sending on' : '<i class="ti ti-player-pause"></i> Sending off'; } catch (e) {}
+  if (window.MK_EXTRA) for (const f of window.MK_EXTRA) try { f(SECTIONS); } catch (e) {}
+  go();
+})();
+</script>
+</body>
+</html>
