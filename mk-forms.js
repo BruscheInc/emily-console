@@ -17,7 +17,10 @@ const MK = () => require("./mk-core");
 
 const RUNTIME = () => fs.readFileSync(path.join(__dirname, "public", "mk-forms-runtime.js"), "utf8");
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
-const SMS_CONSENT = (brand) => `By signing up for texts, you agree to receive recurring automated marketing text messages (e.g. new arrivals, offers, cart reminders) from ${brand} at the number provided. Consent is not a condition of purchase. Msg & data rates may apply. Msg frequency varies. Reply STOP to cancel, HELP for help. See our Terms and Privacy Policy.`;
+const SMS_CONSENT_V1 = (brand) => `By signing up for texts, you agree to receive recurring automated marketing text messages (e.g. new arrivals, offers, cart reminders) from ${brand} at the number provided. Consent is not a condition of purchase. Msg & data rates may apply. Msg frequency varies. Reply STOP to cancel, HELP for help. See our Terms and Privacy Policy.`;
+// Shown next to an UNCHECKED checkbox on the phone step (carriers require a separate, unchecked box).
+const SMS_CONSENT = (brand) => `By checking this box, you agree to receive recurring automated marketing text messages (e.g. new arrivals, offers, cart reminders) from ${brand} at the number provided. Consent is not a condition of purchase. Msg & data rates may apply. Msg frequency varies. Reply STOP to cancel, HELP for help.`;
+const SHOP_URL = { lb: "https://larkspurbaby.com", lbo: "https://larkspurbabyoutlet.com" };
 const EMAIL_CONSENT = (brand) => `By signing up you agree to receive marketing emails from ${brand}. Unsubscribe anytime.`;
 
 async function migrate() {
@@ -73,7 +76,7 @@ async function save(id, b, who, isAdmin) {
      JSON.stringify(b.teaser || cur.teaser), JSON.stringify(b.coupon || cur.coupon), b.list_id != null ? Number(b.list_id) : cur.list_id, b.sms_consent_text != null ? b.sms_consent_text : cur.sms_consent_text,
      b.email_consent_text != null ? b.email_consent_text : cur.email_consent_text, who || null])).rows[0];
 }
-const publicForm = (f) => ({ id: f.id, priority: f.priority, steps: f.steps, style: f.style, targeting: f.targeting, teaser: f.teaser, sms_consent_text: f.sms_consent_text, email_consent_text: f.email_consent_text });
+const publicForm = (f) => ({ id: f.id, shop_url: SHOP_URL[f.store] || "", priority: f.priority, steps: f.steps, style: f.style, targeting: f.targeting, teaser: f.teaser, sms_consent_text: f.sms_consent_text, email_consent_text: f.email_consent_text });
 
 /* ---------------- coupons ---------------- */
 async function issueCoupon(store, form, profile) {
@@ -110,10 +113,11 @@ async function submit(store, b, ip) {
   const brand = MK().STORES[store];
   const src = `form:${form.id}${isPreview ? ":preview" : ""}`;
   if (b.kind === "email" && vals.email) { await MK().setConsent(prof, "email", "subscribed", { source: src, detail: form.name, wording: form.email_consent_text || EMAIL_CONSENT(brand) }); }
+  if (b.kind === "phone" && vals.phone && vals.sms_consent_checked !== true) return { error: "Please check the box to agree to texts." };
   if (b.kind === "phone" && vals.phone) {
     const phone = MK().normPhone(vals.phone);
     await db(`UPDATE mk_profiles SET phone=COALESCE(phone,$2), updated_at=now() WHERE id=$1`, [prof.id, phone]); prof.phone = prof.phone || phone;
-    await MK().setConsent(prof, "sms", "subscribed", { source: src, detail: form.name, wording: form.sms_consent_text || SMS_CONSENT(brand) });
+    await MK().setConsent(prof, "sms", "subscribed", { source: src, detail: `${form.name} · checkbox ticked`, wording: form.sms_consent_text || SMS_CONSENT(brand) });
   }
   if (b.kind === "question") {
     const props = {}; for (const [k, v] of Object.entries(vals)) if (/^[a-z0-9_]{1,40}$/i.test(k) && String(v).length < 200) props[k] = String(v);
@@ -198,5 +202,9 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   app.put("/api/mk/tracking", async (req, res) => { if (!admin(req, res)) return; try { const b = req.body || {}; const cur = await MK().settings(); const t = { ...(cur.tracking || {}) }; for (const k of ["lb", "lbo"]) if (b[k] != null) t[k] = !!b[k]; const out = await MK().saveSettings({ tracking: t }, actorOf(req)); CACHE.clear(); res.json(out); } catch (e) { fail(res, e); } });
 }
 
-async function init() { await migrate(); }
+async function init() {
+  await migrate();
+  // Forms still using the old "by signing up for texts" wording get the checkbox wording.
+  try { for (const [st, brand] of Object.entries(MK().STORES)) await db(`UPDATE mk_forms SET sms_consent_text=$3 WHERE store=$1 AND sms_consent_text=$2`, [st, SMS_CONSENT_V1(brand), SMS_CONSENT(brand)]); } catch (e) { console.error("form consent wording:", e.message); }
+}
 module.exports = { init, migrate, routes, list, get, create, save, submit, config, issueCoupon, SMS_CONSENT, EMAIL_CONSENT };

@@ -58,7 +58,7 @@
       '.ch{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:8px 0}.ch button{flex:1 1 40%;background:transparent;color:' + tx + ';border:1px solid currentColor}.ch button.on{background:' + bt + ';color:' + btx + ';border-color:' + bt + '}' +
       'button{font:inherit;font-weight:700;cursor:pointer;border:0;border-radius:999px;padding:13px 18px;min-height:46px}.go{width:100%;margin-top:12px;background:' + bt + ';color:' + btx + '}' +
       '.no{background:transparent;color:' + tx + ';opacity:.7;font-weight:400;text-decoration:underline;margin-top:6px;padding:8px}.x{position:absolute;top:8px;right:8px;width:36px;height:36px;min-height:0;padding:0;border-radius:50%;background:rgba(0,0,0,.06);color:' + tx + ';font-size:20px;line-height:36px}' +
-      '.legal{font-size:10.5px;opacity:.75;margin-top:10px;text-align:left}.err{color:#b42318;font-size:13px;margin-top:6px;min-height:1em}.code{font:700 24px/1 monospace;letter-spacing:.12em;border:2px dashed currentColor;border-radius:12px;padding:14px;margin:12px 0}' +
+      '.legal{font-size:10.5px;opacity:.75;margin-top:10px;text-align:left}.smsok{display:flex;gap:8px;align-items:flex-start;font-size:11px;line-height:1.4;text-align:left;margin:12px 0 4px;cursor:pointer}.smsok input{margin:2px 0 0;width:16px;height:16px;flex:none}.smsok span{opacity:.8}.smsok a{color:inherit}.err{color:#b42318;font-size:13px;margin-top:6px;min-height:1em}.code{font:700 24px/1 monospace;letter-spacing:.12em;border:2px dashed currentColor;border-radius:12px;padding:14px;margin:12px 0}' +
       '.teaser{position:fixed;bottom:16px;' + (s.side === 'right' ? 'right' : 'left') + ':16px;z-index:2147483599;background:' + bt + ';color:' + btx + ';border-radius:999px;padding:12px 18px;font:700 14px Helvetica,Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.2)}' +
       '@media (max-width:640px){.card .img{display:none}.ov{padding:0;align-items:flex-end}.ov .card{border-radius:' + r + 'px ' + r + 'px 0 0;width:100%}.full .ov .card{border-radius:0}}';
   }
@@ -82,11 +82,12 @@
         return '<label for="q' + i + '">' + esc(q2.label) + '</label><input id="q' + i + '" data-k="' + esc(q2.key) + '" type="' + (q2.type === 'date' ? 'date' : 'text') + '">';
       }).join('');
       var code = s.kind === 'success' && sub.code ? '<div class="code" aria-label="Your code">' + esc(sub.code) + '</div><button type="button" class="go" id="cp">Copy code</button>' : '';
-      var legal = s.kind === 'phone' && f.sms_consent_text ? '<div class="legal">' + esc(f.sms_consent_text) + '</div>' : (s.kind === 'email' && f.email_consent_text ? '<div class="legal">' + esc(f.email_consent_text) + '</div>' : '');
+      var shop = (f.shop_url || '').replace(/\/$/, '');
+      var legal = s.kind === 'phone' ? '<label class="smsok"><input type="checkbox" id="smsok"> <span>' + esc(f.sms_consent_text || '') + (shop ? ' <a href="' + esc(shop) + '/policies/terms-of-service" target="_blank" rel="noopener">Terms</a> &amp; <a href="' + esc(shop) + '/policies/privacy-policy" target="_blank" rel="noopener">Privacy</a>' : '') + '</span></label>' : (s.kind === 'email' && f.email_consent_text ? '<div class="legal">' + esc(f.email_consent_text) + '</div>' : '');
       var btn = s.kind === 'success' ? (s.button ? '<a href="' + esc(s.link || '/') + '" style="text-decoration:none"><button type="button" class="go">' + esc(s.button) + '</button></a>' : '') : '<button type="submit" class="go">' + esc(s.button || 'Continue') + '</button>';
       var skip = s.kind === 'phone' || s.kind === 'question' ? '<button type="button" class="no" id="sk">' + esc(s.skip || 'No thanks') + '</button>' : (s.kind === 'email' && !container ? '<button type="button" class="no" id="nt">' + esc(s.decline || 'No thanks') + '</button>' : '');
       var inner = '<div class="card" role="dialog" aria-modal="' + (container ? 'false' : 'true') + '" aria-label="' + esc(s.title || 'Sign up') + '">' + img + '<form class="in" novalidate>' + (container ? '' : '<button type="button" class="x" aria-label="Close">×</button>') +
-        (s.eyebrow ? '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' : '') + '<h2>' + esc(s.title || '') + '</h2>' + (s.text ? '<p>' + esc(s.text) + '</p>' : '') + fields + code + btn + skip + legal + '<div class="err" role="alert"></div></form></div>';
+        (s.eyebrow ? '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' : '') + '<h2>' + esc(s.title || '') + '</h2>' + (s.text ? '<p>' + esc(s.text) + '</p>' : '') + fields + code + (s.kind === 'phone' ? legal + '<div class="err" role="alert"></div>' + btn + skip : btn + skip + legal + '<div class="err" role="alert"></div>') + '</form></div>';
       wrap.innerHTML = layout === 'popup' ? '<div class="ov">' + inner + '</div>' : layout === 'full' ? '<div class="full"><div class="ov">' + inner + '</div></div>' : layout === 'flyout' ? '<div class="fly">' + inner + '</div>' : layout === 'banner' ? '<div class="banner">' + inner + '</div>' : '<div class="emb">' + inner + '</div>';
       var form = wrap.querySelector('form'), err = wrap.querySelector('.err');
       var x = wrap.querySelector('.x'); if (x) x.onclick = function () { close(); };
@@ -100,7 +101,8 @@
         e.preventDefault(); err.textContent = '';
         var vals = {};
         if (s.kind === 'email') { var em = wrap.querySelector('#e').value.trim(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { err.textContent = 'Please enter a valid email.'; return; } vals.email = em; }
-        if (s.kind === 'phone') { var ph = wrap.querySelector('#p').value.replace(/\D/g, ''); if (ph.length < 10) { err.textContent = 'Please enter a 10-digit phone number.'; return; } vals.phone = ph; }
+        if (s.kind === 'phone') { var ph = wrap.querySelector('#p').value.replace(/\D/g, ''); if (ph.length < 10) { err.textContent = 'Please enter a 10-digit phone number.'; return; }
+          var ok = wrap.querySelector('#smsok'); if (!ok || !ok.checked) { err.textContent = 'Check the box to agree to texts, or tap "' + (s.skip || 'No thanks') + '".'; return; } vals.phone = ph; vals.sms_consent_checked = true; }
         if (s.kind === 'question') { wrap.querySelectorAll('input[data-k]').forEach(function (i) { if (i.value) vals[i.dataset.k] = i.value; }); (s.fields || []).forEach(function (q2) { if (values[q2.key]) vals[q2.key] = values[q2.key]; }); }
         for (var k in vals) values[k] = vals[k];
         var bt = form.querySelector('.go'); if (bt) bt.disabled = true;

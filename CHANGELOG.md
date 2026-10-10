@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.67.0
+- **Sign-up forms: separate, unchecked text-message consent checkbox** (required by carriers and Amazon's toll-free registration). The phone step shows the consent wording next to an unchecked box with Terms and Privacy links; a phone number is only accepted when the box is ticked, and the phone step stays optional ("No thanks"). The server refuses a phone sign-up without the tick, and the consent record notes it.
+- Consent wording now starts "By checking this box…"; existing forms on the old default wording were updated.
+
 ## 4.66.0
 - **Amazon SES connected to Buzzin.** Marketing emails send through SES from hello@larkspurbaby.com (and the Outlet's address), with one-click unsubscribe headers (List-Unsubscribe / List-Unsubscribe-Post) that Gmail and Yahoo require for bulk mail.
 - **Bounce & complaint reports.** One button on Domain & DNS sets up Amazon's reporting (configuration set → SNS → Buzzin). Permanent bounces and spam complaints mark the address "stopped" right away, so it's never emailed again unless the person signs up again through a form. Deliveries are recorded too. Only messages signed by Amazon are accepted.
