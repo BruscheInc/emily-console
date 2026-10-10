@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.65.2
+- Domain & DNS: Shopify's IPv6 record is labeled, and the record list gets more room on smaller screens.
+
 ## 4.65.1
 - Domain & DNS works with GoDaddy's new Personal Access Tokens (GODADDY_PAT in Railway). An older key + secret still works too.
 

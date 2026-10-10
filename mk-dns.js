@@ -31,6 +31,7 @@ function purpose(r, domain) {
   const n = r.name, d = String(r.data || "").toLowerCase();
   if (r.type === "NS" || r.type === "SOA") return "GoDaddy (domain itself)";
   if (r.type === "A" && n === "@" && d.startsWith("23.227.38.")) return "Shopify store";
+  if (r.type === "AAAA" && n === "@" && d.startsWith("2620:127:f00f") || (r.type === "AAAA" && d.startsWith("2620:0127:f00f"))) return "Shopify store";
   if (r.type === "CNAME" && (n === "www" || n === "account") && d.includes("myshopify.com")) return "Shopify store";
   if (d.includes("email.myshopify.com") || d.includes(".email.myshopify")) return "Shopify emails (orders, shipping)";
   if (r.type === "MX" && d.includes("google.com")) return "Google email (receiving)";

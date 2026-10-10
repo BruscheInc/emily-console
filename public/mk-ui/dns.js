@@ -12,7 +12,7 @@ async function renderDns(el) {
   const st = STORE || 'lb', domain = meta.domains[st];
   el.innerHTML = `<h1>Domain &amp; DNS</h1><p class="sub">${esc(domain)}${STORE ? '' : ' (pick a store at the top to switch)'} · your GoDaddy records and what each one is for. Buzzin can add records you approve; it never edits or deletes one. Admins only.</p>
   ${meta.connected ? '' : `<div class="note"><b>GoDaddy isn't connected.</b> On developer.godaddy.com, click the key icon (top right) and create a <b>Personal Access Token</b> with DNS read and update access. Add it in Railway → emily-console → Variables as <b>GODADDY_PAT</b>, then deploy.</div>`}
-  <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px;align-items:start;margin-top:12px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:14px;align-items:start;margin-top:12px">
     <div class="card" style="padding:6px"><div style="padding:8px 10px;display:flex;align-items:center"><b style="font-size:15px">Current records</b><span class="sp"></span><button class="btn xs" id="dnsr"${meta.connected ? '' : ' disabled'}><i class="ti ti-refresh"></i> Reload</button></div><div id="dnslist" class="tw"><div class="empty">${meta.connected ? 'Loading…' : 'Connect GoDaddy to see records.'}</div></div></div>
     <div><div class="card"><b style="font-size:15px">Add records</b>
       <div style="font-size:12.5px;color:var(--muted);margin-top:4px">Paste rows from Amazon (or upload its "Download .csv record set" file), or tick a ready-made set. You'll see exactly what changes before anything happens.</div>
@@ -26,7 +26,7 @@ async function renderDns(el) {
     if (!meta.connected) return;
     $('dnslist').innerHTML = '<div class="empty">Loading…</div>';
     try { const r = await api('/api/mk/dns/' + domain);
-      $('dnslist').innerHTML = `<table><thead><tr><th>Type</th><th>Name</th><th>Value</th><th>For</th></tr></thead><tbody>${r.records.map((x) => `<tr><td>${esc(x.type)}</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:12px">${esc(x.name)}</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:12px;word-break:break-all;max-width:280px">${x.priority != null && x.type === 'MX' ? esc(x.priority) + ' ' : ''}${esc(String(x.data).length > 90 ? String(x.data).slice(0, 90) + '…' : x.data)}</td><td>${x.purpose === 'Unknown' ? '<span class="pill hon">Unknown</span>' : esc(x.purpose)}</td></tr>`).join('')}</tbody></table>`;
+      $('dnslist').innerHTML = `<table><thead><tr><th>Type</th><th>Name</th><th>Value</th><th>For</th></tr></thead><tbody>${r.records.map((x) => `<tr><td>${esc(x.type)}</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:12px">${esc(x.name)}</td><td style="font-family:ui-monospace,Menlo,monospace;font-size:12px;word-break:break-all;min-width:220px">${x.priority != null && x.type === 'MX' ? esc(x.priority) + ' ' : ''}${esc(String(x.data).length > 90 ? String(x.data).slice(0, 90) + '…' : x.data)}</td><td>${x.purpose === 'Unknown' ? '<span class="pill hon">Unknown</span>' : esc(x.purpose)}</td></tr>`).join('')}</tbody></table>`;
     } catch (e) { $('dnslist').innerHTML = `<div class="note" style="margin:8px">${esc(e.message)}</div>`; }
   };
   load(); $('dnsr').onclick = load;
