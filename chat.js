@@ -362,9 +362,12 @@ async function widgetJs(store) {
 (function(){
   if (window.__buzzinChat) return; window.__buzzinChat = 1;
   var ORIGIN = ${JSON.stringify(o)}, STORE = ${JSON.stringify(store)};
-  var q = location.search, sitePreview = /[?&]buzzin_chat=preview/.test(q);
+  var q = location.search, sitePreview = /[?&]buzzin_chat=(preview|debug)/.test(q), DEBUG = /[?&]buzzin_chat=debug/.test(q);
+  var dbg = function(msg){ if (!DEBUG) return; var d = document.getElementById('buzzin-dbg'); if (!d) { d = document.createElement('pre'); d.id = 'buzzin-dbg'; d.setAttribute('style', 'position:fixed;top:8px;left:8px;right:8px;z-index:2147483647;background:#111;color:#0f0;font:11px/1.35 monospace;padding:8px;margin:0;border-radius:8px;white-space:pre-wrap;opacity:.92;pointer-events:none'); document.documentElement.appendChild(d); } d.textContent += msg + '\n'; };
+  dbg('Buzzin chat debug · script loaded');
   try { if (sitePreview) sessionStorage.setItem('buzzin_chat_preview','1'); else sitePreview = sessionStorage.getItem('buzzin_chat_preview') === '1'; } catch(e){}
   fetch(ORIGIN + '/api/chat/' + STORE + '/config').then(function(r){ return r.json(); }).then(function(c){
+    dbg('config: ' + (c && !c.error ? 'ok · enabled=' + c.enabled + ' · show_mobile=' + c.launcher.show_mobile : 'ERROR'));
     if (!c || c.error) return;
     if (!c.enabled && !sitePreview) return;
     var path = location.pathname, list = function(s){ return String(s||'').split(/[\\n,]+/).map(function(x){return x.trim();}).filter(Boolean); };
@@ -373,8 +376,11 @@ async function widgetJs(store) {
     if (hide.some(match)) return; if (only.length && !only.some(match)) return;
     // Only one chat on the page: hide the old Gorgias chat (and its "chat-button") while ours is showing.
     if (c.hide_others !== false) { var hs = document.createElement('style'); hs.textContent = '#gorgias-chat-container,#chat-button,iframe#chat-button,#gorgias-chat-messenger-button{display:none!important}'; document.head.appendChild(hs); }
-    window.BuzzinChatMount(c, { origin: ORIGIN, store: STORE, sitePreview: sitePreview });
-  }).catch(function(){});
+    var api = window.BuzzinChatMount(c, { origin: ORIGIN, store: STORE, sitePreview: sitePreview });
+    if (DEBUG) setTimeout(function(){ try { var h = document.querySelector('[data-buzzin-chat]'), b = h && h.shadowRoot && h.shadowRoot.querySelector('.btn'), r = b && b.getBoundingClientRect(), vv = window.visualViewport;
+      dbg('mounted: ' + !!api + ' · host display=' + (h ? getComputedStyle(h).display : 'none') + '\nbutton: ' + (r ? Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' · shown=' + (b && getComputedStyle(b).display) : 'none')
+        + '\nscreen: inner ' + innerWidth + 'x' + innerHeight + ' · visible ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' @' + Math.round(vv.offsetLeft) + ',' + Math.round(vv.offsetTop) : '?') + ' · page width ' + document.documentElement.scrollWidth); } catch (e) { dbg('debug error: ' + e.message); } }, 1500);
+  }).catch(function(e){ dbg('config fetch failed: ' + (e && e.message)); });
 })();
 ${LOADER}`;
 }
@@ -434,15 +440,36 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
     void panel.offsetWidth; panel.classList.toggle('open', v);
     dim.classList.toggle('on', v && sheet);
     btn.style.display = v && m ? 'none' : 'flex'; face(v); btn.setAttribute('aria-label', v ? 'Close chat' : 'Open chat');
-    try { if (!inBox) document.documentElement.style.overflow = v && m ? 'hidden' : ''; } catch(e){} };
+    try { if (!inBox) document.documentElement.style.overflow = v && m ? 'hidden' : ''; } catch(e){} place(); };
+  // Phones: pin to the part of the page you can actually see. Some themes make the page wider than the
+  // screen, and then "bottom-right" of the page is off to the side on iPhone — so place by the visual viewport.
+  var place = function(){
+    var vv = window.visualViewport, m = !inBox && mobile() && vv;
+    var clear = function(el, keepW){ if (!el) return; el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.height = el.style.maxHeight = ''; if (!keepW) el.style.width = ''; };
+    if (!m) { clear(btn, true); clear(teaser, true); if (!inBox) { panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = panel.style.height = panel.style.maxHeight = ''; } return; }
+    var x = L.offset_x_m, y = L.offset_y_m, bw = btn.offsetWidth || L.size, bh = btn.offsetHeight || L.size;
+    btn.style.right = btn.style.bottom = 'auto';
+    btn.style.left = Math.round(vv.offsetLeft + (side === 'right' ? vv.width - bw - x : x)) + 'px';
+    btn.style.top = Math.round(vv.offsetTop + vv.height - bh - y) + 'px';
+    if (teaser) { teaser.style.right = teaser.style.bottom = 'auto'; teaser.style.maxWidth = Math.min(260, vv.width - 2 * x) + 'px';
+      teaser.style.left = Math.round(vv.offsetLeft + (side === 'right' ? Math.max(8, vv.width - teaser.offsetWidth - x) : x)) + 'px';
+      teaser.style.top = Math.round(vv.offsetTop + vv.height - bh - y - 12 - teaser.offsetHeight) + 'px'; }
+    if (panel.classList.contains('sheet') || panel.classList.contains('full')) {
+      var h = panel.classList.contains('full') ? vv.height : Math.round(vv.height * (L.mobile_height || 82) / 100);
+      panel.style.right = panel.style.bottom = 'auto'; panel.style.maxHeight = 'none';
+      panel.style.left = Math.round(vv.offsetLeft) + 'px'; panel.style.width = Math.round(vv.width) + 'px';
+      panel.style.top = Math.round(vv.offsetTop + vv.height - h) + 'px'; panel.style.height = h + 'px';
+    }
+  };
+  if (!inBox && window.visualViewport) { window.visualViewport.addEventListener('resize', function(){ place(); }); window.visualViewport.addEventListener('scroll', function(){ place(); }); }
   btn.onclick = function(){ setOpen(!opened); };
   var teaser = null, hideTeaser = function(){ if (teaser) { teaser.remove(); teaser = null; } };
   var showTeaser = function(){ if (opened || teaser || !L.teaser_on || !L.teaser) return; teaser = document.createElement('div'); teaser.className = 'teaser'; teaser.innerHTML = '<button class="x" aria-label="Dismiss">×</button>' + L.teaser.replace(/</g,'&lt;');
-    teaser.onclick = function(e){ if (e.target.className === 'x') { hideTeaser(); try { sessionStorage.setItem('buzzin_chat_teased','1'); } catch(_){} return; } setOpen(true); }; root.appendChild(teaser); unread = true; face(false); };
+    teaser.onclick = function(e){ if (e.target.className === 'x') { hideTeaser(); try { sessionStorage.setItem('buzzin_chat_teased','1'); } catch(_){} return; } setOpen(true); }; root.appendChild(teaser); unread = true; face(false); place(); };
   window.addEventListener('message', function(e){ if (!e.data || !e.data.buzzinChat || (frame && e.source !== frame.contentWindow)) return; if (e.data.type === 'close') setOpen(false);
     if (e.data.type === 'wide') panel.style.width = e.data.on && !mobile() ? Math.max(P.width, 460) + 'px' : ''; });
-  window.addEventListener('resize', function(){ vars(); if (opened) setOpen(true); });
-  root.appendChild(dim); root.appendChild(panel); root.appendChild(btn); face(false);
+  window.addEventListener('resize', function(){ vars(); if (opened) setOpen(true); else place(); });
+  root.appendChild(dim); root.appendChild(panel); root.appendChild(btn); face(false); place(); setTimeout(place, 300);
   var seen = false; try { seen = sessionStorage.getItem('buzzin_chat_teased') === '1' || localStorage.getItem('buzzin_chat_seen') === '1'; } catch(e){}
   if (o.preview) { if (L.teaser_on && L.teaser) showTeaser(); }
   else { if (!seen && L.teaser_on) setTimeout(showTeaser, (L.teaser_delay || 0) * 1000); if (L.auto_open && !seen) setTimeout(function(){ if (!opened) setOpen(true); }, L.auto_open * 1000); }

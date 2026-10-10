@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.49.4
+- Chat on phones: the button, greeting and sheet are placed by the part of the page you can actually see, so they can't end up off-screen when the store page is wider than the phone (iPhone does this when something on the page overflows).
+- Add ?buzzin_chat=debug to a store URL to see an on-screen status box (loaded, settings, where the button is) — for troubleshooting on a phone.
+
 ## 4.49.3
 - Chat: "Start over" (link under the message box, shown once a chat has started) clears the conversation, any looked-up order and the portal, and shows the welcome and shortcuts again.
 
