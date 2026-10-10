@@ -76,6 +76,7 @@ input:focus,select:focus,textarea:focus{border-color:#B9B5AC;box-shadow:0 0 0 3p
   <nav class="nav" id="nav" aria-label="Marketing"></nav>
   <section class="view" id="view" aria-live="polite"></section>
 </div>
+<script src="/mk-ui/email.js?v=__VERSION__"></script>
 <script>
 const KEY = (() => { try { return localStorage.getItem('ec_key') || ''; } catch (e) { return ''; } })();
 const $ = (id) => document.getElementById(id);
@@ -110,6 +111,7 @@ function go() {
   current = (location.hash || '#overview').slice(1).split('/')[0];
   const s = SECTIONS.find((x) => x.id === current) || SECTIONS[1];
   drawNav();
+  $('view').style.padding = ''; window.onbeforeunload = null;
   $('view').innerHTML = '<div class="empty">Loading…</div>';
   Promise.resolve(s.render($('view'), (location.hash.slice(1).split('/')[1] || ''))).catch((e) => { $('view').innerHTML = `<div class="card"><b>Couldn't load this page.</b><p>${esc(e.message)}</p></div>`; });
 }

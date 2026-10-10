@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.53.0
+- **Marketing, phase 2 — email.** Email templates built from blocks (logo, heading, text, image, button, products, their cart/viewed items, coupon, countdown, columns, divider, spacer, social, footer, HTML, reusable blocks), any block shown only to certain people, live desktop/phone/dark-mode preview, Emily writes subject lines and copy, image library.
+- Brand kits per store (logo, colors, fonts with safe fallbacks, buttons, sender, address, social links); changing one updates every template.
+- Klaviyo's 22 templates imported as editable HTML, with Klaviyo tags translated ({% unsubscribe %} and friends).
+- Unsubscribe and email-preference pages with one-click unsubscribe; every email gets a footer with the address and unsubscribe link.
+- Test sends go through the sending lock: held unless the address is on the internal test list and a sender is connected.
+
 ## 4.52.0
 - **Marketing, phase 1 — contacts and consent.** New Marketing page (link in the left menu): one profile per person per store, merged from the Klaviyo copy and both Shopify stores (customers and orders since 2023), with email and text consent, a full consent history, engagement tiers, sizes last bought, lists, and that person's customer-service tickets. People Klaviyo "suppressed" to save on billing keep their consent and start as lapsed.
 - Sending switches and an internal test list. Nothing can be sent: the switches refuse to turn on until an email sender or texting number is connected and approved.
