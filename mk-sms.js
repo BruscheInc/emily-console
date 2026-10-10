@@ -110,7 +110,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
       res.json({ ...(await smsSettings(s)), providers: P.list(), connected: await require("./mk-send").ready(s, "sms"), keywords: KEYWORDS,
         sent_30d: (await db(`SELECT status, count(*)::int n FROM mk_sends WHERE store=$1 AND channel='sms' AND created_at > now() - interval '30 days' GROUP BY 1`, [s])).rows }); } catch (e) { fail(res, e); }
   });
-  app.put("/api/mk/sms/settings/:store", async (req, res) => { if (!admin(req, res)) return; try { const s = store(req.params.store); if (!s) return res.status(400).json({ error: "unknown store" }); res.json(await saveSmsSettings(s, req.body || {}, actorOf(req))); } catch (e) { fail(res, e); } });
+  app.put("/api/mk/sms/settings/:store", async (req, res) => { if (!admin(req, res)) return; try { const s = store(req.params.store); if (!s) return res.status(400).json({ error: "unknown store" }); const saved = await saveSmsSettings(s, req.body || {}, actorOf(req)); try { const A = require("./mk-sms-aws"); if (A.configured()) A.syncKeywords().catch((e) => console.error("keyword sync:", e.message)); } catch (_) {} res.json(saved); } catch (e) { fail(res, e); } });
   /* Try an incoming text without a provider: only for numbers on the internal test list, since keywords change real consent. */
   app.post("/api/mk/sms/simulate-inbound", async (req, res) => {
     if (!admin(req, res)) return;

@@ -37,7 +37,7 @@ app.use((req, res, next) => {
   if (p === `/returns/${d.key}` && !req.query.preview) return res.redirect(301, "/");
   if (p === "/robots.txt") return res.type("text").send("User-agent: *\nAllow: /\n");
   if (p.startsWith(`/chat/${d.key}/`) || p.startsWith(`/api/chat/${d.key}/`) || p.startsWith("/brand/")) return next();   // website chat widget
-  if (p.startsWith(`/mkf/${d.key}/`) || p.startsWith(`/api/mkf/${d.key}/`) || p.startsWith("/mk/u/") || p.startsWith("/mk/p/") || p.startsWith("/mk/img/") || p.startsWith("/mk/o/") || p.startsWith("/mk/l/") || p.startsWith("/mk/ses/")) return next();   // sign-up forms, unsubscribe pages, email images
+  if (p.startsWith(`/mkf/${d.key}/`) || p.startsWith(`/api/mkf/${d.key}/`) || p.startsWith("/mk/u/") || p.startsWith("/mk/p/") || p.startsWith("/mk/img/") || p.startsWith("/mk/o/") || p.startsWith("/mk/l/") || p.startsWith("/mk/ses/") || p.startsWith("/mk/sms/aws/")) return next();   // sign-up forms, unsubscribe pages, email images
   if (p.startsWith("/returns/label/") || p.startsWith("/returns/print/") || p.startsWith("/returns/asset/") || p.startsWith("/api/returns/public/") || p === `/returns/${d.key}`) return next();
   return res.redirect(302, "/");
 });
@@ -940,7 +940,7 @@ const PORT = process.env.PORT || 8080;
   try { await EXC.init(); } catch (e) { console.error("Exceptions failed to start:", e.message); }
   try { await EM.init(); } catch (e) { console.error("Email templates failed to start:", e.message); }
   try { await FAQ.init(); } catch (e) { console.error("FAQs failed to start:", e.message); }
-  try { await require("./mk-core").init(); await require("./mk-send").migrate(); for (const m of ["./mk-email", "./mk-forms", "./mk-segments", "./mk-flows", "./mk-campaigns", "./mk-sms", "./mk-analytics", "./mk-ses"]) { try { const x = require(m); if (x.init) await x.init(); } catch (e) { if (e.code !== "MODULE_NOT_FOUND") console.error(`marketing ${m}:`, e.message); } } } catch (e) { console.error("Marketing failed to start:", e.message); }
+  try { await require("./mk-core").init(); await require("./mk-send").migrate(); for (const m of ["./mk-email", "./mk-forms", "./mk-segments", "./mk-flows", "./mk-campaigns", "./mk-sms", "./mk-analytics", "./mk-ses", "./mk-sms-aws"]) { try { const x = require(m); if (x.init) await x.init(); } catch (e) { if (e.code !== "MODULE_NOT_FOUND") console.error(`marketing ${m}:`, e.message); } } } catch (e) { console.error("Marketing failed to start:", e.message); }
   try { await CHAT.init(); } catch (e) { console.error("Chat widget failed to start:", e.message); }
   try { await KL.init(); } catch (e) { console.error("Klaviyo import failed to start:", e.message); }
   try { await require("./catalog").init(); } catch (e) { console.error("Catalog failed to start:", e.message); }

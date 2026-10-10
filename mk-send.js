@@ -34,6 +34,7 @@ async function ready(store, channel, { test = false } = {}) {
   const c = cfg[store] && cfg[store][channel];
   // test sends (internal test list) only need a verified domain; real sends also need SES production access
   if (channel === "email") return !!(c && (test ? c.test_ok || c.verified : c.verified) && process.env.AWS_SES_ACCESS_KEY_ID && process.env.AWS_SES_SECRET_ACCESS_KEY);
+  if (c && c.provider === "aws") return !!((test ? c.test_ok || c.verified : c.verified) && require("./mk-sms-aws").configured());
   return !!(c && c.verified && c.provider && process.env[`SMS_${String(c.provider).toUpperCase()}_KEY`]);
 }
 async function senders() { return (await core.setting("mk_senders", null)) || {}; }
@@ -87,9 +88,10 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
       if (profile.id) await MK().track(store, "received_email", { profileId: profile.id, props: { send_id: String(row.id), campaign_id: campaignId ? String(campaignId) : null, flow_id: flowId ? String(flowId) : null }, source: "buzzin", extId: `recv:${row.id}` }).catch(() => {});
       return r2;
     }
-    // Texting: no number is approved yet.
-    await db(`UPDATE mk_sends SET status='held', reason='texting not connected yet' WHERE id=$1`, [row.id]);
-    return { ...row, status: "held", reason: "texting not connected yet" };
+    const providerId = await require("./mk-sms-aws").send({ store, to, body: msg.body, sendId: row.id });
+    const r3 = (await db(`UPDATE mk_sends SET status='sent', provider_id=$2, sent_at=now() WHERE id=$1 RETURNING *`, [row.id, providerId])).rows[0];
+    if (profile.id) await MK().track(store, "received_sms", { profileId: profile.id, props: { send_id: String(row.id), campaign_id: campaignId ? String(campaignId) : null, flow_id: flowId ? String(flowId) : null }, source: "buzzin", extId: `recv:${row.id}` }).catch(() => {});
+    return r3;
   } catch (e) {
     await db(`UPDATE mk_sends SET status='failed', reason=$2 WHERE id=$1`, [row.id, String(e.message).slice(0, 300)]);
     return { ...row, status: "failed", reason: e.message };

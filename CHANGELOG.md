@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.68.0
+- **Texting through Amazon (AWS End User Messaging SMS).** Texts send from your Amazon toll-free number using the same Amazon login as email. The Texting page shows the number, its registration status (in review, approved, needs changes), sandbox or production, and the monthly limit. Checked every 3 hours.
+- One button connects replies and delivery reports: two-way texting goes to Buzzin, so STOP/HELP/JOIN change consent and any other reply becomes a ticket, and each text is marked delivered or failed. Buzzin's STOP/HELP/JOIN wording is copied onto the number so Amazon's automatic replies match, and again whenever the wording is saved.
+- Texts only go out once the number is active, the registration is approved, Amazon has lifted the sandbox, and the store's text switch is on. Before that, test texts go to verified test numbers only.
+
 ## 4.67.0
 - **Sign-up forms: separate, unchecked text-message consent checkbox** (required by carriers and Amazon's toll-free registration). The phone step shows the consent wording next to an unchecked box with Terms and Privacy links; a phone number is only accepted when the box is ticked, and the phone step stays optional ("No thanks"). The server refuses a phone sign-up without the tick, and the consent record notes it.
 - Consent wording now starts "By checking this box…"; existing forms on the old default wording were updated.
