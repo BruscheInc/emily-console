@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.68.3
+- Texting: when Amazon approves the toll-free number, Buzzin turns on replies and the STOP/HELP/JOIN wording for it by itself (checked every 3 hours and whenever the Texting page loads). No need to click Re-run setup.
+
 ## 4.68.2
 - Texting page: "Check again" button when Amazon refuses a request, so you can retry after adding permissions without reloading.
 

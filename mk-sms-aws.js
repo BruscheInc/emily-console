@@ -61,6 +61,16 @@ async function status() {
   const list = nums.map((n) => { const r = regs.find((x) => x.RegistrationId === n.RegistrationId); return { id: n.PhoneNumberId, arn: n.PhoneNumberArn, phone: n.PhoneNumber, type: n.NumberType, status: n.Status, two_way: !!n.TwoWayEnabled, two_way_buzzin: !!(cfg.topic && n.TwoWayChannelArn === cfg.topic), registration: r ? r.RegistrationStatus : (n.RegistrationId ? "UNKNOWN" : null), store: (cfg.stores || {})[n.PhoneNumberId] || null }; });
   // A single number belongs to Larkspur Baby until someone says otherwise.
   if (list.length && !list.some((x) => x.store)) list[0].store = "lb";
+  // When Amazon activates a number after setup already ran, finish it here: two-way replies + keyword wording.
+  const fresh = cfg.topic ? list.filter((x) => x.status === "ACTIVE" && !x.two_way_buzzin) : [];
+  if (fresh.length) {
+    try {
+      for (const x of fresh) { await c.send(new M.UpdatePhoneNumberCommand({ PhoneNumberId: x.id, TwoWayEnabled: true, TwoWayChannelArn: cfg.topic })); x.two_way = x.two_way_buzzin = true; }
+      await syncKeywords();
+      console.log(`📱 Amazon texting: ${fresh.map((x) => x.phone).join(", ")} is active, replies and STOP/HELP/JOIN wording turned on`);
+      await core.audit({ kind: "sms-setup", detail: `Amazon texting: number active, two-way + keywords on ${fresh.map((x) => x.phone).join(", ")}`, who: "buzzin" }).catch(() => {});
+    } catch (e) { console.error("Amazon texting: finishing active number failed:", e.message); }
+  }
   const production = tier === "PRODUCTION";
   const senders = await setting("mk_senders");
   for (const st of ["lb", "lbo"]) {
