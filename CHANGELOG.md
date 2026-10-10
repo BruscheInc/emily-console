@@ -3,6 +3,15 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.55.0
+- **Marketing, phase 4 — flows.** Flow builder with a step-by-step canvas: emails, texts, waits (with "until 10 AM" and weekdays, in the customer's time zone), wait-for-something, yes/no splits, A/B splits, update profile, add/remove from list, single-use coupon, alert the team, create a Buzzin ticket, webhook. Any step can point at a step that already exists, so paths join and a shared email is written once.
+- Starts when someone joins a list, does something (started checkout, placed order, viewed a product, clicked an email…), enters a segment, or a date on their profile comes around (baby's date + 90 days, birthday). Entry rules, exit rules checked before every step, and "only once / once every N days / every time".
+- Each email or text step is Draft, Test (internal list only) or Live. Draft/Test/Live/Paused for the whole flow; people already inside keep the version they started on.
+- Simulate any real customer to see the exact path and timing without sending; People view to see who's inside and add someone by hand.
+- Klaviyo's flows converted to Buzzin drafts (triggers, filters, splits, delays, emails), with duplicate paths merged.
+- Segments engine behind the scenes (used by flows now; the Segments page comes next) and text-message basics: segment counter, STOP/HELP/JOIN keywords, replies become tickets.
+- Still nothing sends: every send is held until an approved sender is connected.
+
 ## 4.54.0
 - **Marketing, phase 3 — sign-up forms.** Form Studio: popup, flyout, full-screen-on-phones, banner and embedded forms with steps (email → phone with the required text-consent wording → questions like baby's due date → success with the code), answer-based branching, design, timing (seconds, scroll, exit intent), who sees it (device, new/returning, never to subscribers, days after closing, ad traffic only), pages, priority, teaser tab, and a single-use code per person.
 - Forms ride on the script already on the store theme. Draft = Studio only; Preview = only with `?buzzin_form=preview` in the store URL; Live = everyone (admin only). Real Shopify codes are created only for Live forms. Nothing is live.

@@ -59,7 +59,7 @@ module.exports = function mount(app, { guard, isAdmin, actorOf, VERSION }) {
   });
 
   /* the other marketing modules mount their own routes */
-  for (const m of ["./mk-email", "./mk-forms", "./mk-flows", "./mk-campaigns", "./mk-sms", "./mk-analytics"]) {
+  for (const m of ["./mk-email", "./mk-forms", "./mk-segments", "./mk-flows", "./mk-campaigns", "./mk-sms", "./mk-analytics"]) {
     try { const mod = require(m); if (mod.routes) mod.routes(app, { guard, admin, actorOf, fail, store }); } catch (e) { if (e.code !== "MODULE_NOT_FOUND" || !String(e.message).includes(m.slice(2))) console.error(`marketing ${m}:`, e.message); }
   }
 };
