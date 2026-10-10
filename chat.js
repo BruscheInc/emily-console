@@ -163,6 +163,11 @@ async function init() {
     for (const k of Object.keys(R().STORE_DEFS)) { const cur = await settings(k);
       await save(k, { ...cur, launcher: { ...cur.launcher, icon: "dots", bg: "#F1F5F5", fg: "#97CFCC", shadow: true, size: Math.max(cur.launcher.size, 64), radius: 45 } }, "system (v4.60 launcher icon)"); }
     await core.syncSet("chat_launcher_dots_v1", "done", {}); console.log("💬 Chat: launcher switched to the speech-bubble icon"); } } catch (e) { console.error("chat launcher update:", e.message); }
+  // One-time (v4.61): bubble in the Larkspur blue.
+  try { if (!(await core.syncGet("chat_launcher_blue_v1"))) {
+    for (const k of Object.keys(R().STORE_DEFS)) { const cur = await settings(k); const blue = "#242F3F";   // Larkspur blue (same navy as the brand kit and emails)
+      await save(k, { ...cur, launcher: { ...cur.launcher, fg: blue } }, "system (v4.61 launcher color)"); console.log(`💬 Chat: ${k.toUpperCase()} launcher bubble set to ${blue}`); }
+    await core.syncSet("chat_launcher_blue_v1", "done", {}); } } catch (e) { console.error("chat launcher color:", e.message); }
 }
 const ipHash = (ip) => crypto.createHash("sha256").update(String(ip || "") + (process.env.CONSOLE_KEY || "")).digest("hex").slice(0, 16);
 async function getChat(id, store) { const r = (await db(`SELECT * FROM hd_chats WHERE id=$1 AND store=$2`, [id, store])).rows[0]; return r || null; }

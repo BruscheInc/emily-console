@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.61.0
+- Chat launcher bubble is now Larkspur blue (#242F3F) on both stores.
+
 ## 4.60.0
 - **Chat widget: new launcher icon.** A filled speech bubble with three dots on a soft, light round button. Both stores switched to it (light button, soft teal bubble, 64px). It's also in Chat Studio's icon picker as "dots", and the colors can be changed there like any other icon.
 
