@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.56.0
+- **Marketing, phase 5 — segments and campaigns.** Segments page: build a group with the same rule editor flows use (things they did, profile details, consent, lists, sizes bought, open tickets/claims/returns), see the live count and who's in it, or describe it in plain words and Emily builds it. Recounted every 20 minutes.
+- Campaigns: email or text to any mix of lists and segments, with exclusions; people with an open ticket, claim or recent return left out by default; consent required. Live audience count, email preview, text segment counter.
+- Timing: right away, a set time, or a set hour in each person's time zone. Smart sending. A/B test 2–4 subject lines, emails or texts on a test group, winner (by opens or clicks) goes to the rest. Resend to people who didn't open, with a new subject.
+- Non-admins send a campaign for approval (Slack heads-up); admins approve or schedule. Calendar view of everything scheduled and sent. Copy, unschedule, stop.
+- If sending is off when a campaign's time comes, it waits up to 6 hours, then goes back to Draft with a note — it never goes out late. Sending is still off everywhere.
+
 ## 4.55.0
 - **Marketing, phase 4 — flows.** Flow builder with a step-by-step canvas: emails, texts, waits (with "until 10 AM" and weekdays, in the customer's time zone), wait-for-something, yes/no splits, A/B splits, update profile, add/remove from list, single-use coupon, alert the team, create a Buzzin ticket, webhook. Any step can point at a step that already exists, so paths join and a shared email is written once.
 - Starts when someone joins a list, does something (started checkout, placed order, viewed a product, clicked an email…), enters a segment, or a date on their profile comes around (baby's date + 90 days, birthday). Entry rules, exit rules checked before every step, and "only once / once every N days / every time".

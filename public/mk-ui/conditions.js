@@ -11,7 +11,9 @@ function summarize(def, ctx = {}) {
     if (c.group) return '(' + summarize(c.group, ctx) + ')';
     const ev = (ctx.events || {})[c.event] || c.event;
     if (c.type === 'event') { const w = c.window || {}; const when = w.kind === 'since_start' ? ' since entering' : w.kind === 'last_days' ? ` in the last ${w.days} days` : ''; return c.op === 'zero' ? `${ev}: never${when}` : `${ev}${c.value > 1 ? ` ${c.op === 'at_most' ? 'at most' : 'at least'} ${c.value}×` : ''}${when}`; }
-    if (c.type === 'field') { const f = (FIELD_OPTS.find((x) => x[0] === c.field) || [c.field, c.field])[1]; return `${f} ${({ eq: 'is', ne: 'is not', gt: '>', lt: '<', gte: '≥', lte: '≤', contains: 'contains', set: 'is set', unset: 'is empty', older_than_days: 'more than', within_days: 'within' })[c.op] || c.op}${['set', 'unset'].includes(c.op) ? '' : ' ' + c.value}${/days/.test(c.op) ? ' days ago' : ''}`; }
+    if (c.type === 'field') { const f = (FIELD_OPTS.find((x) => x[0] === c.field) || [c.field, c.field])[1];
+      if (c.op === 'within_days') return `${f} within the last ${c.value} days`; if (c.op === 'older_than_days') return `${f} more than ${c.value} days ago`; if (c.op === 'in_days') return `${f} is ${c.value} days from today`;
+      return `${f} ${({ eq: 'is', ne: 'is not', gt: '>', lt: '<', gte: '≥', lte: '≤', contains: 'contains', set: 'is set', unset: 'is empty', older_than_days: 'more than', within_days: 'within' })[c.op] || c.op}${['set', 'unset'].includes(c.op) ? '' : ' ' + c.value}${/days/.test(c.op) ? ' days ago' : ''}`; }
     if (c.type === 'consent') return `${c.state === 'subscribed' ? 'Can' : "Can't"} get ${c.channel === 'sms' ? 'texts' : 'email'}`;
     if (c.type === 'list') return `${c.in === false ? 'Not in' : 'In'} list ${((ctx.lists || []).find((l) => String(l.id) === String(c.list_id)) || {}).name || c.list_id}`;
     if (c.type === 'segment') return `${c.in === false ? 'Not in' : 'In'} segment ${((ctx.segments || []).find((l) => String(l.id) === String(c.segment_id)) || {}).name || c.segment_id}`;
