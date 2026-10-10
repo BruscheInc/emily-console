@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.50.0
+- Klaviyo import (read-only): Buzzin pulls every Klaviyo flow with its full definition (trigger, splits, waits, emails, texts), the email templates those flows use, lists, segments and sign-up forms, so the marketing features can be rebuilt from the real setup. Runs once when KLAVIYO_API_KEY is added; admins can re-run it. Buzzin never changes anything in Klaviyo.
+
 ## 4.49.6
 - Chat header picture: the exact navy flower from the store's header logo, cut out on its own (served from Buzzin), replacing the wrong logo file.
 

@@ -882,6 +882,18 @@ app.post("/api/returns/create", async (req, res) => {
     res.json({ ok: true, record: rec, attached: !!file });
   } catch (e) { retErr(res, e); }
 });
+/* ---- Klaviyo import (read-only): flows, templates, lists, segments, forms ---- */
+const KL = require("./klaviyo");
+app.get("/api/klaviyo/status", async (req, res) => { if (!guard(req, res)) return; try { res.json(await KL.status()); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post("/api/klaviyo/import", async (req, res) => {
+  if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "admins only" });
+  KL.importAll(actorOf(req)).catch(() => {}); res.json({ ok: true, started: true });
+});
+app.get("/api/klaviyo/:kind", async (req, res) => {
+  if (!guard(req, res)) return; if (!["flow", "template", "list", "segment", "form"].includes(req.params.kind)) return res.status(404).json({ error: "unknown kind" });
+  try { const rows = await KL.list(req.params.kind); res.json({ items: rows.map((r) => ({ id: r.id, name: r.name, fetched_at: r.fetched_at, ...(req.query.full ? { data: r.data } : {}) })) }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/klaviyo/:kind/:id", async (req, res) => { if (!guard(req, res)) return; try { const r = await KL.get(req.params.kind, req.params.id); if (!r) return res.status(404).json({ error: "not found" }); res.json(r); } catch (e) { res.status(500).json({ error: e.message }); } });
 app.post("/api/returns/poll", async (req, res) => { if (!guard(req, res)) return; try { await R.poll(); res.json({ ok: true }); } catch (e) { retErr(res, e); } });
 app.get("/api/returns/ss-stores", async (req, res) => { if (!guard(req, res)) return; try { res.json({ stores: await R.ssStores() }); } catch (e) { retErr(res, e); } });
 app.get("/api/returns/carriers", async (req, res) => { if (!guard(req, res)) return; try { res.json({ carriers: await R.carriers() }); } catch (e) { retErr(res, e); } });
@@ -926,6 +938,7 @@ const PORT = process.env.PORT || 8080;
   try { await EM.init(); } catch (e) { console.error("Email templates failed to start:", e.message); }
   try { await FAQ.init(); } catch (e) { console.error("FAQs failed to start:", e.message); }
   try { await CHAT.init(); } catch (e) { console.error("Chat widget failed to start:", e.message); }
+  try { await KL.init(); } catch (e) { console.error("Klaviyo import failed to start:", e.message); }
   try { await require("./catalog").init(); } catch (e) { console.error("Catalog failed to start:", e.message); }
   // Emily — the agent. Runs inside this process; drafts on every inbound message; talks in Slack.
   try { await require("./emily").start(); } catch (e) { console.error("Emily failed to start:", e.message); }
