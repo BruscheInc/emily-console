@@ -36,7 +36,7 @@ app.use((req, res, next) => {
   if (p === "/" || p === "/index.html") { req.url = `/returns/${d.key}` + (req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""); return next(); }
   if (p === `/returns/${d.key}` && !req.query.preview) return res.redirect(301, "/");
   if (p === "/robots.txt") return res.type("text").send("User-agent: *\nAllow: /\n");
-  if (p.startsWith(`/chat/${d.key}/`) || p.startsWith(`/api/chat/${d.key}/`)) return next();   // website chat widget
+  if (p.startsWith(`/chat/${d.key}/`) || p.startsWith(`/api/chat/${d.key}/`) || p.startsWith("/brand/")) return next();   // website chat widget
   if (p.startsWith("/returns/label/") || p.startsWith("/returns/print/") || p.startsWith("/returns/asset/") || p.startsWith("/api/returns/public/") || p === `/returns/${d.key}`) return next();
   return res.redirect(302, "/");
 });

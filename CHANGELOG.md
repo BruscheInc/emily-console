@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.49.6
+- Chat header picture: the exact navy flower from the store's header logo, cut out on its own (served from Buzzin), replacing the wrong logo file.
+
 ## 4.49.5
 - Chat header picture is the Larkspur flower only (not the full wordmark), and the green "online" dot now sits on the edge of the circle, fully visible.
 
