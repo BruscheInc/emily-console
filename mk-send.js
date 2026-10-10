@@ -75,6 +75,10 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
     [store, channel, profile.id || null, to || null, messageId || null, flowId || null, flowStep || null, campaignId || null, key,
      channel === "email" ? (msg.subject || null) : String(msg.body || "").slice(0, 160), status === "sent" ? "sending" : status, reason, JSON.stringify({ test: !!test })])).rows[0];
   if (!row || status !== "sent") return row || dup;
+  // Tracked links and the open pixel are added only to messages that really go out.
+  const T = require("./mk-analytics");
+  if (channel === "email" && msg.html) msg = { ...msg, html: await T.instrumentEmail(msg.html, row, msg.campaign_name || null) };
+  if (channel === "sms" && msg.body) msg = { ...msg, body: await T.instrumentSms(msg.body, row, msg.campaign_name || null) };
   // A connected sender would deliver here. None exists yet, so this branch is unreachable today (ready() is false).
   await db(`UPDATE mk_sends SET status='held', reason='sender not implemented' WHERE id=$1`, [row.id]);
   return { ...row, status: "held", reason: "sender not implemented" };

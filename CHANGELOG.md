@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.58.0
+- **Marketing, phase 7 — analytics.** New Analytics page (7 days to 12 months, per store or both): store revenue and the part credited to an email or text click, revenue by day, flows vs campaigns vs email vs texts, top-earning campaigns and flows, email health (bounces, spam complaints, unsubscribes against the Gmail/Yahoo limits), new subscribers by day, sign-up form rates, and repeat-purchase cohorts by first-order month.
+- Tracking ready for when sending starts: every link becomes a short Buzzin link that records the click and adds utm tags for Shopify; emails get an open pixel. Apple Mail's automatic opens and link-scanner clicks are recorded but marked as machine and left out of open rates, A/B winners and resend-to-non-openers.
+- Clicks feed segments and flows ("clicked an email in the last 30 days"), and revenue credit uses the windows in Settings (email 5 days, text 1 day by default).
+
 ## 4.57.0
 - **Marketing, phase 6 — texting.** New Texting page per store: the name every text starts with, the opt-out line (must mention STOP), editable replies for STOP / HELP / JOIN, optional cost per segment for estimates, a text tester with the segment counter, and a log of every reply.
 - "Try a reply": pretend a test-list number texted in, to see the keyword reply, the consent change, or the Buzzin ticket it opens.
