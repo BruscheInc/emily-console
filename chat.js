@@ -443,7 +443,7 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
     + '.panel.sheet.open{transform:none}'
     + '.panel.sheet:before{content:"";position:absolute;top:7px;left:50%;width:38px;height:4px;margin-left:-19px;border-radius:3px;background:rgba(255,255,255,.55);z-index:2;pointer-events:none}'
     + '.dim{position:'+pos+';inset:0;z-index:'+(L.z-1)+';background:rgba(15,15,20,.38);opacity:0;pointer-events:none;transition:opacity .2s ease}'
-    + '.dim.on{opacity:1;pointer-events:auto;touch-action:none}'
+    + '.dim.on{opacity:1;pointer-events:auto}'
     + '.panel iframe{width:100%;height:100%;border:0;display:block}'
     + '@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}';
   root.innerHTML = '<style>'+css+'</style>';
@@ -457,38 +457,27 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
   var load = function(){ if (frame) return; frame = document.createElement('iframe'); frame.title = 'Chat'; frame.src = o.origin + '/chat/' + o.store + '/frame' + (o.preview ? '?preview=1' : o.sitePreview ? '?site_preview=1' : ''); frame.setAttribute('allow','clipboard-write'); panel.appendChild(frame);
     frame.addEventListener('load', function(){ if (o.preview) send({ type: 'config', config: c }); send({ type: 'page', page: location.pathname }); }); };
   var dim = document.createElement('div'); dim.className = 'dim'; dim.onclick = function(){ setOpen(false); };
-  dim.addEventListener('touchmove', function(e){ e.preventDefault(); }, { passive: false });
   var setOpen = function(v){ opened = v; if (v) { load(); unread = false; hideTeaser(); try { localStorage.setItem('buzzin_chat_seen','1'); } catch(e){} }
     var m = mobile(), sheet = m && L.mobile_style !== 'full', full = m && L.mobile_style === 'full';
     panel.classList.toggle('sheet', sheet); panel.classList.toggle('full', full);
     void panel.offsetWidth; panel.classList.toggle('open', v);
     dim.classList.toggle('on', v && sheet);
     btn.style.display = v && m ? 'none' : 'flex'; face(v); btn.setAttribute('aria-label', v ? 'Close chat' : 'Open chat');
-    if (!inBox) lock(v && m); place(); };
-  // Phones: freeze the page behind the chat. Without this, iPhone Safari keeps scrolling the store underneath
-  // and its toolbar grows/shrinks, which makes the chat sheet jump. body position:fixed is the only lock iOS honors.
-  var locked = null;
-  var lock = function(on){
-    try {
-      var de = document.documentElement, b = document.body;
-      if (on && !locked) {
-        locked = { y: window.scrollY || de.scrollTop || 0, html: de.getAttribute('style'), body: b.getAttribute('style') };
-        de.style.overflow = 'hidden';
-        b.style.position = 'fixed'; b.style.top = (-locked.y) + 'px'; b.style.left = '0'; b.style.right = '0'; b.style.width = '100%'; b.style.overflow = 'hidden';
-      } else if (!on && locked) {
-        var y = locked.y;
-        if (locked.html == null) de.removeAttribute('style'); else de.setAttribute('style', locked.html);
-        if (locked.body == null) b.removeAttribute('style'); else b.setAttribute('style', locked.body);
-        locked = null;
-        var sb = de.style.scrollBehavior; de.style.scrollBehavior = 'auto'; window.scrollTo(0, y); de.style.scrollBehavior = sb;
-      }
-    } catch(e){}
-  };
+    if (v && m) sheetH = Math.round(window.innerHeight * (L.mobile_height || 82) / 100);
+    place(); };
+  var sheetH = 0;
   // Phones: pin to the part of the page you can actually see. Some themes make the page wider than the
   // screen, and then "bottom-right" of the page is off to the side on iPhone — so place by the visual viewport.
   var place = function(){
     var vv = window.visualViewport, m = !inBox && mobile() && vv;
     var clear = function(el, keepW){ if (!el) return; el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.height = el.style.maxHeight = ''; if (!keepW) el.style.width = ''; };
+    if (m && Math.abs((vv.scale || 1) - 1) < 0.01 && vv.width >= window.innerWidth - 2 && vv.height >= window.innerHeight - 120) {
+      // Normal phone view: fixed to the screen by CSS, which iPhone keeps steady while the page scrolls underneath.
+      clear(btn, true); clear(teaser, true);
+      panel.style.left = panel.style.top = panel.style.right = panel.style.width = panel.style.maxHeight = ''; panel.style.bottom = '';
+      panel.style.height = panel.classList.contains('sheet') && sheetH ? sheetH + 'px' : '';
+      return;
+    }
     if (!m) { clear(btn, true); clear(teaser, true); if (!inBox) { panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = panel.style.height = panel.style.maxHeight = ''; } return; }
     var x = L.offset_x_m, y = L.offset_y_m, bw = btn.offsetWidth || L.size, bh = btn.offsetHeight || L.size;
     btn.style.right = btn.style.bottom = 'auto';
@@ -511,7 +500,7 @@ const LOADER = `window.BuzzinChatMount = function(c, o){
     teaser.onclick = function(e){ if (e.target.className === 'x') { hideTeaser(); try { sessionStorage.setItem('buzzin_chat_teased','1'); } catch(_){} return; } setOpen(true); }; root.appendChild(teaser); unread = true; face(false); place(); };
   window.addEventListener('message', function(e){ if (!e.data || !e.data.buzzinChat || (frame && e.source !== frame.contentWindow)) return; if (e.data.type === 'close') setOpen(false);
     if (e.data.type === 'wide') panel.style.width = e.data.on && !mobile() ? Math.max(P.width, 460) + 'px' : ''; });
-  window.addEventListener('resize', function(){ vars(); var m = mobile(); if (opened && m !== !!locked && !inBox) setOpen(true); else place(); });
+  window.addEventListener('resize', function(){ vars(); place(); });
   root.appendChild(dim); root.appendChild(panel); root.appendChild(btn); face(false); place(); setTimeout(place, 300);
   var seen = false; try { seen = sessionStorage.getItem('buzzin_chat_teased') === '1' || localStorage.getItem('buzzin_chat_seen') === '1'; } catch(e){}
   if (o.preview) { if (L.teaser_on && L.teaser) showTeaser(); }
