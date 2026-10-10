@@ -210,14 +210,24 @@ const ORDERS_BULK = (since) => `{ orders(query: "created_at:>=${since}") { edges
   lineItems { edges { node { title variantTitle sku quantity product { id } originalUnitPriceSet { shopMoney { amount } } } } } } } } }`;
 
 async function runBulk(st, query, label) {
-  const start = await R().gql(st, `mutation R($q: String!) { bulkOperationRunQuery(query: $q) { bulkOperation { id status } userErrors { field message } } }`, { q: query });
-  const res = start.bulkOperationRunQuery || (start.data && start.data.bulkOperationRunQuery);
-  if (!res || (res.userErrors && res.userErrors.length)) throw new Error(`${label}: ${JSON.stringify(res && res.userErrors)}`);
-  const id = res.bulkOperation.id;
+  const norm = (q) => String(q || "").replace(/\s+/g, " ").trim();
+  let id = null;
+  for (let attempt = 0; attempt < 40 && !id; attempt++) {
+    const start = await R().gql(st, `mutation R($q: String!) { bulkOperationRunQuery(query: $q) { bulkOperation { id status } userErrors { field message } } }`, { q: query });
+    const res = start.bulkOperationRunQuery;
+    if (res && res.bulkOperation && !(res.userErrors || []).length) { id = res.bulkOperation.id; break; }
+    const msg = JSON.stringify((res && res.userErrors) || []);
+    if (!/already in progress/i.test(msg)) throw new Error(`${label}: ${msg}`);
+    // Another export is running (often ours, from before a restart). Reuse it if it's the same query, else wait for it.
+    const cur = (await R().gql(st, `{ currentBulkOperation { id status query } }`)).currentBulkOperation;
+    if (cur && norm(cur.query) === norm(query)) { id = cur.id; break; }
+    await sleep(30000);
+  }
+  if (!id) throw new Error(`${label}: another Shopify export kept running`);
   for (let i = 0; i < 720; i++) {
     await sleep(i < 6 ? 5000 : 15000);
     const s = await R().gql(st, `query S($id: ID!) { node(id: $id) { ... on BulkOperation { id status errorCode objectCount url partialDataUrl } } }`, { id });
-    const op = s.node || (s.data && s.data.node);
+    const op = s.node;
     if (!op) continue;
     if (op.status === "COMPLETED") return op;
     if (["FAILED", "CANCELED", "EXPIRED"].includes(op.status)) throw new Error(`${label}: bulk export ${op.status} ${op.errorCode || ""}`);
@@ -402,7 +412,7 @@ async function init() {
   // Start the first sync shortly after boot; each step runs once and is remembered.
   setTimeout(() => syncAll({ who: "boot" }).catch(() => {}), 90 * 1000);
   // While the Klaviyo copy is still in progress, check again every 10 minutes so the merge runs when it finishes.
-  setInterval(async () => { const s = await core.syncGet("mk_sync_klaviyo").catch(() => null); if (!s || !s.cursor) syncAll({ who: "retry" }).catch(() => {}); }, 10 * 60 * 1000);
+  setInterval(() => { syncAll({ who: "retry" }).catch(() => {}); }, 10 * 60 * 1000);   // finished steps are skipped
   setInterval(() => recomputeTiers().catch(() => {}), 6 * 3600 * 1000);
 }
 

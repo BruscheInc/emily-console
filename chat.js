@@ -371,6 +371,8 @@ async function widgetJs(store) {
 (function(){
   if (window.__buzzinChat) return; window.__buzzinChat = 1;
   var ORIGIN = ${JSON.stringify(o)}, STORE = ${JSON.stringify(store)};
+  // Buzzin sign-up forms ride on the same script. They show nothing unless a form is live or the URL has ?buzzin_form=preview.
+  try { var bzf = document.createElement('script'); bzf.src = ORIGIN + '/mkf/' + STORE + '/forms.js'; bzf.async = true; (document.head || document.documentElement).appendChild(bzf); } catch (e) {}
   var q = location.search, sitePreview = /[?&]buzzin_chat=(preview|debug)/.test(q), DEBUG = /[?&]buzzin_chat=debug/.test(q);
   var dbg = function(msg){ if (!DEBUG) return; var d = document.getElementById('buzzin-dbg'); if (!d) { d = document.createElement('pre'); d.id = 'buzzin-dbg'; d.setAttribute('style', 'position:fixed;top:8px;left:8px;right:8px;z-index:2147483647;background:#111;color:#0f0;font:11px/1.35 monospace;padding:8px;margin:0;border-radius:8px;white-space:pre-wrap;opacity:.92;pointer-events:none'); document.documentElement.appendChild(d); } d.textContent += msg + '\\n'; };
   dbg('Buzzin chat debug · script loaded');

@@ -1,6 +1,6 @@
 {
   "name": "buzzin",
-  "version": "4.53.0",
+  "version": "4.54.0",
   "private": true,
   "description": "Buzzin — Brusche Inc.'s own support desk (Larkspur Baby · Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
   "main": "server.js",

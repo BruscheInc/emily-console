@@ -77,6 +77,7 @@ input:focus,select:focus,textarea:focus{border-color:#B9B5AC;box-shadow:0 0 0 3p
   <section class="view" id="view" aria-live="polite"></section>
 </div>
 <script src="/mk-ui/email.js?v=__VERSION__"></script>
+<script src="/mk-ui/forms.js?v=__VERSION__"></script>
 <script>
 const KEY = (() => { try { return localStorage.getItem('ec_key') || ''; } catch (e) { return ''; } })();
 const $ = (id) => document.getElementById(id);
@@ -222,13 +223,16 @@ async function renderSettings(el) {
       <div style="display:flex;gap:8px;align-items:center"><input type="time" id="qs" value="${esc(s.quiet_hours.start)}"> to <input type="time" id="qe" value="${esc(s.quiet_hours.end)}"></div></div>
     <div class="card"><b>Smart sending</b><p class="sub" style="margin:4px 0 10px">Skip anyone who got a marketing message within this many hours.</p>
       <div style="display:flex;gap:8px;align-items:center">Email <input type="number" id="se" min="0" max="168" value="${s.smart_sending_hours.email}" style="width:80px"> hours · Texts <input type="number" id="ss" min="0" max="168" value="${s.smart_sending_hours.sms}" style="width:80px"> hours</div></div>
+    <div class="card"><b>Record store activity</b><p class="sub" style="margin:4px 0 10px">Product views and add-to-cart on the store, for browse and cart flows. Off until you're ready; nothing is sent either way.</p>
+      <table><tbody><tr><td>Larkspur Baby</td><td><label class="sw"><input type="checkbox" data-tr="lb" ${(s.tracking || {}).lb ? 'checked' : ''}><span></span></label></td></tr><tr><td>Outlet</td><td><label class="sw"><input type="checkbox" data-tr="lbo" ${(s.tracking || {}).lbo ? 'checked' : ''}><span></span></label></td></tr></tbody></table></div>
     <div class="card"><b>Revenue credit</b><p class="sub" style="margin:4px 0 10px">An order counts for a message if it comes within this many days of a click.</p>
       <div style="display:flex;gap:8px;align-items:center">Email <input type="number" id="ae" min="1" max="30" value="${s.attribution.email_click_days}" style="width:80px"> days · Texts <input type="number" id="as" min="1" max="30" value="${s.attribution.sms_click_days}" style="width:80px"> days</div></div>
   </div>
   <div style="margin-top:14px"><button class="btn pri" id="save">Save settings</button></div>`;
+  el.querySelectorAll('[data-tr]').forEach((i) => i.onchange = async () => { try { await api('/api/mk/tracking', { method: 'PUT', body: JSON.stringify({ [i.dataset.tr]: i.checked }) }); toast(i.checked ? 'Recording store activity' : 'Stopped recording'); } catch (e) { toast(e.message, 1); i.checked = !i.checked; } });
   $('save').onclick = async () => {
     const sending = { lb: {}, lbo: {} };
-    el.querySelectorAll('.sw input').forEach((i) => { sending[i.dataset.k][i.dataset.ch] = i.checked; });
+    el.querySelectorAll('.sw input[data-k]').forEach((i) => { sending[i.dataset.k][i.dataset.ch] = i.checked; });
     try {
       await api('/api/mk/settings', { method: 'PUT', body: JSON.stringify({ sending, test_list: $('tl').value.split(/\n|,/).map((x) => x.trim()).filter(Boolean), quiet_hours: { start: $('qs').value, end: $('qe').value }, smart_sending_hours: { email: $('se').value, sms: $('ss').value }, attribution: { email_click_days: $('ae').value, sms_click_days: $('as').value } }) });
       toast('Saved'); go();

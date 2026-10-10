@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.54.0
+- **Marketing, phase 3 — sign-up forms.** Form Studio: popup, flyout, full-screen-on-phones, banner and embedded forms with steps (email → phone with the required text-consent wording → questions like baby's due date → success with the code), answer-based branching, design, timing (seconds, scroll, exit intent), who sees it (device, new/returning, never to subscribers, days after closing, ad traffic only), pages, priority, teaser tab, and a single-use code per person.
+- Forms ride on the script already on the store theme. Draft = Studio only; Preview = only with `?buzzin_form=preview` in the store URL; Live = everyone (admin only). Real Shopify codes are created only for Live forms. Nothing is live.
+- Sign-ups record consent with the exact wording shown, join the chosen list, and start any flow that list triggers.
+- Optional "Record store activity" (product views, add to cart) per store, off by default.
+
 ## 4.53.0
 - **Marketing, phase 2 — email.** Email templates built from blocks (logo, heading, text, image, button, products, their cart/viewed items, coupon, countdown, columns, divider, spacer, social, footer, HTML, reusable blocks), any block shown only to certain people, live desktop/phone/dark-mode preview, Emily writes subject lines and copy, image library.
 - Brand kits per store (logo, colors, fonts with safe fallbacks, buttons, sender, address, social links); changing one updates every template.
