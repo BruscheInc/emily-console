@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.68.2
+- Texting page: "Check again" button when Amazon refuses a request, so you can retry after adding permissions without reloading.
+
 ## 4.68.1
 - Tracked links in texts and emails, the open pixel, and the unsubscribe/preferences links now use the store's own domain (https://returns.larkspurbaby.com/l/… and the Outlet's) instead of the Railway address. Carriers filter texts whose links point at a domain that isn't the sender's, and mailbox providers trust matching domains more.
 
