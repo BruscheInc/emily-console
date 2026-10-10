@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.57.0
+- **Marketing, phase 6 — texting.** New Texting page per store: the name every text starts with, the opt-out line (must mention STOP), editable replies for STOP / HELP / JOIN, optional cost per segment for estimates, a text tester with the segment counter, and a log of every reply.
+- "Try a reply": pretend a test-list number texted in, to see the keyword reply, the consent change, or the Buzzin ticket it opens.
+- Texting providers (Twilio, Telnyx) are ready to plug in: signed webhooks for incoming texts and delivery updates. The webhook refuses everything until a provider's keys are set and its number is approved. Nothing can be texted yet.
+
 ## 4.56.0
 - **Marketing, phase 5 — segments and campaigns.** Segments page: build a group with the same rule editor flows use (things they did, profile details, consent, lists, sizes bought, open tickets/claims/returns), see the live count and who's in it, or describe it in plain words and Emily builds it. Recounted every 20 minutes.
 - Campaigns: email or text to any mix of lists and segments, with exclusions; people with an open ticket, claim or recent return left out by default; consent required. Live audience count, email preview, text segment counter.
