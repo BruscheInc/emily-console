@@ -211,7 +211,7 @@ async function render(store, tpl, profile, extra = {}) {
 ${parts.join("\n")}
 </table></td></tr></table></body></html>`;
   const text = html.replace(/<style[\s\S]*?<\/style>/g, "").replace(/<br\s*\/?>/g, "\n").replace(/<\/(p|div|h\d|tr)>/g, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;|&#847;|&zwnj;/g, " ").replace(/&amp;/g, "&").replace(/\n\s*\n+/g, "\n\n").trim();
-  return { subject: personalize(tpl.subject || "", ctx, { html: false }), preview, html, text };
+  return { subject: personalize(tpl.subject || "", ctx, { html: false }), preview, html, text, unsubscribe_url: profile && profile.id ? ctx.unsubscribe_url : null };
 }
 
 /* ---------------- templates ---------------- */

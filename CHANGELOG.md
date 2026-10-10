@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.66.0
+- **Amazon SES connected to Buzzin.** Marketing emails send through SES from hello@larkspurbaby.com (and the Outlet's address), with one-click unsubscribe headers (List-Unsubscribe / List-Unsubscribe-Post) that Gmail and Yahoo require for bulk mail.
+- **Bounce & complaint reports.** One button on Domain & DNS sets up Amazon's reporting (configuration set → SNS → Buzzin). Permanent bounces and spam complaints mark the address "stopped" right away, so it's never emailed again unless the person signs up again through a form. Deliveries are recorded too. Only messages signed by Amazon are accepted.
+- Domain & DNS shows SES status: production access, each store's sending domain (DKIM, bounce address) and whether reports are connected. Checked every 6 hours.
+- Test emails to the internal test list go out once the domain is verified. Everything else still needs SES production access and the store's sending switch turned on.
+- Needs AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY and AWS_SES_REGION (us-east-2) in Railway; the page shows the exact IAM policy to use.
+
 ## 4.65.2
 - Domain & DNS: Shopify's IPv6 record is labeled, and the record list gets more room on smaller screens.
 

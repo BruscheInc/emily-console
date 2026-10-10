@@ -12,6 +12,7 @@ async function renderDns(el) {
   const st = STORE || 'lb', domain = meta.domains[st];
   el.innerHTML = `<h1>Domain &amp; DNS</h1><p class="sub">${esc(domain)}${STORE ? '' : ' (pick a store at the top to switch)'} · your GoDaddy records and what each one is for. Buzzin can add records you approve; it never edits or deletes one. Admins only.</p>
   ${meta.connected ? '' : `<div class="note"><b>GoDaddy isn't connected.</b> On developer.godaddy.com, click the key icon (top right) and create a <b>Personal Access Token</b> with DNS read and update access. Add it in Railway → emily-console → Variables as <b>GODADDY_PAT</b>, then deploy.</div>`}
+  <div class="card" id="sescard" style="margin-top:12px"><div class="empty">Checking Amazon SES…</div></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:14px;align-items:start;margin-top:12px">
     <div class="card" style="padding:6px"><div style="padding:8px 10px;display:flex;align-items:center"><b style="font-size:15px">Current records</b><span class="sp"></span><button class="btn xs" id="dnsr"${meta.connected ? '' : ' disabled'}><i class="ti ti-refresh"></i> Reload</button></div><div id="dnslist" class="tw"><div class="empty">${meta.connected ? 'Loading…' : 'Connect GoDaddy to see records.'}</div></div></div>
     <div><div class="card"><b style="font-size:15px">Add records</b>
@@ -22,6 +23,7 @@ async function renderDns(el) {
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><label class="btn xs" style="cursor:pointer"><i class="ti ti-upload"></i> Upload .csv<input type="file" id="dnsf" accept=".csv,text/csv,text/plain" style="display:none"></label><span class="sp"></span><button class="btn pri" id="dnsp"${meta.connected ? '' : ' disabled'}>Preview changes</button></div>
       <div id="dnsplan" style="margin-top:12px"></div></div>
     <div class="card" style="margin-top:14px"><b style="font-size:15px">Is it live?</b><div style="font-size:12.5px;color:var(--muted);margin-top:4px">Checks the public internet (what Gmail sees) for the records above. New records usually show within minutes, sometimes up to an hour.</div><button class="btn" id="dnsl" style="margin-top:8px" disabled>Check the previewed records</button><div id="dnslive" style="margin-top:8px"></div></div></div></div>`;
+  sesCard();
   const load = async () => {
     if (!meta.connected) return;
     $('dnslist').innerHTML = '<div class="empty">Loading…</div>';
@@ -50,5 +52,27 @@ async function renderDns(el) {
       $('dnslive').innerHTML = r.results.map((x) => `<div style="display:flex;gap:8px;align-items:center;margin-top:6px">${x.live ? '<span class="pill ok">Live</span>' : '<span class="pill hon">Not yet</span>'}<span style="font-family:ui-monospace,Menlo,monospace;font-size:12px">${esc(x.type)} ${esc(x.fq)}</span></div>`).join('') || '<div class="empty">Preview some records first.</div>';
     } catch (e) { $('dnslive').innerHTML = `<div class="note">${esc(e.message)}</div>`; }
   };
+}
+async function sesCard() {
+  const box = $('sescard'); if (!box) return;
+  try {
+    const r = await api('/api/mk/ses/status');
+    if (!r.connected) {
+      box.innerHTML = `<b style="font-size:15px"><i class="ti ti-mail"></i> Amazon SES (sending email)</b><div class="note" style="margin-top:8px"><b>Not connected yet.</b> In AWS, create an IAM user called <b>buzzin-ses</b> with the policy below, create an access key for it, then add <b>AWS_SES_ACCESS_KEY_ID</b>, <b>AWS_SES_SECRET_ACCESS_KEY</b> and <b>AWS_SES_REGION</b> = us-east-2 in Railway and deploy.</div>
+        <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">IAM policy (copy into the JSON tab)</summary><pre style="white-space:pre-wrap;font-size:11.5px;background:var(--panel2);padding:10px;border-radius:8px;margin-top:6px">${esc(JSON.stringify(r.policy, null, 2))}</pre></details>`;
+      return;
+    }
+    const ok = (v) => v ? '<span class="pill ok">Yes</span>' : '<span class="pill hon">Not yet</span>';
+    const ev = r.events || {};
+    box.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><b style="font-size:15px"><i class="ti ti-mail"></i> Amazon SES (sending email)</b><span class="sp"></span><button class="btn xs" id="sesre"><i class="ti ti-refresh"></i> Check again</button></div>
+      <table style="margin-top:8px"><tbody>
+        <tr><td>Out of the sandbox (production access)</td><td>${ok(r.production)}</td><td style="color:var(--muted);font-size:12.5px">${r.production ? '' : 'Until approved: 200 emails a day, only to verified addresses.'}${r.quota ? ` Limit: ${fmtN(r.quota.per_day)}/day, ${fmtN(r.quota.per_second)}/second.` : ''}</td></tr>
+        ${Object.entries(r.stores).map(([k, v]) => `<tr><td>${k === 'lbo' ? 'Outlet' : 'Larkspur Baby'}: ${esc(v.from)}</td><td>${ok(v.verified)}</td><td style="color:var(--muted);font-size:12.5px">${v.exists ? `DKIM ${esc(v.dkim || '—')} · bounce address ${esc(v.mail_from || '—')}` : 'Domain not added in SES yet.'}</td></tr>`).join('')}
+        <tr><td>Bounce &amp; complaint reports to Buzzin</td><td>${ok(ev.subscribed)}</td><td style="color:var(--muted);font-size:12.5px">${ev.subscribed ? 'Permanent bounces and spam complaints stop emails to that address automatically.' : ev.config_set ? 'Set up; waiting for Amazon to confirm the connection (a minute or two).' : ''}</td></tr>
+      </tbody></table>
+      ${ev.subscribed ? '' : '<button class="btn pri" id="sesev" style="margin-top:10px"><i class="ti ti-plug"></i> Connect bounce &amp; complaint reports</button>'}`;
+    $('sesre').onclick = sesCard;
+    const b = $('sesev'); if (b) b.onclick = async () => { b.disabled = true; try { await api('/api/mk/ses/setup-events', { method: 'POST', body: '{}' }); toast('Connected — Amazon confirms in a minute'); setTimeout(sesCard, 8000); } catch (e) { toast(e.message, 1); b.disabled = false; } };
+  } catch (e) { box.innerHTML = `<b>Amazon SES</b><div class="note" style="margin-top:8px">${esc(e.message)}</div>`; }
 }
 })();

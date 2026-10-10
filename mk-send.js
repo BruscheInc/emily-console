@@ -29,10 +29,11 @@ async function migrate() {
 }
 
 /** Is a real sender connected for this store and channel? (Nothing is, until the accounts are approved.) */
-async function ready(store, channel) {
+async function ready(store, channel, { test = false } = {}) {
   const cfg = (await core.setting("mk_senders", null)) || {};
   const c = cfg[store] && cfg[store][channel];
-  if (channel === "email") return !!(c && c.verified && process.env.AWS_SES_ACCESS_KEY_ID && process.env.AWS_SES_SECRET_ACCESS_KEY);
+  // test sends (internal test list) only need a verified domain; real sends also need SES production access
+  if (channel === "email") return !!(c && (test ? c.test_ok || c.verified : c.verified) && process.env.AWS_SES_ACCESS_KEY_ID && process.env.AWS_SES_SECRET_ACCESS_KEY);
   return !!(c && c.verified && c.provider && process.env[`SMS_${String(c.provider).toUpperCase()}_KEY`]);
 }
 async function senders() { return (await core.setting("mk_senders", null)) || {}; }
@@ -68,7 +69,7 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
   else if (!transactional && channel === "sms" && profile.sms_consent !== "subscribed" && !test) { status = "skipped"; reason = `text consent: ${profile.sms_consent}`; }
   else if (channel === "sms" && !transactional && inQuietHours(profile.timezone, s.quiet_hours)) { status = "deferred"; reason = "quiet hours"; }
   else if (!(s.sending[store] && s.sending[store][channel]) && !(test && onTestList)) { status = "held"; reason = test ? "not on the internal test list" : "sending is off"; }
-  else if (!(await ready(store, channel))) { status = "held"; reason = `no ${channel === "email" ? "email sender" : "texting number"} connected yet`; }
+  else if (!(await ready(store, channel, { test: test && onTestList && !(s.sending[store] && s.sending[store][channel]) }))) { status = "held"; reason = `no ${channel === "email" ? "approved email sender" : "texting number"} connected yet`; }
   else if (!(await capsOk(store, channel, s.caps))) { status = "held"; reason = "hourly or daily cap reached"; }
   const row = (await db(`INSERT INTO mk_sends (store, channel, profile_id, to_addr, message_id, flow_id, flow_step, campaign_id, idem, subject, status, reason, meta)
                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (idem) DO NOTHING RETURNING *`,
@@ -79,9 +80,20 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
   const T = require("./mk-analytics");
   if (channel === "email" && msg.html) msg = { ...msg, html: await T.instrumentEmail(msg.html, row, msg.campaign_name || null) };
   if (channel === "sms" && msg.body) msg = { ...msg, body: await T.instrumentSms(msg.body, row, msg.campaign_name || null) };
-  // A connected sender would deliver here. None exists yet, so this branch is unreachable today (ready() is false).
-  await db(`UPDATE mk_sends SET status='held', reason='sender not implemented' WHERE id=$1`, [row.id]);
-  return { ...row, status: "held", reason: "sender not implemented" };
+  try {
+    if (channel === "email") {
+      const providerId = await require("./mk-ses").sendEmail({ store, to, msg, sendId: row.id });
+      const r2 = (await db(`UPDATE mk_sends SET status='sent', provider_id=$2, sent_at=now() WHERE id=$1 RETURNING *`, [row.id, providerId])).rows[0];
+      if (profile.id) await MK().track(store, "received_email", { profileId: profile.id, props: { send_id: String(row.id), campaign_id: campaignId ? String(campaignId) : null, flow_id: flowId ? String(flowId) : null }, source: "buzzin", extId: `recv:${row.id}` }).catch(() => {});
+      return r2;
+    }
+    // Texting: no number is approved yet.
+    await db(`UPDATE mk_sends SET status='held', reason='texting not connected yet' WHERE id=$1`, [row.id]);
+    return { ...row, status: "held", reason: "texting not connected yet" };
+  } catch (e) {
+    await db(`UPDATE mk_sends SET status='failed', reason=$2 WHERE id=$1`, [row.id, String(e.message).slice(0, 300)]);
+    return { ...row, status: "failed", reason: e.message };
+  }
 }
 
 async function recent({ store, channel, limit = 100 }) {
