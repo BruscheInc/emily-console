@@ -16,6 +16,9 @@ const core = require("./core");
 const { db } = core;
 const MK = () => require("./mk-core");
 
+// Links and the open pixel use the store's own domain (returns.larkspurbaby.com), never the Railway address:
+// carriers and mailbox providers distrust links on a domain that isn't the sender's.
+const brandBase = (store) => { try { const d = require("./returns").STORE_DEFS[store]; if (d && d.host) return `https://${d.host}`; } catch (_) {} return PUBLIC_URL(); };
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
 const SECRET = () => process.env.RETURNS_SECRET || process.env.CONSOLE_KEY || "buzzin";
 const sig = (s) => crypto.createHmac("sha256", SECRET()).update(String(s)).digest("base64url").slice(0, 12);
@@ -38,7 +41,7 @@ function withUtm(url, { channel, name }) {
     return u.toString();
   } catch (_) { return url; }
 }
-async function link(sendId, url) { const c = code(); await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,$2,$3)`, [c, sendId, url]); return `${PUBLIC_URL()}/mk/l/${c}`; }
+async function link(send, url) { const c = code(); await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,$2,$3)`, [c, send.id, url]); return `${brandBase(send.store)}/l/${c}`; }
 /** Email: wrap links (not unsubscribe/preferences/mailto) and add the open pixel. */
 async function instrumentEmail(html, send, name) {
   const seen = new Map();
@@ -48,11 +51,11 @@ async function instrumentEmail(html, send, name) {
   while ((m = re.exec(html))) {
     const url = m[1].replace(/&amp;/g, "&");
     if (/\/mk\/(u|p)\//.test(url)) continue;
-    if (!seen.has(url)) seen.set(url, await link(send.id, withUtm(url, { channel: "email", name })));
+    if (!seen.has(url)) seen.set(url, await link(send, withUtm(url, { channel: "email", name })));
     out.push(html.slice(last, m.index), `href="${seen.get(url)}"`); last = m.index + m[0].length;
   }
   out.push(html.slice(last));
-  const px = `<img src="${PUBLIC_URL()}/mk/o/${send.id}.${sig("o" + send.id)}.gif" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0">`;
+  const px = `<img src="${brandBase(send.store)}/mk/o/${send.id}.${sig("o" + send.id)}.gif" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0">`;
   const body = out.join("");
   return /<\/body>/i.test(body) ? body.replace(/<\/body>/i, `${px}</body>`) : body + px;
 }
@@ -60,7 +63,7 @@ async function instrumentEmail(html, send, name) {
 async function instrumentSms(text, send, name) {
   const urls = [...new Set(String(text).match(/https?:\/\/[^\s]+/g) || [])];
   let t = String(text);
-  for (const u of urls) t = t.split(u).join(await link(send.id, withUtm(u, { channel: "sms", name })));
+  for (const u of urls) t = t.split(u).join(await link(send, withUtm(u, { channel: "sms", name })));
   return t;
 }
 
@@ -156,7 +159,7 @@ function routes(app, { guard, fail, store }) {
     res.set({ "Content-Type": "image/gif", "Cache-Control": "no-store, max-age=0" }).send(PIXEL);
     try { const [id, s] = String(req.params.t).replace(/\.gif$/, "").split("."); if (sig("o" + id) !== s) return; const send = await sendRow(id); if (send) await record(send, "opened", req); } catch (e) { console.error("open pixel:", e.message); }
   });
-  app.get("/mk/l/:code", async (req, res) => {
+  app.get(["/mk/l/:code", "/l/:code"], async (req, res) => {
     try {
       const l = (await db(`SELECT * FROM mk_links WHERE code=$1`, [String(req.params.code).slice(0, 20)])).rows[0];
       if (!l) return res.status(404).type("text").send("This link has expired.");

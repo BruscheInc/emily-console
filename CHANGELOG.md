@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.68.1
+- Tracked links in texts and emails, the open pixel, and the unsubscribe/preferences links now use the store's own domain (https://returns.larkspurbaby.com/l/… and the Outlet's) instead of the Railway address. Carriers filter texts whose links point at a domain that isn't the sender's, and mailbox providers trust matching domains more.
+
 ## 4.68.0
 - **Texting through Amazon (AWS End User Messaging SMS).** Texts send from your Amazon toll-free number using the same Amazon login as email. The Texting page shows the number, its registration status (in review, approved, needs changes), sandbox or production, and the monthly limit. Checked every 3 hours.
 - One button connects replies and delivery reports: two-way texting goes to Buzzin, so STOP/HELP/JOIN change consent and any other reply becomes a ticket, and each text is marked delivered or failed. Buzzin's STOP/HELP/JOIN wording is copied onto the number so Amazon's automatic replies match, and again whenever the wording is saved.

@@ -158,6 +158,7 @@ function footer(b, ctx, p = {}) {
     ${p.text ? personalize(p.text, ctx) + "<br>" : ""}${esc(b.name)}${b.address ? " · " + esc(b.address) : " · [store postal address — add it in Brand kit]"}<br>
     <a href="${esc(ctx.unsubscribe_url || "#")}" style="color:${b.colors.muted}">Unsubscribe</a> · <a href="${esc(ctx.preferences_url || "#")}" style="color:${b.colors.muted}">Email preferences</a></td></tr>`;
 }
+const BASE = (store) => { try { const d = require("./returns").STORE_DEFS[store]; if (d && d.host) return `https://${d.host}`; } catch (_) {} return PUBLIC_URL(); };   // the store's own domain
 const absUrl = (u) => (u && u.startsWith("/") ? PUBLIC_URL() + u : u || "");
 /** Rich text from the editor: keep b/i/u/a/br/p/strong/em/span(style color)/ul/ol/li only. */
 function sanitizeRich(h) {
@@ -183,7 +184,7 @@ async function contextFor(store, profile, extra = {}) {
     profile_id: profile && profile.id, props: (profile && profile.props) || {}, orders_count: profile && profile.orders_count, total_spent: profile && profile.total_spent,
     last_sizes: profile && profile.props && profile.props.last_sizes, ...((profile && profile.props) || {}),
     store_name: b.name, store_address: b.address, shop_url: b.shop_url,
-    unsubscribe_url: `${PUBLIC_URL()}/mk/u/${tok}`, preferences_url: `${PUBLIC_URL()}/mk/p/${tok}`, web_url: `${PUBLIC_URL()}/mk/u/${tok}`,
+    unsubscribe_url: `${BASE(store)}/mk/u/${tok}`, preferences_url: `${BASE(store)}/mk/p/${tok}`, web_url: `${BASE(store)}/mk/u/${tok}`,
     coupon: extra.coupon || (profile && profile.props && profile.props.coupon) || "{{ coupon }}",
     ...extra,
   };
