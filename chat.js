@@ -31,10 +31,12 @@ const url = (v) => { const s = String(v || "").trim(); return /^(https?:\/\/|\/)
 /* ---------------- settings (everything the studio can change) ---------------- */
 const ICONS = ["chat", "bubbles", "bee", "heart", "question", "sparkle", "headset", "mail", "custom"];
 const FONTS = () => require("./returns-theme").FONTS;
+// The Larkspur flower on its own (the chat header picture), not the full wordmark.
+const FLOWER = process.env.CHAT_FLOWER_URL || "https://cdn.shopify.com/s/files/1/0533/3080/4887/files/logo_75x75_1.svg?v=1702506448";
 async function defaultsFor(store) {
   const def = R().STORE_DEFS[store];
-  let primary = "#242F3F", font = "System", logo = "";
-  try { const t = await require("./returns-theme").published(store); primary = t.colors.primary || primary; font = t.type.body_font || font; logo = t.brand.logo || ""; } catch (_) {}
+  let primary = "#242F3F", font = "System", logo = FLOWER;
+  try { const t = await require("./returns-theme").published(store); primary = t.colors.primary || primary; font = t.type.body_font || font; } catch (_) {}
   return {
     enabled: false,                  // shown to customers only when on (preview on the live site with ?buzzin_chat=preview)
     launcher: { icon: "chat", icon_url: "", text: "", size: 60, bg: primary, fg: "#FFFFFF", radius: 30, shadow: true, position: "right",
@@ -149,7 +151,14 @@ async function migrate() {
   await db(`ALTER TABLE hd_chats ADD COLUMN IF NOT EXISTS fails INT DEFAULT 0`);
   await db(`CREATE TABLE IF NOT EXISTS hd_chat_installs (id BIGSERIAL PRIMARY KEY, store TEXT, theme_id TEXT, content TEXT, action TEXT, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
 }
-async function init() { try { await migrate(); } catch (e) { console.error("chat migrate:", e.message); } }
+async function init() {
+  try { await migrate(); } catch (e) { console.error("chat migrate:", e.message); }
+  // One-time: the header picture was the full logo (wordmark); use the flower mark instead.
+  try { if (!(await core.syncGet("chat_avatar_flower_v1"))) {
+    for (const k of Object.keys(R().STORE_DEFS)) { const v = await core.setting(KEY(k), null);
+      if (v && v.header && (!v.header.avatar || !/logo_75x75/.test(v.header.avatar))) { v.header.avatar = FLOWER; await db(`UPDATE emily_settings SET value=$2, updated_at=now() WHERE key=$1`, [KEY(k), JSON.stringify(v)]); cache.delete(k); } }
+    await core.syncSet("chat_avatar_flower_v1", "done", {}); } } catch (e) { console.error("chat avatar update:", e.message); }
+}
 const ipHash = (ip) => crypto.createHash("sha256").update(String(ip || "") + (process.env.CONSOLE_KEY || "")).digest("hex").slice(0, 16);
 async function getChat(id, store) { const r = (await db(`SELECT * FROM hd_chats WHERE id=$1 AND store=$2`, [id, store])).rows[0]; return r || null; }
 async function putChat(id, store, messages, extra = {}) {
