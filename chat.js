@@ -153,6 +153,22 @@ async function migrate() {
 }
 async function init() {
   try { await migrate(); } catch (e) { console.error("chat migrate:", e.message); }
+  // TEMP (logo hunt): describe the store's logo files so we can pick the flower-only mark.
+  setTimeout(async () => { try {
+    const base = "https://cdn.shopify.com/s/files/1/0533/3080/4887/files/";
+    const svg = await (await fetch(base + "nb_bn.svg?v=1741021200")).text();
+    console.log("LOGOHUNT nb_bn.svg len=" + svg.length + " :: " + svg.replace(/\s+/g, " ").slice(0, 6000));
+    const k = K(); if (!k.anthropic) return;
+    for (const f of ["favicon.png?v=1723193503", "logo_75x75_1.svg?v=1702506448", "logo_40x40_be54c46f-36e3-4ca0-87d7-ecc869f878c7.svg?v=1702506535", "Footer_Logo.png?v=1688760270", "Footer_Logo_2.png?v=1688760416", "Larkspur_Logo.png?v=1691758009", "logo_favicon.png?v=1666676886", "logo_square.png?v=1666676925", "Larkspur_Logo_June.png?v=1687686827", "logo_black_outline.png?v=1667931952"]) {
+      try {
+        const r = await fetch(base + f + (f.includes(".png") ? "&width=400" : "")); const type = (r.headers.get("content-type") || "").split(";")[0];
+        if (/svg/.test(type)) { const t = await r.text(); console.log("LOGOHUNT " + f + " SVG :: " + t.replace(/\s+/g, " ").slice(0, 1500)); continue; }
+        const data = Buffer.from(await r.arrayBuffer()).toString("base64");
+        const out = await k.anthropic.messages.create({ model: k.model, max_tokens: 120, messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: type, data } }, { type: "text", text: "In one line: what does this logo image show (flower icon only? text? both?), its colors and background (transparent/white/colored)." }] }] });
+        console.log("LOGOHUNT " + f + " :: " + (out.content || []).map((b) => b.text || "").join(" ").replace(/\s+/g, " "));
+      } catch (e) { console.log("LOGOHUNT " + f + " error " + e.message); }
+    }
+  } catch (e) { console.log("LOGOHUNT error " + e.message); } }, 15000);
   // One-time: the header picture was the full logo (wordmark); use the flower mark instead.
   try { if (!(await core.syncGet("chat_avatar_flower_v1"))) {
     for (const k of Object.keys(R().STORE_DEFS)) { const v = await core.setting(KEY(k), null);
