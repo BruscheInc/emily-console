@@ -114,6 +114,20 @@ async function status() {
   return { configured: !!KEY(), running: !!running, last, stored: r.rows };
 }
 
+/** One readable line per step, so a flow can be reviewed from the logs. Long message bodies are cut short. */
+function stepLines(name, def) {
+  const cut = (v) => JSON.stringify(v, (k, x) => (typeof x === "string" && x.length > 220 ? x.slice(0, 220) + "…" : (k === "html" || k === "body_html") ? undefined : x));
+  return ((def && def.actions) || []).map((a) => `📋 ${name} · ${a.id} · ${a.type} · links ${cut(a.links || {})} · ${cut(a.data || {}).slice(0, 900)}`);
+}
+async function logOutlines() {
+  const rows = (await db(`SELECT name, data FROM hd_klaviyo WHERE kind='flow' ORDER BY name`)).rows;
+  for (const r of rows) {
+    const def = r.data && r.data.attributes && r.data.attributes.definition;
+    console.log(`📋 ${r.name} · entry ${def && def.entry_action_id} · trigger ${JSON.stringify((def && def.triggers) || null)} · filter ${JSON.stringify((def && def.profile_filter) || null).slice(0, 400)}`);
+    for (const l of stepLines(r.name, def)) console.log(l);
+  }
+}
+
 async function init() {
   await db(`CREATE TABLE IF NOT EXISTS hd_klaviyo (kind TEXT NOT NULL, id TEXT NOT NULL, name TEXT, data JSONB, fetched_at TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (kind, id))`);
   if (!KEY()) { console.log("📥 Klaviyo: no API key — import off"); return; }
@@ -121,6 +135,10 @@ async function init() {
   const done = await core.syncGet("klaviyo_import").catch(() => null);
   if (!done || !done.cursor) setTimeout(() => importAll("boot").catch(() => {}), 30000);
   else console.log(`📥 Klaviyo: last import ${done.cursor}`);
+  // One-time: print each imported flow step by step (read from Buzzin's copy, nothing is fetched).
+  if (done && done.cursor && !(await core.syncGet("klaviyo_outline_v1").catch(() => null))) {
+    setTimeout(async () => { try { await logOutlines(); await core.syncSet("klaviyo_outline_v1", new Date().toISOString(), {}); } catch (e) { console.error("Klaviyo outline:", e.message); } }, 20000);
+  }
 }
 
 module.exports = { init, importAll, list, get, status };
