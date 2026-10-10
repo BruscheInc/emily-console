@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.64.0
+- Marketing emails send from **hello@larkspurbaby.com** (and hello@larkspurbabyoutlet.com), the addresses customers already know, instead of hello@mail.… Replies still go to the same inbox.
+
 ## 4.63.0
 - **Chat widget on phones: page scrolls again, chat stays still.** Undid the 4.62 page freeze. The open chat is now pinned to the screen by the browser itself (no repositioning while the page scrolls), and its height is set once when it opens, so it no longer twitches when iPhone Safari's toolbar shrinks or grows. The old repositioning is only used when the page is zoomed, wider than the screen, or the keyboard is up.
 

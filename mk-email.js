@@ -38,11 +38,11 @@ async function migrate() {
 const BRAND_DEFAULTS = {
   lb: { name: "Larkspur Baby", logo: "/brand/larkspur-flower.svg", logo_width: 64, colors: { primary: "#242F3F", text: "#2B2A33", muted: "#6E6B76", ground: "#F6F5F2", panel: "#FFFFFF", link: "#242F3F", button_text: "#FFFFFF" },
         fonts: { heading: "Georgia, 'Times New Roman', serif", body: "Helvetica, Arial, sans-serif" }, button: { radius: 999, padding: "14px 28px" },
-        sender: { from_name: "Larkspur Baby", from_local: "hello", domain: "mail.larkspurbaby.com", reply_to: "hello@larkspurbaby.com" },
+        sender: { from_name: "Larkspur Baby", from_local: "hello", domain: "larkspurbaby.com", reply_to: "hello@larkspurbaby.com" },
         address: "", social: { instagram: "", facebook: "", tiktok: "", pinterest: "" }, shop_url: "https://larkspurbaby.com" },
   lbo: { name: "Larkspur Baby Outlet", logo: "/brand/larkspur-flower.svg", logo_width: 64, colors: { primary: "#242F3F", text: "#2B2A33", muted: "#6E6B76", ground: "#F6F5F2", panel: "#FFFFFF", link: "#242F3F", button_text: "#FFFFFF" },
         fonts: { heading: "Georgia, 'Times New Roman', serif", body: "Helvetica, Arial, sans-serif" }, button: { radius: 999, padding: "14px 28px" },
-        sender: { from_name: "Larkspur Baby Outlet", from_local: "hello", domain: "mail.larkspurbabyoutlet.com", reply_to: "hello@larkspurbabyoutlet.com" },
+        sender: { from_name: "Larkspur Baby Outlet", from_local: "hello", domain: "larkspurbabyoutlet.com", reply_to: "hello@larkspurbabyoutlet.com" },
         address: "", social: { instagram: "", facebook: "", tiktok: "", pinterest: "" }, shop_url: "https://larkspurbabyoutlet.com" },
 };
 const deepMerge = (a, b) => { const o = { ...a }; for (const [k, v] of Object.entries(b || {})) o[k] = v && typeof v === "object" && !Array.isArray(v) ? deepMerge(a[k] || {}, v) : v; return o; };
@@ -375,6 +375,11 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
 
 async function init() {
   await migrate();
+  // One-time: send as hello@larkspurbaby.com (the address customers know), not hello@mail.… — a saved brand kit that still has the old default is updated.
+  try { if (!(await core.syncGet("mk_sender_root_domain_v1").catch(() => null))) {
+    for (const st of Object.keys(BRAND_DEFAULTS)) { const r = (await db(`SELECT data FROM mk_brand WHERE store=$1`, [st])).rows[0];
+      if (r && r.data && r.data.sender && /^mail\./.test(r.data.sender.domain || "")) { r.data.sender.domain = r.data.sender.domain.replace(/^mail\./, ""); await db(`UPDATE mk_brand SET data=$2, updated_at=now() WHERE store=$1`, [st, JSON.stringify(r.data)]); } }
+    await core.syncSet("mk_sender_root_domain_v1", "done", {}); } } catch (e) { console.error("sender domain update:", e.message); }
   if (!(await core.syncGet("mk_klaviyo_templates_v1").catch(() => null))) {
     setTimeout(async () => { try { const n = await importKlaviyoTemplates("lb"); if (n) { await core.syncSet("mk_klaviyo_templates_v1", new Date().toISOString(), { n }); console.log(`✉️  Marketing: ${n} Klaviyo templates imported as editable HTML`); } } catch (e) { console.error("Klaviyo templates import:", e.message); } }, 60000);
   }
