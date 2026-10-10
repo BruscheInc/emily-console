@@ -58,7 +58,7 @@ const DEFAULTS = {
   claims_since: null,              // claims + order edits before this are hidden from Buzzin's Claims screen and counts (test data). "Clear claims" moves it
   stats_since: "2026-10-07T23:10:00Z", // returns before this (testing) are left out of spend/analytics; "Reset stats" moves it            // when on, links use returns.larkspurbaby.com / returns.larkspurbabyoutlet.com (turn on once DNS is live)
   window_days: { lb: 7, lbo: 7 },
-  label_fee: 7.95,                 // flat fee — only used when label_fee_mode is "flat", or as the fallback if a live quote fails
+  label_fee: 7.99,                 // flat fee — only used when label_fee_mode is "flat", or as the fallback when no live quote is available
   label_fee_mode: "weight",        // "weight" = the fee is the real label price for the package weight (live ShipStation quote shown in the portal)
   store_credit_enabled: true,
   store_credit_bonus_pct: 15,
@@ -74,6 +74,7 @@ const DEFAULTS = {
   packaging_oz: 4,
   void_unused_after_days: 28,      // customers have this many days to drop off; the label is voided and the return closed the day after
   dropoff_reminder_days: 21,       // reminder email if the package hasn't been dropped off by this day
+  transit_refund_days: 14,         // accepted by USPS but not delivered back after this many days → refunded automatically (0 = off)
   test_labels: true,
   own_return_email: true,          // send our own branded return email (Portal Studio → Emails) instead of Shopify's label email
   // Portal options beyond returns (edit order, defective, Package Protection, not delivered)
@@ -109,7 +110,7 @@ async function settings() {
 async function saveSettings(patch, who) {
   const cur = await settings();
   const next = { ...cur, ...patch, window_days: { ...cur.window_days, ...(patch.window_days || {}) }, ss_store: { ...cur.ss_store, ...(patch.ss_store || {}) }, return_address: { ...cur.return_address, ...(patch.return_address || {}) } };
-  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "marked_delivered_window_days", "pp_claim_window_days", "nopp_claim_window_days", "attempted_wait_hours", "replacement_min_stock", "dropoff_reminder_days", "po_lock_minutes", "transit_claim_max_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
+  for (const k of ["label_fee", "store_credit_bonus_pct", "default_item_oz", "packaging_oz", "void_unused_after_days", "transit_refund_days", "edit_window_minutes", "claim_window_days", "pp_stall_days", "delivered_wait_hours", "transit_claim_days", "marked_delivered_window_days", "pp_claim_window_days", "nopp_claim_window_days", "attempted_wait_hours", "replacement_min_stock", "dropoff_reminder_days", "po_lock_minutes", "transit_claim_max_days", "auto_approve_max", "auto_approve_confidence", "auto_approve_max_prior"]) next[k] = Number(next[k]) || 0;
   for (const k of Object.keys(next.window_days)) next.window_days[k] = Number(next.window_days[k]) || 0;
   next.label_fee_mode = next.label_fee_mode === "flat" ? "flat" : "weight";
   if (patch.reasons !== undefined) { next.reasons = (Array.isArray(patch.reasons) ? patch.reasons : String(patch.reasons).split("\n")).map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 20); if (!next.reasons.length) next.reasons = DEFAULTS.reasons; }
@@ -378,7 +379,14 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
   }
   return { labelId: l.label_id, trackingNumber: l.tracking_number, labelUrl: (l.label_download && (l.label_download.pdf || l.label_download.href)) || null, cost: l.shipment_cost ? l.shipment_cost.amount : null, carrier: l.carrier_code };
 }
-async function track(labelId) { const t = await ss("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`); return { code: t.status_code || "UN", text: t.status_description || "" }; }
+async function track(labelId) {
+  const t = await ss("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`);
+  // When the carrier first had the package: the earliest real scan (not "label created"), else ShipStation's ship date.
+  const scans = (t.events || []).filter((e) => e.occurred_at && !["NY", "UN"].includes(e.status_code)).map((e) => new Date(e.occurred_at)).filter((d) => !isNaN(d));
+  const first = scans.length ? new Date(Math.min(...scans)) : null;
+  const shipped = !first && t.ship_date && !["NY", "UN"].includes(t.status_code) ? new Date(t.ship_date) : null;
+  return { code: t.status_code || "UN", text: t.status_description || "", acceptedAt: (first || shipped) && !isNaN(first || shipped) ? (first || shipped).toISOString() : null };
+}
 // Returns { ok, message } — ShipStation answers 200 with approved:false and a reason when it refuses a void.
 async function voidLabel(labelId) {
   const r = await ss("PUT", `/v2/labels/${encodeURIComponent(labelId)}/void`);
@@ -729,7 +737,8 @@ async function quotePortal(body) {
   const fee = live != null && live > 0 ? live : Number(s.label_fee);
   return {
     fee: round2(fee), live: live != null && live > 0, mode: s.label_fee_mode === "flat" ? "flat" : "weight", waived: ex.has("label_fee"), weight_oz: Math.round(weight),
-    quote_token: live != null && live > 0 ? sign({ t: "q", o: p.o, f: round2(live), w: Math.round(weight), z: from.postal_code, exp: Date.now() + 2 * 3600e3 }) : null,
+    // No live quote → the fallback fee is what the customer sees, and the signed token holds them to it.
+    quote_token: s.label_fee_mode === "flat" ? null : sign({ t: "q", o: p.o, f: round2(fee), fb: !(live != null && live > 0), w: Math.round(weight), z: from.postal_code, exp: Date.now() + 2 * 3600e3 }),
   };
 }
 async function submitPortal(body) {
@@ -764,7 +773,7 @@ async function createForTicket({ orderName, lines, refundMethod, ticketId, who, 
 }
 
 /* ---------------- 3. refund once it's back ---------------- */
-async function refund(rec, { force = false, who = "auto" } = {}) {
+async function refund(rec, { force = false, who = "auto", reason = null } = {}) {
   if (["refunded", "cancelled"].includes(rec.status)) return rec;
   if (!force && rec.status !== "delivered") throw new Error("Package isn't delivered yet");
   const s = await settings(), st = shopFor(rec.store);
@@ -809,7 +818,7 @@ async function refund(rec, { force = false, who = "auto" } = {}) {
   const paid = round2(net + bonus);
   const how = credit ? `store credit ($${net.toFixed(2)} + $${bonus.toFixed(2)} bonus)` : "original payment";
   await core.audit({ ticketId: rec.ticket_id || null, kind: "return-refunded", detail: `${rec.rma} · $${paid.toFixed(2)} to ${how}`, who, target: rec.id });
-  core.slackPost(`💸 Return ${rec.rma} (${rec.order_name}) refunded $${paid.toFixed(2)} to ${how}${who === "auto" ? " — package delivered back to us" : ` by ${who}`}`).catch(() => {});
+  core.slackPost(`💸 Return ${rec.rma} (${rec.order_name}) refunded $${paid.toFixed(2)} to ${how}${who === "auto" ? (reason === "lost_in_transit" ? ` — accepted by USPS but not delivered back after ${s.transit_refund_days} days` : " — package delivered back to us") : ` by ${who}`}`).catch(() => {});
   return update(rec.id, { status: "refunded", refunded_amount: paid, refunded_at: new Date().toISOString(), fee_charged: fee, order_value: total },
     `Refunded $${paid.toFixed(2)} to ${how} — return value $${total.toFixed(2)} less $${fee.toFixed(2)} label fee${who !== "auto" ? ` (by ${who})` : ""}`);
 }
@@ -835,7 +844,19 @@ async function checkOne(rec) {
     if (s.auto_refund) { try { await refund(rec); } catch (e) { await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
     return;
   }
-  if (["AC", "IT", "AT", "EX"].includes(t.code) && rec.status === "label_created") return update(rec.id, { status: "in_transit" }, "On its way back");
+  const moving = ["AC", "IT", "AT", "EX"].includes(t.code);
+  if (moving && !rec.accepted_at) rec = await update(rec.id, { accepted_at: t.acceptedAt || new Date().toISOString() }, `Accepted by the carrier${t.acceptedAt ? " on " + new Date(t.acceptedAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }) : ""}`);
+  if (moving && rec.status === "label_created") rec = await update(rec.id, { status: "in_transit" }, "On its way back");
+  // Handed to USPS but still not delivered back after N days: approve and refund without waiting for it.
+  if (rec.accepted_at && ["label_created", "in_transit"].includes(rec.status) && s.transit_refund_days > 0) {
+    const days = (Date.now() - new Date(rec.accepted_at).getTime()) / 86400e3;
+    if (days >= s.transit_refund_days) {
+      rec = await update(rec.id, { auto_approved_transit: true }, `Accepted by the carrier ${Math.floor(days)} days ago and still not delivered — approved automatically`);
+      try { await refund(rec, { force: true, reason: "lost_in_transit" }); } catch (e) { await update(rec.id, { status: "needs_attention" }, "Auto refund (not delivered after " + s.transit_refund_days + " days) failed: " + e.message); }
+      return;
+    }
+  }
+  if (moving) return;
   const age = (Date.now() - new Date(rec.created_at).getTime()) / 86400e3;
   const unused = rec.status === "label_created" && ["NY", "UN"].includes(t.code) && !(await EX().forOrder(rec.order_name)).has("dropoff_deadline");
   if (unused && s.void_unused_after_days > 0 && age >= s.void_unused_after_days) {
@@ -1023,6 +1044,7 @@ async function init() {
   try { if (!(await core.syncGet("returns_windows_v4_29"))) { await saveSettings({ window_days: { lb: 7, lbo: 7 }, claim_window_days: 30, marked_delivered_window_days: 5 }, "system (v4.29 windows)"); await core.syncSet("returns_windows_v4_29", "done", {}); console.log("↩️  Returns: windows set — returns 7 days, defects 30 days, marked-delivered 5 days (from delivery)"); } } catch (e) { console.error("returns windows:", e.message); }
   // Portal is fully live: hide every claim / order edit made during testing (kept in the database, just not shown or counted).
   try { if (!(await core.syncGet("claims_reset_live_v1"))) { const at = new Date().toISOString(); await saveSettings({ claims_since: at }, "system (claims go-live reset)"); await core.syncSet("claims_reset_live_v1", "done", {}); console.log(`🧾 Claims: test data hidden — showing claims from ${at}`); } } catch (e) { console.error("claims reset:", e.message); }
+  try { if (!(await core.syncGet("returns_fallback_fee_799"))) { await saveSettings({ label_fee: 7.99, transit_refund_days: 14 }, "system (v4.59 fallback fee $7.99, 14-day transit refund)"); await core.syncSet("returns_fallback_fee_799", "done", {}); console.log("↩️  Returns: fallback label fee $7.99 · refund if not delivered 14 days after USPS accepts it"); } } catch (e) { console.error("returns fallback fee:", e.message); }
   const s = await settings();
   const p = setupProblems(s);
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);

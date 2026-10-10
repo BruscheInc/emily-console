@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.59.0
+- **Returns: refund when a return is lost on the way back.** Once tracking shows USPS accepted the package, Buzzin records that date. If it still isn't delivered back 14 days later, the return is approved and refunded automatically (same refund rules and label fee as a delivered return). The days are editable in Returns → Settings (0 turns it off). If the refund fails, the return goes to Needs attention.
+- **Returns: $7.99 fallback label fee.** When a live label quote isn't available, the portal shows $7.99 and that's the most the customer is charged (if the real label ends up cheaper, they pay the lower amount, same as today).
+
 ## 4.58.0
 - **Marketing, phase 7 — analytics.** New Analytics page (7 days to 12 months, per store or both): store revenue and the part credited to an email or text click, revenue by day, flows vs campaigns vs email vs texts, top-earning campaigns and flows, email health (bounces, spam complaints, unsubscribes against the Gmail/Yahoo limits), new subscribers by day, sign-up form rates, and repeat-purchase cohorts by first-order month.
 - Tracking ready for when sending starts: every link becomes a short Buzzin link that records the click and adds utm tags for Shopify; emails get an open pixel. Apple Mail's automatic opens and link-scanner clicks are recorded but marked as machine and left out of open rates, A/B winners and resend-to-non-openers.
