@@ -274,7 +274,7 @@ app.get("/api/counts", async (req, res) => {
       views[v] = n.rows[0].n;
     }
     let stuck = { never_scanned: 0, undelivered: 0 }; try { stuck = await require("./emily").stuckCounts(); } catch (_) {}
-    let returns = null; try { const rc = await require("./returns").counts(); returns = { open: rc.open, attention: rc.attention }; } catch (_) {}
+    let returns = null; try { const rc = await require("./returns").counts(); returns = { open: rc.open, attention: rc.attention, loop: rc.loop || null }; } catch (_) {}
     let claims = null; try { claims = (await require("./claims").counts()).open || 0; } catch (_) {}
     let faq = null; try { faq = (await require("./faqs").status()).pending || 0; } catch (_) {}
     res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns, claims, faq });

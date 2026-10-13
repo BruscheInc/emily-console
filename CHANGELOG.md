@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.69.3
+- Loop returns have their own page in the left menu (Returns & claims → **Loop returns**), with its own tiles, filters and count; Import from Loop moved there. The Returns page shows only Buzzin returns.
+
 ## 4.69.2
 - Loop import: fixed "Query cost is 1058" — the Shopify lookup is now three small queries.
 - Returns: imported Loop returns have their own **From Loop** tab (needs-attention first) and are left out of the other tabs, tiles and money totals. Tracking and the CSV export still include them.

@@ -384,6 +384,7 @@
   <div class="grp" data-g="returns"><button class="nav gh" onclick="toggleGrp('returns')"><i class="i ti ti-arrow-back-up"></i><span>Returns & claims</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
     <button class="nav view sub" data-view="returns" onclick="setView('returns')"><i class="si ti ti-arrow-back-up"></i><span>Returns</span><span class="n" id="v-returns"></span></button>
+    <button class="nav view sub" data-view="loop_returns" onclick="setView('loop_returns')"><i class="si ti ti-history"></i><span>Loop returns</span><span class="n" id="v-loop"></span></button>
     <button class="nav view sub" data-view="claims" onclick="setView('claims')"><i class="si ti ti-receipt"></i><span>Claims</span><span class="n" id="v-claims"></span></button>
     <button class="nav sub" onclick="retExceptions()"><i class="si ti ti-sparkles"></i><span>Order exceptions</span></button>
     <a class="nav sub" href="https://returns.larkspurbaby.com" target="_blank" rel="noopener"><i class="si ti ti-external-link"></i><span>LB return portal</span><i class="ext ti ti-arrow-up-right"></i></a>
@@ -525,13 +526,13 @@ async function loadCounts(){try{
   const c=await api("/api/counts?view="+encodeURIComponent(VIEW));
   for(const k of ["pending","sent","closed","collabs","all"]){const el=$("n-"+k);if(el)el.textContent=c[k]!=null?c[k]:"";}
   for(const v of ["lb","lbo","lb_tickets","lbo_tickets","oos","all"]){const el=$("v-"+v);if(el)el.textContent=(c.views&&c.views[v])?c.views[v]:"";}
-  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||"";
+  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||""; const lv=$("v-loop"); if(lv){ const L=c.returns&&c.returns.loop; lv.textContent=L?(L.attention||L.open||""):""; }
   // tab title carries the pending count, like a real inbox
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Buzzin`:"Buzzin";
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",loop_returns:"Loop returns",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -625,14 +626,14 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';_listSig="";}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
-  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="returns_analytics"||VIEW==="claims";
+  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
   if(VIEW==="home") return loadHome(silent);
   if(VIEW==="activity") return loadActivity(silent);
-  if(VIEW==="returns") return loadReturns(silent);
+  if(VIEW==="returns"||VIEW==="loop_returns") return loadReturns(silent);
   if(VIEW==="claims") return loadClaims(silent);
   if(VIEW==="returns_analytics"){ if(!silent||!RA.d) loadAnalytics(silent); return; }
   if(isStuck) return loadStuck(silent);
@@ -1054,6 +1055,7 @@ async function loadStuck(silent){
 }
 async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify…"; try{ const r=await api("/api/stuck/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.scanned} orders — ${r.never_scanned} never scanned · ${r.undelivered} not delivered`); }catch(e){toast("Check failed",true);} loadStuck(); loadCounts(); }
 /* ---------- Returns: our own portal (replaces Loop). Data from returns.js ---------- */
+let LOOP_F={status:"needs_attention",store:"",q:""}; function retF(){ return VIEW==="loop_returns"?LOOP_F:RET_F; }
 let RET_F={status:"open",store:"",q:""}, RET_OPEN=new Set(), _retSig="", RET_D=null;
 const RET_LABEL={label_created:"Label created",in_transit:"On its way back",delivered:"Delivered",refunded:"Refunded",needs_attention:"Needs attention",cancelled:"Cancelled"};
 const RET_CHIP={label_created:"",in_transit:"drafted",delivered:"drafted",refunded:"sent",needs_attention:"skip",cancelled:""};
@@ -1317,11 +1319,13 @@ async function raReset(){
 async function loadReturns(silent){
   const w=$("stuckwrap"); if(!silent){ w.innerHTML='<div class="empty">Loading returns…</div>'; _retSig=""; }
   try{
-    const isLoop=RET_F.status==="loop";
-    const d=await api(`/api/returns?status=${encodeURIComponent(isLoop?"":RET_F.status)}&source=${isLoop?"loop":""}&store=${encodeURIComponent(RET_F.store)}&q=${encodeURIComponent(RET_F.q)}`);
-    const sig=JSON.stringify([RET_F,d.counts,d.returns.map(r=>[r.id,r.status,r.updated_at]),[...RET_OPEN]]); if(silent&&sig===_retSig)return; _retSig=sig; RET_D=d;
-    const c=d.counts||{by:{}}, s=d.settings;
-    const seg=(k,l,n)=>`<button class="tab ${RET_F.status===k?"on":""}" onclick="RET_F.status='${k}';loadReturns()">${l}<span class="n">${n||0}</span></button>`;
+    const isLoop=VIEW==="loop_returns";
+    const d=await api(`/api/returns?status=${encodeURIComponent(retF().status)}&source=${isLoop?"loop":""}&store=${encodeURIComponent(retF().store)}&q=${encodeURIComponent(retF().q)}`);
+    const sig=JSON.stringify([retF(),d.counts,d.returns.map(r=>[r.id,r.status,r.updated_at]),[...RET_OPEN]]); if(silent&&sig===_retSig)return; _retSig=sig; RET_D=d;
+    const c0=d.counts||{by:{}}, s=d.settings;
+    // Loop returns: same table and actions, but their own counts, tiles and header.
+    const c=isLoop?{...(c0.loop||{by:{}}),by:(c0.loop&&c0.loop.by)||{}}:c0;
+    const seg=(k,l,n)=>`<button class="tab ${retF().status===k?"on":""}" onclick="retF().status='${k}';loadReturns()">${l}<span class="n">${n||0}</span></button>`;
     const all=Object.values(c.by||{}).reduce((a,b)=>a+b,0);
     $("showing").textContent=`${d.returns.length} return${d.returns.length===1?"":"s"}`;
     const host=(u)=>String(u||"").replace(/^https?:\/\//,"");
@@ -1332,8 +1336,22 @@ async function loadReturns(silent){
           <button class="btn sec" onclick="navigator.clipboard.writeText('${esc(u)}').then(()=>toast('Link copied'))">Copy link</button>
           <a class="btn sec" href="/returns-studio?store=${x.key}" target="_blank" rel="noopener">🎨 Customize</a>
           <a class="btn sec" href="/email-studio?store=${x.key}" target="_blank" rel="noopener">✉️ Emails</a></div></div>`; };
-    const tile=(k,label,val,sub,cls)=>`<button class="rc-tile ${cls||""} ${k!==null&&RET_F.status===k?"on":""}" ${k===null?"disabled":`onclick="RET_F.status='${k}';loadReturns()"`}><div class="rc-tl">${label}</div><div class="rc-tv">${val}</div><div class="rc-ts">${sub}</div></button>`;
-    let h=`<div class="rc">
+    const tile=(k,label,val,sub,cls)=>`<button class="rc-tile ${cls||""} ${k!==null&&retF().status===k?"on":""}" ${k===null?"disabled":`onclick="retF().status='${k}';loadReturns()"`}><div class="rc-tl">${label}</div><div class="rc-tv">${val}</div><div class="rc-ts">${sub}</div></button>`;
+    let h=isLoop?`<div class="rc">
+      <div class="rc-warn" style="background:var(--panel2);color:inherit;border-color:var(--line)"><b>Returns started in Loop</b>, kept apart from Buzzin returns. ${c.attention||0} need a decision (Loop shows them delivered back or stuck, never refunded) · ${c.open||0} still open (tracked like new returns) · ${(c.by&&c.by.refunded)||0} refunded. Open one to <b>Refund now</b> or <b>Cancel</b>.
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${d.admin?`<button class="btn sec xs" onclick="loopImport()">⬆ Import from Loop</button>`:""}<button class="btn sec xs" onclick="retPoll(this)">↻ Check tracking</button></div></div>
+      <div class="rc-tiles">
+        ${tile("needs_attention","Needs a decision",c.attention||0,c.attention?"delivered or stuck, never refunded":"all clear",c.attention?"bad":"")}
+        ${tile("open","Still open",c.open||0,"label made · on the way · arrived")}
+        ${tile("refunded","Refunded",(c.by&&c.by.refunded)||0,"done")}
+        ${tile("cancelled","Cancelled",(c.by&&c.by.cancelled)||0,"closed without a refund")}
+        ${tile("","All Loop returns",c.total||0,"everything imported")}
+      </div>
+      <div class="rc-bar">
+        <div class="seg">${seg("needs_attention","Needs a decision",c.attention)}${seg("open","Open",c.open)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",c.total)}</div>
+        <select onchange="retF().store=this.value;loadReturns()" class="rc-in"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${retF().store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
+        <input type="text" class="rc-in rc-q" placeholder="Search order, return #, email, name" value="${esc(retF().q)}" onkeydown="if(event.key==='Enter'){retF().q=this.value.trim();loadReturns()}">
+      </div></div>`:`<div class="rc">
       <div class="rc-portals">${Object.values(d.stores).map(portalCard).join("")}
         <div class="rc-quick"><div class="rc-pn">Quick actions</div>
           <button class="btn sec" onclick="setView('returns_analytics')">📊 Return analytics</button>
@@ -1342,7 +1360,6 @@ async function loadReturns(silent){
           <button class="btn sec" onclick="retPoll(this)">↻ Check tracking</button>
           <a class="btn sec" href="/api/returns.csv?key=${encodeURIComponent(KEY)}">⬇ Export CSV</a>
           ${d.admin?`<button class="btn sec" onclick="retSettings()">⚙︎ Settings</button>`:""}
-          ${d.admin?`<button class="btn sec" onclick="loopImport()">⬆ Import from Loop</button>`:""}
           ${s.test_labels?`<div class="rc-warn">TEST labels on — no real labels are bought</div>`:""}
           ${s.portal_live?"":`<div class="rc-warn">Not live — Emily still sends Loop links</div>`}</div></div>
       ${(d.problems||[]).length?`<div class="rc-warn">⚠️ Setup: ${d.problems.map(esc).join(" · ")}</div>`:""}
@@ -1355,12 +1372,11 @@ async function loadReturns(silent){
         ${tile("","All returns",all,"everything")}
       </div>
       <div class="rc-bar">
-        <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}${c.loop&&c.loop.total?seg("loop","From Loop",c.loop.total):""}</div>
-        <select onchange="RET_F.store=this.value;loadReturns()" class="rc-in"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${RET_F.store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
-        <input type="text" class="rc-in rc-q" placeholder="Search order, return #, email, name" value="${esc(RET_F.q)}" onkeydown="if(event.key==='Enter'){RET_F.q=this.value.trim();loadReturns()}">
-        ${RET_F.q?`<button class="btn sec xs" onclick="RET_F.q='';loadReturns()">Clear search</button>`:""}
-      </div>
-      ${isLoop&&c.loop?`<div class="rc-warn" style="margin-top:10px">Returns started in Loop, kept apart from Buzzin returns. ${c.loop.attention} need a decision (delivered back or stuck, never refunded) · ${c.loop.open} still open · ${c.loop.refunded} refunded. Open one to Refund now or Cancel.</div>`:""}</div>`;
+        <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}</div>
+        <select onchange="retF().store=this.value;loadReturns()" class="rc-in"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${retF().store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
+        <input type="text" class="rc-in rc-q" placeholder="Search order, return #, email, name" value="${esc(retF().q)}" onkeydown="if(event.key==='Enter'){retF().q=this.value.trim();loadReturns()}">
+        ${retF().q?`<button class="btn sec xs" onclick="retF().q='';loadReturns()">Clear search</button>`:""}
+      </div></div>`;
     if(!d.returns.length){ w.innerHTML=h+'<div class="empty">No returns here.</div>'; return; }
     h+=`<table class="tickets stuck"><thead><tr><th class="c-t">Return</th><th>Customer</th><th>Items</th><th>Method</th><th>Status</th><th>Amount</th></tr></thead><tbody>`;
     for(const r of d.returns){
@@ -1384,7 +1400,7 @@ async function loadReturns(silent){
       }
     }
     w.innerHTML=h+"</tbody></table>";
-  }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load returns.</div>'; }
+  }catch(e){ console.error("returns view:",e); w.innerHTML='<div class="empty">Couldn\'t load returns.</div>'; }
 }
 async function retAct(id,act,b,ask){ if(ask&&!confirm(ask))return; b.disabled=true; try{ const r=await api(`/api/returns/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error)throw new Error(r.error); toast(act==="refund"?"Refunded":act==="cancel"?"Return cancelled":"Tracking checked"); }catch(e){ toast(e.message,true); } loadReturns(true); loadCounts(); }
 // Import returns still open in Loop: upload Loop's ASN report(s) → preview → import.
@@ -1417,7 +1433,7 @@ async function loopImportRun(apply,btn){
     <div style="max-height:52vh;overflow:auto"><table class="tickets"><thead><tr><th>Order</th><th>Items</th><th>Loop label</th><th>What happens</th><th>Why</th></tr></thead><tbody>${d.returns.slice().sort((a,b)=>order.indexOf(a.action)-order.indexOf(b.action)).map(row).join("")}</tbody></table></div>`;
   if(btn) btn.textContent="Import";
   go.disabled=apply||!n; if(!apply) go.textContent=n?`Import ${n} return${n===1?"":"s"}`:"Nothing to import";
-  if(apply){ loadReturns(); loadCounts(); }
+  if(apply){ if(VIEW!=="loop_returns") setView("loop_returns"); else { loadReturns(); loadCounts(); } }
 }
 async function retPoll(b){ b.disabled=true; b.textContent="Checking…"; try{ await api("/api/returns/poll",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); }catch(e){} loadReturns(); loadCounts(); }
 async function retSettings(){
