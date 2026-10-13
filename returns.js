@@ -500,28 +500,34 @@ async function putRec(rec, event) {
   return rec;
 }
 async function update(id, patch, event) { const rec = await getRec(id); if (!rec) return null; Object.assign(rec, patch); return putRec(rec, event); }
-async function list({ status, store, q, limit = 300 } = {}) {
-  const where = [], args = [];
+// Loop imports live on their own tab: source "loop" shows only them; every other view leaves them out.
+const LOOP_SQL = `COALESCE(data->>'source','') = 'loop'`;
+async function list({ status, store, q, source, limit = 300 } = {}) {
+  const where = [source === "loop" ? LOOP_SQL : source === "all" ? "TRUE" : `NOT (${LOOP_SQL})`], args = [];
   if (status === "open") where.push(`status IN ('label_created','in_transit','delivered')`);
   else if (status) { args.push(status); where.push(`status=$${args.length}`); }
   if (store) { args.push(store); where.push(`store=$${args.length}`); }
   if (q) { args.push(`%${q.toLowerCase()}%`); where.push(`(lower(rma) LIKE $${args.length} OR lower(order_name) LIKE $${args.length} OR lower(email) LIKE $${args.length} OR lower(data->>'customer_name') LIKE $${args.length})`); }
   args.push(Math.min(Number(limit) || 300, 1000));
-  const r = await db(`SELECT * FROM hd_returns ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created_at DESC LIMIT $${args.length}`, args);
+  const order = source === "loop" ? `CASE status WHEN 'needs_attention' THEN 0 WHEN 'delivered' THEN 1 WHEN 'in_transit' THEN 2 WHEN 'label_created' THEN 3 ELSE 4 END, created_at DESC` : "created_at DESC";
+  const r = await db(`SELECT * FROM hd_returns ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY ${order} LIMIT $${args.length}`, args);
   return r.rows.map(rowToRec);
 }
 // Money totals only count real returns since the last stats reset; voided (cancelled) labels cost nothing.
 const STATS_WHERE = `created_at >= $1 AND COALESCE((data->>'test_label')::boolean, false) = false`;
 async function counts() {
   const s = await settings();
-  const by = await db(`SELECT status, count(*)::int n FROM hd_returns GROUP BY status`);
+  const by = await db(`SELECT status, count(*)::int n FROM hd_returns WHERE NOT (${LOOP_SQL}) GROUP BY status`);
+  const lp = await db(`SELECT status, count(*)::int n FROM hd_returns WHERE ${LOOP_SQL} GROUP BY status`);
   const m = await db(`SELECT COALESCE(sum((data->>'refunded_amount')::numeric),0) refunded,
       COALESCE(sum(CASE WHEN status<>'cancelled' THEN (data->>'label_cost')::numeric END),0) labels, COALESCE(sum((data->>'fee_charged')::numeric),0) fees
-    FROM hd_returns WHERE ${STATS_WHERE}`, [s.stats_since]);
+    FROM hd_returns WHERE ${STATS_WHERE} AND NOT (${LOOP_SQL})`, [s.stats_since]);
   const out = { by: {}, refunded: Number(m.rows[0].refunded), labels: Number(m.rows[0].labels), fees: Number(m.rows[0].fees), since: s.stats_since };
   for (const x of by.rows) out.by[x.status] = x.n;
   out.open = (out.by.label_created || 0) + (out.by.in_transit || 0) + (out.by.delivered || 0);
   out.attention = out.by.needs_attention || 0;
+  const L = {}; for (const x of lp.rows) L[x.status] = x.n;
+  out.loop = { total: Object.values(L).reduce((a, b) => a + b, 0), open: (L.label_created || 0) + (L.in_transit || 0) + (L.delivered || 0), attention: L.needs_attention || 0, refunded: L.refunded || 0, by: L };
   return out;
 }
 const publicRec = (r, s) => ({ rma: r.rma, status: r.status, label_url: r.status === "cancelled" || r.source === "loop" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${labelToken(r.id)}`, tracking_number: r.tracking_number, tracking_url: r.tracking_url, refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity })) });
@@ -936,7 +942,7 @@ async function dropoffEmail(rec, kind) {
 let polling = false, noTrackerSeen = 0, noTrackerLogged = 0;
 async function poll() {
   if (polling || !SS_KEY) return; polling = true;
-  try { for (const rec of await list({ status: "open" })) { if (rec.status === "delivered" || rec.test_label) continue; try { await checkOne(rec); } catch (e) { if (e.noTracker) { noTrackerSeen++; continue; } console.error(`return ${rec.rma}:`, e.message); } } }
+  try { for (const rec of await list({ status: "open", source: "all" })) { if (rec.status === "delivered" || rec.test_label) continue; try { await checkOne(rec); } catch (e) { if (e.noTracker) { noTrackerSeen++; continue; } console.error(`return ${rec.rma}:`, e.message); } } }
   finally { polling = false; if (noTrackerSeen && Date.now() - noTrackerLogged > 24 * 3600e3) { noTrackerLogged = Date.now(); console.log(`↩️  Returns: ${noTrackerSeen} Loop return${noTrackerSeen === 1 ? "" : "s"} can't be tracked until USPS tracking keys are added (USPS_CLIENT_ID / USPS_CLIENT_SECRET)`); } noTrackerSeen = 0; }
 }
 

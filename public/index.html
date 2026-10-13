@@ -1317,7 +1317,8 @@ async function raReset(){
 async function loadReturns(silent){
   const w=$("stuckwrap"); if(!silent){ w.innerHTML='<div class="empty">Loading returns…</div>'; _retSig=""; }
   try{
-    const d=await api(`/api/returns?status=${encodeURIComponent(RET_F.status)}&store=${encodeURIComponent(RET_F.store)}&q=${encodeURIComponent(RET_F.q)}`);
+    const isLoop=RET_F.status==="loop";
+    const d=await api(`/api/returns?status=${encodeURIComponent(isLoop?"":RET_F.status)}&source=${isLoop?"loop":""}&store=${encodeURIComponent(RET_F.store)}&q=${encodeURIComponent(RET_F.q)}`);
     const sig=JSON.stringify([RET_F,d.counts,d.returns.map(r=>[r.id,r.status,r.updated_at]),[...RET_OPEN]]); if(silent&&sig===_retSig)return; _retSig=sig; RET_D=d;
     const c=d.counts||{by:{}}, s=d.settings;
     const seg=(k,l,n)=>`<button class="tab ${RET_F.status===k?"on":""}" onclick="RET_F.status='${k}';loadReturns()">${l}<span class="n">${n||0}</span></button>`;
@@ -1354,11 +1355,12 @@ async function loadReturns(silent){
         ${tile("","All returns",all,"everything")}
       </div>
       <div class="rc-bar">
-        <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}</div>
+        <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}${c.loop&&c.loop.total?seg("loop","From Loop",c.loop.total):""}</div>
         <select onchange="RET_F.store=this.value;loadReturns()" class="rc-in"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${RET_F.store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
         <input type="text" class="rc-in rc-q" placeholder="Search order, return #, email, name" value="${esc(RET_F.q)}" onkeydown="if(event.key==='Enter'){RET_F.q=this.value.trim();loadReturns()}">
         ${RET_F.q?`<button class="btn sec xs" onclick="RET_F.q='';loadReturns()">Clear search</button>`:""}
-      </div></div>`;
+      </div>
+      ${isLoop&&c.loop?`<div class="rc-warn" style="margin-top:10px">Returns started in Loop, kept apart from Buzzin returns. ${c.loop.attention} need a decision (delivered back or stuck, never refunded) · ${c.loop.open} still open · ${c.loop.refunded} refunded. Open one to Refund now or Cancel.</div>`:""}</div>`;
     if(!d.returns.length){ w.innerHTML=h+'<div class="empty">No returns here.</div>'; return; }
     h+=`<table class="tickets stuck"><thead><tr><th class="c-t">Return</th><th>Customer</th><th>Items</th><th>Method</th><th>Status</th><th>Amount</th></tr></thead><tbody>`;
     for(const r of d.returns){

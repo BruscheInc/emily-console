@@ -108,23 +108,25 @@ function classify(x, s) {
 }
 
 /* ---------------- Shopify check ---------------- */
-const ORDER_RETURNS = `query LoopOrder($q: String!) { orders(first: 5, query: $q) { nodes {
-  id name email currencyCode customer { id } shippingAddress { name } billingAddress { name }
-  refunds { createdAt totalRefundedSet { shopMoney { amount } } }
-  returns(first: 20) { nodes { id name status createdAt
-    returnLineItems(first: 50) { nodes { id quantity ... on ReturnLineItem { fulfillmentLineItem { id lineItem { id title variantTitle sku image { url(transform: { maxWidth: 200 }) } discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } } } } } } }
-    reverseFulfillmentOrders(first: 5) { nodes { reverseDeliveries(first: 5) { nodes { deliverable { ... on ReverseDeliveryShippingDeliverable { tracking { number } } } } } } } } } } } }`;
+// Three small queries (one big one goes over Shopify's 1,000-point query cost limit).
+const ORDER_FIND = `query LoopOrder($q: String!) { orders(first: 2, query: $q) { nodes {
+  id name email currencyCode customer { id } shippingAddress { name } billingAddress { name } refunds { createdAt totalRefundedSet { shopMoney { amount } } } } } }`;
+const ORDER_RETURNS = `query LoopReturns($id: ID!) { order(id: $id) { returns(first: 10) { nodes { id name status createdAt
+  reverseFulfillmentOrders(first: 3) { nodes { reverseDeliveries(first: 3) { nodes { deliverable { ... on ReverseDeliveryShippingDeliverable { tracking { number } } } } } } } } } } }`;
+const RETURN_LINES = `query LoopReturnLines($id: ID!) { return(id: $id) { returnLineItems(first: 50) { nodes { id quantity ... on ReturnLineItem { fulfillmentLineItem { id lineItem {
+  id title variantTitle sku image { url(transform: { maxWidth: 200 }) } discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } } } } } } } } }`;
 async function shopifyFor(x) {
   const st = R().shopFor(x.store);
   const name = x.order_name.replace(/^#/, "").trim();
-  const d = await R().gql(st, ORDER_RETURNS, { q: `name:${name}` });
+  const d = await R().gql(st, ORDER_FIND, { q: `name:${name}` });
   const order = (d.orders.nodes || []).find((o) => o.name.replace(/^#/, "").toUpperCase() === name.toUpperCase());
   if (!order) return { why: `Order ${x.order_name} not found in Shopify` };
-  const rets = order.returns.nodes || [];
+  const rets = ((await R().gql(st, ORDER_RETURNS, { id: order.id })).order || { returns: { nodes: [] } }).returns.nodes || [];
   const trk = (r) => r.reverseFulfillmentOrders.nodes.flatMap((f) => f.reverseDeliveries.nodes.map((v) => v.deliverable && v.deliverable.tracking && v.deliverable.tracking.number)).filter(Boolean);
   const match = rets.find((r) => trk(r).includes(x.tracking)) || (rets.filter((r) => r.status === "OPEN").length === 1 ? rets.find((r) => r.status === "OPEN") : null);
   if (!match) return { order, why: "No matching return in Shopify" };
   if (match.status !== "OPEN") return { order, ret: match, why: `Shopify return ${match.name} is ${match.status.toLowerCase()} — already handled` };
+  match.returnLineItems = ((await R().gql(st, RETURN_LINES, { id: match.id })).return || { returnLineItems: { nodes: [] } }).returnLineItems;
   const since = new Date(match.createdAt).getTime() - 60e3;
   const refundedAfter = (order.refunds || []).filter((f) => new Date(f.createdAt).getTime() >= since).reduce((t, f) => t + Number(f.totalRefundedSet.shopMoney.amount || 0), 0);
   return { order, ret: match, refundedAfter: Math.round(refundedAfter * 100) / 100 };
