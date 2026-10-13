@@ -905,6 +905,15 @@ app.put("/api/returns/settings", async (req, res) => {
   try { const saved = await R.saveSettings(req.body || {}, actorOf(req)); res.json({ settings: saved });
     setTimeout(() => require("./faqs").autoRunAll("Returns settings changed").catch(() => {}), 5000); } catch (e) { retErr(res, e); }
 });
+// Import the returns still open in Loop (Loop ASN report .xlsx files). ?apply=1 imports; without it, a preview.
+app.post("/api/returns/loop-import", express.json({ type: "application/x-loop-import", limit: "25mb" }), async (req, res) => {
+  if (!guard(req, res)) return; if (!isAdmin(req)) return res.status(403).json({ error: "Only admins can import from Loop." });
+  try {
+    const files = ((req.body && req.body.files) || []).map((f) => ({ name: String(f.name || ""), buffer: Buffer.from(String(f.data || ""), "base64") })).filter((f) => f.buffer.length);
+    if (!files.length) return res.status(400).json({ error: "Pick the Loop report file(s) first." });
+    res.json(await require("./loop-import").run(files, { apply: req.query.apply === "1", who: actorOf(req) }));
+  } catch (e) { retErr(res, e); }
+});
 app.post("/api/returns/:id/:act", async (req, res) => {
   if (!guard(req, res)) return;
   const who = actorOf(req), act = req.params.act;

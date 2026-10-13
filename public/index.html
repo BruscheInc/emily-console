@@ -1341,6 +1341,7 @@ async function loadReturns(silent){
           <button class="btn sec" onclick="retPoll(this)">↻ Check tracking</button>
           <a class="btn sec" href="/api/returns.csv?key=${encodeURIComponent(KEY)}">⬇ Export CSV</a>
           ${d.admin?`<button class="btn sec" onclick="retSettings()">⚙︎ Settings</button>`:""}
+          ${d.admin?`<button class="btn sec" onclick="loopImport()">⬆ Import from Loop</button>`:""}
           ${s.test_labels?`<div class="rc-warn">TEST labels on — no real labels are bought</div>`:""}
           ${s.portal_live?"":`<div class="rc-warn">Not live — Emily still sends Loop links</div>`}</div></div>
       ${(d.problems||[]).length?`<div class="rc-warn">⚠️ Setup: ${d.problems.map(esc).join(" · ")}</div>`:""}
@@ -1363,7 +1364,7 @@ async function loadReturns(silent){
     for(const r of d.returns){
       const n=r.items.reduce((a,i)=>a+i.quantity,0);
       h+=`<tr class="row" onclick="RET_OPEN.has('${r.id}')?RET_OPEN.delete('${r.id}'):RET_OPEN.add('${r.id}');loadReturns(true)">
-        <td class="c-t" style="width:18%"><div class="subj">${esc(r.rma)}</div><div class="exc">${esc(r.order_name)} · ${fmtDay(r.created_at)}${r.source!=="portal"?" · by staff":""}</div></td>
+        <td class="c-t" style="width:18%"><div class="subj">${esc(r.rma)}</div><div class="exc">${esc(r.order_name)} · ${fmtDay(r.created_at)}${r.source==="loop"?" · from Loop":r.source!=="portal"?" · by staff":""}</div></td>
         <td style="width:20%">${esc(r.customer_name||"")}<div class="exc">${esc(r.email||"")}</div></td>
         <td style="width:24%">${n} item${n===1?"":"s"}<div class="exc">${esc(r.items.map(i=>i.title).join(", "))}</div></td>
         <td style="width:12%">${r.refund_method==="store_credit"?"Store credit":"Original payment"}</td>
@@ -1373,7 +1374,7 @@ async function loadReturns(silent){
         const act=!["refunded","cancelled"].includes(r.status);
         h+=`<tr><td colspan="6" style="background:var(--panel2);padding:14px 22px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:13px">
           <div>${r.items.map(i=>`<div>${i.quantity}× ${esc(i.title)}${i.variant?` <span class="exc" style="display:inline">${esc(i.variant)}</span>`:""} · ${money(i.unit_price)} · <i>${esc(i.reason)}</i>${i.note?` — “${esc(i.note)}”`:""}</div>`).join("")}
-            <div style="margin-top:8px">Tracking <a href="${esc(r.tracking_url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(r.tracking_number)}</a>${r.tracking_text?" · "+esc(r.tracking_text):""} · label ${money(r.label_cost)}${r.label_emailed===false?' · <span style="color:#c0392b">Shopify did not email the label</span>':""}</div>
+            <div style="margin-top:8px">Tracking <a href="${esc(r.tracking_url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(r.tracking_number)}</a>${r.tracking_text?" · "+esc(r.tracking_text):""} · ${r.source==="loop"?`Loop label${r.loop_tracking_url?` (<a href="${esc(r.loop_tracking_url)}" target="_blank" rel="noopener" style="color:var(--accent)">Loop tracking</a>)`:""}`:"label "+money(r.label_cost)}${r.label_emailed===false?' · <span style="color:#c0392b">Shopify did not email the label</span>':""}</div>
             ${r.feedback?`<div style="margin-top:8px">Customer feedback: experience <b>${r.feedback.ease||"—"}/5</b> · buy again <b>${r.feedback.again||"—"}/5</b>${r.feedback.note?` — “${esc(r.feedback.note)}”`:""}</div>`:""}
             <div class="exc" style="display:block">Shopify return ${esc(r.shopify_return_name||"")}${r.ticket_id?` · <a href="#" onclick="event.stopPropagation();openTicket(${r.ticket_id});return false" style="color:var(--accent)">ticket ${r.ticket_id}</a>`:""}</div>
             ${act?`<div class="stk-acts" style="margin-top:10px"><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','track',this)">Check tracking</button><button class="btn xs" onclick="event.stopPropagation();retAct('${r.id}','refund',this,'Refund now, before the package is back?')">Refund now</button><button class="btn sec xs danger" onclick="event.stopPropagation();retAct('${r.id}','cancel',this,'Cancel this return and void the label?')">Cancel return</button></div>`:""}</div>
@@ -1384,6 +1385,38 @@ async function loadReturns(silent){
   }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load returns.</div>'; }
 }
 async function retAct(id,act,b,ask){ if(ask&&!confirm(ask))return; b.disabled=true; try{ const r=await api(`/api/returns/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error)throw new Error(r.error); toast(act==="refund"?"Refunded":act==="cancel"?"Return cancelled":"Tracking checked"); }catch(e){ toast(e.message,true); } loadReturns(true); loadCounts(); }
+// Import returns still open in Loop: upload Loop's ASN report(s) → preview → import.
+let LOOP_FILES=[];
+function loopImport(){
+  closeModal(); LOOP_FILES=[];
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box" style="width:min(900px,100%)"><h3>Import open returns from Loop</h3>
+    <div class="sub">In Loop, export the <b>ASN Report</b> (All Time) for each store and pick the files here. Buzzin reads only the returns that are still open, checks each one in Shopify, and shows you what it will do before anything changes. Customers aren't emailed.</div>
+    <input type="file" id="li-f" accept=".xlsx" multiple style="margin:10px 0">
+    <div id="li-out"><div class="exc" style="display:block">Pick one or more .xlsx files.</div></div>
+    <div class="acts" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">Close</button><button class="btn" id="li-go" disabled onclick="loopImportRun(true,this)">Import</button></div></div>`;
+  document.body.appendChild(m);
+  $("li-f").onchange=async(e)=>{ LOOP_FILES=[]; for(const f of e.target.files){ const b=new Uint8Array(await f.arrayBuffer()); let bin=""; for(let i=0;i<b.length;i+=32768) bin+=String.fromCharCode.apply(null,b.subarray(i,i+32768)); LOOP_FILES.push({name:f.name,data:btoa(bin)}); } loopImportRun(false); };
+}
+async function loopImportRun(apply,btn){
+  if(!LOOP_FILES.length) return;
+  if(apply&&!confirm("Import these returns into Buzzin now?")) return;
+  const out=$("li-out"), go=$("li-go"); go.disabled=true; if(btn) btn.textContent="Importing…";
+  out.innerHTML=`<div class="empty">${apply?"Importing":"Reading the files and checking Shopify"}… this can take a minute.</div>`;
+  let d; try{ d=await api("/api/returns/loop-import"+(apply?"?apply=1":""),{method:"POST",headers:{"Content-Type":"application/x-loop-import"},body:JSON.stringify({files:LOOP_FILES})}); if(d.error) throw new Error(d.error); }
+  catch(e){ out.innerHTML=`<div class="rc-warn">${esc(e.message)}</div>`; if(btn) btn.textContent="Import"; return; }
+  const S=d.summary, A={track:["Track","drafted"],refund:["Refund now","sent"],review:["Needs attention","skip"],skip:["Skip",""],error:["Error","skip"]};
+  const n=S.track+S.refund+S.review;
+  const row=(r)=>`<tr><td><b>${esc(r.order_name)}</b><div class="exc">${esc(r.store.toUpperCase())} · ${r.submitted?fmtDay(r.submitted):""}${r.rma?" · "+esc(r.rma):""}</div></td><td>${r.items} item${r.items===1?"":"s"}<div class="exc">~${money(r.value)}</div></td><td>${esc(String(r.label_status||"").replace(/_/g," "))}</td><td><span class="chip ${A[r.action][1]}">${A[r.action][0]}</span>${r.imported?' <span class="chip sent">imported</span>':""}</td><td style="white-space:normal">${esc(r.why||"")}</td></tr>`;
+  const order=["review","refund","track","error","skip"];
+  out.innerHTML=`<div style="font-size:13px;margin:6px 0 10px">${S.open_returns} open in Loop (of ${S.lines} report lines) → <b>${S.track}</b> to track · <b>${S.review}</b> need a person · <b>${S.refund}</b> to refund now · ${S.skip} skipped${S.error?` · <span style="color:#c0392b">${S.error} errors</span>`:""}</div>
+    ${d.usps_tracking?"":`<div class="rc-warn" style="margin-bottom:10px">Tracking for Loop labels needs USPS tracking keys. Until <b>USPS_CLIENT_ID</b> and <b>USPS_CLIENT_SECRET</b> are added in Railway, imported returns won't update on their own — use Refund now when a package arrives.</div>`}
+    ${apply?`<div class="rc-warn" style="background:#e8f6ee;color:#1e7a4c;border-color:#bfe5cf">Done — ${d.returns.filter(r=>r.imported).length} imported.</div>`:""}
+    <div style="max-height:52vh;overflow:auto"><table class="tickets"><thead><tr><th>Order</th><th>Items</th><th>Loop label</th><th>What happens</th><th>Why</th></tr></thead><tbody>${d.returns.slice().sort((a,b)=>order.indexOf(a.action)-order.indexOf(b.action)).map(row).join("")}</tbody></table></div>`;
+  if(btn) btn.textContent="Import";
+  go.disabled=apply||!n; if(!apply) go.textContent=n?`Import ${n} return${n===1?"":"s"}`:"Nothing to import";
+  if(apply){ loadReturns(); loadCounts(); }
+}
 async function retPoll(b){ b.disabled=true; b.textContent="Checking…"; try{ await api("/api/returns/poll",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); }catch(e){} loadReturns(); loadCounts(); }
 async function retSettings(){
   const s=RET_D.settings, a=s.return_address; closeModal();

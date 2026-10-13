@@ -387,6 +387,53 @@ async function track(labelId) {
   const shipped = !first && t.ship_date && !["NY", "UN"].includes(t.status_code) ? new Date(t.ship_date) : null;
   return { code: t.status_code || "UN", text: t.status_description || "", acceptedAt: (first || shipped) && !isNaN(first || shipped) ? (first || shipped).toISOString() : null };
 }
+// Labels that didn't come from our ShipStation account (Loop returns): track by the tracking number itself.
+// USPS's own tracking API (free — USPS_CLIENT_ID / USPS_CLIENT_SECRET from developers.usps.com) is the main route;
+// ShipStation's any-number tracking is tried too, for plans that include it.
+let uspsTok = { token: null, exp: 0 };
+const uspsReady = () => !!(process.env.USPS_CLIENT_ID && process.env.USPS_CLIENT_SECRET);
+function trackerReady() { return uspsReady(); }
+async function uspsToken() {
+  if (uspsTok.token && Date.now() < uspsTok.exp) return uspsTok.token;
+  const r = await fetch("https://apis.usps.com/oauth2/v3/token", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ grant_type: "client_credentials", client_id: process.env.USPS_CLIENT_ID, client_secret: process.env.USPS_CLIENT_SECRET }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error(`USPS sign-in failed (${r.status})`);
+  uspsTok = { token: j.access_token, exp: Date.now() + ((Number(j.expires_in) || 3600) - 300) * 1000 };
+  return uspsTok.token;
+}
+// USPS v3 → the same shape track() returns: { code, text, acceptedAt }  (codes as ShipStation uses them)
+function uspsShape(j) {
+  const evs = (j.trackingEvents || []).map((e) => ({ type: String(e.eventType || ""), at: e.eventTimestamp ? new Date(e.eventTimestamp) : null })).filter((e) => e.type);
+  const cat = String(j.statusCategory || ""), status = String(j.status || j.statusSummary || "");
+  const labelOnly = (t) => /label (was )?created|pre-shipment|shipping label|awaiting item/i.test(t);
+  const real = evs.filter((e) => !labelOnly(e.type) && e.at && !isNaN(e.at));
+  const first = real.length ? new Date(Math.min(...real.map((e) => e.at.getTime()))) : null;
+  let code = "IT";
+  if (/^delivered$/i.test(cat) || (/\bdelivered\b/i.test(status) && !/out for delivery|attempt|not delivered|undeliver/i.test(status))) code = /pickup|post office|parcel locker/i.test(status) && !/delivered to agent/i.test(status) ? "SP" : "DE";
+  else if (/available for pickup/i.test(status)) code = "SP";
+  else if (/^alert$/i.test(cat) || /exception|return to sender|undeliverable/i.test(status)) code = "EX";
+  else if (!real.length || /pre-shipment|label created/i.test(cat + " " + status)) code = "NY";
+  return { code, text: status || cat || "", acceptedAt: code === "NY" ? null : first ? first.toISOString() : null };
+}
+async function trackNumber(number, carrier) {
+  const n = String(number || "").replace(/\s+/g, "");
+  if (!n) throw new Error("No tracking number");
+  const guess = emily().carrierFromNumber(n);
+  if ((!guess || guess.name === "USPS") && uspsReady()) {
+    const tok = await uspsToken();
+    const r = await fetch(`https://apis.usps.com/tracking/v3/tracking/${encodeURIComponent(n)}?expand=DETAIL`, { headers: { Authorization: `Bearer ${tok}`, Accept: "application/json" } });
+    if (r.status === 401) uspsTok = { token: null, exp: 0 };
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(`USPS ${r.status}: ${(j.error && (j.error.message || j.error)) || "tracking unavailable"}`.slice(0, 160));
+    return uspsShape(j);
+  }
+  if (guess) {
+    try { const t = await emily().claimsKit().ssV2Track(guess.v2, n); if (t) return { code: t.code || "UN", text: t.description || "", acceptedAt: t.moving || t.delivered ? (t.last_event && t.last_event.at) || null : null }; }
+    catch (_) { /* plan doesn't include any-number tracking, or the label isn't in this account */ }
+  }
+  const e = new Error("Can't track this label yet — add USPS tracking keys (USPS_CLIENT_ID / USPS_CLIENT_SECRET) in Railway"); e.noTracker = true; throw e;
+}
 // Returns { ok, message } — ShipStation answers 200 with approved:false and a reason when it refuses a void.
 async function voidLabel(labelId) {
   const r = await ss("PUT", `/v2/labels/${encodeURIComponent(labelId)}/void`);
@@ -477,7 +524,7 @@ async function counts() {
   out.attention = out.by.needs_attention || 0;
   return out;
 }
-const publicRec = (r, s) => ({ rma: r.rma, status: r.status, label_url: r.status === "cancelled" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${labelToken(r.id)}`, tracking_number: r.tracking_number, tracking_url: r.tracking_url, refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity })) });
+const publicRec = (r, s) => ({ rma: r.rma, status: r.status, label_url: r.status === "cancelled" || r.source === "loop" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${labelToken(r.id)}`, tracking_number: r.tracking_number, tracking_url: r.tracking_url, refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity })) });
 // Everything the confirmation page shows (also reachable later from the link in our emails).
 async function publicView(r) {
   const s = await settings();
@@ -491,7 +538,7 @@ async function publicView(r) {
     id: r.id, token: tok, view_url: `${portalUrl(r.store, s)}?r=${r.id}.${tok}`, store: r.store,
     rma: r.rma, status: r.status, order_name: r.order_name, created_at: r.created_at, email: r.email, phone: r.phone || "", address: r.address || null, customer_name: r.customer_name,
     dropoff_days: s.void_unused_after_days, dropoff_by: new Date(new Date(r.created_at).getTime() + s.void_unused_after_days * 86400e3).toISOString(),
-    label_url: r.status === "cancelled" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${tok}`, print_url: r.status === "cancelled" ? null : `${linkBase(r.store, s)}/returns/print/${r.id}/${tok}`,
+    label_url: r.status === "cancelled" || r.source === "loop" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${tok}`, print_url: r.status === "cancelled" || r.source === "loop" ? null : `${linkBase(r.store, s)}/returns/print/${r.id}/${tok}`,
     tracking_number: r.tracking_number, tracking_url: r.tracking_url, label_emailed: r.label_emailed !== false && !r.test_label, test_label: !!r.test_label,
     refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity, unit_price: i.unit_price, image: i.image || null, reason: i.reason })),
     summary: { subtotal: round2(sub), tax: round2(tax), fee: round2(fee), bonus, bonus_pct: Number(s.store_credit_bonus_pct), total: r.status === "refunded" && r.refunded_amount != null ? Number(r.refunded_amount) : round2(net + bonus), final: r.status === "refunded" },
@@ -827,7 +874,8 @@ async function refund(rec, { force = false, who = "auto", reason = null } = {}) 
 async function cancel(rec, why, who) {
   if (rec.status === "refunded") throw new Error("Already refunded");
   let voided = false, why2 = "";
-  if (!rec.label_id) { voided = true; why2 = " (test — no label was bought)"; }
+  if (!rec.label_id && rec.source === "loop") { voided = false; why2 = " (Loop label — nothing to void from Buzzin)"; }
+  else if (!rec.label_id) { voided = true; why2 = " (test — no label was bought)"; }
   else { try { const v = await voidLabel(rec.label_id); voided = v.ok; if (!v.ok) why2 = ` — ShipStation said: ${v.message || "void refused"}. Void it in ShipStation or ask ShipStation for a refund`; } catch (e) { why2 = ` — ${e.message}`; } }
   try { await gql(shopFor(rec.store), CANCEL, { id: rec.shopify_return_id }); } catch (e) { await update(rec.id, {}, "Shopify cancel failed: " + e.message); }
   await core.audit({ ticketId: rec.ticket_id || null, kind: "return-cancelled", detail: `${rec.rma} · ${why}`, who: who || "system", target: rec.id });
@@ -837,7 +885,7 @@ async function cancel(rec, why, who) {
 /* ---------------- 5. tracking poller ---------------- */
 async function checkOne(rec) {
   const s = await settings();
-  const t = await track(rec.label_id);
+  const t = rec.label_id ? await track(rec.label_id) : await trackNumber(rec.tracking_number, rec.carrier);
   if (t.code !== rec.tracking_code) rec = await update(rec.id, { tracking_code: t.code, tracking_text: t.text }, `Tracking: ${t.code} ${t.text}`.trim());
   if (t.code === "DE" || t.code === "SP") {
     rec = await update(rec.id, { status: "delivered", delivered_at: new Date().toISOString() }, "Delivered back to us");
@@ -861,10 +909,11 @@ async function checkOne(rec) {
   const unused = rec.status === "label_created" && ["NY", "UN"].includes(t.code) && !(await EX().forOrder(rec.order_name)).has("dropoff_deadline");
   if (unused && s.void_unused_after_days > 0 && age >= s.void_unused_after_days) {
     rec = await cancel(rec, `Not dropped off within ${s.void_unused_after_days} days — return closed`, "system");
-    if (rec && rec.status === "cancelled") await dropoffEmail(rec, "closed").catch((e) => update(rec.id, {}, "Closing email failed: " + e.message));
+    // Loop returns close quietly: the customer's label and emails came from Loop, so ours would point at a label we don't have.
+    if (rec && rec.status === "cancelled" && rec.source !== "loop") await dropoffEmail(rec, "closed").catch((e) => update(rec.id, {}, "Closing email failed: " + e.message));
     return;
   }
-  if (unused && s.dropoff_reminder_days > 0 && age >= s.dropoff_reminder_days && !rec.reminder_sent) {
+  if (unused && rec.source !== "loop" && s.dropoff_reminder_days > 0 && age >= s.dropoff_reminder_days && !rec.reminder_sent) {
     try { await dropoffEmail(rec, "reminder"); await update(rec.id, { reminder_sent: new Date().toISOString() }, `Drop-off reminder emailed (day ${Math.floor(age)})`); }
     catch (e) { await update(rec.id, {}, "Drop-off reminder failed: " + e.message); }
   }
@@ -884,11 +933,11 @@ async function dropoffEmail(rec, kind) {
   const r = await sendBranded(kind === "reminder" ? "return_reminder" : "return_closed", rec);
   if (!rec.ticket_id && r && r.ticket_id) await update(rec.id, { ticket_id: r.ticket_id });
 }
-let polling = false;
+let polling = false, noTrackerSeen = 0, noTrackerLogged = 0;
 async function poll() {
   if (polling || !SS_KEY) return; polling = true;
-  try { for (const rec of await list({ status: "open" })) { if (rec.status === "delivered" || rec.test_label) continue; try { await checkOne(rec); } catch (e) { console.error(`return ${rec.rma}:`, e.message); } } }
-  finally { polling = false; }
+  try { for (const rec of await list({ status: "open" })) { if (rec.status === "delivered" || rec.test_label) continue; try { await checkOne(rec); } catch (e) { if (e.noTracker) { noTrackerSeen++; continue; } console.error(`return ${rec.rma}:`, e.message); } } }
+  finally { polling = false; if (noTrackerSeen && Date.now() - noTrackerLogged > 24 * 3600e3) { noTrackerLogged = Date.now(); console.log(`↩️  Returns: ${noTrackerSeen} Loop return${noTrackerSeen === 1 ? "" : "s"} can't be tracked until USPS tracking keys are added (USPS_CLIENT_ID / USPS_CLIENT_SECRET)`); } noTrackerSeen = 0; }
 }
 
 function csv(rows) {
@@ -1050,4 +1099,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { findOrder, linkBase, quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { putRec, update, trackingUrl, trackNumber, trackerReady, uspsShape, Q: { SUGGEST, RETURN_DETAIL }, findOrder, linkBase, quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
