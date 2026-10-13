@@ -330,6 +330,29 @@ app.post("/api/reply", async (req, res) => {
     res.json({ ok: true, via: r.via });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// Attach a file to the next reply on a ticket (image, label PDF, …). It goes out with the next reply — typed or Emily's approved draft.
+const ATTACH_MAX = 15 * 1024 * 1024;
+app.post("/api/ticket/:id/attach", express.raw({ type: () => true, limit: "16mb" }), async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const id = String(req.params.id), buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!buf.length) return res.status(400).json({ error: "That file is empty." });
+    if (buf.length > ATTACH_MAX) return res.status(400).json({ error: "Files can be up to 15 MB." });
+    const t = (await db(`SELECT id FROM hd_tickets WHERE id=$1`, [id])).rows[0]; if (!t) return res.status(404).json({ error: "ticket not found" });
+    const name = String(decodeURIComponent(req.get("x-file-name") || "attachment")).replace(/[\\/\r\n"]/g, "_").slice(0, 120) || "attachment";
+    const type = String(req.get("x-file-type") || "application/octet-stream").split(";")[0].slice(0, 100);   // body is always sent as octet-stream
+    const staged = (await db(`SELECT COALESCE(sum(length(data)),0)::bigint n FROM hd_files WHERE ticket_id=$1 AND staged AND sent_at IS NULL`, [id])).rows[0];
+    if (Number(staged.n) + buf.length > 20 * 1024 * 1024) return res.status(400).json({ error: "Attachments on one reply can add up to 20 MB." });
+    const f = await core.saveFile({ ticketId: id, name, contentType: type, buffer: buf, by: actorOf(req) });
+    await db(`UPDATE hd_files SET staged=true WHERE id=$1`, [f.file_id]);
+    res.json({ ok: true, file: { ...f, staged: true } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/ticket/:id/attach/:fid/remove", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { await db(`DELETE FROM hd_files WHERE id=$1 AND ticket_id=$2 AND staged AND sent_at IS NULL`, [req.params.fid, String(req.params.id)]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.post("/api/note", async (req, res) => {
   if (!guard(req, res)) return;
   try {

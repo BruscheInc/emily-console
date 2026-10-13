@@ -217,6 +217,9 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS hd_order_cache (order_name TEXT PRIMARY KEY, store TEXT, financial TEXT, fulfillment TEXT, cancelled BOOLEAN, edited BOOLEAN, refunded NUMERIC, total NUMERIC, shipstation TEXT, tracking TEXT, error TEXT, checked_at TIMESTAMPTZ DEFAULT now())`);
   await db(`ALTER TABLE hd_order_cache ADD COLUMN IF NOT EXISTS admin_url TEXT`);
   await db(`CREATE TABLE IF NOT EXISTS hd_files (id TEXT PRIMARY KEY, ticket_id BIGINT, name TEXT, content_type TEXT, data BYTEA, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now())`);
+  // Files staff attach in the reply box wait here (staged) until the next reply on the ticket goes out.
+  await db(`ALTER TABLE hd_files ADD COLUMN IF NOT EXISTS staged BOOLEAN DEFAULT false`);
+  await db(`ALTER TABLE hd_files ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ`);
   await db(`ALTER TABLE emily_drafts ADD COLUMN IF NOT EXISTS todo JSONB`);
   try { await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS order_status JSONB`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS order_checked_at TIMESTAMPTZ`); } catch (_) {}
   try { await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS items JSONB`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ`); await db(`ALTER TABLE oos_cases ADD COLUMN IF NOT EXISTS followup_sent_at TIMESTAMPTZ`); } catch (_) {}

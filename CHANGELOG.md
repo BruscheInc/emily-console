@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.70.0
+- Tickets: **Attach** button in the reply box. Add images, labels or PDFs (up to 15 MB each, 20 MB per reply); they show as chips you can remove and go out with the next reply — your typed reply or Emily's approved draft. Return labels from Emily's actions show in the same list.
+
 ## 4.69.3
 - Loop returns have their own page in the left menu (Returns & claims → **Loop returns**), with its own tiles, filters and count; Import from Loop moved there. The Returns page shows only Buzzin returns.
 

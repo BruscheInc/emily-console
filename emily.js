@@ -476,12 +476,16 @@ async function applyAction(id, who, overrides = null) {
 }
 // Files produced by applied actions on this ticket (return labels) that haven't gone out on a reply yet.
 async function pendingFiles(ticketId) {
-  const r = await db(`SELECT id, files FROM emily_actions WHERE ticket_id=$1 AND status='applied' AND files IS NOT NULL`, [String(ticketId)]);
+  const r = await db(`SELECT id, files FROM emily_actions WHERE ticket_id=$1 AND status='applied' AND files IS NOT NULL`, [String(ticketId)]).catch(() => ({ rows: [] }));
   const out = [];
   for (const a of r.rows) for (const f of a.files || []) if (!f.sent) out.push({ action_id: a.id, ...f });
+  // plus anything staff attached in the reply box
+  const st = await db(`SELECT id, name, content_type, length(data) size, created_by FROM hd_files WHERE ticket_id=$1 AND staged AND sent_at IS NULL ORDER BY created_at`, [String(ticketId)]).catch(() => ({ rows: [] }));
+  for (const f of st.rows) out.push({ file_id: f.id, name: f.name, content_type: f.content_type, size: Number(f.size), staged: true, by: f.created_by });
   return out;
 }
 async function markFilesSent(ticketId) {
+  await db(`UPDATE hd_files SET sent_at=now() WHERE ticket_id=$1 AND staged AND sent_at IS NULL`, [String(ticketId)]).catch(() => {});
   await db(`UPDATE emily_actions SET files = (SELECT jsonb_agg(f || '{"sent":true}'::jsonb) FROM jsonb_array_elements(files) f) WHERE ticket_id=$1 AND status='applied' AND files IS NOT NULL`, [String(ticketId)]).catch(() => {});
 }
 async function setTodo(draftId, index, state, who) {
