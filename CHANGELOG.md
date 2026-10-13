@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.69.1
+- Returns: at startup, when USPS keys are set, Buzzin tests USPS tracking and logs whether it works ("📮 USPS tracking: …").
+
 ## 4.69.0
 - Returns: **Import from Loop** (Returns → Quick actions, admins). Upload Loop's ASN report .xlsx files; Buzzin reads only the returns still open, checks each against its Shopify return, previews, then imports. Labels not yet dropped off and packages on their way back are tracked like new returns (14-day transit rule, auto refund on delivery, quiet close after the drop-off window). Packages Loop marked delivered long ago but never refunded go to Needs attention. Exchanges, expired labels and returns already closed in Shopify are skipped. No customer emails.
 - Returns can now be tracked by tracking number (labels not bought in our ShipStation account) through USPS's tracking API — needs USPS_CLIENT_ID / USPS_CLIENT_SECRET.

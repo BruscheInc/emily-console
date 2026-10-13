@@ -1095,6 +1095,19 @@ async function init() {
   try { if (!(await core.syncGet("claims_reset_live_v1"))) { const at = new Date().toISOString(); await saveSettings({ claims_since: at }, "system (claims go-live reset)"); await core.syncSet("claims_reset_live_v1", "done", {}); console.log(`🧾 Claims: test data hidden — showing claims from ${at}`); } } catch (e) { console.error("claims reset:", e.message); }
   try { if (!(await core.syncGet("returns_fallback_fee_799"))) { await saveSettings({ label_fee: 7.99, transit_refund_days: 14 }, "system (v4.59 fallback fee $7.99, 14-day transit refund)"); await core.syncSet("returns_fallback_fee_799", "done", {}); console.log("↩️  Returns: fallback label fee $7.99 · refund if not delivered 14 days after USPS accepts it"); } } catch (e) { console.error("returns fallback fee:", e.message); }
   const s = await settings();
+  // USPS tracking keys: say plainly at boot whether tracking works (USPS may give an app sign-in without the tracking API).
+  if (uspsReady()) setTimeout(async () => {
+    try {
+      await uspsToken();
+      const probe = (await db(`SELECT data->>'tracking_number' n FROM hd_returns WHERE data->>'tracking_number' ~ '^9[2-5]' ORDER BY created_at DESC LIMIT 1`).catch(() => ({ rows: [] }))).rows[0];
+      const n = (probe && probe.n) || "9400100000000000000000";
+      const tok = await uspsToken();
+      const r = await fetch(`https://apis.usps.com/tracking/v3/tracking/${encodeURIComponent(n)}?expand=DETAIL`, { headers: { Authorization: `Bearer ${tok}`, Accept: "application/json" } });
+      const body = (await r.text()).slice(0, 200).replace(/\s+/g, " ");
+      if (r.status === 401 || r.status === 403) console.log(`📮 USPS tracking: sign-in works, but USPS hasn't turned on tracking for this app yet (${r.status}: ${body})`);
+      else console.log(`📮 USPS tracking: working (test lookup answered ${r.status})`);
+    } catch (e) { console.log(`📮 USPS tracking: ${e.message}`); }
+  }, 20e3);
   const p = setupProblems(s);
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
