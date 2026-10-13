@@ -1844,7 +1844,7 @@ async function send(id){
   try{
     const ep=MODE==="reply"?"/api/reply":"/api/note";
     const r=await api(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,text})});
-    if(r.error){toast(r.error,true);} else {toast(MODE==="reply"?"Reply sent ✓":"Note added ✓");$("composer").value="";openTicket(id);loadCounts();}
+    if(r.error){toast(r.error,true);} else {if(r.warning) toast(r.warning,true); else toast(MODE==="reply"?(r.attached?`Reply sent with ${r.attached} attachment${r.attached===1?"":"s"} ✓`:"Reply sent ✓"):"Note added ✓");$("composer").value="";openTicket(id);loadCounts();}
   }catch(e){toast("Failed",true);} b.disabled=false; b.textContent=was;
 }
 async function setStatus(id,status){try{const r=await api("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,id,status})});if(r.error){toast(r.error,true);return;}toast(status==="closed"?"Closed":"Reopened — back in Pending");loadCounts();if(status==="closed")closeThread();else openTicket(id);}catch(e){toast("Failed",true);}}

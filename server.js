@@ -323,11 +323,11 @@ app.post("/api/reply", async (req, res) => {
     let files = [];
     try { files = (await require("./emily").pendingFiles(id)).map((f) => f.file_id); } catch (e) {}
     const r = await sendReply({ ticketId: id, text: body, who, via: "buzzin", files });
-    if (files.length) { try { await require("./emily").markFilesSent(id); } catch (e) {} }
+    if (files.length && r.via !== "gorgias") { try { await require("./emily").markFilesSent(id); } catch (e) {} }
     // If Emily had a draft waiting on this ticket, a human reply settles it.
     try { const emily = require("./emily"); await emily.onHumanReply(id, String(text), who); } catch (e) {}
     slackPost(`✉️ *Reply sent* → ${r.to} · ${r.mailbox} · ticket ${id} · by ${who}\n>>> ${String(text).slice(0, 500)}`);
-    res.json({ ok: true, via: r.via });
+    res.json({ ok: true, via: r.via, attached: r.attached || 0, warning: files.length && r.via === "gorgias" ? "Sent through Gorgias, which can't carry attachments — they're still waiting for the next reply." : null });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Attach a file to the next reply on a ticket (image, label PDF, …). It goes out with the next reply — typed or Emily's approved draft.
