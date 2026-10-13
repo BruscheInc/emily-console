@@ -342,6 +342,9 @@
 .attnote{font-size:12px;color:var(--muted);width:100%}
 .attchip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:3px 8px;max-width:320px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .attchip small{color:var(--muted)}.attchip button{border:0;background:none;cursor:pointer;font-size:15px;line-height:1;color:var(--muted);padding:0 0 0 2px}.attchip button:hover{color:#c0392b}
+.c-ck{width:34px;padding-left:14px!important;padding-right:0!important}.c-ck input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.bulkbar{display:flex;gap:8px;align-items:center;padding:8px 16px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:13px}.bulkbar.hidden{display:none}
 </style>
 </head>
 <body>
@@ -430,7 +433,8 @@
         <input class="search" id="q" placeholder="Search name, subject or message…" oninput="debouncedList()">
       </div>
     </div>
-    <div class="tablewrap"><table class="tickets"><thead><tr><th class="c-t">Ticket</th><th class="c-ord">Order</th><th class="c-ost">Order status</th><th class="c-tags">Tags</th><th class="c-cust">Customer</th><th class="c-last">Last message ↓</th></tr></thead><tbody id="list"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody></table></div>
+    <div id="bulkbar" class="bulkbar hidden"><b id="bulkn">0 selected</b><button class="btn xs" id="bulkclose" onclick="bulkStatus('closed',this)">Close selected</button><button class="btn sec xs" id="bulkopen" onclick="bulkStatus('open',this)">Reopen selected</button><button class="btn sec xs" onclick="SEL.clear();syncBulk()">Clear</button></div>
+    <div class="tablewrap"><table class="tickets"><thead><tr><th class="c-ck"><input type="checkbox" id="selall" title="Select all on this page" onclick="selAll(this.checked)"></th><th class="c-t">Ticket</th><th class="c-ord">Order</th><th class="c-ost">Order status</th><th class="c-tags">Tags</th><th class="c-cust">Customer</th><th class="c-last">Last message ↓</th></tr></thead><tbody id="list"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody></table></div>
     <div id="stuckwrap" class="tablewrap" style="display:none"></div>
     <div class="pager"><span id="pageinfo"></span><span class="sp"></span><button class="btn sec xs" id="prevpg" onclick="page(-1)">‹ Prev</button><button class="btn sec xs" id="nextpg" onclick="page(1)">Next ›</button></div>
   </div>
@@ -628,7 +632,7 @@ function chipsFor(t){
 let STUCK_STATE="open";
 let _listSig="";
 async function loadList(force,silent){
-  const el=$("list"); if(force){el.innerHTML='<tr><td colspan="6" class="empty">Loading…</td></tr>';_listSig="";}
+  const el=$("list"); if(force){el.innerHTML='<tr><td colspan="7" class="empty">Loading…</td></tr>';_listSig="";SEL.clear();syncBulk();}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
   const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
@@ -651,8 +655,9 @@ async function loadList(force,silent){
     $("showing").textContent=TOTAL?`Showing ${from}–${to} of ${TOTAL.toLocaleString()}`:"";
     $("pageinfo").textContent=TOTAL?`Page ${Math.floor(OFFSET/PAGE)+1} of ${Math.max(1,Math.ceil(TOTAL/PAGE))}`:"";
     $("prevpg").disabled=OFFSET<=0; $("nextpg").disabled=OFFSET+PAGE>=TOTAL;
-    if(!tickets.length){el.innerHTML='<tr><td colspan="6" class="empty">No '+TAB+' tickets here.</td></tr>';return;}
-    el.innerHTML=tickets.map(t=>`<tr class="row ${CUR===t.id?"on":""}" onclick="openTicket(${t.id})">
+    if(!tickets.length){el.innerHTML='<tr><td colspan="7" class="empty">No '+TAB+' tickets here.</td></tr>';syncBulk();return;}
+    el.innerHTML=tickets.map(t=>`<tr class="row ${CUR===t.id?"on":""} ${SEL.has(t.id)?"sel":""}" onclick="openTicket(${t.id})">
+      <td class="c-ck" onclick="event.stopPropagation()"><input type="checkbox" ${SEL.has(t.id)?"checked":""} onclick="selOne(${t.id},this.checked)"></td>
       <td class="c-t"><div class="subj ${t.unread?"unread":""}">${t.messages_count>1?`<span class="cnt">${t.messages_count}</span>`:""}${esc(t.subject||"(no subject)")}</div><div class="exc">${esc((t.excerpt||"").replace(/\s+/g," ")).slice(0,140)}</div></td>
       <td class="c-ord">${t.order_number?(t.order_info&&t.order_info.admin_url?`<a class="ordno" href="${esc(t.order_info.admin_url)}" target="_blank" rel="noopener" title="Open this order in Shopify" onclick="event.stopPropagation()">#${esc(t.order_number)} ↗</a>`:`<span class="ordno">#${esc(t.order_number)}</span>`):'<span class="exc">—</span>'}</td>
       <td class="c-ost">${orderStatusChips(t.order_info)}</td>
@@ -660,7 +665,28 @@ async function loadList(force,silent){
       <td class="c-cust" title="${esc(t.customer.email||"")}">${esc(t.customer.name||"")}</td>
       <td class="c-last ${t.unread?"unread":""}">${fmt(t.last)}</td>
     </tr>`).join("");
-  }catch(e){el.innerHTML='<tr><td colspan="6" class="empty">Couldn\'t load tickets.</td></tr>';}
+    syncBulk();
+  }catch(e){el.innerHTML='<tr><td colspan="7" class="empty">Couldn\'t load tickets.</td></tr>';}
+}
+// Bulk select: tick tickets in the list, then close or reopen them together.
+const SEL=new Set();
+function selOne(id,on){ on?SEL.add(id):SEL.delete(id); syncBulk(); }
+function selAll(on){ for(const t of tickets) on?SEL.add(t.id):SEL.delete(t.id); document.querySelectorAll('#list .c-ck input').forEach(c=>c.checked=on); syncBulk(); }
+function syncBulk(){
+  const bar=$("bulkbar"); if(!bar) return;
+  bar.classList.toggle("hidden",!SEL.size); $("bulkn").textContent=`${SEL.size} selected`;
+  document.querySelectorAll('#list tr.row').forEach(r=>{ const c=r.querySelector('.c-ck input'); if(c) r.classList.toggle("sel",c.checked); });
+  const all=$("selall"); if(all){ const on=tickets.length&&tickets.every(t=>SEL.has(t.id)); all.checked=!!on; all.indeterminate=!on&&tickets.some(t=>SEL.has(t.id)); }
+  $("bulkclose").style.display=TAB==="closed"?"none":""; $("bulkopen").style.display=TAB==="closed"||TAB==="all"?"":"none";
+}
+async function bulkStatus(status,b){
+  const ids=[...SEL]; if(!ids.length) return;
+  if(!confirm(`${status==="closed"?"Close":"Reopen"} ${ids.length} ticket${ids.length===1?"":"s"}?`)) return;
+  b.disabled=true;
+  try{ const r=await api("/api/status/bulk",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids,status})}); if(r.error) throw new Error(r.error);
+    toast(`${status==="closed"?"Closed":"Reopened"} ${r.changed} ticket${r.changed===1?"":"s"}`); SEL.clear(); if(CUR&&ids.includes(CUR)&&status==="closed") closeThread(); else loadList(true); loadCounts(); }
+  catch(e){ toast(e.message,true); }
+  b.disabled=false;
 }
 
 /* ---------- settings: mailbox connection + history import ---------- */

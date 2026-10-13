@@ -376,6 +376,20 @@ app.post("/api/status", async (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// Close or reopen many tickets at once (ticket list checkboxes).
+app.post("/api/status/bulk", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const { ids, status } = req.body || {};
+    const list = [...new Set((Array.isArray(ids) ? ids : []).map((x) => String(x)).filter((x) => /^\d+$/.test(x)))].slice(0, 500);
+    if (!list.length || !["open", "closed"].includes(status)) return res.status(400).json({ error: "ids and status open|closed required" });
+    const who = actorOf(req);
+    const r = await db(`UPDATE hd_tickets SET status=$2, updated_at=now(), reopened_at=CASE WHEN $2='open' THEN now() ELSE NULL END WHERE id = ANY($1::bigint[]) AND status IS DISTINCT FROM $2 RETURNING id`, [list, status]);
+    for (const x of r.rows) await db(`INSERT INTO hd_events (ticket_id,kind,detail,user_name) VALUES ($1,'status',$2,$3)`, [x.id, status === "open" ? "reopened — back to Pending (bulk)" : "closed (bulk)", who]);
+    if (r.rows.length) slackPost(`${status === "closed" ? "✅ Closed" : "↩️ Reopened"} ${r.rows.length} ticket${r.rows.length === 1 ? "" : "s"} at once · by ${who}`);
+    res.json({ ok: true, changed: r.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.post("/api/assign", async (req, res) => {
   if (!guard(req, res)) return;
   try {
