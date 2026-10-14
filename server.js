@@ -44,6 +44,8 @@ app.use((req, res, next) => {
 app.get(["/", "/index.html"], (_q, r) => { r.setHeader("Cache-Control", "no-store"); r.type("html").send(INDEX_HTML); });
 app.use(express.static(path.join(__dirname, "public"), { index: false, setHeaders: (res, p) => { if (p.endsWith("sw.js")) res.setHeader("Cache-Control", "no-store"); } }));
 app.get("/health", (_q, r) => r.json({ ok: true, version: VERSION }));
+// Claude connector: lets Claude read tickets, Emily's drafts/actions and policies, and add internal notes. Off unless BUZZIN_MCP_TOKEN is set.
+require("./mcp")(app, { core });
 app.get("/api/version", (_q, r) => r.json({ version: VERSION, major: "v" + VERSION.split(".")[0] }));
 app.get("/api/role", (req, res) => { const s = core.sessionOf(keyFrom(req)); res.json({ ok: !!s, user: s ? s.name : null, role: s ? s.role : null, email: s ? s.email : null }); });
 const isAdmin = (req) => { const s = core.sessionOf(keyFrom(req)); return !!(s && s.role === "admin"); };

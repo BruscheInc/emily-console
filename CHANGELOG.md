@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.72.0
+- **Claude connector.** Buzzin can now be added to Claude as a custom connector, so Claude can open Buzzin tickets directly: the conversation, every draft Emily wrote, the actions she staged (replacements, address changes, refunds) and the ticket history, plus Emily's policies. Claude can add internal notes; it cannot email customers, approve actions or change orders. Off until **BUZZIN_MCP_TOKEN** is set in Railway. Connector URL: `https://<buzzin-host>/mcp/<BUZZIN_MCP_TOKEN>`.
+
 ## 4.71.0
 - Ticket lists: checkboxes on every row plus select-all for the page. Tick tickets and use **Close selected** (or **Reopen selected** on Closed / All) to change them together.
 

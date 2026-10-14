@@ -26,3 +26,8 @@ A full CS inbox over **Gorgias**, and an extension of Emily. Node/Express PWA �
 - Replies send from the ticket's connected brand address (e.g. hello@larkspurbabyoutlet.com) to the customer — the same path Emily uses.
 - Messages are rendered as sanitized text (no tracking pixels / no HTML injection).
 - Spam-tagged tickets are hidden from the queue.
+
+## Claude connector
+Buzzin exposes a connector at `/mcp` so Claude can read tickets (messages, Emily's drafts and staged actions, history), Emily's policies, and add internal notes. It never emails customers or changes orders.
+1. In Railway, add the variable `BUZZIN_MCP_TOKEN` with a long random value.
+2. In claude.ai → Settings → Connectors → Add custom connector, use `https://<buzzin-host>/mcp/<BUZZIN_MCP_TOKEN>`.
