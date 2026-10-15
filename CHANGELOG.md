@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.76.0
+- Emily reads discounts live from Shopify (Larkspur Baby). In the website chat and on email she checks the code a customer mentions: a near-miss like HAPPYHOLIDAY comes back as the real code (happyholidays) with a link that applies it at checkout, plus what it covers (e.g. only the Holiday collection), end date, minimum, and whether it combines. Expired or unknown codes get a clear answer.
+- She never reveals one-time codes, her own goodwill codes, or test / 100%-off codes, never lists codes nobody asked about, and never suggests the military code unless asked for it.
+- Larkspur Baby Outlet has no discounts of any kind: Emily won't offer or propose a code for the Outlet, and the chat says so.
+
 ## 4.75.1
 - Rules: Emily only gives the military code (thankyoumilitary, Larkspur Baby only) when a customer explicitly asks for a military discount — never when someone asks about discounts in general.
 
