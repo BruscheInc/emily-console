@@ -1495,7 +1495,7 @@ function retAccept(id){
   const r=(RET_D&&RET_D.returns||[]).find(x=>x.id===id); if(!r) return;
   closeModal(); const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
   m.innerHTML=`<div class="box" style="width:min(560px,100%)"><h3>Accept ${esc(r.rma)} at the warehouse</h3>
-    <div class="sub">Count what's in the box. ${["label_created","in_transit"].includes(r.status)?"Accepting marks it delivered back and the refund runs automatically when everything is there.":"This records what came in; it doesn't change the refund."} If anything is missing, the return goes to Needs attention instead of refunding.</div>
+    <div class="sub">Count what's in the box. ${["label_created","in_transit","delivered"].includes(r.status)?"Accepting marks it delivered back and refunds only the items received (less the label fee). Items that didn't come back aren't refunded.":"This records what came in. If you refund it afterwards, only the items received are refunded."}</div>
     ${r.items.map((i,idx)=>`<div style="display:flex;gap:10px;align-items:center;margin:8px 0"><div style="flex:1;font-size:13px">${esc(i.title)}${i.variant?` <span class="exc" style="display:inline">${esc(i.variant)}</span>`:""}<div class="exc" style="display:block">${esc(i.sku||"")} · returned ${i.quantity}</div></div>
       <label style="font-size:12px;color:var(--muted)">Received <input type="number" min="0" max="${i.quantity}" value="${i.quantity}" data-idx="${idx}" class="ra-qty" style="width:64px"></label></div>`).join("")}
     <label>Note (optional)</label><input type="text" id="ra-note" placeholder="e.g. tags missing, worn, wrong item">
@@ -1554,6 +1554,7 @@ async function retSettings(){
     <label class="chk"><input type="checkbox" id="rs-credit" ${s.store_credit_enabled?"checked":""}> Offer store credit</label>
     <label class="chk"><input type="checkbox" id="rs-feecredit" ${s.fee_on_store_credit?"checked":""}> Charge the label fee on store credit too</label>
     <label class="chk"><input type="checkbox" id="rs-auto" ${s.auto_refund?"checked":""}> Refund automatically when the package is delivered back</label>
+    <label class="chk"><input type="checkbox" id="rs-checkin" ${s.refund_after_checkin?"checked":""}> Wait for the warehouse to accept it, then refund only the items received</label>
     <label>Return reasons customers can pick (one per line)</label><textarea id="rs-reasons" rows="6" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;background:var(--panel2);color:var(--ink)">${esc((s.reasons||[]).join("\n"))}</textarea>
     <label>Final-sale product tags (can't be returned)</label><input type="text" id="rs-tags" value="${esc(s.final_sale_tags)}">
     <label>ShipStation carrier &amp; service</label><select id="rs-svc"><option value="">Loading carriers…</option></select>
@@ -1589,7 +1590,7 @@ async function retSettings(){
   $("rs-go").onclick=async()=>{
     const [carrier_id,service_code]=($("rs-svc").value||"|").split("|");
     const body={portal_live:$("rs-live").checked,branded_links:$("rs-branded").checked,test_labels:$("rs-test").checked,window_days:{lb:Number($("rs-wlb").value),lbo:Number($("rs-wlbo").value)},label_fee:Number($("rs-fee").value),label_fee_mode:$("rs-feemode").value,store_credit_bonus_pct:Number($("rs-bonus").value),
-      store_credit_enabled:$("rs-credit").checked,fee_on_store_credit:$("rs-feecredit").checked,auto_refund:$("rs-auto").checked,final_sale_tags:$("rs-tags").value,void_unused_after_days:Number($("rs-void").value),dropoff_reminder_days:Number($("rs-remind").value),transit_refund_days:Number($("rs-transit").value),default_item_oz:Number($("rs-oz").value),
+      store_credit_enabled:$("rs-credit").checked,fee_on_store_credit:$("rs-feecredit").checked,auto_refund:$("rs-auto").checked,refund_after_checkin:$("rs-checkin").checked,final_sale_tags:$("rs-tags").value,void_unused_after_days:Number($("rs-void").value),dropoff_reminder_days:Number($("rs-remind").value),transit_refund_days:Number($("rs-transit").value),default_item_oz:Number($("rs-oz").value),
       return_address:{name:$("ra-name").value.trim(),company_name:$("ra-co").value.trim(),address_line1:$("ra-1").value.trim(),address_line2:$("ra-2").value.trim(),city_locality:$("ra-city").value.trim(),state_province:$("ra-st").value.trim().toUpperCase(),postal_code:$("ra-zip").value.trim(),phone:$("ra-ph").value.trim(),country_code:"US"}};
     if(carrier_id) { body.carrier_id=carrier_id; body.service_code=service_code; }
     body.ss_store={lb:$("rs-sslb").value,lbo:$("rs-sslbo").value};

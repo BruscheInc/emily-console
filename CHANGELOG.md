@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.78.0
+- Returns: refunds follow what the warehouse received. When a return is accepted at the warehouse with fewer items than expected, only the received items are refunded (less the label fee) and the Shopify return is closed for the rest. "Refund now" on a checked-in return does the same.
+- New setting (Returns → Settings): **Wait for the warehouse to accept it, then refund only the items received** — holds the automatic refund at "Delivered" until someone checks the package in. Off by default.
+
 ## 4.77.0
 - Returns: **Accept at warehouse** on every return. Staff count what came back (qty per item + a note); the date and who accepted it are saved. If tracking hadn't caught up (or it's a Loop label), accepting marks it delivered and the normal auto refund runs; if anything is short, it goes to Needs attention instead and Slack gets a note.
 - New **Returned items** page (Returns & claims): one line per returned product with when it was sent back, delivered and accepted at the warehouse; filters by status, store, dates and SKU; totals by product; CSV export. The menu count shows returns delivered but not checked in yet.

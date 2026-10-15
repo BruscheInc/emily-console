@@ -64,6 +64,7 @@ const DEFAULTS = {
   store_credit_bonus_pct: 15,
   fee_on_store_credit: true,
   auto_refund: true,
+  refund_after_checkin: false,     // when on, wait for the warehouse to accept the package and refund only what was received
   final_sale_tags: "final-sale, final sale, no-returns",
   carrier_id: "",
   ss_store: { lb: "", lbo: "" },
@@ -834,7 +835,17 @@ async function refund(rec, { force = false, who = "auto", reason = null } = {}) 
   const det = (await gql(st, RETURN_DETAIL, { id: rec.shopify_return_id })).return;
   if (!det) throw new Error("Shopify return not found");
   if (det.status === "CLOSED" || det.status === "CANCELED") return update(rec.id, { status: "needs_attention" }, `Shopify return is ${det.status} — nothing refunded automatically`);
-  const rli = det.returnLineItems.nodes.map((n) => ({ id: n.id, quantity: n.quantity }));
+  // Refund what the warehouse actually received (when it checked the return in); otherwise everything on the return.
+  const recv = rec.warehouse && Array.isArray(rec.warehouse.lines) ? rec.warehouse.lines : null;
+  const missing = [];
+  let rli = det.returnLineItems.nodes.map((n) => ({ id: n.id, quantity: n.quantity, fli: n.fulfillmentLineItem && n.fulfillmentLineItem.id }));
+  if (recv) {
+    const left = new Map();   // fulfillment line item → units received, spread across the matching return lines
+    (rec.items || []).forEach((it, idx) => { const l = recv.find((x) => x.idx === idx); if (it.fli) left.set(it.fli, (left.get(it.fli) || 0) + (l ? Number(l.received) : it.quantity)); });
+    rli = rli.map((x) => { if (!left.has(x.fli)) return x; const q = Math.min(x.quantity, left.get(x.fli)); left.set(x.fli, left.get(x.fli) - q); if (q < x.quantity) missing.push(x.quantity - q); return { ...x, quantity: q }; }).filter((x) => x.quantity > 0);
+    if (!rli.length) return update(rec.id, { status: "needs_attention" }, "Nothing to refund — the warehouse received none of the items");
+  }
+  rli = rli.map(({ id, quantity }) => ({ id, quantity }));
   const out = (await gql(st, SUGGEST, { id: rec.shopify_return_id, items: rli })).return.suggestedFinancialOutcome;
   const ft = out.financialTransfer || {};
   const total = Number((ft.amount && ft.amount.shopMoney.amount) || out.discountedSubtotal.shopMoney.amount);
@@ -869,12 +880,13 @@ async function refund(rec, { force = false, who = "auto", reason = null } = {}) 
     const c = await gql(st, CREDIT, { id: rec.customer_id, key: key("bonus"), input: { creditAmount: { amount: bonus.toFixed(2), currencyCode: currency }, notify: true } });
     userErrors(c.storeCreditAccountCredit, "Bonus store credit failed");
   }
+  if (missing.length) { try { const c = await gql(st, `mutation Close($id: ID!) { returnClose(id: $id) { return { id status } userErrors { field message } } }`, { id: rec.shopify_return_id }); userErrors(c.returnClose, "close"); } catch (e) { await update(rec.id, {}, "Couldn't close the Shopify return for the items that never came back: " + e.message); } }
   const paid = round2(net + bonus);
   const how = credit ? `store credit ($${net.toFixed(2)} + $${bonus.toFixed(2)} bonus)` : "original payment";
   await core.audit({ ticketId: rec.ticket_id || null, kind: "return-refunded", detail: `${rec.rma} · $${paid.toFixed(2)} to ${how}`, who, target: rec.id });
-  core.slackPost(`💸 Return ${rec.rma} (${rec.order_name}) refunded $${paid.toFixed(2)} to ${how}${who === "auto" ? (reason === "lost_in_transit" ? ` — accepted by USPS but not delivered back after ${s.transit_refund_days} days` : " — package delivered back to us") : ` by ${who}`}`).catch(() => {});
+  core.slackPost(`💸 Return ${rec.rma} (${rec.order_name}) refunded $${paid.toFixed(2)} to ${how}${missing.length ? ` for the items received (${missing.reduce((a, b) => a + b, 0)} never came back)` : ""}${who === "auto" ? (reason === "lost_in_transit" ? ` — accepted by USPS but not delivered back after ${s.transit_refund_days} days` : " — package delivered back to us") : ` by ${who}`}`).catch(() => {});
   return update(rec.id, { status: "refunded", refunded_amount: paid, refunded_at: new Date().toISOString(), fee_charged: fee, order_value: total },
-    `Refunded $${paid.toFixed(2)} to ${how} — return value $${total.toFixed(2)} less $${fee.toFixed(2)} label fee${who !== "auto" ? ` (by ${who})` : ""}`);
+    `Refunded $${paid.toFixed(2)} to ${how} — ${missing.length ? `only the items received (${missing.reduce((a, b) => a + b, 0)} not returned), ` : ""}return value $${total.toFixed(2)} less $${fee.toFixed(2)} label fee${who !== "auto" ? ` (by ${who})` : ""}`);
 }
 
 /* ---------------- 4. cancel ---------------- */
@@ -896,7 +908,8 @@ async function checkOne(rec) {
   if (t.code !== rec.tracking_code) rec = await update(rec.id, { tracking_code: t.code, tracking_text: t.text }, `Tracking: ${t.code} ${t.text}`.trim());
   if (t.code === "DE" || t.code === "SP") {
     rec = await update(rec.id, { status: "delivered", delivered_at: new Date().toISOString() }, "Delivered back to us");
-    if (s.auto_refund) { try { await refund(rec); } catch (e) { await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
+    if (s.auto_refund && s.refund_after_checkin && !rec.warehouse) { await update(rec.id, {}, "Waiting for the warehouse to check it in before refunding"); }
+    else if (s.auto_refund) { try { await refund(rec); } catch (e) { await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
     return;
   }
   const moving = ["AC", "IT", "AT", "EX"].includes(t.code);
@@ -965,11 +978,12 @@ async function acceptAtWarehouse(rec, { who, items, note } = {}) {
     `Accepted at the warehouse by ${wh.by}: ${lines.map((l) => `${l.received}/${l.expected}× ${l.title}${l.variant ? " (" + l.variant + ")" : ""}`).join(", ")}${wh.note ? ` — “${wh.note}”` : ""}`);
   await core.audit({ ticketId: rec.ticket_id || null, kind: "return-accepted", detail: `${rec.rma} · ${lines.reduce((t, l) => t + l.received, 0)} item(s) received${short.length ? " · " + short.length + " line(s) short" : ""}`, who: wh.by, target: rec.id }).catch(() => {});
   if (short.length) core.slackPost(`📦 Return ${rec.rma} (${rec.order_name}) checked in by ${wh.by} with differences: ${short.map((l) => `${l.title}${l.variant ? " " + l.variant : ""} — got ${l.received} of ${l.expected}`).join("; ")}${wh.note ? ` · “${wh.note}”` : ""}`).catch(() => {});
-  if (["label_created", "in_transit"].includes(rec.status)) {
-    rec = await update(rec.id, { status: "delivered", delivered_at: rec.delivered_at || at }, "Delivered back to us (confirmed by the warehouse)");
-    const s = await settings();
-    if (s.auto_refund && !short.length) { try { rec = await refund(rec); } catch (e) { rec = await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
-    else if (short.length) rec = await update(rec.id, { status: "needs_attention" }, "Not refunded automatically — the warehouse received fewer items than expected");
+  if (["label_created", "in_transit"].includes(rec.status)) rec = await update(rec.id, { status: "delivered", delivered_at: rec.delivered_at || at }, "Delivered back to us (confirmed by the warehouse)");
+  // Refund what came back — the same automatic refund as a delivered package, but only for the items received.
+  const s = await settings();
+  if (rec.status === "delivered" && s.auto_refund) {
+    if (!lines.some((l) => l.received > 0)) rec = await update(rec.id, { status: "needs_attention" }, "Not refunded — the warehouse received none of the items");
+    else { try { rec = await refund(rec); } catch (e) { rec = await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
   }
   return rec;
 }
