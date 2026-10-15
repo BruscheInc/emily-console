@@ -141,6 +141,27 @@ module.exports = function mountMcp(app, deps = {}) {
       run: (a) => policies(a.key),
     },
     {
+      name: "buzzin_list_chats",
+      description: "List website chat conversations Emily had with shoppers (Larkspur Baby 'lb' / Outlet 'lbo'), newest first: first question, last reply, verified order, and whether it was handed to the team as a ticket. Search q matches anything said in the chat. Page with offset.",
+      inputSchema: { type: "object", properties: { store: { type: "string", enum: ["lb", "lbo"] }, q: { type: "string" }, handoff: { type: "boolean", description: "only chats handed off to a ticket" }, limit: { type: "number" }, offset: { type: "number" } } },
+      annotations: { readOnlyHint: true },
+      run: (a) => require("./replies").listChats(a),
+    },
+    {
+      name: "buzzin_get_chat",
+      description: "Read one website chat transcript in full (every customer message and Emily's reply, with times, products and order lookups shown).",
+      inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+      annotations: { readOnlyHint: true },
+      run: (a) => require("./replies").getChat(a.id),
+    },
+    {
+      name: "buzzin_list_auto_replies",
+      description: "List emails Emily sent without approval and tickets she closed on her own, newest first: what the customer wrote, what Emily sent, intent, why it was closed, and whether the customer wrote back after. kind: 'sent' or 'closed'.",
+      inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["sent", "closed"] }, store: { type: "string", enum: ["lb", "lbo"] }, q: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
+      annotations: { readOnlyHint: true },
+      run: (a) => require("./replies").listAuto(a),
+    },
+    {
       name: "buzzin_add_internal_note",
       description: "Add an internal note to a Buzzin ticket (team only; the customer never sees it). Signed as Claude.",
       inputSchema: { type: "object", properties: { id: { type: "number" }, text: { type: "string" } }, required: ["id", "text"] },
@@ -162,7 +183,7 @@ module.exports = function mountMcp(app, deps = {}) {
           protocolVersion: params.protocolVersion || PROTOCOL,
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: "buzzin", version: require("./package.json").version },
-          instructions: "Buzzin is Brusche Inc.'s own support desk; Emily is the AI agent inside it. Ticket ids are numbers from 9000000000 up. Read-only except internal notes.",
+          instructions: "Buzzin is Brusche Inc.'s own support desk; Emily is the AI agent inside it. Buzzin's own ticket ids start at 9000000000; older ones came from Gorgias. Website chats and Emily's automatic replies are readable too. Read-only except internal notes.",
         });
       case "ping": return reply({});
       case "tools/list":

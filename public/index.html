@@ -171,7 +171,23 @@
   .back{display:inline-block}
   .thead{flex:none;padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .tno{font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);margin-right:6px;cursor:default}.thead .tno{cursor:pointer;margin-left:6px}
-  .thead .who{font-weight:800}.thead .sub{color:var(--muted);font-size:12px}
+  .thead .who{font-weight:800}
+  .er-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 12px}
+  .er-tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px}.er-tile b{display:block;font-size:22px;line-height:1.2}.er-tile span{color:var(--muted);font-size:12px}
+  .er-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
+  .er-bar select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink)}
+  .er-q{white-space:pre-wrap;font-size:13px;line-height:1.45;max-height:4.4em;overflow:hidden}
+  .er-row{cursor:pointer}.er-row:hover td{background:var(--panel2)}
+  .er-open td{background:var(--panel2)}
+  .er-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 2px 10px}
+  .er-pair h4{margin:0 0 4px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .er-pair .t{white-space:pre-wrap;font-size:13px;line-height:1.5;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:340px;overflow:auto}
+  .er-tr{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .er-m{max-width:82%;padding:8px 12px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap}
+  .er-m.c{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+  .er-m.e{align-self:flex-start;background:var(--panel2);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .er-m .at{display:block;font-size:10.5px;opacity:.7;margin-top:3px}.er-m .x{display:block;font-size:11.5px;opacity:.85;margin-top:4px}
+  @media (max-width:760px){.er-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.er-pair{grid-template-columns:1fr}}.thead .sub{color:var(--muted);font-size:12px}
   .thead .sp{flex:1}
   .pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
   .pill.open{background:rgba(183,121,31,.14);color:var(--warn)}.pill.closed{background:rgba(100,112,135,.16);color:var(--muted)}
@@ -409,6 +425,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
   </div></div>
   <div class="grp" data-g="analytics"><button class="nav gh" onclick="toggleGrp('analytics')"><i class="i ti ti-chart-pie"></i><span>Analytics</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
+    <button class="nav view sub" data-view="emily_replies" onclick="setView('emily_replies')"><i class="si ti ti-message-chatbot"></i><span>Emily's replies</span></button>
     <button class="nav view sub" data-view="returns_analytics" onclick="setView('returns_analytics')"><i class="si ti ti-chart-bar"></i><span>Return analytics</span></button>
     <button class="nav view sub" data-view="activity" onclick="setView('activity')"><i class="si ti ti-history"></i><span>Activity log</span></button>
   </div></div>
@@ -541,7 +558,7 @@ async function loadCounts(){try{
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",loop_returns:"Loop returns",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",loop_returns:"Loop returns",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -635,13 +652,14 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="7" class="empty">Loading…</td></tr>';_listSig="";SEL.clear();syncBulk();}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
-  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_analytics"||VIEW==="claims";
+  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
   if(VIEW==="home") return loadHome(silent);
   if(VIEW==="activity") return loadActivity(silent);
+  if(VIEW==="emily_replies") return loadReplies(silent);
   if(VIEW==="returns"||VIEW==="loop_returns") return loadReturns(silent);
   if(VIEW==="claims") return loadClaims(silent);
   if(VIEW==="returns_analytics"){ if(!silent||!RA.d) loadAnalytics(silent); return; }
@@ -1641,6 +1659,68 @@ async function returnModal(){
       if(r.error)throw new Error(r.error); toast(`Return ${r.record.rma} created${r.attached?" — label attached to your reply":""}`); closeModal(); if(CUR)openTicket(CUR); loadCounts(); }
     catch(e){ toast(e.message,true); go.disabled=false; go.textContent="Create return + label"; }
   };
+}
+/* ---------- Emily's replies: website chats + emails she sent / tickets she closed on her own ---------- */
+let ER={tab:"chats",store:"",q:"",handoff:false,kind:"",offset:0,open:null}, _erSig="", ER_ITEMS=[];
+async function loadReplies(silent){
+  const w=$("stuckwrap"); if(!silent){ w.innerHTML='<div class="empty">Loading…</div>'; _erSig=""; }
+  try{
+    const qs=`store=${encodeURIComponent(ER.store)}&q=${encodeURIComponent(ER.q)}&offset=${ER.offset}&limit=50`;
+    const [st,d]=await Promise.all([api("/api/emily-replies/stats").catch(()=>({})),
+      ER.tab==="chats"?api(`/api/emily-replies/chats?${qs}&handoff=${ER.handoff?1:0}`):api(`/api/emily-replies/auto?${qs}&kind=${encodeURIComponent(ER.kind)}`)]);
+    const sig=JSON.stringify([ER,d.total,(d.items||[]).slice(0,3).map(x=>x.id||x.ticket_id+"/"+x.at)]); if(silent&&sig===_erSig) return; _erSig=sig;
+    ER_ITEMS=d.items||[];
+    $("showing").textContent=d.total?`${d.offset+1}–${Math.min(d.offset+ER_ITEMS.length,d.total)} of ${d.total.toLocaleString()}`:"";
+    const tab=(k,l,n)=>`<button class="tab ${ER.tab===k?"on":""}" onclick="ER.tab='${k}';ER.offset=0;ER.open=null;loadReplies()">${l}${n!=null?`<span class="n">${n}</span>`:""}</button>`;
+    const tiles=`<div class="er-tiles">
+      <div class="er-tile"><b>${st.chats_30d||0}</b><span>Website chats · 30 days</span></div>
+      <div class="er-tile"><b>${st.handoffs_30d||0}</b><span>Chats handed to the team</span></div>
+      <div class="er-tile"><b>${st.auto_sent_30d||0}</b><span>Emails Emily sent on her own</span></div>
+      <div class="er-tile"><b>${st.auto_closed_30d||0}</b><span>Tickets Emily closed</span></div></div>`;
+    const filters=`<div class="er-bar">
+      <div class="seg">${tab("chats","Website chat")}${tab("auto","Auto-sent & auto-closed")}</div>
+      <select onchange="ER.store=this.value;ER.offset=0;loadReplies()"><option value="">Both stores</option><option value="lb" ${ER.store==="lb"?"selected":""}>Larkspur Baby</option><option value="lbo" ${ER.store==="lbo"?"selected":""}>Outlet</option></select>
+      ${ER.tab==="chats"?`<label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" ${ER.handoff?"checked":""} onchange="ER.handoff=this.checked;ER.offset=0;loadReplies()"> Handed to the team only</label>`
+        :`<select onchange="ER.kind=this.value;ER.offset=0;loadReplies()"><option value="">Sent or closed</option><option value="sent" ${ER.kind==="sent"?"selected":""}>Emails Emily sent</option><option value="closed" ${ER.kind==="closed"?"selected":""}>Tickets Emily closed</option></select>`}
+      <input class="search" style="max-width:280px" placeholder="${ER.tab==="chats"?"Search what was said, email, order #…":"Search customer, order #, ticket #, reply…"}" value="${esc(ER.q)}" onkeydown="if(event.key==='Enter'){ER.q=this.value.trim();ER.offset=0;loadReplies()}">
+      <span class="sp" style="flex:1"></span>
+      <button class="btn sec xs" ${ER.offset<=0?"disabled":""} onclick="ER.offset=Math.max(0,ER.offset-50);loadReplies()">‹ Newer</button><button class="btn sec xs" ${ER.offset+50>=d.total?"disabled":""} onclick="ER.offset+=50;loadReplies()">Older ›</button></div>`;
+    const head=`<div class="stuckhead"><span>${ER.tab==="chats"?"Every conversation shoppers had with Emily in the website chat, kept in full. Click one to read it.":"Emails Emily sent without approval, and tickets she closed on her own. Click a row to see what the customer wrote and what Emily said."}</span></div>`;
+    if(!ER_ITEMS.length){ w.innerHTML=tiles+filters+head+`<div class="empty">Nothing here yet.</div>`; return; }
+    w.innerHTML=tiles+filters+head+`<div id="er-list">${ER.tab==="chats"?erChatTable():erAutoTable()}</div>`;
+  }catch(e){ w.innerHTML=`<div class="empty">Couldn't load Emily's replies: ${esc(e.message||"")}</div>`; }
+}
+function erChatTable(){
+  return `<table class="tickets"><thead><tr><th class="c-t" style="width:14%">Last message</th><th style="width:11%">Store</th><th>Shopper asked</th><th>Emily's last reply</th><th style="width:15%">Outcome</th></tr></thead><tbody>${ER_ITEMS.map((c,i)=>`<tr class="er-row" onclick="erChat(${i})">
+    <td class="c-t"><b>${fmt(c.last)}</b><div class="exc">${fmtDay(c.started)} · ${c.messages} msg${c.messages===1?"":"s"}</div></td>
+    <td>${c.store==="lbo"?"Outlet":"Larkspur"}</td>
+    <td><div class="er-q">${esc(c.first_question||"(no question)")}</div></td>
+    <td><div class="er-q" style="color:var(--muted)">${esc(c.last_reply||"")}</div></td>
+    <td>${c.handed_off?`<a href="#" onclick="event.stopPropagation();openTicket(${c.ticket_id});return false" class="chip" style="text-decoration:none">→ ticket #${c.ticket_id}</a>`:'<span class="chip">Handled in chat</span>'}${c.order?`<div class="exc">Order ${esc(c.order)}</div>`:""}${c.email?`<div class="exc">${esc(c.email)}</div>`:""}</td></tr>`).join("")}</tbody></table>`;
+}
+async function erChat(i){
+  const c=ER_ITEMS[i]; if(!c) return;
+  closeModal(); const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box" style="width:min(680px,100%)"><h3>Website chat · ${c.store==="lbo"?"Larkspur Baby Outlet":"Larkspur Baby"}</h3><div class="sub">Loading…</div></div>`;
+  document.body.appendChild(m);
+  try{
+    const d=await api(`/api/emily-replies/chats/${encodeURIComponent(c.id)}`);
+    const meta=[`Started ${fmtDay(d.started)} ${fmt(d.started)}`, d.page?`on ${esc(d.page)}`:"", d.order?`order ${esc(d.order)} verified`:"", d.email?esc(d.email):""].filter(Boolean).join(" · ");
+    m.querySelector(".box").innerHTML=`<div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1"><h3>Website chat · ${esc(d.store_name)}</h3><div class="sub" style="margin-bottom:4px">${meta}</div></div>
+      ${d.ticket_id?`<button class="btn sec xs" onclick="closeModal();openTicket(${d.ticket_id})">Open ticket #${d.ticket_id}</button>`:""}<button class="btn sec xs" onclick="closeModal()">Close</button></div>
+      <div class="er-tr">${d.messages.map(x=>`<div class="er-m ${x.who==="customer"?"c":"e"}">${esc(x.text||"")}${x.order?`<span class="x">📦 showed order ${esc(String(x.order))}</span>`:""}${x.products?`<span class="x">🛍️ ${esc(x.products.join(", "))}</span>`:""}${x.handoff?`<span class="x">📨 handed to the team</span>`:""}<span class="at">${x.who==="customer"?"Shopper":"Emily"}${x.at?" · "+fmt(x.at):""}</span></div>`).join("")}</div>`;
+  }catch(e){ m.querySelector(".sub").textContent="Couldn't load this chat: "+(e.message||""); }
+}
+function erToggle(i){ ER.open=ER.open===i?null:i; const l=$("er-list"); if(l) l.innerHTML=erAutoTable(); }
+function erAutoTable(){
+  return `<table class="tickets"><thead><tr><th class="c-t" style="width:14%">When</th><th style="width:20%">Customer</th><th>Ticket</th><th style="width:22%">What Emily did</th><th style="width:13%">Now</th></tr></thead><tbody>${ER_ITEMS.map((x,i)=>{const open=ER.open===i;
+    return `<tr class="er-row ${open?"er-open":""}" onclick="erToggle(${i})">
+    <td class="c-t"><b>${fmt(x.at)}</b><div class="exc">${fmtDay(x.at)}</div></td>
+    <td><b>${esc(x.customer||"")}</b>${x.order?`<div class="exc">#${esc(x.order)}</div>`:""}</td>
+    <td><a href="#" onclick="event.stopPropagation();openTicket(${x.ticket_id});return false" style="color:var(--accent);font-weight:600;text-decoration:none">#${x.ticket_id}</a><div class="exc">${esc(x.subject||"")}</div></td>
+    <td>${x.sent?`<span class="chip drafted">✉️ Sent${x.intent?" · "+esc(x.intent):""}</span>`:""}${x.closed?`<div style="margin-top:3px"><span class="chip">🔒 Closed</span><div class="exc">${esc(x.close_reason||"")}</div></div>`:""}</td>
+    <td>${x.customer_replied_after?`<span class="chip" style="color:#b7791f">↩︎ Customer wrote back${x.customer_replied_after>1?" ×"+x.customer_replied_after:""}</span>`:'<span class="exc">No reply since</span>'}<div class="exc">${esc(x.status||"")}</div></td></tr>
+    ${open?`<tr class="er-open"><td colspan="5"><div class="er-pair"><div><h4>Customer wrote</h4><div class="t">${esc(x.customer_text||"(no message found)")}</div></div><div><h4>${x.sent?"Emily sent":"Emily's note"}</h4><div class="t">${esc(x.sent_text||x.close_reason||"(closed without a reply)")}</div></div></div></td></tr>`:""}`;}).join("")}</tbody></table>`;
 }
 /* ---------- Activity log: every action, when, by whom ---------- */
 let ACT_F={who:"",kind:"",q:"",offset:0}, _actSig="";

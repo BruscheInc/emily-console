@@ -6,6 +6,8 @@ Every upload to the emily-console repo is one version. The number shows in the a
 ## 4.73.0
 - Emily: replacement orders can now ship to a different address. Before, a replacement always went to the address on the order it was based on — so when that order had gone to the wrong address, the replacement went there too, and the right address only ended up in the note (ticket 9000000517). Emily now passes the correct address, and the card's "Ship to" line shows it.
 - Emily: when she proposes a new replacement for the same order on a ticket, the older card is retired, so only one can be applied.
+- **Emily's replies** (Analytics → Emily's replies): one page for everything Emily said without a person in the loop. *Website chat* lists every chat conversation from both stores, kept in full — click one to read the whole transcript, with the order she looked up and the ticket it was handed to. *Auto-sent & auto-closed* lists every email she sent on her own and every ticket she closed, with what the customer wrote, what Emily sent, why it closed, and whether the customer wrote back after. Counts for the last 30 days on top; filter by store and search.
+- Claude connector: can also read website chats and Emily's automatic replies.
 - Tickets: the ticket number shows in the ticket list and next to the customer's name on an open ticket (click it to copy). Searching a ticket number finds that ticket.
 
 ## 4.72.1
