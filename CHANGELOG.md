@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.75.1
+- Rules: Emily only gives the military code (thankyoumilitary, Larkspur Baby only) when a customer explicitly asks for a military discount — never when someone asks about discounts in general.
+
 ## 4.75.0
 - Menu: Buzzin opens with every group collapsed except Inbox (and the group for the page you're on).
 - Rules: the military discount code thankyoumilitary is for Larkspur Baby only — not the Outlet.
