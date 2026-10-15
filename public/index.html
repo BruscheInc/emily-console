@@ -536,8 +536,11 @@ else {(async()=>{
 function applyView(){document.querySelectorAll(".nav.view").forEach(b=>b.classList.toggle("on",b.dataset.view===VIEW)); initGroups();}
 /* ---- sidebar groups (Klaviyo-style categories, Gorgias-style view counts) ---- */
 function grpState(){ try{ return JSON.parse(localStorage.getItem("ec_groups")||"{}"); }catch(e){ return {}; } }
-function initGroups(){ const st=grpState(); document.querySelectorAll(".side .grp").forEach(g=>{ const hasOn=!!g.querySelector(".nav.view.on"); g.classList.toggle("closed", st[g.dataset.g]===false && !hasOn); }); }
-function toggleGrp(id){ const g=document.querySelector(`.side .grp[data-g="${id}"]`); if(!g)return; const closed=!g.classList.contains("closed"); g.classList.toggle("closed",closed); const st=grpState(); st[id]=!closed; try{localStorage.setItem("ec_groups",JSON.stringify(st));}catch(e){} }
+// Buzzin opens with every group collapsed except Inbox (and the group holding the page you're on). Opening and closing
+// groups works as usual while the app is open; it isn't remembered for next time.
+let _grpInit=false;
+function initGroups(){ if(_grpInit) return; _grpInit=true; document.querySelectorAll(".side .grp").forEach(g=>{ const hasOn=!!g.querySelector(".nav.view.on"); g.classList.toggle("closed", g.dataset.g!=="inbox" && !hasOn); }); }
+function toggleGrp(id){ const g=document.querySelector(`.side .grp[data-g="${id}"]`); if(!g)return; const closed=!g.classList.contains("closed"); g.classList.toggle("closed",closed); }
 function groupTotals(){ document.querySelectorAll(".side .grp").forEach(g=>{ let t=0; g.querySelectorAll(".gb .n").forEach(n=>{ t+=Number(n.textContent)||0; }); const el=g.querySelector(".gt"); if(el) el.textContent=t?t.toLocaleString():""; }); }
 function sideSearch(){ const ticketViews=["lb","lbo","lb_tickets","lbo_tickets","oos","all"]; if(document.body.classList.contains("viewing")) closeThread(); if(!ticketViews.includes(VIEW)) setView("all"); setTimeout(()=>{ const q=$("q"); if(q){ q.focus(); q.select(); } },60); }
 document.addEventListener("keydown",(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){ e.preventDefault(); sideSearch(); } });

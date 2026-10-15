@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.75.0
+- Menu: Buzzin opens with every group collapsed except Inbox (and the group for the page you're on).
+- Rules: the military discount code thankyoumilitary is for Larkspur Baby only — not the Outlet.
+
 ## 4.74.0
 - Website chat now answers from Emily's full rulebook — free shipping, local pickup, discounts, returns, the Outlet — instead of only the FAQ page, so it gives real answers ("free shipping on Larkspur Baby orders of $75+, applied automatically") rather than "check our FAQ".
 - Website chat knows both stores. It links shoppers to the other store when asked, and when something isn't sold on the store they're on but is on the other one (e.g. dresses at the Outlet), it says so and links it.
