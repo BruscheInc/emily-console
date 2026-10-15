@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.73.0
+- Emily: replacement orders can now ship to a different address. Before, a replacement always went to the address on the order it was based on — so when that order had gone to the wrong address, the replacement went there too, and the right address only ended up in the note (ticket 9000000517). Emily now passes the correct address, and the card's "Ship to" line shows it.
+- Emily: when she proposes a new replacement for the same order on a ticket, the older card is retired, so only one can be applied.
+- Tickets: the ticket number shows in the ticket list and next to the customer's name on an open ticket (click it to copy). Searching a ticket number finds that ticket.
+
 ## 4.72.1
 - Address change ready: when PUBLIC_URL changes (buzzin.bruscheinc.com), Buzzin subscribes Amazon's email and texting reports at the new address on startup. While both addresses are subscribed, duplicate events are handled once.
 ## 4.72.0

@@ -199,7 +199,9 @@ app.get("/api/tickets", async (req, res) => {
     if (q) {
       args.push(`%${q}%`);
       const i = args.length;
-      where.push(`(subject ILIKE $${i} OR customer_email ILIKE $${i} OR customer_name ILIKE $${i} OR order_number ILIKE $${i}
+      args.push(q.replace(/^#/, "").trim());
+      const j = args.length;
+      where.push(`(id::text = $${j} OR subject ILIKE $${i} OR customer_email ILIKE $${i} OR customer_name ILIKE $${i} OR order_number ILIKE $${i}
                    OR EXISTS (SELECT 1 FROM hd_messages m WHERE m.ticket_id=hd_tickets.id AND m.body_text ILIKE $${i}))`);
     }
     const total = (await db(`SELECT count(*)::int AS n FROM hd_tickets WHERE ${where.join(" AND ")}`, args)).rows[0].n;
