@@ -1109,7 +1109,7 @@ async function loadStuck(silent){
 }
 async function stuckRefresh(b){ b.disabled=true; b.textContent="Checking Shopify…"; try{ const r=await api("/api/stuck/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.scanned} orders — ${r.never_scanned} never scanned · ${r.undelivered} not delivered`); }catch(e){toast("Check failed",true);} loadStuck(); loadCounts(); }
 /* ---------- Returns: our own portal (replaces Loop). Data from returns.js ---------- */
-let LOOP_F={status:"needs_attention",store:"",q:""}; function retF(){ return VIEW==="loop_returns"?LOOP_F:RET_F; }
+let LOOP_F={status:"",store:"",q:""}; function retF(){ return VIEW==="loop_returns"?LOOP_F:RET_F; }
 let RET_F={status:"open",store:"",q:""}, RET_OPEN=new Set(), _retSig="", RET_D=null;
 const RET_LABEL={label_created:"Label created",in_transit:"On its way back",delivered:"Delivered",refunded:"Refunded",needs_attention:"Needs attention",cancelled:"Cancelled"};
 const RET_CHIP={label_created:"",in_transit:"drafted",delivered:"drafted",refunded:"sent",needs_attention:"skip",cancelled:""};
@@ -1436,7 +1436,7 @@ async function loadReturns(silent){
     for(const r of d.returns){
       const n=r.items.reduce((a,i)=>a+i.quantity,0);
       h+=`<tr class="row" onclick="RET_OPEN.has('${r.id}')?RET_OPEN.delete('${r.id}'):RET_OPEN.add('${r.id}');loadReturns(true)">
-        <td class="c-t" style="width:18%"><div class="subj">${esc(r.rma)}</div><div class="exc">${esc(r.order_name)} · ${fmtDay(r.created_at)}${r.source==="loop"?" · from Loop":r.source!=="portal"?" · by staff":""}</div></td>
+        <td class="c-t" style="width:18%"><div class="subj">${esc(r.rma)}</div><div class="exc">${esc(r.order_name)} · ${fmtDay(r.created_at)}${r.source==="loop"?` · <span class="chip" style="font-size:10.5px">Loop</span>`:r.source!=="portal"?" · by staff":""}</div></td>
         <td style="width:20%">${esc(r.customer_name||"")}<div class="exc">${esc(r.email||"")}</div></td>
         <td style="width:24%">${n} item${n===1?"":"s"}<div class="exc">${esc(r.items.map(i=>i.title).join(", "))}</div></td>
         <td style="width:12%">${r.refund_method==="store_credit"?"Store credit":"Original payment"}</td>

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## ..1
+- Returns: searching on the Returns page now also finds imported Loop returns (marked "Loop"). The Loop returns page opens on All instead of only "Needs a decision", so open Loop returns (label made / on the way) are visible right away.
+
 ## 4.78.0
 - Returns: refunds follow what the warehouse received. When a return is accepted at the warehouse with fewer items than expected, only the received items are refunded (less the label fee) and the Shopify return is closed for the rest. "Refund now" on a checked-in return does the same.
 - New setting (Returns → Settings): **Wait for the warehouse to accept it, then refund only the items received** — holds the automatic refund at "Delivered" until someone checks the package in. Off by default.

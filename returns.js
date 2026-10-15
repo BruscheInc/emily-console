@@ -504,7 +504,8 @@ async function update(id, patch, event) { const rec = await getRec(id); if (!rec
 // Loop imports live on their own tab: source "loop" shows only them; every other view leaves them out.
 const LOOP_SQL = `COALESCE(data->>'source','') = 'loop'`;
 async function list({ status, store, q, source, limit = 300 } = {}) {
-  const where = [source === "loop" ? LOOP_SQL : source === "all" ? "TRUE" : `NOT (${LOOP_SQL})`], args = [];
+  // A search on the Returns page also finds Loop returns, so nothing seems to be missing.
+  const where = [source === "loop" ? LOOP_SQL : source === "all" || q ? "TRUE" : `NOT (${LOOP_SQL})`], args = [];
   if (status === "open") where.push(`status IN ('label_created','in_transit','delivered')`);
   else if (status) { args.push(status); where.push(`status=$${args.length}`); }
   if (store) { args.push(store); where.push(`store=$${args.length}`); }
