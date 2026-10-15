@@ -182,13 +182,15 @@ function routes(app, { admin, actorOf, fail }) {
         if (r.ok) { const cfg = await setting("mk_sms_aws"); await saveSetting("mk_sms_aws", { ...cfg, confirmed_at: new Date().toISOString() }); console.log("📱 Amazon texting: replies and delivery reports connected"); }
         return;
       }
-      if (m.Type === "Notification") await onMessage(JSON.parse(m.Message || "{}"));
+      if (m.Type === "Notification") { if (require("./mk-ses").seenSns(m.MessageId)) return; await onMessage(JSON.parse(m.Message || "{}")); }
     } catch (e) { console.error("SMS events:", e.message); }
   });
 }
 
 async function init() {
   if (!configured()) return;
+  try { const cfg = await setting("mk_sms_aws"); if (cfg.topic && cfg.endpoint && cfg.endpoint !== `${PUBLIC_URL()}/mk/sms/aws/events`) { await setup("address change"); console.log(`📱 Amazon texting: replies and reports subscribed at the new address ${PUBLIC_URL()} (old: ${cfg.endpoint})`); } }
+  catch (e) { console.error("Amazon texting address move:", e.message); }
   try { const s = await status(); console.log(`📱 Amazon texting: ${s.tier.toLowerCase()} · ${s.numbers.length ? s.numbers.map((n) => `${n.phone} ${n.status.toLowerCase()} (registration ${String(n.registration || "none").toLowerCase()})`).join(" · ") : "no number yet"} · limit $${s.monthly_limit}/mo`); }
   catch (e) { console.log(`📱 Amazon texting: not ready (${e.name || "error"}: ${String(e.message).slice(0, 120)})`); }
   setInterval(() => status().catch(() => {}), 3 * 3600e3);

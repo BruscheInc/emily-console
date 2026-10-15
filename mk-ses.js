@@ -95,6 +95,16 @@ async function saveEvents(patch) {
   await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('mk_ses_events',$1,'ses',now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`, [JSON.stringify({ ...cur, ...patch })]);
 }
 
+// While Amazon has both the old and the new Buzzin address subscribed (after an address change), each event
+// arrives twice with the same MessageId — handle it once.
+const seen = new Map();
+function seenSns(id) {
+  if (!id) return false;
+  const now = Date.now();
+  if (seen.size > 5000) for (const [k, t] of seen) if (now - t > 3600e3) seen.delete(k);
+  if (seen.has(id)) return true;
+  seen.set(id, now); return false;
+}
 /* SNS messages are signed by Amazon; anything that fails the check is ignored. */
 const certCache = new Map();
 async function verifySns(m) {
@@ -160,16 +170,19 @@ function routes(app, { guard, admin, actorOf, fail }) {
         const r = await fetch(m.SubscribeURL); if (r.ok) { await saveEvents({ confirmed_at: new Date().toISOString(), topic: m.TopicArn }); console.log("📬 SES reports connected (bounces, complaints, deliveries)"); }
         return;
       }
-      if (m.Type === "Notification") await onEvent(JSON.parse(m.Message || "{}"));
+      if (m.Type === "Notification") { if (seenSns(m.MessageId)) return; await onEvent(JSON.parse(m.Message || "{}")); }
     } catch (e) { console.error("SES events:", e.message); }
   });
 }
 
 async function init() {
   if (!configured()) return;
+  // Buzzin's address changed (PUBLIC_URL): point Amazon's reports at the new one. The old subscription keeps working until it's deleted in AWS.
+  try { const ev = (await core.setting("mk_ses_events", null)) || {}; if (ev.topic && ev.endpoint && ev.endpoint !== `${PUBLIC_URL()}/mk/ses/events`) { await setupEvents("address change"); console.log(`📬 SES reports: subscribed the new address ${PUBLIC_URL()} (old: ${ev.endpoint})`); } }
+  catch (e) { console.error("SES reports address move:", e.message); }
   try { const s = await status(); console.log(`📧 Amazon SES: ${s.production ? "production" : "sandbox (200/day, verified recipients only)"} · ${Object.entries(s.stores).map(([k, v]) => `${k.toUpperCase()} ${v.domain} ${v.verified ? "verified" : v.exists ? "not verified yet" : "not added"}`).join(" · ")} · reports ${s.events && s.events.subscribed ? "on" : "not set up"}`); }
   catch (e) { console.error("Amazon SES check:", e.message); }
   setInterval(() => status().catch(() => {}), 6 * 3600e3);
 }
 
-module.exports = { init, routes, status, setupEvents, sendEmail, onEvent, verifySns, configured, SES_POLICY };
+module.exports = { seenSns, init, routes, status, setupEvents, sendEmail, onEvent, verifySns, configured, SES_POLICY };
