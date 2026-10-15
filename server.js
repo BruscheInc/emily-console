@@ -280,7 +280,7 @@ app.get("/api/counts", async (req, res) => {
       views[v] = n.rows[0].n;
     }
     let stuck = { never_scanned: 0, undelivered: 0 }; try { stuck = await require("./emily").stuckCounts(); } catch (_) {}
-    let returns = null; try { const rc = await require("./returns").counts(); returns = { open: rc.open, attention: rc.attention, loop: rc.loop || null }; } catch (_) {}
+    let returns = null; try { const rc = await require("./returns").counts(); returns = { open: rc.open, attention: rc.attention, loop: rc.loop || null, unchecked: rc.unchecked || 0 }; } catch (_) {}
     let claims = null; try { claims = (await require("./claims").counts()).open || 0; } catch (_) {}
     let faq = null; try { faq = (await require("./faqs").status()).pending || 0; } catch (_) {}
     res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns, claims, faq });
@@ -957,12 +957,25 @@ app.post("/api/returns/loop-import", express.json({ type: "application/x-loop-im
     res.json(await require("./loop-import").run(files, { apply: req.query.apply === "1", who: actorOf(req) }));
   } catch (e) { retErr(res, e); }
 });
+// Returned-items log (what's coming back, what arrived, what the warehouse accepted). Also readable by Stockroom with the same key.
+app.get("/api/returns/items", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json(await R.itemsLog({ state: String(req.query.state || "all"), store: String(req.query.store || ""), q: String(req.query.q || ""), from: String(req.query.from || ""), to: String(req.query.to || "") })); }
+  catch (e) { retErr(res, e); }
+});
+app.get("/api/returns/items.csv", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { const d = await R.itemsLog({ state: String(req.query.state || "all"), store: String(req.query.store || ""), q: String(req.query.q || ""), from: String(req.query.from || ""), to: String(req.query.to || "") });
+    res.setHeader("Content-Type", "text/csv"); res.setHeader("Content-Disposition", 'attachment; filename="returned-items.csv"'); res.send(R.itemsCsv(d.rows)); }
+  catch (e) { retErr(res, e); }
+});
 app.post("/api/returns/:id/:act", async (req, res) => {
   if (!guard(req, res)) return;
   const who = actorOf(req), act = req.params.act;
   try {
     const rec = await R.getRec(req.params.id); if (!rec) return res.status(404).json({ error: "not found" });
     if (act === "refund") await R.refund(rec, { force: true, who });
+    else if (act === "accept") await R.acceptAtWarehouse(rec, { who, items: (req.body || {}).items, note: (req.body || {}).note });
     else if (act === "track") await R.checkOne(rec);
     else if (act === "cancel") await R.cancel(rec, `Cancelled by ${who}`, who);
     else return res.status(400).json({ error: "unknown action" });

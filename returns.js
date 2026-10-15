@@ -526,6 +526,7 @@ async function counts() {
   for (const x of by.rows) out.by[x.status] = x.n;
   out.open = (out.by.label_created || 0) + (out.by.in_transit || 0) + (out.by.delivered || 0);
   out.attention = out.by.needs_attention || 0;
+  out.unchecked = Number((await db(`SELECT count(*)::int n FROM hd_returns WHERE status <> 'cancelled' AND data->'warehouse' IS NULL AND (status='delivered' OR data->>'delivered_at' IS NOT NULL) AND COALESCE((data->>'test_label')::boolean,false)=false`)).rows[0].n);
   const L = {}; for (const x of lp.rows) L[x.status] = x.n;
   out.loop = { total: Object.values(L).reduce((a, b) => a + b, 0), open: (L.label_created || 0) + (L.in_transit || 0) + (L.delivered || 0), attention: L.needs_attention || 0, refunded: L.refunded || 0, by: L };
   return out;
@@ -946,6 +947,75 @@ async function poll() {
   finally { polling = false; if (noTrackerSeen && Date.now() - noTrackerLogged > 24 * 3600e3) { noTrackerLogged = Date.now(); console.log(`↩️  Returns: ${noTrackerSeen} Loop return${noTrackerSeen === 1 ? "" : "s"} can't be tracked until USPS tracking keys are added (USPS_CLIENT_ID / USPS_CLIENT_SECRET)`); } noTrackerSeen = 0; }
 }
 
+/* ---------------- warehouse: accept returned items, and the returned-items log ---------------- */
+// Warehouse staff confirm what actually came back (qty per item + a note). If tracking hadn't caught up yet
+// (or it's a Loop label Buzzin can't track), accepting counts as "delivered back" and the normal auto-refund runs.
+async function acceptAtWarehouse(rec, { who, items, note } = {}) {
+  if (rec.status === "cancelled") throw new Error("This return was cancelled");
+  const got = Array.isArray(items) ? items : [];
+  const lines = (rec.items || []).map((i, idx) => {
+    const m = got.find((g) => (g.idx != null && Number(g.idx) === idx) || (g.sku && g.sku === i.sku));
+    const q = m ? Math.max(0, Math.min(1000, Math.floor(Number(m.qty)))) : i.quantity;
+    return { idx, sku: i.sku || "", title: i.title, variant: i.variant || "", expected: i.quantity, received: isNaN(q) ? i.quantity : q };
+  });
+  const at = new Date().toISOString();
+  const short = lines.filter((l) => l.received !== l.expected);
+  const wh = { accepted_at: at, by: who || "staff", note: String(note || "").slice(0, 500), lines };
+  rec = await update(rec.id, { warehouse: wh },
+    `Accepted at the warehouse by ${wh.by}: ${lines.map((l) => `${l.received}/${l.expected}× ${l.title}${l.variant ? " (" + l.variant + ")" : ""}`).join(", ")}${wh.note ? ` — “${wh.note}”` : ""}`);
+  await core.audit({ ticketId: rec.ticket_id || null, kind: "return-accepted", detail: `${rec.rma} · ${lines.reduce((t, l) => t + l.received, 0)} item(s) received${short.length ? " · " + short.length + " line(s) short" : ""}`, who: wh.by, target: rec.id }).catch(() => {});
+  if (short.length) core.slackPost(`📦 Return ${rec.rma} (${rec.order_name}) checked in by ${wh.by} with differences: ${short.map((l) => `${l.title}${l.variant ? " " + l.variant : ""} — got ${l.received} of ${l.expected}`).join("; ")}${wh.note ? ` · “${wh.note}”` : ""}`).catch(() => {});
+  if (["label_created", "in_transit"].includes(rec.status)) {
+    rec = await update(rec.id, { status: "delivered", delivered_at: rec.delivered_at || at }, "Delivered back to us (confirmed by the warehouse)");
+    const s = await settings();
+    if (s.auto_refund && !short.length) { try { rec = await refund(rec); } catch (e) { rec = await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
+    else if (short.length) rec = await update(rec.id, { status: "needs_attention" }, "Not refunded automatically — the warehouse received fewer items than expected");
+  }
+  return rec;
+}
+// One row per returned item, across Buzzin and Loop returns.
+// state: coming (label made / on the way) · arrived (delivered, waiting for the warehouse) · accepted · all
+async function itemsLog({ state = "all", store = "", q = "", from = "", to = "" } = {}) {
+  const r = await db(`SELECT * FROM hd_returns WHERE status <> 'cancelled' AND COALESCE((data->>'test_label')::boolean,false) = false ORDER BY created_at DESC LIMIT 5000`);
+  const fromT = from ? new Date(from + "T00:00:00-05:00").getTime() : null, toT = to ? new Date(to + "T23:59:59-05:00").getTime() : null;
+  const needle = String(q || "").trim().toLowerCase();
+  const rows = [];
+  for (const rec of r.rows.map(rowToRec)) {
+    if (store && rec.store !== store) continue;
+    const wh = rec.warehouse || null;
+    const st = wh ? "accepted" : rec.delivered_at || rec.status === "delivered" ? "arrived" : ["label_created", "in_transit"].includes(rec.status) ? "coming" : "other";
+    if (state !== "all" && st !== state) continue;
+    const when = st === "accepted" ? wh.accepted_at : st === "arrived" ? rec.delivered_at : rec.created_at;
+    const t = when ? new Date(when).getTime() : 0;
+    if ((fromT && t < fromT) || (toT && t > toT)) continue;
+    (rec.items || []).forEach((i, idx) => {
+      const line = wh && wh.lines ? wh.lines.find((l) => l.idx === idx) : null;
+      const row = { return_id: rec.id, rma: rec.rma, order_name: rec.order_name, store: rec.store, source: rec.source || "portal", customer: rec.customer_name || "", email: rec.email || "",
+        sku: i.sku || "", title: i.title, variant: i.variant || "", qty: i.quantity, received: line ? line.received : null, reason: i.reason || "", unit_price: i.unit_price,
+        state: st, return_status: rec.status, started_at: rec.created_at, shipped_at: rec.accepted_at || null, delivered_at: rec.delivered_at || null,
+        accepted_at: wh ? wh.accepted_at : null, accepted_by: wh ? wh.by : null, note: wh ? wh.note : "", refunded_at: rec.refunded_at || null, tracking_number: rec.tracking_number || "", tracking_url: rec.tracking_url || "" };
+      if (needle && ![row.sku, row.title, row.variant, row.rma, row.order_name, row.customer, row.email].some((v) => String(v).toLowerCase().includes(needle))) return;
+      rows.push(row);
+    });
+  }
+  const bySku = new Map();
+  for (const x of rows) {
+    const k = x.sku || `${x.title}|${x.variant}`;
+    const g = bySku.get(k) || { sku: x.sku, title: x.title, variant: x.variant, coming: 0, arrived: 0, accepted: 0, received: 0 };
+    if (x.state === "coming") g.coming += x.qty; else if (x.state === "arrived") g.arrived += x.qty; else if (x.state === "accepted") { g.accepted += x.qty; g.received += x.received ?? x.qty; }
+    bySku.set(k, g);
+  }
+  const counts = { coming: 0, arrived: 0, accepted: 0 };
+  for (const x of rows) if (counts[x.state] != null) counts[x.state] += x.qty;
+  return { rows, by_sku: [...bySku.values()].sort((a, b) => (b.coming + b.arrived + b.accepted) - (a.coming + a.arrived + a.accepted)), counts };
+}
+function itemsCsv(rows) {
+  const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const d = (v) => v ? new Date(v).toLocaleString("en-US", { timeZone: "America/Chicago" }) : "";
+  const head = ["SKU", "Product", "Variant", "Qty returned", "Qty received", "Status", "Return #", "Order", "Store", "Source", "Customer", "Reason", "Return started", "Shipped back", "Delivered back", "Accepted at warehouse", "Accepted by", "Warehouse note", "Refunded", "Tracking"];
+  const label = { coming: "Coming back", arrived: "Delivered — not checked in", accepted: "Accepted", other: "Other" };
+  return [head.map(q).join(","), ...rows.map((r) => [r.sku, r.title, r.variant, r.qty, r.received ?? "", label[r.state] || r.state, r.rma, r.order_name, r.store.toUpperCase(), r.source, r.customer, r.reason, d(r.started_at), d(r.shipped_at), d(r.delivered_at), d(r.accepted_at), r.accepted_by || "", r.note || "", d(r.refunded_at), r.tracking_number].map(q).join(","))].join("\n");
+}
 function csv(rows) {
   const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
   const head = ["RMA", "Store", "Order", "Customer", "Email", "Status", "Method", "Items", "Reasons", "Item value", "Refunded", "Fee", "Label cost", "Tracking", "Source", "Created", "Refunded at"];
@@ -1118,4 +1188,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { putRec, update, trackingUrl, trackNumber, trackerReady, uspsShape, Q: { SUGGEST, RETURN_DETAIL }, findOrder, linkBase, quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { acceptAtWarehouse, itemsLog, itemsCsv, putRec, update, trackingUrl, trackNumber, trackerReady, uspsShape, Q: { SUGGEST, RETURN_DETAIL }, findOrder, linkBase, quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

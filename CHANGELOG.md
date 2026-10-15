@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.77.0
+- Returns: **Accept at warehouse** on every return. Staff count what came back (qty per item + a note); the date and who accepted it are saved. If tracking hadn't caught up (or it's a Loop label), accepting marks it delivered and the normal auto refund runs; if anything is short, it goes to Needs attention instead and Slack gets a note.
+- New **Returned items** page (Returns & claims): one line per returned product with when it was sent back, delivered and accepted at the warehouse; filters by status, store, dates and SKU; totals by product; CSV export. The menu count shows returns delivered but not checked in yet.
+
 ## 4.76.0
 - Emily reads discounts live from Shopify (Larkspur Baby). In the website chat and on email she checks the code a customer mentions: a near-miss like HAPPYHOLIDAY comes back as the real code (happyholidays) with a link that applies it at checkout, plus what it covers (e.g. only the Holiday collection), end date, minimum, and whether it combines. Expired or unknown codes get a clear answer.
 - She never reveals one-time codes, her own goodwill codes, or test / 100%-off codes, never lists codes nobody asked about, and never suggests the military code unless asked for it.

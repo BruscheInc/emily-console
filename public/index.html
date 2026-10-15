@@ -408,6 +408,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
   <div class="grp" data-g="returns"><button class="nav gh" onclick="toggleGrp('returns')"><i class="i ti ti-arrow-back-up"></i><span>Returns & claims</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
     <button class="nav view sub" data-view="returns" onclick="setView('returns')"><i class="si ti ti-arrow-back-up"></i><span>Returns</span><span class="n" id="v-returns"></span></button>
+    <button class="nav view sub" data-view="returns_items" onclick="setView('returns_items')"><i class="si ti ti-package"></i><span>Returned items</span><span class="n" id="v-ritems"></span></button>
     <button class="nav view sub" data-view="loop_returns" onclick="setView('loop_returns')"><i class="si ti ti-history"></i><span>Loop returns</span><span class="n" id="v-loop"></span></button>
     <button class="nav view sub" data-view="claims" onclick="setView('claims')"><i class="si ti ti-receipt"></i><span>Claims</span><span class="n" id="v-claims"></span></button>
     <button class="nav sub" onclick="retExceptions()"><i class="si ti ti-sparkles"></i><span>Order exceptions</span></button>
@@ -555,13 +556,13 @@ async function loadCounts(){try{
   const c=await api("/api/counts?view="+encodeURIComponent(VIEW));
   for(const k of ["pending","sent","closed","collabs","all"]){const el=$("n-"+k);if(el)el.textContent=c[k]!=null?c[k]:"";}
   for(const v of ["lb","lbo","lb_tickets","lbo_tickets","oos","all"]){const el=$("v-"+v);if(el)el.textContent=(c.views&&c.views[v])?c.views[v]:"";}
-  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||""; const lv=$("v-loop"); if(lv){ const L=c.returns&&c.returns.loop; lv.textContent=L?(L.attention||L.open||""):""; }
+  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||""; const riv=$("v-ritems"); if(riv) riv.textContent=(c.returns&&c.returns.unchecked)||""; const lv=$("v-loop"); if(lv){ const L=c.returns&&c.returns.loop; lv.textContent=L?(L.attention||L.open||""):""; }
   // tab title carries the pending count, like a real inbox
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Buzzin`:"Buzzin";
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",loop_returns:"Loop returns",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -655,7 +656,7 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="7" class="empty">Loading…</td></tr>';_listSig="";SEL.clear();syncBulk();}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
-  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_analytics"||VIEW==="claims";
+  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
@@ -664,6 +665,7 @@ async function loadList(force,silent){
   if(VIEW==="activity") return loadActivity(silent);
   if(VIEW==="emily_replies") return loadReplies(silent);
   if(VIEW==="returns"||VIEW==="loop_returns") return loadReturns(silent);
+  if(VIEW==="returns_items") return loadRetItems(silent);
   if(VIEW==="claims") return loadClaims(silent);
   if(VIEW==="returns_analytics"){ if(!silent||!RA.d) loadAnalytics(silent); return; }
   if(isStuck) return loadStuck(silent);
@@ -1446,8 +1448,9 @@ async function loadReturns(silent){
           <div>${r.items.map(i=>`<div>${i.quantity}× ${esc(i.title)}${i.variant?` <span class="exc" style="display:inline">${esc(i.variant)}</span>`:""} · ${money(i.unit_price)} · <i>${esc(i.reason)}</i>${i.note?` — “${esc(i.note)}”`:""}</div>`).join("")}
             <div style="margin-top:8px">Tracking <a href="${esc(r.tracking_url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(r.tracking_number)}</a>${r.tracking_text?" · "+esc(r.tracking_text):""} · ${r.source==="loop"?`Loop label${r.loop_tracking_url?` (<a href="${esc(r.loop_tracking_url)}" target="_blank" rel="noopener" style="color:var(--accent)">Loop tracking</a>)`:""}`:"label "+money(r.label_cost)}${r.label_emailed===false?' · <span style="color:#c0392b">Shopify did not email the label</span>':""}</div>
             ${r.feedback?`<div style="margin-top:8px">Customer feedback: experience <b>${r.feedback.ease||"—"}/5</b> · buy again <b>${r.feedback.again||"—"}/5</b>${r.feedback.note?` — “${esc(r.feedback.note)}”`:""}</div>`:""}
+            ${r.warehouse?`<div style="margin-top:8px">📦 <b>Accepted at the warehouse</b> ${fmt(r.warehouse.accepted_at)} by ${esc(r.warehouse.by||"staff")}${(r.warehouse.lines||[]).some(l=>l.received!==l.expected)?` — <span style="color:#c0392b">${r.warehouse.lines.filter(l=>l.received!==l.expected).map(l=>`${esc(l.title)}: got ${l.received} of ${l.expected}`).join("; ")}</span>`:" — everything received"}${r.warehouse.note?` · “${esc(r.warehouse.note)}”`:""}</div>`:""}
             <div class="exc" style="display:block">Shopify return ${esc(r.shopify_return_name||"")}${r.ticket_id?` · <a href="#" onclick="event.stopPropagation();openTicket(${r.ticket_id});return false" style="color:var(--accent)">ticket ${r.ticket_id}</a>`:""}</div>
-            ${act?`<div class="stk-acts" style="margin-top:10px"><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','track',this)">Check tracking</button><button class="btn xs" onclick="event.stopPropagation();retAct('${r.id}','refund',this,'Refund now, before the package is back?')">Refund now</button><button class="btn sec xs danger" onclick="event.stopPropagation();retAct('${r.id}','cancel',this,'Cancel this return and void the label?')">Cancel return</button></div>`:""}</div>
+            ${act?`<div class="stk-acts" style="margin-top:10px"><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','track',this)">Check tracking</button>${r.warehouse?"":`<button class="btn sec xs" onclick="event.stopPropagation();retAccept('${r.id}')">📦 Accept at warehouse</button>`}<button class="btn xs" onclick="event.stopPropagation();retAct('${r.id}','refund',this,'Refund now, before the package is back?')">Refund now</button><button class="btn sec xs danger" onclick="event.stopPropagation();retAct('${r.id}','cancel',this,'Cancel this return and void the label?')">Cancel return</button></div>`:""}</div>
           <div><b>History</b>${(r.events||[]).slice().reverse().map(e=>`<div class="exc" style="display:block;white-space:normal">${fmt(e.at)} — ${esc(e.text)}</div>`).join("")}</div></div></td></tr>`;
       }
     }
@@ -1486,6 +1489,57 @@ async function loopImportRun(apply,btn){
   if(btn) btn.textContent="Import";
   go.disabled=apply||!n; if(!apply) go.textContent=n?`Import ${n} return${n===1?"":"s"}`:"Nothing to import";
   if(apply){ if(VIEW!=="loop_returns") setView("loop_returns"); else { loadReturns(); loadCounts(); } }
+}
+// Warehouse check-in for a return: confirm how many of each item came back.
+function retAccept(id){
+  const r=(RET_D&&RET_D.returns||[]).find(x=>x.id===id); if(!r) return;
+  closeModal(); const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box" style="width:min(560px,100%)"><h3>Accept ${esc(r.rma)} at the warehouse</h3>
+    <div class="sub">Count what's in the box. ${["label_created","in_transit"].includes(r.status)?"Accepting marks it delivered back and the refund runs automatically when everything is there.":"This records what came in; it doesn't change the refund."} If anything is missing, the return goes to Needs attention instead of refunding.</div>
+    ${r.items.map((i,idx)=>`<div style="display:flex;gap:10px;align-items:center;margin:8px 0"><div style="flex:1;font-size:13px">${esc(i.title)}${i.variant?` <span class="exc" style="display:inline">${esc(i.variant)}</span>`:""}<div class="exc" style="display:block">${esc(i.sku||"")} · returned ${i.quantity}</div></div>
+      <label style="font-size:12px;color:var(--muted)">Received <input type="number" min="0" max="${i.quantity}" value="${i.quantity}" data-idx="${idx}" class="ra-qty" style="width:64px"></label></div>`).join("")}
+    <label>Note (optional)</label><input type="text" id="ra-note" placeholder="e.g. tags missing, worn, wrong item">
+    <div class="acts" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" id="ra-go">Accept</button></div></div>`;
+  document.body.appendChild(m);
+  $("ra-go").onclick=async()=>{ const b=$("ra-go"); b.disabled=true;
+    const items=[...document.querySelectorAll(".ra-qty")].map(x=>({idx:Number(x.dataset.idx),qty:Number(x.value)}));
+    try{ const d=await api(`/api/returns/${id}/accept`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,note:$("ra-note").value})}); if(d.error) throw new Error(d.error);
+      toast(d.record&&d.record.status==="refunded"?"Accepted and refunded":"Accepted at the warehouse"); closeModal(); loadReturns(true); loadCounts(); }
+    catch(e){ toast(e.message,true); b.disabled=false; } };
+}
+// Returned items: one row per product, with when it was sent back, delivered and accepted at the warehouse.
+let RI_F={state:"all",store:"",q:"",from:"",to:""}, RI_D=null;
+async function loadRetItems(silent){
+  const w=$("stuckwrap"); if(!silent) w.innerHTML='<div class="empty">Loading returned items…</div>';
+  const qs=`state=${RI_F.state}&store=${encodeURIComponent(RI_F.store)}&q=${encodeURIComponent(RI_F.q)}&from=${RI_F.from}&to=${RI_F.to}`;
+  let d; try{ d=await api("/api/returns/items?"+qs); if(d.error) throw new Error(d.error); }catch(e){ w.innerHTML='<div class="empty">Couldn\'t load returned items.</div>'; return; }
+  RI_D=d; const c=d.counts;
+  $("showing").textContent=`${d.rows.length} line${d.rows.length===1?"":"s"}`;
+  const LAB={coming:["On its way back",""],arrived:["Delivered — not checked in","skip"],accepted:["Accepted","sent"],other:["Other",""]};
+  const seg=(k,l,n)=>`<button class="tab ${RI_F.state===k?"on":""}" onclick="RI_F.state='${k}';loadRetItems()">${l}${n!=null?`<span class="n">${n}</span>`:""}</button>`;
+  const dt=(v)=>v?fmtDay(v):"—";
+  let h=`<div class="rc"><div class="rc-tiles">
+      <div class="rc-tile"><div class="rc-tl">On its way back</div><div class="rc-tv">${c.coming}</div><div class="rc-ts">units (label made or in transit)</div></div>
+      <div class="rc-tile ${c.arrived?"bad":""}"><div class="rc-tl">Delivered, not checked in</div><div class="rc-tv">${c.arrived}</div><div class="rc-ts">units waiting for the warehouse</div></div>
+      <div class="rc-tile"><div class="rc-tl">Accepted at warehouse</div><div class="rc-tv">${c.accepted}</div><div class="rc-ts">units checked in${RI_F.from||RI_F.to?" (in range)":""}</div></div></div>
+    <div class="rc-bar"><div class="seg">${seg("all","All")}${seg("coming","On its way",c.coming)}${seg("arrived","Not checked in",c.arrived)}${seg("accepted","Accepted",c.accepted)}</div>
+      <select class="rc-in" onchange="RI_F.store=this.value;loadRetItems()"><option value="">Both stores</option><option value="lb" ${RI_F.store==="lb"?"selected":""}>Larkspur Baby</option><option value="lbo" ${RI_F.store==="lbo"?"selected":""}>Outlet</option></select>
+      <input type="date" class="rc-in" value="${RI_F.from}" onchange="RI_F.from=this.value;loadRetItems()" title="From"><input type="date" class="rc-in" value="${RI_F.to}" onchange="RI_F.to=this.value;loadRetItems()" title="To">
+      <input type="text" class="rc-in rc-q" placeholder="Search SKU, product, order, return #" value="${esc(RI_F.q)}" onkeydown="if(event.key==='Enter'){RI_F.q=this.value.trim();loadRetItems()}">
+      <a class="btn sec xs" href="/api/returns/items.csv?key=${encodeURIComponent(KEY)}&${qs}">⬇ CSV</a></div>
+    <div class="exc" style="display:block;margin-top:6px">Dates filter by when the item was accepted (Accepted), delivered (Not checked in) or when the return started (On its way).</div></div>`;
+  if(d.by_sku.length){
+    h+=`<details style="margin:0 22px 10px"><summary style="cursor:pointer;font-weight:600;font-size:13px">By product (${d.by_sku.length})</summary><table class="tickets" style="margin-top:6px"><thead><tr><th>Product</th><th>SKU</th><th>On its way</th><th>Not checked in</th><th>Accepted</th><th>Received</th></tr></thead><tbody>${d.by_sku.slice(0,300).map(g=>`<tr><td>${esc(g.title)}${g.variant?` <span class="exc" style="display:inline">${esc(g.variant)}</span>`:""}</td><td>${esc(g.sku||"")}</td><td>${g.coming||""}</td><td>${g.arrived||""}</td><td>${g.accepted||""}</td><td>${g.accepted?g.received:""}</td></tr>`).join("")}</tbody></table></details>`;
+  }
+  if(!d.rows.length){ w.innerHTML=h+'<div class="empty">No returned items here.</div>'; return; }
+  h+=`<table class="tickets"><thead><tr><th class="c-t">Product</th><th>Qty</th><th>Return</th><th>Status</th><th>Sent back</th><th>Delivered</th><th>Accepted</th></tr></thead><tbody>${d.rows.map(x=>`<tr>
+      <td class="c-t"><div class="subj">${esc(x.title)}${x.variant?` <span class="exc" style="display:inline">${esc(x.variant)}</span>`:""}</div><div class="exc">${esc(x.sku||"")}${x.reason?" · "+esc(x.reason):""}</div></td>
+      <td>${x.qty}${x.received!=null&&x.received!==x.qty?` <span style="color:#c0392b" title="received">(got ${x.received})</span>`:""}</td>
+      <td><b>${esc(x.rma)}</b><div class="exc">${esc(x.order_name)} · ${esc(x.store.toUpperCase())}${x.source==="loop"?" · Loop":""}</div></td>
+      <td><span class="chip ${LAB[x.state][1]}">${LAB[x.state][0]}</span></td>
+      <td>${dt(x.shipped_at)}</td><td>${dt(x.delivered_at)}</td>
+      <td>${x.accepted_at?`${dt(x.accepted_at)}<div class="exc">${esc(x.accepted_by||"")}</div>`:"—"}</td></tr>`).join("")}</tbody></table>`;
+  w.innerHTML=h;
 }
 async function retPoll(b){ b.disabled=true; b.textContent="Checking…"; try{ await api("/api/returns/poll",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); }catch(e){} loadReturns(); loadCounts(); }
 async function retSettings(){
