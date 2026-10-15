@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.74.0
+- Website chat now answers from Emily's full rulebook — free shipping, local pickup, discounts, returns, the Outlet — instead of only the FAQ page, so it gives real answers ("free shipping on Larkspur Baby orders of $75+, applied automatically") rather than "check our FAQ".
+- Website chat knows both stores. It links shoppers to the other store when asked, and when something isn't sold on the store they're on but is on the other one (e.g. dresses at the Outlet), it says so and links it.
+- When the chat can't answer, it no longer tells shoppers to email us. An email box appears under its reply; the shopper leaves their email and a ticket is created with the whole chat attached (one ticket per chat — later questions are added to it). Typing an email into the chat works too.
+- Rules: Larkspur Baby Outlet has no free shipping (Larkspur Baby: free on US orders of $75+, no code). Military discount code thankyoumilitary.
+- Rules: the old Loop return links in Emily's saved rules now point to returns.larkspurbaby.com / returns.larkspurbabyoutlet.com.
+
 ## 4.73.0
 - Emily: replacement orders can now ship to a different address. Before, a replacement always went to the address on the order it was based on — so when that order had gone to the wrong address, the replacement went there too, and the right address only ended up in the note (ticket 9000000517). Emily now passes the correct address, and the card's "Ship to" line shows it.
 - Emily: when she proposes a new replacement for the same order on a ticket, the older card is retired, so only one can be applied.

@@ -77,6 +77,7 @@ button,input,textarea{font:inherit;color:inherit}
 .vf{width:92%;border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;padding:12px}
 .vf .t{font-weight:700;margin-bottom:2px}.vf .h{color:var(--muted);font-size:.84em;margin-bottom:8px}
 .vf .g{display:grid;grid-template-columns:1.3fr 1fr;gap:6px}
+.vf .g1{display:grid;grid-template-columns:1fr;gap:6px}
 .vf input{width:100%;border:1px solid rgba(0,0,0,.14);border-radius:9px;padding:9px 10px;outline:0;min-width:0}
 .vf input:focus{border-color:var(--accent)}
 .vf button{margin-top:8px;width:100%;border:0;border-radius:10px;padding:10px;background:var(--accent);color:var(--accentfg);font-weight:700;cursor:pointer}
@@ -161,6 +162,20 @@ function orderCard(o) {
   if (o.can_do_now.length) h += `<div class="sec"><div class="lab">You can</div>${o.can_do_now.map((x) => `<div class="do">${esc(x)}</div>`).join('')}${(o.actions || []).length ? `<div class="acts">${o.actions.map((a) => `<button data-portal="${esc(a.do)}" data-order="${esc(o.order)}">${esc(a.label)}</button>`).join('')}</div>` : ''}</div>`;
   return h + '</div>';
 }
+function emailBox() {
+  return `<div class="row bot"><div class="vf" id="ef"><div class="t">Get a reply from our team</div><div class="h">Leave your email and we'll follow up, usually within 1 business day.</div>
+    <div class="g1"><input id="eMail" type="email" inputmode="email" autocomplete="email" placeholder="you@email.com" value="${esc(S.email || '')}"></div>
+    <div class="e hidden" id="eErr"></div><button id="eGo">Send to our team</button></div></div>`;
+}
+async function sendEmail() {
+  const b = $('eGo'); if (!b) return; const email = $('eMail').value.trim(); S.email = email;
+  const last = [...S.msgs].reverse().find((m) => m.role === 'bot' && m.need_email);
+  const q = [...S.msgs].reverse().find((m) => m.role === 'user');
+  b.disabled = true; $('eErr').classList.add('hidden');
+  try { const r = await api('handoff', { session: S.id, email, message: (last && last.summary) || (q && q.text) || 'Question from the website chat', from_chat: true });
+    if (last) last.need_email = false; S.msgs.push({ role: 'bot', text: r.message }); keep(); render(); }
+  catch (e) { b.disabled = false; $('eErr').textContent = e.message; $('eErr').classList.remove('hidden'); }
+}
 function verifyForm() {
   return `<div class="row bot"><div class="vf" id="vf"><div class="t">Look up your order</div><div class="h">Enter your order number and the ZIP code from your billing address.</div>
     <div class="g"><input id="vOrder" placeholder="Order # (e.g. ${STORE === 'lbo' ? 'LBO' : 'LB'}12345)" autocomplete="off" value="${esc(S.vOrder || '')}"><input id="vZip" placeholder="Billing ZIP" inputmode="numeric" autocomplete="postal-code" maxlength="10" value="${esc(S.vZip || '')}"></div>
@@ -193,6 +208,7 @@ function render() {
   h += S.msgs.map(bubble).join('');
   const last = S.msgs[S.msgs.length - 1];
   if (C.ai && C.ai.order_lookup && !busy && (S.ask || (last && last.need_order))) h += verifyForm();
+  if (!busy && last && last.need_email && C.handoff.enabled) h += emailBox();
   if (busy) h += `<div class="row bot"><div class="b typing" aria-label="${esc(C.copy.thinking)}"><i></i><i></i><i></i></div></div>`;
   $('body').innerHTML = h;
   $('body').scrollTop = $('body').scrollHeight;
@@ -207,7 +223,7 @@ async function api(path, body) {
 async function ask(text) {
   text = String(text || '').trim(); if (!text || busy) return;
   S.msgs.push({ role: 'user', text }); busy = true; $('in').value = ''; grow(); render(); keep();
-  try { const r = await api('message', { session: S.id, text }); S.id = r.session || S.id; S.msgs.push({ role: 'bot', text: r.reply, buttons: r.buttons || [], handoff: !!r.handoff, need_order: !!r.need_order, products: r.products || [] }); }
+  try { const r = await api('message', { session: S.id, text }); S.id = r.session || S.id; S.msgs.push({ role: 'bot', text: r.reply, buttons: r.buttons || [], handoff: !!r.handoff, need_order: !!r.need_order, need_email: !!r.need_email, summary: r.summary || '', products: r.products || [] }); }
   catch (e) { S.msgs.push({ role: 'bot', text: e.message || C.copy.error, handoff: C.handoff.enabled }); }
   busy = false; keep(); render(); $('in').focus();
 }
@@ -237,11 +253,12 @@ $('body').addEventListener('click', (e) => {
   const q = e.target.closest('[data-q]');
   if (q) { const it = C.quick[+q.dataset.q]; if (it.type === 'lookup') { S.msgs.push({ role: 'user', text: it.label }); S.ask = true; keep(); render(); setTimeout(() => $('vOrder') && $('vOrder').focus(), 30); return; } return ask(it.value); }
   if (e.target.closest('#vGo')) return verify();
+  if (e.target.closest('#eGo')) return sendEmail();
   const pb = e.target.closest('[data-portal]'); if (pb) return openPortal(C.portal, { do: pb.dataset.portal, order: pb.dataset.order });
   const a = e.target.closest('a[href]'); if (a && isPortal(a.href)) { e.preventDefault(); return openPortal(a.href); }
   if (e.target.closest('[data-team]')) openForm();
 });
-$('body').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.id === 'vOrder' || e.target.id === 'vZip')) { e.preventDefault(); verify(); } });
+$('body').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.id === 'vOrder' || e.target.id === 'vZip')) { e.preventDefault(); verify(); } if (e.key === 'Enter' && e.target.id === 'eMail') { e.preventDefault(); sendEmail(); } });
 $('in').addEventListener('input', grow);
 $('in').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask($('in').value); } });
 $('send').onclick = () => ask($('in').value);
