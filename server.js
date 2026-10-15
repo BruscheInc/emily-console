@@ -975,7 +975,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
   try {
     const rec = await R.getRec(req.params.id); if (!rec) return res.status(404).json({ error: "not found" });
     if (act === "refund") await R.refund(rec, { force: true, who });
-    else if (act === "accept") await R.acceptAtWarehouse(rec, { who, items: (req.body || {}).items, note: (req.body || {}).note });
+    else if (act === "accept") await R.acceptAtWarehouse(rec, { who, items: (req.body || {}).items, note: (req.body || {}).note, all: !!(req.body || {}).all });
     else if (act === "track") await R.checkOne(rec);
     else if (act === "cancel") await R.cancel(rec, `Cancelled by ${who}`, who);
     else return res.status(400).json({ error: "unknown action" });

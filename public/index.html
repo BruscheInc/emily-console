@@ -362,6 +362,8 @@
 .c-ck{width:34px;padding-left:14px!important;padding-right:0!important}.c-ck input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
 tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .bulkbar{display:flex;gap:8px;align-items:center;padding:8px 16px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:13px}.bulkbar.hidden{display:none}
+.whrow{display:flex;gap:10px;align-items:center;padding:3px 0}.whin{display:inline-flex;gap:6px;align-items:center}.whin input{width:52px;padding:3px 6px;font-size:12px}
+.whok{font-size:11.5px;color:#1e7a4c;background:#e8f6ee;border-radius:6px;padding:2px 7px;white-space:nowrap}.whok.short{color:#b03a2e;background:#fdecea}
 </style>
 </head>
 <body>
@@ -1445,12 +1447,12 @@ async function loadReturns(silent){
       if(RET_OPEN.has(r.id)){
         const act=!["refunded","cancelled"].includes(r.status);
         h+=`<tr><td colspan="6" style="background:var(--panel2);padding:14px 22px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:13px">
-          <div>${r.items.map(i=>`<div>${i.quantity}× ${esc(i.title)}${i.variant?` <span class="exc" style="display:inline">${esc(i.variant)}</span>`:""} · ${money(i.unit_price)} · <i>${esc(i.reason)}</i>${i.note?` — “${esc(i.note)}”`:""}</div>`).join("")}
+          <div>${r.items.map((i,idx)=>`<div class="whrow"><div style="flex:1">${i.quantity}× ${esc(i.title)}${i.variant?` <span class="exc" style="display:inline">${esc(i.variant)}</span>`:""} · ${money(i.unit_price)} · <i>${esc(i.reason)}</i>${i.note?` — “${esc(i.note)}”`:""}</div>${whCell(r,i,idx)}</div>`).join("")}
             <div style="margin-top:8px">Tracking <a href="${esc(r.tracking_url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(r.tracking_number)}</a>${r.tracking_text?" · "+esc(r.tracking_text):""} · ${r.source==="loop"?`Loop label${r.loop_tracking_url?` (<a href="${esc(r.loop_tracking_url)}" target="_blank" rel="noopener" style="color:var(--accent)">Loop tracking</a>)`:""}`:"label "+money(r.label_cost)}${r.label_emailed===false?' · <span style="color:#c0392b">Shopify did not email the label</span>':""}</div>
             ${r.feedback?`<div style="margin-top:8px">Customer feedback: experience <b>${r.feedback.ease||"—"}/5</b> · buy again <b>${r.feedback.again||"—"}/5</b>${r.feedback.note?` — “${esc(r.feedback.note)}”`:""}</div>`:""}
-            ${r.warehouse?`<div style="margin-top:8px">📦 <b>Accepted at the warehouse</b> ${fmt(r.warehouse.accepted_at)} by ${esc(r.warehouse.by||"staff")}${(r.warehouse.lines||[]).some(l=>l.received!==l.expected)?` — <span style="color:#c0392b">${r.warehouse.lines.filter(l=>l.received!==l.expected).map(l=>`${esc(l.title)}: got ${l.received} of ${l.expected}`).join("; ")}</span>`:" — everything received"}${r.warehouse.note?` · “${esc(r.warehouse.note)}”`:""}</div>`:""}
+            ${r.warehouse&&r.warehouse.accepted_at?`<div style="margin-top:8px">📦 <b>All items checked in</b> ${fmt(r.warehouse.accepted_at)}${(r.warehouse.lines||[]).some(l=>l.received!==l.expected)?` — <span style="color:#c0392b">${r.warehouse.lines.filter(l=>l.received!==l.expected).map(l=>`${esc(l.title)}: got ${l.received} of ${l.expected}`).join("; ")}</span>`:" — everything received"}${r.warehouse.note?` · “${esc(r.warehouse.note)}”`:""}</div>`:""}
             <div class="exc" style="display:block">Shopify return ${esc(r.shopify_return_name||"")}${r.ticket_id?` · <a href="#" onclick="event.stopPropagation();openTicket(${r.ticket_id});return false" style="color:var(--accent)">ticket ${r.ticket_id}</a>`:""}</div>
-            ${act?`<div class="stk-acts" style="margin-top:10px"><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','track',this)">Check tracking</button>${r.warehouse?"":`<button class="btn sec xs" onclick="event.stopPropagation();retAccept('${r.id}')">📦 Accept at warehouse</button>`}<button class="btn xs" onclick="event.stopPropagation();retAct('${r.id}','refund',this,'Refund now, before the package is back?')">Refund now</button><button class="btn sec xs danger" onclick="event.stopPropagation();retAct('${r.id}','cancel',this,'Cancel this return and void the label?')">Cancel return</button></div>`:""}</div>
+            ${act?`<div class="stk-acts" style="margin-top:10px"><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','track',this)">Check tracking</button>${whAllBtn(r)}<button class="btn xs" onclick="event.stopPropagation();retAct('${r.id}','refund',this,'Refund now, before the package is back?')">Refund now</button><button class="btn sec xs danger" onclick="event.stopPropagation();retAct('${r.id}','cancel',this,'Cancel this return and void the label?')">Cancel return</button></div>`:""}</div>
           <div><b>History</b>${(r.events||[]).slice().reverse().map(e=>`<div class="exc" style="display:block;white-space:normal">${fmt(e.at)} — ${esc(e.text)}</div>`).join("")}</div></div></td></tr>`;
       }
     }
@@ -1490,22 +1492,28 @@ async function loopImportRun(apply,btn){
   go.disabled=apply||!n; if(!apply) go.textContent=n?`Import ${n} return${n===1?"":"s"}`:"Nothing to import";
   if(apply){ if(VIEW!=="loop_returns") setView("loop_returns"); else { loadReturns(); loadCounts(); } }
 }
-// Warehouse check-in for a return: confirm how many of each item came back.
-function retAccept(id){
-  const r=(RET_D&&RET_D.returns||[]).find(x=>x.id===id); if(!r) return;
-  closeModal(); const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
-  m.innerHTML=`<div class="box" style="width:min(560px,100%)"><h3>Accept ${esc(r.rma)} at the warehouse</h3>
-    <div class="sub">Count what's in the box. ${["label_created","in_transit","delivered"].includes(r.status)?"Accepting marks it delivered back and refunds only the items received (less the label fee). Items that didn't come back aren't refunded.":"This records what came in. If you refund it afterwards, only the items received are refunded."}</div>
-    ${r.items.map((i,idx)=>`<div style="display:flex;gap:10px;align-items:center;margin:8px 0"><div style="flex:1;font-size:13px">${esc(i.title)}${i.variant?` <span class="exc" style="display:inline">${esc(i.variant)}</span>`:""}<div class="exc" style="display:block">${esc(i.sku||"")} · returned ${i.quantity}</div></div>
-      <label style="font-size:12px;color:var(--muted)">Received <input type="number" min="0" max="${i.quantity}" value="${i.quantity}" data-idx="${idx}" class="ra-qty" style="width:64px"></label></div>`).join("")}
-    <label>Note (optional)</label><input type="text" id="ra-note" placeholder="e.g. tags missing, worn, wrong item">
-    <div class="acts" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" id="ra-go">Accept</button></div></div>`;
-  document.body.appendChild(m);
-  $("ra-go").onclick=async()=>{ const b=$("ra-go"); b.disabled=true;
-    const items=[...document.querySelectorAll(".ra-qty")].map(x=>({idx:Number(x.dataset.idx),qty:Number(x.value)}));
-    try{ const d=await api(`/api/returns/${id}/accept`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,note:$("ra-note").value})}); if(d.error) throw new Error(d.error);
-      toast(d.record&&d.record.status==="refunded"?"Accepted and refunded":"Accepted at the warehouse"); closeModal(); loadReturns(true); loadCounts(); }
-    catch(e){ toast(e.message,true); b.disabled=false; } };
+// Warehouse check-in, per item: a count box + Accept on each item, and Accept all for the rest.
+function whLine(r,idx){ return r.warehouse&&(r.warehouse.lines||[]).find(l=>l.idx===idx); }
+function whCell(r,i,idx){
+  const l=whLine(r,idx);
+  if(l) return `<span class="whok ${l.received<l.expected?"short":""}" title="${esc(l.by||"")}">✓ ${l.received} of ${l.expected} in · ${fmtDay(l.accepted_at||r.warehouse.accepted_at)}${l.by?" · "+esc(l.by):""}</span>`;
+  if(r.status==="cancelled") return "";
+  return `<span class="whin" onclick="event.stopPropagation()"><input type="number" min="0" max="${i.quantity}" value="${i.quantity}" id="wq-${r.id}-${idx}" title="How many came back"><button class="btn sec xs" onclick="whAccept('${r.id}',[${idx}],this)">Accept</button></span>`;
+}
+function whAllBtn(r){
+  if(r.status==="cancelled"||(r.warehouse&&r.warehouse.accepted_at)) return "";
+  const left=r.items.map((_,idx)=>idx).filter(idx=>!whLine(r,idx)); if(!left.length) return "";
+  return `<button class="btn sec xs" onclick="event.stopPropagation();whAccept('${r.id}',[${left.join(",")}],this,true)">📦 Accept all${left.length<r.items.length?" remaining":""} (${left.length})</button>`;
+}
+async function whAccept(id,idxs,b,all){
+  const items=idxs.map(idx=>{ const el=$(`wq-${id}-${idx}`); return {idx,qty:el?Number(el.value):undefined}; });
+  const short=items.filter(x=>x.qty!=null&&!isNaN(x.qty)&&(RET_D.returns.find(r=>r.id===id)||{items:[]}).items[x.idx]&&x.qty<RET_D.returns.find(r=>r.id===id).items[x.idx].quantity);
+  if(all&&!confirm(`Check in ${idxs.length} item${idxs.length===1?"":"s"}${short.length?` (${short.length} with fewer than expected)`:""}? When everything is checked in, the refund runs for what was received.`)) return;
+  b.disabled=true;
+  try{ const d=await api(`/api/returns/${id}/accept`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items})}); if(d.error) throw new Error(d.error);
+    const rec=d.record||{}; toast(rec.status==="refunded"?"Checked in and refunded":rec.warehouse&&rec.warehouse.accepted_at?"All items checked in":"Item checked in"); }
+  catch(e){ toast(e.message,true); }
+  loadReturns(true); loadCounts();
 }
 // Returned items: one row per product, with when it was sent back, delivered and accepted at the warehouse.
 let RI_F={state:"all",store:"",q:"",from:"",to:""}, RI_D=null;

@@ -528,7 +528,7 @@ async function counts() {
   for (const x of by.rows) out.by[x.status] = x.n;
   out.open = (out.by.label_created || 0) + (out.by.in_transit || 0) + (out.by.delivered || 0);
   out.attention = out.by.needs_attention || 0;
-  out.unchecked = Number((await db(`SELECT count(*)::int n FROM hd_returns WHERE status <> 'cancelled' AND data->'warehouse' IS NULL AND (status='delivered' OR data->>'delivered_at' IS NOT NULL) AND COALESCE((data->>'test_label')::boolean,false)=false`)).rows[0].n);
+  out.unchecked = Number((await db(`SELECT count(*)::int n FROM hd_returns WHERE status <> 'cancelled' AND (data->'warehouse'->>'accepted_at') IS NULL AND (status='delivered' OR data->>'delivered_at' IS NOT NULL) AND COALESCE((data->>'test_label')::boolean,false)=false`)).rows[0].n);
   const L = {}; for (const x of lp.rows) L[x.status] = x.n;
   out.loop = { total: Object.values(L).reduce((a, b) => a + b, 0), open: (L.label_created || 0) + (L.in_transit || 0) + (L.delivered || 0), attention: L.needs_attention || 0, refunded: L.refunded || 0, by: L };
   return out;
@@ -909,7 +909,7 @@ async function checkOne(rec) {
   if (t.code !== rec.tracking_code) rec = await update(rec.id, { tracking_code: t.code, tracking_text: t.text }, `Tracking: ${t.code} ${t.text}`.trim());
   if (t.code === "DE" || t.code === "SP") {
     rec = await update(rec.id, { status: "delivered", delivered_at: new Date().toISOString() }, "Delivered back to us");
-    if (s.auto_refund && s.refund_after_checkin && !rec.warehouse) { await update(rec.id, {}, "Waiting for the warehouse to check it in before refunding"); }
+    if (s.auto_refund && s.refund_after_checkin && !whDone(rec)) { await update(rec.id, {}, "Waiting for the warehouse to check it in before refunding"); }
     else if (s.auto_refund) { try { await refund(rec); } catch (e) { await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
     return;
   }
@@ -962,28 +962,41 @@ async function poll() {
 }
 
 /* ---------------- warehouse: accept returned items, and the returned-items log ---------------- */
-// Warehouse staff confirm what actually came back (qty per item + a note). If tracking hadn't caught up yet
-// (or it's a Loop label Buzzin can't track), accepting counts as "delivered back" and the normal auto-refund runs.
-async function acceptAtWarehouse(rec, { who, items, note } = {}) {
+// Warehouse staff check items in one at a time (or all at once): how many of each came back, when, and who.
+// Once every item on the return is checked in, the return counts as accepted. If tracking hadn't caught up (or it's
+// a Loop label Buzzin can't track), that marks it delivered, and the normal auto refund runs for the items received.
+const whDone = (rec) => !!(rec.warehouse && rec.warehouse.accepted_at);
+async function acceptAtWarehouse(rec, { who, items, note, all } = {}) {
   if (rec.status === "cancelled") throw new Error("This return was cancelled");
+  if (whDone(rec)) throw new Error("This return was already checked in");
+  const by = who || "staff", at = new Date().toISOString();
+  const wh = { ...(rec.warehouse || {}), lines: [...((rec.warehouse && rec.warehouse.lines) || [])] };
   const got = Array.isArray(items) ? items : [];
-  const lines = (rec.items || []).map((i, idx) => {
-    const m = got.find((g) => (g.idx != null && Number(g.idx) === idx) || (g.sku && g.sku === i.sku));
-    const q = m ? Math.max(0, Math.min(1000, Math.floor(Number(m.qty)))) : i.quantity;
-    return { idx, sku: i.sku || "", title: i.title, variant: i.variant || "", expected: i.quantity, received: isNaN(q) ? i.quantity : q };
+  const added = [];
+  (rec.items || []).forEach((i, idx) => {
+    if (wh.lines.some((l) => l.idx === idx)) return;                         // already checked in
+    const m = got.find((g) => g.idx != null && Number(g.idx) === idx);
+    if (!m && !all) return;
+    let q = m ? Math.floor(Number(m.qty)) : i.quantity; if (isNaN(q)) q = i.quantity;
+    const line = { idx, sku: i.sku || "", title: i.title, variant: i.variant || "", expected: i.quantity, received: Math.max(0, Math.min(i.quantity, q)), accepted_at: at, by };
+    wh.lines.push(line); added.push(line);
   });
-  const at = new Date().toISOString();
-  const short = lines.filter((l) => l.received !== l.expected);
-  const wh = { accepted_at: at, by: who || "staff", note: String(note || "").slice(0, 500), lines };
+  if (!added.length) throw new Error("Pick an item to check in");
+  if (note) wh.note = [wh.note, String(note).slice(0, 500)].filter(Boolean).join(" · ");
+  const complete = (rec.items || []).every((_, idx) => wh.lines.some((l) => l.idx === idx));
+  if (complete) { wh.accepted_at = at; wh.by = by; }
+  wh.lines.sort((x, y) => x.idx - y.idx);
   rec = await update(rec.id, { warehouse: wh },
-    `Accepted at the warehouse by ${wh.by}: ${lines.map((l) => `${l.received}/${l.expected}× ${l.title}${l.variant ? " (" + l.variant + ")" : ""}`).join(", ")}${wh.note ? ` — “${wh.note}”` : ""}`);
-  await core.audit({ ticketId: rec.ticket_id || null, kind: "return-accepted", detail: `${rec.rma} · ${lines.reduce((t, l) => t + l.received, 0)} item(s) received${short.length ? " · " + short.length + " line(s) short" : ""}`, who: wh.by, target: rec.id }).catch(() => {});
-  if (short.length) core.slackPost(`📦 Return ${rec.rma} (${rec.order_name}) checked in by ${wh.by} with differences: ${short.map((l) => `${l.title}${l.variant ? " " + l.variant : ""} — got ${l.received} of ${l.expected}`).join("; ")}${wh.note ? ` · “${wh.note}”` : ""}`).catch(() => {});
+    `Checked in at the warehouse by ${by}: ${added.map((l) => `${l.received} of ${l.expected}× ${l.title}${l.variant ? " (" + l.variant + ")" : ""}`).join(", ")}${note ? ` — “${String(note).slice(0, 500)}”` : ""}${complete ? " · all items checked in" : ""}`);
+  const short = added.filter((l) => l.received < l.expected);
+  await core.audit({ ticketId: rec.ticket_id || null, kind: "return-accepted", detail: `${rec.rma} · ${added.reduce((t, l) => t + l.received, 0)} item(s) checked in${short.length ? " · " + short.length + " short" : ""}${complete ? " · complete" : ""}`, who: by, target: rec.id }).catch(() => {});
+  if (short.length) core.slackPost(`📦 Return ${rec.rma} (${rec.order_name}) checked in by ${by} with differences: ${short.map((l) => `${l.title}${l.variant ? " " + l.variant : ""} — got ${l.received} of ${l.expected}`).join("; ")}${note ? ` · “${note}”` : ""}`).catch(() => {});
+  if (!complete) return rec;
   if (["label_created", "in_transit"].includes(rec.status)) rec = await update(rec.id, { status: "delivered", delivered_at: rec.delivered_at || at }, "Delivered back to us (confirmed by the warehouse)");
   // Refund what came back — the same automatic refund as a delivered package, but only for the items received.
   const s = await settings();
   if (rec.status === "delivered" && s.auto_refund) {
-    if (!lines.some((l) => l.received > 0)) rec = await update(rec.id, { status: "needs_attention" }, "Not refunded — the warehouse received none of the items");
+    if (!wh.lines.some((l) => l.received > 0)) rec = await update(rec.id, { status: "needs_attention" }, "Not refunded — the warehouse received none of the items");
     else { try { rec = await refund(rec); } catch (e) { rec = await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
   }
   return rec;
@@ -998,17 +1011,19 @@ async function itemsLog({ state = "all", store = "", q = "", from = "", to = "" 
   for (const rec of r.rows.map(rowToRec)) {
     if (store && rec.store !== store) continue;
     const wh = rec.warehouse || null;
-    const st = wh ? "accepted" : rec.delivered_at || rec.status === "delivered" ? "arrived" : ["label_created", "in_transit"].includes(rec.status) ? "coming" : "other";
-    if (state !== "all" && st !== state) continue;
-    const when = st === "accepted" ? wh.accepted_at : st === "arrived" ? rec.delivered_at : rec.created_at;
-    const t = when ? new Date(when).getTime() : 0;
-    if ((fromT && t < fromT) || (toT && t > toT)) continue;
+    const base = rec.delivered_at || rec.status === "delivered" ? "arrived" : ["label_created", "in_transit"].includes(rec.status) ? "coming" : "other";
     (rec.items || []).forEach((i, idx) => {
       const line = wh && wh.lines ? wh.lines.find((l) => l.idx === idx) : null;
+      const st = line ? "accepted" : base;
+      if (state !== "all" && st !== state) return;
+      const lineAt = line ? line.accepted_at || wh.accepted_at : null;
+      const when = st === "accepted" ? lineAt : st === "arrived" ? rec.delivered_at : rec.created_at;
+      const t = when ? new Date(when).getTime() : 0;
+      if ((fromT && t < fromT) || (toT && t > toT)) return;
       const row = { return_id: rec.id, rma: rec.rma, order_name: rec.order_name, store: rec.store, source: rec.source || "portal", customer: rec.customer_name || "", email: rec.email || "",
         sku: i.sku || "", title: i.title, variant: i.variant || "", qty: i.quantity, received: line ? line.received : null, reason: i.reason || "", unit_price: i.unit_price,
         state: st, return_status: rec.status, started_at: rec.created_at, shipped_at: rec.accepted_at || null, delivered_at: rec.delivered_at || null,
-        accepted_at: wh ? wh.accepted_at : null, accepted_by: wh ? wh.by : null, note: wh ? wh.note : "", refunded_at: rec.refunded_at || null, tracking_number: rec.tracking_number || "", tracking_url: rec.tracking_url || "" };
+        accepted_at: line ? line.accepted_at || wh.accepted_at : null, accepted_by: line ? line.by || wh.by : null, note: wh ? wh.note || "" : "", refunded_at: rec.refunded_at || null, tracking_number: rec.tracking_number || "", tracking_url: rec.tracking_url || "" };
       if (needle && ![row.sku, row.title, row.variant, row.rma, row.order_name, row.customer, row.email].some((v) => String(v).toLowerCase().includes(needle))) return;
       rows.push(row);
     });
