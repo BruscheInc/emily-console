@@ -3,7 +3,7 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
-## ..1
+## 4.78.1
 - Returns: searching on the Returns page now also finds imported Loop returns (marked "Loop"). The Loop returns page opens on All instead of only "Needs a decision", so open Loop returns (label made / on the way) are visible right away.
 
 ## 4.78.0
