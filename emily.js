@@ -831,6 +831,10 @@ async function shopifyProposeCancel(input) {
 }
 async function shopifyProposeRefund(input) {
   if (!input.order) return { error: "Provide the order number." };
+  // Out-of-stock refunds never restock: the item isn't on the shelf, so putting it back would make it sellable again.
+  let oos = input.restock === false;
+  if (!oos && input.ticket_id) { try { const t = (await db(`SELECT tags FROM hd_tickets WHERE id=$1`, [String(input.ticket_id)])).rows[0]; oos = !!(t && (t.tags || []).some((g) => /^oos/.test(g))); } catch (_) {} }
+  if (!oos && /out[- ]of[- ]stock|\boos\b/i.test(String(input.reason || ""))) oos = true;
   const o = await orderDetail(input.order);
   if (o.error || o.note) return o;
   if (!o.can_refund) return { note: `Order ${o.name} has nothing left to refund ($${o.refunded.toFixed(2)} of $${o.total.toFixed(2)} already refunded${o.cancelled_at ? "; order is cancelled" : ""}).` };
@@ -842,8 +846,8 @@ async function shopifyProposeRefund(input) {
   }
   const what = mode === "amount" ? `$${Number(input.amount).toFixed(2)}` : mode === "items" ? items.map((i) => `${i.quantity}× ${i.title}`).join(", ") + (input.shipping ? " + shipping" : "") : `the full remaining amount ($${(o.total - o.refunded).toFixed(2)})`;
   await stageAction({ kind: "shopify_propose_refund", input, title: `Refund — order ${o.name} (${o.store})`, ticketId: input.ticket_id,
-    summary: `💸 Refund ${what} to the original payment → ${o.email || "?"}${input.reason ? `\nReason: ${input.reason}` : ""}`,
-    exec: async () => await refundOrder(o, { mode, items, amount: input.amount, shipping: !!input.shipping, note: input.reason || `Requested via ticket ${input.ticket_id || "?"}`, notify: false, restock: input.restock !== false }) });
+    summary: `💸 Refund ${what} to the original payment → ${o.email || "?"}${oos ? "\nNo restock (out of stock)" : ""}${input.reason ? `\nReason: ${input.reason}` : ""}`,
+    exec: async () => await refundOrder(o, { mode, items, amount: input.amount, shipping: !!input.shipping, note: input.reason || `Requested via ticket ${input.ticket_id || "?"}`, notify: false, restock: oos ? false : input.restock !== false }) });
   return { ok: true, staged: true, note: `Staged a refund of ${what} on ${o.name} for Jose's approval. It will NOT be issued until he clicks Apply — tell the customer the refund is being processed and takes 5–10 business days to appear; do NOT say it has been issued.` };
 }
 

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.79.2
+- Refunds for out-of-stock items never put the item back in stock (it isn't on the shelf, so restocking would make it sellable again). The refund card says "No restock (out of stock)".
+
 ## 4.79.1
 - Refunds work again. The refund preview sent Shopify the wrong type for "refund shipping" (Shopify wants true/false), so every refund — Emily's refund card and the Refund button on an order — failed before anything was refunded (ticket 9000000616).
 - Approving Emily's draft is blocked when an action on that ticket just failed (e.g. the reply says "we're processing your refund" but the refund errored). Retry the action, or edit the reply.
