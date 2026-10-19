@@ -794,11 +794,11 @@ async function refundOrder(o, { mode, items, amount, shipping, note, notify, res
   const st = storeByBrand(o.store);
   const lineArgs = mode === "items" ? (items || []).filter((i) => i.line_item_id && Number(i.quantity) > 0).map((i) => ({ lineItemId: i.line_item_id, quantity: Number(i.quantity), restockType: restock === false ? "NO_RESTOCK" : "RETURN" })) : [];
   if (mode === "items" && !lineArgs.length) throw new Error("Pick at least one item to refund.");
-  const sq = await storeGraphQL(st, `query($id:ID!,$li:[RefundLineItemInput!],$full:Boolean,$ship:RefundShippingInput){ order(id:$id){ suggestedRefund(refundLineItems:$li,suggestFullRefund:$full,refundShipping:$ship){
+  const sq = await storeGraphQL(st, `query($id:ID!,$li:[RefundLineItemInput!],$full:Boolean,$ship:Boolean){ order(id:$id){ suggestedRefund(refundLineItems:$li,suggestFullRefund:$full,refundShipping:$ship){
       amountSet{shopMoney{amount currencyCode}} maximumRefundableSet{shopMoney{amount}} shipping{amountSet{shopMoney{amount}}}
       suggestedTransactions{ gateway kind amountSet{shopMoney{amount currencyCode}} parentTransaction{id} }
       refundLineItems{ lineItem{id} quantity restockType } } } }`,
-    { id: o.id, li: mode === "items" ? lineArgs : null, full: mode === "full", ship: (mode === "full" || (mode === "items" && shipping)) ? { fullRefund: true } : null });
+    { id: o.id, li: mode === "items" ? lineArgs : null, full: mode === "full", ship: (mode === "full" || (mode === "items" && shipping)) ? true : null });
   const sr = sq.order && sq.order.suggestedRefund;
   if (!sr) throw new Error("Shopify returned no refund suggestion for this order.");
   const max = Number(sr.maximumRefundableSet.shopMoney.amount);
@@ -1920,6 +1920,15 @@ async function decide({ ticketId, action, text, who, applyActions = [], override
   for (const aid of Array.isArray(applyActions) ? applyActions : []) {
     try { const r = await applyAction(String(aid), who, overrides && overrides[aid] ? overrides[aid] : null); appliedNotes.push(r.note); if (r.code) codes.push(r.code); }
     catch (e) { return { ok: false, error: `Couldn't apply "${aid}": ${e.message} — nothing was sent.` }; }
+  }
+  // Don't send a reply that promises something whose action just failed (e.g. "we're processing your refund" after the
+  // refund errored). Fix or retry the action first — or edit the reply to say something else.
+  if (action !== "edit") {
+    try {
+      const bad = (await db(`SELECT f.title, f.result FROM emily_actions f WHERE f.ticket_id=$1 AND f.status='failed' AND f.created_at >= $2::timestamptz - interval '15 minutes'
+                               AND NOT EXISTS (SELECT 1 FROM emily_actions a WHERE a.ticket_id=f.ticket_id AND a.kind=f.kind AND a.status='applied' AND a.decided_at > f.created_at)`, [id, d.created_at])).rows;
+      if (bad.length) return { ok: false, error: `"${bad[0].title}" failed (${String(bad[0].result || "").slice(0, 160)}) — the reply wasn't sent because it promises that. Retry the action, or edit the reply.` };
+    } catch (_) {}
   }
   const filled = await fillPlaceholders(id, body, codes);
   if (filled.pending) return { ok: false, error: "The draft still has a {{DISCOUNT_CODE}} placeholder — tick the discount so it gets created, or edit the text." };

@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.79.1
+- Refunds work again. The refund preview sent Shopify the wrong type for "refund shipping" (Shopify wants true/false), so every refund — Emily's refund card and the Refund button on an order — failed before anything was refunded (ticket 9000000616).
+- Approving Emily's draft is blocked when an action on that ticket just failed (e.g. the reply says "we're processing your refund" but the refund errored). Retry the action, or edit the reply.
+
 ## 4.79.0
 - Returns: warehouse check-in is per item. Each item on a return has a count box and **Accept**; **Accept all** checks in the rest at once. Each item keeps its own date and who checked it in (shown on the return and on Returned items). When the last item is checked in, the return counts as accepted and the refund runs for what was received.
 
