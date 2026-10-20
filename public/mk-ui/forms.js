@@ -20,6 +20,12 @@ const FONTS = [['inherit', 'Store font'], ['Helvetica, Arial, sans-serif', 'Helv
   ["'Montserrat', Helvetica, sans-serif", 'Montserrat'], ["'Poppins', Helvetica, sans-serif", 'Poppins'], ["'DM Sans', Helvetica, sans-serif", 'DM Sans'], ["'Inter', Helvetica, sans-serif", 'Inter'],
   ["'Nunito', Helvetica, sans-serif", 'Nunito'], ["'Josefin Sans', Helvetica, sans-serif", 'Josefin Sans'], ["'Quicksand', Helvetica, sans-serif", 'Quicksand'], ["'Raleway', Helvetica, sans-serif", 'Raleway'], ["'Lato', Helvetica, sans-serif", 'Lato']];
 const rid = () => 'b' + Math.random().toString(36).slice(2, 8);
+// Pop-up menus (form list ⋮, step ⋮) are styled once for the whole page, so they look the same everywhere.
+(() => { if (document.getElementById('ke-menu-css')) return; const st = document.createElement('style'); st.id = 'ke-menu-css';
+  st.textContent = '.ke-menu{position:fixed;z-index:200;background:#fff;border:1px solid #E4E4E7;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;min-width:190px;font:14px/1.4 inherit}'
+    + '.ke-menu button{all:unset;box-sizing:border-box;display:flex;gap:10px;align-items:center;width:100%;padding:9px 12px;border-radius:6px;cursor:pointer;color:#18181B;font-size:14.5px}'
+    + '.ke-menu button:hover{background:#F4F4F5}.ke-menu button.danger{color:#B42318}.ke-menu button:disabled{opacity:.4;cursor:default}.ke-menu .sep{height:1px;background:#E4E4E7;margin:4px 2px}';
+  document.head.appendChild(st); })();
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
 const LCSS = `<style>
@@ -107,7 +113,7 @@ function formMenu(f, anchor) {
     ['Clone', 'copy', async () => { try { const c = await api('/api/mk/forms/' + f.id + '/clone', { method: 'POST', body: JSON.stringify({}) }); toast('Cloned as a draft'); location.hash = '#forms/' + c.id; } catch (e) { toast(e.message, 1); } }],
     [f.status === 'live' ? 'Unpublish (back to draft)' : 'Publish', f.status === 'live' ? 'player-pause' : 'player-play', async () => { if (f.status !== 'live' && !confirm(`Make "${f.name}" live on the store?`)) return; try { await api('/api/mk/forms/' + f.id, { method: 'PUT', body: JSON.stringify({ status: f.status === 'live' ? 'draft' : 'live' }) }); toast(f.status === 'live' ? 'Back to draft' : 'Live'); go(); } catch (e) { toast(e.message, 1); } }],
     ['Delete', 'trash', async () => { if (!confirm(`Delete "${f.name}"? This can't be undone.`)) return; try { await api('/api/mk/forms/' + f.id, { method: 'DELETE' }); toast('Deleted'); go(); } catch (e) { toast(e.message, 1); } }, { danger: true }],
-  ]);
+  ], { plain: true, alignRight: true });
 }
 window.addEventListener('hashchange', () => { if (!/^#forms\/\d+$/.test(location.hash || '')) document.querySelectorAll('.ke').forEach((x) => x.remove()); });
 
@@ -147,8 +153,6 @@ const CSS = `<style>
 .ke-pill.on{border-color:#6366F1;background:#EEF2FF}.ke-pill .lb{all:unset;cursor:pointer;padding:0 12px;font-weight:600;white-space:nowrap;height:34px;display:flex;align-items:center;gap:6px}
 .ke-pill .gr{color:#A1A1AA;cursor:grab;padding-left:8px}.ke-pill .mn{all:unset;cursor:pointer;border-left:1px solid var(--line);height:34px;width:30px;display:flex;align-items:center;justify-content:center}
 .ke-arrow{color:#A1A1AA;flex:none}
-.ke-menu{position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;min-width:190px}
-.ke-menu button{all:unset;display:flex;gap:8px;align-items:center;width:calc(100% - 20px);padding:8px 10px;border-radius:6px;cursor:pointer}.ke-menu button:hover{background:#F4F4F5}.ke-menu button.danger{color:#B42318}.ke-menu button:disabled{opacity:.4;cursor:default}
 .ke-stage{flex:1;overflow:auto;padding:84px 24px 24px}
 .ke-zoomwrap{transform-origin:top left;display:flex;gap:48px;align-items:flex-start;width:max-content;margin:0 auto}
 .ke-dev{display:flex;flex-direction:column;gap:10px}.ke-dev .cap{display:flex;align-items:center;gap:6px;font-weight:600}
@@ -319,14 +323,20 @@ function bar() {
     p.addEventListener('drop', (e) => { e.preventDefault(); const to = Number(p.dataset.sp); if (dragFrom == null || to === dragFrom) return; const cur = F.steps[SI]; const [m] = F.steps.splice(dragFrom, 1); F.steps.splice(to, 0, m); SI = F.steps.indexOf(cur); dragFrom = null; bar(); mark(); });
   });
 }
-function menu(anchor, items) {
+function menu(anchor, items, opts = {}) {
   document.querySelectorAll('.ke-menu').forEach((m) => m.remove());
-  const r = anchor.getBoundingClientRect(), m = document.createElement('div'); m.className = 'ke-menu';
-  m.innerHTML = items.map(([l, ic, , opt], i) => `<button data-mi="${i}"${opt && opt.disabled ? ' disabled' : ''} class="${opt && opt.danger ? 'danger' : ''}">${ICON(ic)} ${esc(l)}</button>`).join('');
-  m.style.left = Math.min(window.innerWidth - 210, r.left) + 'px'; m.style.top = r.bottom + 6 + 'px';
+  const r = anchor.getBoundingClientRect(), m = document.createElement('div'); m.className = 'ke-menu'; m.setAttribute('role', 'menu');
+  m.innerHTML = items.map(([l, ic, , o], i) => `${o && o.danger && i ? '<div class="sep"></div>' : ''}<button role="menuitem" data-mi="${i}"${o && o.disabled ? ' disabled' : ''} class="${o && o.danger ? 'danger' : ''}">${opts.plain ? '' : ICON(ic) + ' '}${esc(l)}</button>`).join('');
   document.body.appendChild(m);
-  m.querySelectorAll('[data-mi]').forEach((b) => b.onclick = () => { m.remove(); items[Number(b.dataset.mi)][2](); });
-  setTimeout(() => document.addEventListener('click', function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('click', off); } }), 0);
+  const w = m.offsetWidth, h = m.offsetHeight;
+  let left = opts.alignRight ? r.right - w : r.left; left = Math.max(8, Math.min(window.innerWidth - w - 8, left));
+  let top = r.bottom + 6; if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  m.style.left = left + 'px'; m.style.top = top + 'px';
+  m.querySelectorAll('[data-mi]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); m.remove(); items[Number(b.dataset.mi)][2](); });
+  const off = (e) => { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', off); window.removeEventListener('scroll', close2, true); } };
+  const close2 = () => { m.remove(); document.removeEventListener('mousedown', off); window.removeEventListener('scroll', close2, true); };
+  setTimeout(() => { document.addEventListener('mousedown', off); window.addEventListener('scroll', close2, true); }, 0);
+  const onKey = (e) => { if (e.key === 'Escape') { close2(); document.removeEventListener('keydown', onKey); } }; document.addEventListener('keydown', onKey);
 }
 function stepMenu(i, anchor) {
   const s = F.steps[i];
