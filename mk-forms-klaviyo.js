@@ -38,12 +38,13 @@ const col = (c, dflt) => { const r = rgba(c); if (!r) return dflt; return r.pct 
 const font = (f) => (f ? (/,/.test(f) ? f : `'${String(f).replace(/['"]/g, "")}', Helvetica, Arial, sans-serif`) : null);
 const WIDTHS = { small: 400, medium: 600, large: 800, full: 1000 };
 
-const imgCache = new Map();
+const imgCache = new Map(); let imgErr = false;
 async function imageUrl(id) {
   if (!id) return "";
   if (imgCache.has(id)) return imgCache.get(id);
   let url = "";
-  try { const j = await kget(`/images/${id}/`); url = (j.data && j.data.attributes && (j.data.attributes.image_url || j.data.attributes.url)) || ""; } catch (e) { url = ""; }
+  try { const j = await kget(`/images/${id}/`); const at = (j.data && j.data.attributes) || {}; url = at.image_url || at.url || at.src || ""; if (!url) note(`image ${id}: no URL in reply (${Object.keys(at).join(",")})`); }
+  catch (e) { url = ""; if (!imgErr) { imgErr = true; note(`image ${id} couldn't be read: ${e.message.slice(0, 200)}`); } }
   imgCache.set(id, url); await sleep(350); return url;
 }
 
@@ -167,12 +168,18 @@ async function convertVersion(form, v) {
     else if (t === "page_visits" || t === "page_views") targeting.page_views = Number(tp.count || tp.page_visits || tp.pages) || null;
     else if (/device/.test(t)) targeting.device = /mobile/i.test(JSON.stringify(tp)) && !/desktop/i.test(JSON.stringify(tp)) ? "mobile" : /desktop/i.test(JSON.stringify(tp)) && !/mobile/i.test(JSON.stringify(tp)) ? "desktop" : "all";
     else if (/url|page/.test(t)) {
-      const urls = [].concat(tp.urls || tp.url || tp.pages || []).map((u) => (typeof u === "string" ? u : u && (u.url || u.value))).filter(Boolean).map((u) => { try { return new URL(u, "https://x").pathname; } catch (e) { return u; } });
-      if (/exclude|not/.test(t) || tp.exclude) targeting.hide_paths = urls.join("\n"); else targeting.only_paths = urls.join("\n");
-      if (!urls.length) notes.push(`page rule "${t}" needs to be set again`);
+      const inc = [], exc = [];
+      const walk = (o, bad) => { if (o == null) return; if (typeof o === "string") { const v = o.trim(); if (/^(https?:\/\/|\/|\*)/.test(v) || /\.(com|net|org)/.test(v) || /utm_|[?&=]/.test(v)) (bad ? exc : inc).push(v); return; }
+        if (Array.isArray(o)) return o.forEach((x) => walk(x, bad)); if (typeof o === "object") for (const [k2, v2] of Object.entries(o)) walk(v2, bad || /exclude|deny|block|not_/i.test(k2) || (o.match_type && /not|exclude/i.test(String(o.match_type)))); };
+      walk(tp, /exclude|not/.test(t) || !!tp.exclude);
+      const toPath = (u) => { const m = String(u).match(/[?&]utm_source=([^&#]+)/i); if (m) { targeting.utm_source = decodeURIComponent(m[1]); return null; } try { const x = new URL(u, "https://x"); return x.pathname === "/" && /^https?:/.test(u) ? null : x.pathname + (/\*$/.test(u) ? "" : ""); } catch (e) { return u; } };
+      const ip = inc.map(toPath).filter(Boolean), ep = exc.map(toPath).filter(Boolean);
+      if (ip.length) targeting.only_paths = [...new Set(ip)].join("\n"); if (ep.length) targeting.hide_paths = [...new Set(ep)].join("\n");
+      note(`rule "${t}" on "${form.attributes ? form.attributes.name : form.id}": ${JSON.stringify(tp).slice(0, 500)}`);
+      if (!ip.length && !ep.length && !targeting.utm_source) notes.push(`page rule "${t}" needs to be set again`);
     }
     else if (/utm/.test(t)) targeting.utm_source = String(tp.utm_source || tp.value || "");
-    else notes.push(`display rule "${t}" isn't in Buzzin yet`);
+    else { notes.push(t === "custom_javascript" ? "Klaviyo's custom JavaScript display rule isn't in Buzzin; check Targeting (utm_source / pages) does what it did" : t === "location" ? "Klaviyo's visitor-location rule isn't in Buzzin yet (shows everywhere)" : `display rule "${t}" isn't in Buzzin yet`); note(`rule "${t}": ${JSON.stringify(tp).slice(0, 500)}`); }
   }
   if (!timing) targeting.immediate = true;
 
@@ -221,10 +228,12 @@ async function importAll(who, { refresh = false } = {}) {
           const coupon = { enabled: c.coupon, percent: 10, prefix: "WELCOME", expires_days: 14 };
           if (c.coupon) c.notes.push("check the coupon % on the Coupon block (Klaviyo's coupon settings don't come through the API)");
           let id;
-          if (prior && prior.form_id && refresh && (await db(`SELECT 1 FROM mk_forms WHERE id=$1`, [prior.form_id])).rows.length) {
+          const untouched = prior && prior.form_id ? (await db(`SELECT updated_by IN ('boot','klaviyo import') OR updated_by IS NULL AS ok FROM mk_forms WHERE id=$1`, [prior.form_id])).rows[0] : null;
+          if (prior && prior.form_id && refresh && untouched && !untouched.ok) { skipped++; note(`"${a.name}": Buzzin copy was edited, left as is`); continue; }
+          if (prior && prior.form_id && refresh && untouched) {
             id = prior.form_id;
             await db(`UPDATE mk_forms SET name=$2, steps=$3, style=$4, targeting=$5, teaser=$6, coupon=$7, list_id=$8, updated_by=$9, updated_at=now() WHERE id=$1`,
-              [id, name, JSON.stringify(c.steps), JSON.stringify(c.style), JSON.stringify(c.targeting), JSON.stringify(c.teaser), JSON.stringify(coupon), listId, who || "klaviyo import"]);
+              [id, name, JSON.stringify(c.steps), JSON.stringify(c.style), JSON.stringify(c.targeting), JSON.stringify(c.teaser), JSON.stringify(coupon), listId, "klaviyo import"]);
           } else {
             id = (await db(`INSERT INTO mk_forms (store, name, status, steps, style, targeting, teaser, coupon, list_id, sms_consent_text, email_consent_text, source, ext_id, updated_by)
                 VALUES ('lb',$1,'draft',$2,$3,$4,$5,$6,$7,$8,$9,'klaviyo',$10,$11) RETURNING id`,
@@ -257,7 +266,7 @@ function routes(app, { admin, actorOf, fail }) {
 
 async function init() {
   // Copy the Klaviyo forms once, shortly after boot (later copies run from the Sign-up forms page).
-  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v1").catch(() => null); if (!done && KEY()) await importAll("boot"); } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
+  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v2").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v2", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
 }
 
 module.exports = { init, routes, importAll, convertVersion, notesFor };

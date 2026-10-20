@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.84.1
+- Klaviyo form copy: page rules (URL patterns) and utm_source links now carry over; image errors and unsupported display rules are logged clearly. The two copies are refreshed once, unless someone already edited them.
+
 ## 4.84.0
 - **Sign-up form editor laid out 1:1 like Klaviyo's.**
   - Full-screen editor: exit, form name, saved check, Draft / Preview only / Live, **Preview on website**, **Publish**. Changes save automatically (and with Cmd/Ctrl+S).
