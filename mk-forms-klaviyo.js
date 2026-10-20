@@ -188,6 +188,8 @@ async function convertVersion(form, v) {
   // The last step that has no inputs and no submit button is the success step (Klaviyo's "Success").
   const last = steps[steps.length - 1];
   if (last && /success|thank/i.test(last.name || "") || (last && !last.blocks.some((b) => ["email", "phone", "input", "radio", "checkboxes", "dropdown", "date"].includes(b.type)) && steps.length > 1)) last.kind = "success";
+  // Klaviyo leaves step names empty and shows its own labels; use the same ones
+  steps.forEach((st, i) => { if (!vsteps[i].name) st.name = st.kind === "success" ? "Success" : st.blocks.some((b) => b.type === "email") ? "Email Opt-In" : st.blocks.some((b) => b.type === "phone") ? "SMS Opt-In" : `Step ${i + 1}`; });
   if (ctx.buttonStyle) {
     const { ts, bs, height, bg } = ctx.buttonStyle;
     if (bg) style.button.bg = col(bg, style.button.bg); if (ts.text_color) style.button.color = col(ts.text_color); if (ts.font_family) style.button.family = font(ts.font_family);
@@ -309,7 +311,7 @@ function routes(app, { admin, actorOf, fail }) {
 
 async function init() {
   // Copy the Klaviyo forms once, shortly after boot (later copies run from the Sign-up forms page).
-  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v4").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v4", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
+  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v5").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v5", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
 }
 
 module.exports = { init, routes, importAll, convertVersion, notesFor };

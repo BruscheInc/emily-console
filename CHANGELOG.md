@@ -6,6 +6,9 @@ Every upload to the emily-console repo is one version. The number shows in the a
 ## 4.84.4
 - Emily can change the email on an order. When a customer asks (typo at checkout, old address), she stages an email change for one-click approval that updates the order in Shopify and ShipStation, so order and shipping emails reach the right inbox — instead of leaving a to-do for the team (ticket 9000000642).
 
+## 4.85.1
+- Klaviyo copies use Klaviyo's step names (Email Opt-In, Success) and their real images, including the side photo.
+
 ## 4.85.0
 - **Sign-up forms list looks and works like Klaviyo's**: Name (with the list it feeds), Type, Status, Submitted, Submit rate (red / amber / green flag), Total revenue; search, Status and Form type filters; a ⋮ menu on each form with Edit, Analytics, Rename, Clone, Publish / Unpublish and Delete.
 - **Form analytics** (⋮ → Analytics, or click the Submitted number): submit rate, submitted (emails / phones), viewed, total revenue and orders after signing up, revenue per view, text sign-up rate, and a views vs. submissions chart for 7 / 30 / 90 / 365 days or all time.
