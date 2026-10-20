@@ -6,6 +6,9 @@ Every upload to the emily-console repo is one version. The number shows in the a
 ## 4.84.4
 - Emily can change the email on an order. When a customer asks (typo at checkout, old address), she stages an email change for one-click approval that updates the order in Shopify and ShipStation, so order and shipping emails reach the right inbox — instead of leaving a to-do for the team (ticket 9000000642).
 
+## 4.85.3
+- Form editor: click the side photo to change it. Hover shows "Change image"; the Side image panel has Upload / Library, image address, position (left, right, top, none), width, "Use on every step" and Remove.
+
 ## 4.85.2
 - Fix: the form ⋮ menu opens as a dropdown right under the button (it showed as plain buttons at the bottom of the page). Closes on click outside, scroll or Esc.
 

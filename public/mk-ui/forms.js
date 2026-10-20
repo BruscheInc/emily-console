@@ -118,6 +118,7 @@ function formMenu(f, anchor) {
 window.addEventListener('hashchange', () => { if (!/^#forms\/\d+$/.test(location.hash || '')) document.querySelectorAll('.ke').forEach((x) => x.remove()); });
 
 /* ---------------- editor state ---------------- */
+let MEDIA = false;
 let F = null, RAIL = 'add', SI = 0, SEL = null, STEPSET = false, VIEW = 'both', ZOOM = 'fit', MODE = 'edit', ADDTAB = 'basic', fdirty = false, saving = false, UNIV = [];
 const ready = { d: false, m: false };
 const step = () => F.steps[SI] || F.steps[0];
@@ -197,7 +198,7 @@ async function editForm(el, id) {
   $('knm').oninput = () => { F.name = $('knm').value; mark(false); };
   $('kst').onchange = () => { F.status = $('kst').value; dot(); mark(false); };
   $('kpub').onclick = async () => { const b = $('kpub'); if (F.status !== 'live' && b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'Click again to go live'; return; } F.status = 'live'; $('kst').value = 'live'; dot(); await save(); b.dataset.c = ''; b.textContent = 'Update live form'; };
-  k.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { if (RAIL === b.dataset.r && !SEL && !STEPSET && SI >= 0) { $('kside').classList.toggle('closed'); } else { $('kside').classList.remove('closed'); RAIL = b.dataset.r; SEL = null; STEPSET = false; if (SI < 0) SI = 0; } rail(); bar(); panel(); draw(); });
+  k.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { MEDIA = false; if (RAIL === b.dataset.r && !SEL && !STEPSET && SI >= 0) { $('kside').classList.toggle('closed'); } else { $('kside').classList.remove('closed'); RAIL = b.dataset.r; SEL = null; STEPSET = false; if (SI < 0) SI = 0; } rail(); bar(); panel(); draw(); });
   $('kzi').onclick = () => setZoom(cz() + 0.1); $('kzo').onclick = () => setZoom(cz() - 0.1); $('kzf').onclick = () => { ZOOM = 'fit'; layout(); };
   window.onbeforeunload = () => fdirty ? 'Unsaved changes' : undefined;
   window.removeEventListener('message', onFrame); window.addEventListener('message', onFrame);
@@ -211,7 +212,7 @@ function onKey(e) {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
   else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && sel()) { e.preventDefault(); step().blocks.splice(SEL, 1); SEL = null; panel(); mark(); }
-  else if (e.key === 'Escape' && !inField && (SEL != null || STEPSET)) { SEL = null; STEPSET = false; panel(); draw(); }
+  else if (e.key === 'Escape' && !inField && (SEL != null || STEPSET || MEDIA)) { SEL = null; STEPSET = false; MEDIA = false; panel(); draw(); }
 }
 const dot = () => { const d = $('kdot'); if (d) d.className = 'ke-dot ' + F.status; };
 function rail() { document.querySelectorAll('.ke-rail [data-r]').forEach((b) => b.classList.toggle('on', b.dataset.r === RAIL && !$('kside').classList.contains('closed'))); }
@@ -266,7 +267,7 @@ function draw() {
   clearTimeout(drawT);
   drawT = setTimeout(() => {
     const pub = clone({ id: F.id, shop_url: SHOP[F.store], steps: F.steps, style: F.style, targeting: F.targeting, teaser: F.teaser, sms_consent_text: F.sms_consent_text, email_consent_text: F.email_consent_text });
-    const opts = SI === -1 ? { teaser: true } : MODE === 'edit' ? { edit: { step: SI, sel: STEPSET ? null : SEL, names: BNAME } } : {};
+    const opts = SI === -1 ? { teaser: true } : MODE === 'edit' ? { edit: { step: SI, sel: STEPSET || MEDIA ? null : SEL, media: MEDIA, names: BNAME } } : {};
     for (const w of ['d', 'm']) { const fr = $(w === 'd' ? 'fpd' : 'fpm'); if (fr && fr.contentWindow && ready[w]) fr.contentWindow.postMessage({ bzfRender: 1, form: pub, opts }, '*'); }
   }, 50);
 }
@@ -277,8 +278,8 @@ function onFrame(e) {
   if (d.t === 'h') { const h = Math.min(1600, Math.max(200, Number(d.h) || 0) + 8); if (Math.abs((FH[d.frame] || 0) - h) > 2) { FH[d.frame] = h; layout(); } return; }
   if (MODE !== 'edit' || SI < 0) return;
   const bl = step().blocks;
-  if (d.t === 'sel') { SEL = d.i >= 0 ? d.i : null; STEPSET = false; if (d.i < 0) { RAIL = 'styles'; $('kside').classList.remove('closed'); rail(); } panel(); draw(); return; }
-  if (d.t === 'media') { SEL = null; STEPSET = true; $('kside').classList.remove('closed'); bar(); panel(); draw(); return; }
+  if (d.t === 'sel') { MEDIA = false; SEL = d.i >= 0 ? d.i : null; STEPSET = false; if (d.i < 0) { RAIL = 'styles'; $('kside').classList.remove('closed'); rail(); } panel(); draw(); return; }
+  if (d.t === 'media') { SEL = null; STEPSET = false; MEDIA = true; $('kside').classList.remove('closed'); bar(); panel(); draw(); return; }
   if (d.t === 'move') { const [m] = bl.splice(d.from, 1); bl.splice(d.to, 0, m); SEL = d.to; panel(); mark(); return; }
   if (d.t === 'add') { addBlock(d.type, d.at); return; }
   if (d.t === 'tool' && SEL != null) {
@@ -304,7 +305,7 @@ function bar() {
     <button class="ke-ib${VIEW === 'both' ? ' on' : ''}" data-v="both" aria-label="Desktop and mobile" title="Desktop and mobile">${ICON('devices')}</button><button class="ke-ib${VIEW === 'desk' ? ' on' : ''}" data-v="desk" aria-label="Desktop" title="Desktop">${ICON('device-desktop')}</button><button class="ke-ib${VIEW === 'mob' ? ' on' : ''}" data-v="mob" aria-label="Mobile" title="Mobile">${ICON('device-mobile')}</button>
     <span class="sep"></span><button class="ke-ib${MODE === 'play' ? ' on' : ''}" id="kplay" aria-label="Try it" title="${MODE === 'play' ? 'Back to editing' : 'Try the form'}">${ICON(MODE === 'play' ? 'pencil' : 'player-play')}</button>`;
   $('kun').onclick = undo; $('kre').onclick = redo;
-  B.querySelectorAll('[data-st]').forEach((b) => b.onclick = () => { SI = Number(b.dataset.st); SEL = null; STEPSET = false; bar(); panel(); draw(); });
+  B.querySelectorAll('[data-st]').forEach((b) => b.onclick = () => { SI = Number(b.dataset.st); SEL = null; STEPSET = false; MEDIA = false; bar(); panel(); draw(); });
   B.querySelectorAll('[data-sm]').forEach((b) => b.onclick = (e) => stepMenu(Number(b.dataset.sm), b));
   $('ktm').onclick = (e) => menu($('ktm'), [['Teaser settings', 'settings', () => { SI = -1; SEL = null; STEPSET = false; bar(); panel(); draw(); }], [F.teaser && F.teaser.enabled !== false ? 'Turn teaser off' : 'Turn teaser on', 'toggle-left', () => { F.teaser = F.teaser || {}; F.teaser.enabled = !(F.teaser.enabled !== false); bar(); panel(); mark(); }]]);
   B.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { VIEW = b.dataset.v; bar(); layout(); });
@@ -383,12 +384,13 @@ function shell(title, opts = {}) {
   const W = $('fpanel');
   W.innerHTML = `${opts.back ? `<div style="padding:0 18px"><button class="ke-back" id="kbk">${ICON('arrow-left')} ${esc(opts.back)}</button></div>` : ''}<div class="ke-sh"><b>${esc(title)}</b>${opts.right || ''}<button class="ke-ib" id="kcol" aria-label="Collapse panel" title="Collapse">${ICON('layout-sidebar-left-collapse')}</button></div>${opts.tabs || ''}<div class="ke-pane" id="kpane"></div>`;
   $('kcol').onclick = () => { $('kside').classList.add('closed'); rail(); };
-  if (opts.back) $('kbk').onclick = () => { if (opts.back === 'Add blocks') RAIL = 'add'; SEL = null; STEPSET = false; if (SI < 0) SI = 0; rail(); bar(); panel(); draw(); };
+  if (opts.back) $('kbk').onclick = () => { if (opts.back === 'Add blocks') RAIL = 'add'; SEL = null; STEPSET = false; MEDIA = false; if (SI < 0) SI = 0; rail(); bar(); panel(); draw(); };
   return $('kpane');
 }
 function panel() {
   if (!$('fpanel')) return;
   if (SI === -1) return teaserPanel(shell('Teaser', { back: 'Back' }));
+  if (MEDIA) return mediaPanel(shell('Side image', { back: 'Back' }));
   if (STEPSET) return stepPanel(shell('Step settings', { back: 'Back' }));
   const b = sel();
   if (b) return blockPanel(shell(BNAME[b.type] || b.type, { back: 'Add blocks' }));
@@ -434,6 +436,20 @@ function addBlock(type, at) {
   s.blocks.splice(pos, 0, nb);
   if (nb.type === 'coupon' && F.coupon && !F.coupon.enabled) F.coupon.enabled = true;
   SEL = pos; STEPSET = false; panel(); mark();
+}
+
+/* Side image (click the photo on the canvas) */
+function mediaPanel(P) {
+  const s = step(); s.image = s.image || { src: '', pos: 'right', width: 42 }; const im = s.image;
+  P.innerHTML = `<div style="margin-top:8px">${im.src ? `<div style="border:1px solid var(--line);border-radius:10px;height:150px;background:#F4F4F5 url('${esc(im.src)}') center/cover no-repeat"></div>` : '<div class="ke-note">No image yet. Upload one or pick from the library.</div>'}</div>
+    ${fl('Image', `<div id="mimg"></div>${txt('src', im.src, 'Image address')}`)}
+    ${grid(fl('Position', selp('pos', im.pos || 'right', [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['none', 'No image']])), fl('Width (%)', num('width', im.width || 42, { min: 20, max: 60 })))}
+    <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Side images are hidden on phones unless placed on top. This is the image for step "${esc(s.name)}"; each step has its own.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn xs" id="mall">${ICON('copy')} Use on every step</button>${im.src ? `<button class="btn xs danger" id="mrm">${ICON('trash')} Remove image</button>` : ''}</div>`;
+  bind(P, im, (x) => { if (x.dataset.p === 'pos' || x.dataset.p === 'src') panel(); });
+  if (window.MK_imagePicker) window.MK_imagePicker($('mimg'), (url) => { im.src = location.origin + url; if (!im.pos || im.pos === 'none') im.pos = 'right'; panel(); mark(); });
+  $('mall').onclick = () => { F.steps.forEach((x) => { if (x.kind !== 'success' || (x.image && x.image.src)) x.image = { ...im }; }); toast('Image set on every form step'); mark(); };
+  const rm = $('mrm'); if (rm) rm.onclick = () => { im.src = ''; panel(); mark(); };
 }
 
 /* Step settings (from a step's ⋮ menu) */
