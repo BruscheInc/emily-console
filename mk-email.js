@@ -62,7 +62,7 @@ async function saveBrand(store, data, who) {
 const getPath = (obj, p) => String(p).split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
 /** {{ a.b | default: "x" }} / {{ a|default:'x' }} / {{ a | upcase }} → value. Unknown → empty (or the default). */
 function personalize(str, ctx, { html = true } = {}) {
-  return String(str || "").replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, expr) => {
+  return String(str || "").replace(/\{%\s*coupon_code[^%]*%\}/g, "{{ coupon }}").replace(/%7B%25\s*coupon_code.*?%25%7D/gi, "{{ coupon }}").replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, expr) => {
     const parts = expr.split("|").map((x) => x.trim());
     let path = parts.shift().replace(/^person\./, "").replace(/^organization\.name$/, "store_name");
     let v = getPath(ctx, path);
@@ -642,6 +642,35 @@ async function init() {
       await core.syncSet("mk_klaviyo_coupons_v1", new Date().toISOString(), { n, edited });
       console.log(`🎟️  Marketing: coupon codes restored in ${n} Klaviyo emails${edited.length ? ` · edited in Buzzin, left as is: ${edited.join(", ")}` : ""}`);
     } catch (e) { console.error("Klaviyo coupon re-copy:", e.message); } }, 100000);
+  }
+  // One-time: Klaviyo emails edited in Buzzin keep their edits; only the blocks that held Klaviyo's coupon tag get the code back.
+  if (!(await core.syncGet("mk_klaviyo_coupons_edited_v1").catch(() => null))) {
+    setTimeout(async () => { try {
+      const raws = (await db(`SELECT id, data FROM hd_klaviyo WHERE kind='template' AND data::text LIKE '%coupon_code%'`).catch(() => ({ rows: [] }))).rows;
+      const fixed = [];
+      for (const raw of raws) {
+        const t = (await db(`SELECT id, name, doc FROM mk_templates WHERE source='klaviyo' AND ext_id=$1 AND updated_by IS NOT NULL`, [raw.id])).rows[0];
+        const def = raw.data && raw.data.attributes && raw.data.attributes.definition;
+        if (!t || !t.doc || !def || !def.body) continue;
+        const fresh = MKDoc.fromKlaviyo(def, fromKlaviyo), want = {};
+        const strip = (x) => String(x || "").replace(/\{\{\s*coupon\s*\}\}/g, "");
+        const byText = {};   // the first copy dropped the tag, so the old text = the new text without {{ coupon }}
+        const collect = (o) => { if (!o || typeof o !== "object") return; if (Array.isArray(o)) return o.forEach(collect); if (o.id && o.data && /\{\{\s*coupon/.test(JSON.stringify(o.data))) { want[o.id] = o.data; if (typeof o.data.content === "string") byText[strip(o.data.content)] = o.data; } Object.values(o).forEach(collect); };
+        collect(fresh);
+        const doc = typeof t.doc === "string" ? JSON.parse(t.doc) : t.doc; let n = 0;
+        const put = (o) => { if (!o || typeof o !== "object") return; if (Array.isArray(o)) return o.forEach(put);
+          const w = o.id && o.data && !/\{\{\s*coupon/.test(JSON.stringify(o.data)) ? (want[o.id] || (typeof o.data.content === "string" ? byText[o.data.content] : null)) : null;
+          if (w) {
+            if (typeof w.content === "string") o.data.content = w.content;
+            if (w.properties) { o.data.properties = o.data.properties || {}; for (const [k, v] of Object.entries(w.properties)) if (typeof v === "string" && /\{\{\s*coupon/.test(v)) o.data.properties[k] = v; }
+            n++; }
+          Object.values(o).forEach(put); };
+        put(doc);
+        if (n) { await db(`UPDATE mk_templates SET doc=$2, updated_at=now() WHERE id=$1`, [t.id, JSON.stringify(doc)]); fixed.push(`${t.name} (${n} block${n > 1 ? "s" : ""})`); }
+      }
+      await core.syncSet("mk_klaviyo_coupons_edited_v1", new Date().toISOString(), { fixed });
+      console.log(`🎟️  Marketing: coupon code put back in edited Klaviyo emails: ${fixed.join(", ") || "none needed"}`);
+    } catch (e) { console.error("Klaviyo coupon fix (edited):", e.message); } }, 110000);
   }
   // One-time: re-read Klaviyo templates with their drag-and-drop layout so they open as real blocks.
   if (!(await core.syncGet("mk_klaviyo_layouts_v1").catch(() => null)) && process.env.KLAVIYO_API_KEY) {

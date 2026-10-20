@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.90.2
+- "Welcome Email (Klaviyo)" was edited in Buzzin, so the automatic re-copy left it alone. Now only the blocks that held Klaviyo's coupon tag get the code back, and the rest of your edits stay.
+- Any Klaviyo coupon tag still left in an email or link shows the person's code when it's sent.
+
 ## 4.90.1
 Tests feel like the live message.
 - Test emails and texts to an address on the Internal test list use that person's real profile: their first name, real links, and their own working single-use code, created in Shopify like a live send. The same code comes back on each test until it's used or expires.

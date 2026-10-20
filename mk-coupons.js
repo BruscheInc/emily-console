@@ -9,7 +9,7 @@ const MK = () => require("./mk-core");
 const DEFAULTS = { percent: 10, days: 7, prefix: "WELCOME" };
 async function defaults() { const s = await MK().settings(); return { ...DEFAULTS, ...((s && s.coupons) || {}) }; }
 const makeCode = (prefix) => `${String(prefix || "WELCOME").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) || "WELCOME"}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
-const usesCoupon = (tpl) => { try { return /\{\{\s*coupon\b|"type"\s*:\s*"coupon"/.test(JSON.stringify([tpl.blocks, tpl.doc, tpl.body, tpl.subject])); } catch (e) { return false; } };
+const usesCoupon = (tpl) => { try { return /\{\{\s*coupon\b|"type"\s*:\s*"coupon"|coupon_code/.test(JSON.stringify([tpl.blocks, tpl.doc, tpl.body, tpl.subject])); } catch (e) { return false; } };
 
 /** A code a test or preview can show: looks real, isn't created in Shopify. */
 function sample(prefix) { return makeCode(prefix || DEFAULTS.prefix); }
