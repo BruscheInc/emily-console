@@ -87,6 +87,7 @@ function fromKlaviyo(html) {
     .replace(/\{%\s*web_view(?:\s+['"]([^'"]*)['"])?\s*%\}/g, (_, t) => `<a href="{{ web_url }}">${t || "View in browser"}</a>`)
     .replace(/\{\{\s*organization\.full_address\s*\}\}/g, "{{ store_address }}")
     .replace(/\{\{\s*organization\.name\s*\}\}/g, "{{ store_name }}")
+    .replace(/\{%\s*coupon_code[^%]*%\}/g, "{{ coupon }}")   // Klaviyo's unique coupon tag → the person's own Buzzin code
     .replace(/\{%[\s\S]*?%\}/g, "");   // any other Klaviyo logic tag is dropped (noted on import)
 }
 
@@ -235,7 +236,7 @@ async function contextFor(store, profile, extra = {}) {
     last_sizes: profile && profile.props && profile.props.last_sizes, ...((profile && profile.props) || {}),
     store_name: b.name, store_address: b.address, shop_url: b.shop_url,
     unsubscribe_url: `${BASE(store)}/mk/u/${tok}`, preferences_url: `${BASE(store)}/mk/p/${tok}`, web_url: `${BASE(store)}/mk/u/${tok}`,
-    coupon: extra.coupon || (profile && profile.props && profile.props.coupon) || "{{ coupon }}",
+    coupon: extra.coupon || (profile && profile.props && profile.props.coupon) || require("./mk-coupons").sample(),   // previews and tests show a sample code
     ...extra,
   };
 }
@@ -436,6 +437,7 @@ async function importKlaviyoTemplates(store = "lb", opts = {}) {
   let n = 0, layouts = 0;
   const br = await brand(store);
   for (const t of rows) {
+    if (opts.only && !opts.only.includes(t.id)) continue;
     const a = (t.data && t.data.attributes) || {};
     const html = a.html; const def = a.definition;
     if (!html && !def) continue;
@@ -628,6 +630,17 @@ async function init() {
     await core.syncSet("mk_sender_root_domain_v1", "done", {}); } } catch (e) { console.error("sender domain update:", e.message); }
   if (!(await core.syncGet("mk_klaviyo_templates_v1").catch(() => null))) {
     setTimeout(async () => { try { const n = await importKlaviyoTemplates("lb"); if (n) { await core.syncSet("mk_klaviyo_templates_v1", new Date().toISOString(), { n }); console.log(`✉️  Marketing: ${n} Klaviyo templates imported as editable HTML`); } } catch (e) { console.error("Klaviyo templates import:", e.message); } }, 60000);
+  }
+  // One-time: Klaviyo templates used {% coupon_code %}, which the first copy dropped. Re-copy the ones nobody has edited so they show each person's own code.
+  if (!(await core.syncGet("mk_klaviyo_coupons_v1").catch(() => null))) {
+    setTimeout(async () => { try {
+      const ids = (await db(`SELECT id FROM hd_klaviyo WHERE kind='template' AND data::text LIKE '%coupon_code%'`).catch(() => ({ rows: [] }))).rows.map((r) => r.id);
+      const st = ids.length ? (await db(`SELECT ext_id, name, updated_by FROM mk_templates WHERE source='klaviyo' AND ext_id = ANY($1)`, [ids])).rows : [];
+      const fresh = st.filter((r) => !r.updated_by).map((r) => r.ext_id), edited = st.filter((r) => r.updated_by).map((r) => r.name);
+      const n = fresh.length ? await importKlaviyoTemplates("lb", { overwrite: true, only: fresh }) : 0;
+      await core.syncSet("mk_klaviyo_coupons_v1", new Date().toISOString(), { n, edited });
+      console.log(`🎟️  Marketing: coupon codes restored in ${n} Klaviyo emails${edited.length ? ` · edited in Buzzin, left as is: ${edited.join(", ")}` : ""}`);
+    } catch (e) { console.error("Klaviyo coupon re-copy:", e.message); } }, 100000);
   }
   // One-time: re-read Klaviyo templates with their drag-and-drop layout so they open as real blocks.
   if (!(await core.syncGet("mk_klaviyo_layouts_v1").catch(() => null)) && process.env.KLAVIYO_API_KEY) {

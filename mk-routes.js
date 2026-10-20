@@ -43,6 +43,7 @@ module.exports = function mount(app, { guard, isAdmin, actorOf, VERSION }) {
       const b = req.body || {};
       const patch = {};
       if (Array.isArray(b.test_list)) patch.test_list = b.test_list;
+      if (b.coupons) patch.coupons = { percent: Math.min(90, Math.max(1, Number(b.coupons.percent) || 10)), days: Math.min(365, Math.max(1, Number(b.coupons.days) || 7)), prefix: String(b.coupons.prefix || "WELCOME").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) || "WELCOME" };
       if (b.quiet_hours) patch.quiet_hours = { start: String(b.quiet_hours.start || "21:00"), end: String(b.quiet_hours.end || "08:00") };
       if (b.smart_sending_hours) patch.smart_sending_hours = { email: Math.max(0, Number(b.smart_sending_hours.email) || 0), sms: Math.max(0, Number(b.smart_sending_hours.sms) || 0) };
       if (b.attribution) patch.attribution = { email_click_days: Math.min(30, Math.max(1, Number(b.attribution.email_click_days) || 5)), sms_click_days: Math.min(30, Math.max(1, Number(b.attribution.sms_click_days) || 1)) };

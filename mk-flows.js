@@ -238,7 +238,8 @@ async function execNode(run, flow, node, p) {
       if (!(await msgAllowed(c.status || "draft"))) return { next: node.next, note: `skipped: message is ${c.status || "draft"}` };
       if (c.smart_sending !== false && await smartSkip(p.id, "email", S.smart_sending_hours.email)) return { next: node.next, note: "skipped: smart sending" };
       const tpl = await E().getTemplate(c.template_id); if (!tpl) return { next: node.next, note: "skipped: email template missing" };
-      const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: ctx.coupon || (p.props || {}).coupon, items: (ctx.trigger_props && ctx.trigger_props.items) || [], checkout_url: ctx.trigger_props && ctx.trigger_props.checkout_url });
+      let cpn; try { cpn = await couponFor(flow, p, ctx, "email", { ...tpl, subject: c.subject || tpl.subject }, run); } catch (e) { return { next: node.next, note: `skipped: couldn't make a coupon code (${e.message})` }; }
+      const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: cpn, items: (ctx.trigger_props && ctx.trigger_props.items) || [], checkout_url: ctx.trigger_props && ctx.trigger_props.checkout_url });
       const row = await SEND().send({ store: flow.store, channel: "email", profile: p, msg: r, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `tpl:${tpl.id}`, test: run.test });
       return { next: node.next, note: `email ${row.status}${row.reason ? ": " + row.reason : ""}` };
     }
@@ -246,7 +247,8 @@ async function execNode(run, flow, node, p) {
       if (!(await msgAllowed(c.status || "draft"))) return { next: node.next, note: `skipped: message is ${c.status || "draft"}` };
       if (c.smart_sending && await smartSkip(p.id, "sms", S.smart_sending_hours.sms)) return { next: node.next, note: "skipped: smart sending" };
       const SMS = require("./mk-sms");
-      const body = await SMS.compose(flow.store, c, p, { coupon: ctx.coupon || (p.props || {}).coupon, checkout_url: ctx.trigger_props && ctx.trigger_props.checkout_url });
+      let cpn; try { cpn = await couponFor(flow, p, ctx, "sms", { body: c.body }, run); } catch (e) { return { next: node.next, note: `skipped: couldn't make a coupon code (${e.message})` }; }
+      const body = await SMS.compose(flow.store, c, p, { coupon: cpn, checkout_url: ctx.trigger_props && ctx.trigger_props.checkout_url });
       const row = await SEND().send({ store: flow.store, channel: "sms", profile: p, msg: { body, media: c.media || null }, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `sms:${flow.id}:${run.node_id}`, test: run.test });
       if (row.status === "deferred") return { stay: true, wait: new Date(Date.now() + 30 * 60e3), note: "quiet hours — trying again in 30 minutes" };
       return { next: node.next, note: `text ${row.status}${row.reason ? ": " + row.reason : ""}` };
@@ -525,6 +527,17 @@ async function init() {
   if (!(await core.syncGet("mk_klaviyo_flows_v1").catch(() => null))) {
     setTimeout(async () => { try { const t = await core.syncGet("mk_klaviyo_templates_v1").catch(() => null); if (!t) return; const r = await importKlaviyoFlows("lb", "import"); if (r.length) { await core.syncSet("mk_klaviyo_flows_v1", new Date().toISOString(), { n: r.length }); console.log(`🔀 Marketing: ${r.length} Klaviyo flows imported as drafts · ${r.map((x) => `${x.name} ${x.klaviyo_steps}→${x.steps}`).join(" · ")}`); } } catch (e) { console.error("Klaviyo flows import:", e.message); } }, 120 * 1000);
   }
+}
+
+
+/** The code for {{ coupon }}: the one a "Create coupon" step just made, else the person's own unique code (made now if needed). */
+async function couponFor(flow, p, ctx, channel, msg, run) {
+  if (ctx.coupon) return ctx.coupon;
+  const CP = require("./mk-coupons");
+  if (!CP.usesCoupon(msg)) return (p.props || {}).coupon;
+  const S = await MK().settings();
+  const live = !run.test && flow.status === "live" && !!(S.sending[flow.store] && S.sending[flow.store][channel]) && p[channel === "sms" ? "sms_consent" : "email_consent"] === "subscribed";
+  return CP.forProfile(flow.store, p, { real: live, source: `flow ${flow.name}` });
 }
 
 module.exports = { init, migrate, routes, onEvent, enroll, tick, validate, delayUntil, simulate, importKlaviyoFlows, mergeDuplicates, get, list, save, create, TYPES, STARTER_NAMES };

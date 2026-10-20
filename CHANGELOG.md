@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.90.0
+Unique coupon codes in every email and text.
+- **One code per person.** When an email or text uses a coupon and the person has no usable code, Buzzin makes one just for them at send time: a single-use Shopify discount, one per customer. A code is reused while it's valid and unused; once it's used or expired, the next message gets a new one. This works in flows and campaigns, including welcome emails for people who joined without a sign-up form.
+- **Settings → Coupon codes in emails & texts:** percent off (default 10%), days valid (default 7) and code prefix (default WELCOME).
+- **Klaviyo emails:** Klaviyo's `{% coupon_code %}` tag was being dropped when the emails were copied, so "Welcome Email (Klaviyo)" showed no code and its link had none. It now becomes the person's own code, in the text and in links. Copies nobody has edited are re-copied automatically.
+- Tests and previews show a sample code (never created in Shopify) instead of a blank.
+
 ## 4.89.0
 Lists & segments and Campaigns pages laid out like Klaviyo, with easy deleting.
 - **Lists & segments** is now one page: search, type filter, stars, member counts and created dates. Every row has a ⋮ menu (Update definition / View members, Edit name, Clone, Star, Delete), and tick boxes let you delete several at once. Before deleting, Buzzin tells you which forms, flows, campaigns or segments still use it. Deleted lists and segments are hidden, not erased. The Shopify Merged Newsletter list can't be deleted.

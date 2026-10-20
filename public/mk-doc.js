@@ -590,6 +590,9 @@ ${sections}${empty}
       n.data = n.data || {}; n.data.styles = n.data.styles || {}; n.data.display_options = n.data.display_options || {};
       if (typeof n.data.content === 'string') n.data.content = n.type === 'coupon' ? n.data.content.replace(/\{%\s*coupon_code[^%]*%\}/g, '{{ coupon }}') : f(n.data.content);
       (n.subblocks || []).forEach((sb) => { if (typeof sb.content === 'string') sb.content = f(sb.content); if (!sb.id) sb.id = rid(); });
+      const cc = (v) => String(v).replace(/\{%\s*coupon_code[^%]*%\}/g, '{{ coupon }}');   // Klaviyo's coupon tag in links and labels
+      if (n.data.properties) for (const k of Object.keys(n.data.properties)) if (typeof n.data.properties[k] === 'string' && /coupon_code/.test(n.data.properties[k])) n.data.properties[k] = cc(n.data.properties[k]);
+      (n.subblocks || []).forEach((sb) => { for (const k of Object.keys(sb)) if (typeof sb[k] === 'string' && /coupon_code/.test(sb[k])) sb[k] = cc(sb[k]); });
       const dop = n.data.display_options;
       if (dop.visibility && dop.visibility.check) dop.visibility.check = String(dop.visibility.check);
       if (n.type === 'image' && n.data.properties) { const st = n.data.styles; if (st.width == null && st.max_width) st.width = st.max_width; }
