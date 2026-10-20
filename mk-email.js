@@ -595,14 +595,15 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   });
 
   /* unsubscribe (page + one-click POST per RFC 8058) and preferences */
-  const unsub = async (t, channel = "email") => { const tk = readToken(t); if (!tk) return null; const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1 AND store=$2`, [tk.id, tk.store])).rows[0]; if (!p) return null; await MK().setConsent(p, channel, "unsubscribed", { source: "unsubscribe_link" }); return p; };
+  // Old links keep working after profiles merge: a merged-away id resolves to the profile it lives in now.
+  const unsub = async (t, channel = "email") => { const tk = readToken(t); if (!tk) return null; const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [await require("./mk-merge").resolveId(tk.id)])).rows[0]; if (!p) return null; await MK().setConsent(p, channel, "unsubscribed", { source: "unsubscribe_link" }); return p; };
   app.post("/mk/u/:t", express.urlencoded({ extended: false }), async (req, res) => { try { const p = await unsub(req.params.t); if (!p) return res.status(404).send("Link not valid"); const b = await brand(p.store); res.type("html").send(page("Unsubscribed", `<h1>You're unsubscribed</h1><p>You won't get marketing emails from ${esc(b.name)} anymore. Order and shipping emails still come as usual.</p>`, b)); } catch (e) { res.status(500).send("Error"); } });
   app.get("/mk/u/:t", async (req, res) => {
     try { const tk = readToken(req.params.t); if (!tk) return res.status(404).send("This link isn't valid."); const b = await brand(tk.store);
       res.type("html").send(page("Unsubscribe", `<h1>Unsubscribe?</h1><p>You'll stop getting marketing emails from ${esc(b.name)}.</p><form method="post"><button type="submit">Unsubscribe</button></form><p><a class="b l" href="/mk/p/${esc(req.params.t)}" style="display:inline-block;text-decoration:none">Get fewer emails instead</a></p>`, b)); } catch (e) { res.status(500).send("Error"); }
   });
   app.get("/mk/p/:t", async (req, res) => {
-    try { const tk = readToken(req.params.t); if (!tk) return res.status(404).send("This link isn't valid."); const b = await brand(tk.store); const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [tk.id])).rows[0]; if (!p) return res.status(404).send("Not found");
+    try { const tk = readToken(req.params.t); if (!tk) return res.status(404).send("This link isn't valid."); const b = await brand(tk.store); const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [await require("./mk-merge").resolveId(tk.id)])).rows[0]; if (!p) return res.status(404).send("Not found");
       const freq = (p.props && p.props.email_frequency) || "all";
       res.type("html").send(page("Email preferences", `<h1>Email preferences</h1><form method="post">
         <label><input type="radio" name="f" value="all" ${freq === "all" ? "checked" : ""}> Everything: new arrivals, sales and tips</label>
@@ -613,7 +614,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   app.post("/mk/p/:t", express.urlencoded({ extended: false }), async (req, res) => {
     try { const tk = readToken(req.params.t); if (!tk) return res.status(404).send("Link not valid"); const b = await brand(tk.store); const f = String((req.body && req.body.f) || "all");
       if (f === "none") { await unsub(req.params.t); return res.type("html").send(page("Saved", `<h1>You're unsubscribed</h1><p>No more marketing emails from ${esc(b.name)}.</p>`, b)); }
-      await db(`UPDATE mk_profiles SET props = props || jsonb_build_object('email_frequency', $2::text), updated_at=now() WHERE id=$1`, [tk.id, ["all", "weekly", "sales"].includes(f) ? f : "all"]);
+      await db(`UPDATE mk_profiles SET props = props || jsonb_build_object('email_frequency', $2::text), updated_at=now() WHERE id=$1`, [await require("./mk-merge").resolveId(tk.id), ["all", "weekly", "sales"].includes(f) ? f : "all"]);
       res.type("html").send(page("Saved", `<h1>Saved</h1><p>Thanks — we'll email you ${f === "weekly" ? "at most once a week" : f === "sales" ? "only for big sales" : "about everything"}.</p>`, b)); } catch (e) { res.status(500).send("Error"); }
   });
 }

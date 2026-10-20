@@ -1,7 +1,8 @@
 /* =============================================================================================
  *  Buzzin Marketing · contacts, consent and events  (Phase 1)
  *
- *  One profile per person per store. Built from:
+ *  One profile per person across Brusche (Larkspur Baby + Outlet); `store` is the home brand, `stores` every
+ *  brand they've shopped (see mk-merge.js). Built from:
  *    • the Klaviyo copy (hd_klaviyo_profiles)  — consent, properties, last activity, lists
  *    • Shopify customers (bulk export)          — consent, orders count, spend, address
  *    • Shopify orders (bulk export)             — "placed order" events with items and sizes
@@ -32,7 +33,9 @@ async function migrate() {
     orders_count INT NOT NULL DEFAULT 0, total_spent NUMERIC(12,2) NOT NULL DEFAULT 0, first_order_at TIMESTAMPTZ, last_order_at TIMESTAMPTZ,
     last_engaged_at TIMESTAMPTZ, tier TEXT NOT NULL DEFAULT 'new', sources TEXT[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())`);
-  await db(`CREATE UNIQUE INDEX IF NOT EXISTS mk_profiles_store_email ON mk_profiles (store, email) WHERE email IS NOT NULL`);
+  // Before the one-profile-per-customer merge this was unique per store; after it, mk-merge keeps email unique across stores.
+  if (!(await db(`SELECT 1 FROM pg_indexes WHERE indexname='mk_profiles_email_one'`)).rows.length)
+    await db(`CREATE UNIQUE INDEX IF NOT EXISTS mk_profiles_store_email ON mk_profiles (store, email) WHERE email IS NOT NULL`);
   await db(`CREATE INDEX IF NOT EXISTS mk_profiles_store_phone ON mk_profiles (store, phone)`);
   await db(`CREATE INDEX IF NOT EXISTS mk_profiles_shopify ON mk_profiles (shopify_id)`);
   await db(`CREATE TABLE IF NOT EXISTS mk_consent_log (id BIGSERIAL PRIMARY KEY, profile_id BIGINT NOT NULL, channel TEXT NOT NULL, state TEXT NOT NULL,
@@ -72,11 +75,14 @@ async function saveSettings(patch, who) {
 }
 
 /* ---------------- profiles ---------------- */
-async function findProfile(store, { email, phone, shopifyId, klaviyoId }) {
-  if (email) { const r = (await db(`SELECT * FROM mk_profiles WHERE store=$1 AND email=$2`, [store, email])).rows[0]; if (r) return r; }
-  if (shopifyId) { const r = (await db(`SELECT * FROM mk_profiles WHERE store=$1 AND shopify_id=$2 LIMIT 1`, [store, shopifyId])).rows[0]; if (r) return r; }
-  if (klaviyoId) { const r = (await db(`SELECT * FROM mk_profiles WHERE store=$1 AND klaviyo_id=$2 LIMIT 1`, [store, klaviyoId])).rows[0]; if (r) return r; }
-  if (phone) { const r = (await db(`SELECT * FROM mk_profiles WHERE store=$1 AND phone=$2 ORDER BY (email IS NULL) DESC LIMIT 1`, [store, phone])).rows[0]; if (r) return r; }
+async function findProfile(_store, { email, phone, shopifyId, klaviyoId }) {
+  // Customers belong to Brusche: the same person is found whichever store they come in from.
+  // Larkspur Baby's profile is preferred while old per-store duplicates still exist.
+  if (email) { const r = (await db(`SELECT * FROM mk_profiles WHERE email=$1 ORDER BY (store='lb') DESC, id LIMIT 1`, [email])).rows[0]; if (r) return r; }
+  if (shopifyId) { const r = (await db(`SELECT * FROM mk_profiles WHERE shopify_id=$1 LIMIT 1`, [shopifyId])).rows[0]; if (r) return r; }
+  if (klaviyoId) { const r = (await db(`SELECT * FROM mk_profiles WHERE klaviyo_id=$1 LIMIT 1`, [klaviyoId])).rows[0]; if (r) return r; }
+  // A phone only identifies someone when no email says otherwise: a different email on the same phone is a different person.
+  if (phone) { const r = (await db(`SELECT * FROM mk_profiles WHERE phone=$1 ${email ? "AND email IS NULL" : ""} ORDER BY (email IS NULL) DESC, (store='lb') DESC LIMIT 1`, [phone])).rows[0]; if (r) return r; }
   return null;
 }
 
@@ -86,8 +92,8 @@ async function upsertProfile(store, p, source) {
   if (!email && !phone) return null;
   const cur = await findProfile(store, { email, phone, shopifyId: p.shopify_id, klaviyoId: p.klaviyo_id });
   if (!cur) {
-    const r = await db(`INSERT INTO mk_profiles (store, email, phone, first_name, last_name, shopify_id, klaviyo_id, city, region, country, zip, timezone, props, sources, last_engaged_at, created_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16, now())) ON CONFLICT DO NOTHING RETURNING *`,
+    const r = await db(`INSERT INTO mk_profiles (store, email, phone, first_name, last_name, shopify_id, klaviyo_id, city, region, country, zip, timezone, props, sources, last_engaged_at, created_at, stores)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16, now()), ARRAY[$1::text]) ON CONFLICT DO NOTHING RETURNING *`,
       [store, email, phone, p.first_name || null, p.last_name || null, p.shopify_id || null, p.klaviyo_id || null, p.city || null, p.region || null, p.country || null, p.zip || null, p.timezone || null,
        JSON.stringify(p.props || {}), [source], p.last_engaged_at || null, p.created_at || null]);
     return r.rows[0] || (await findProfile(store, { email, phone }));
@@ -96,10 +102,11 @@ async function upsertProfile(store, p, source) {
       email=COALESCE(email,$2), phone=COALESCE(phone,$3), first_name=COALESCE(NULLIF(first_name,''),$4), last_name=COALESCE(NULLIF(last_name,''),$5),
       shopify_id=COALESCE(shopify_id,$6), klaviyo_id=COALESCE(klaviyo_id,$7), city=COALESCE(city,$8), region=COALESCE(region,$9), country=COALESCE(country,$10), zip=COALESCE(zip,$11),
       timezone=COALESCE(timezone,$12), props=props || $13::jsonb, sources=(SELECT ARRAY(SELECT DISTINCT unnest(sources || $14::text[]))),
-      last_engaged_at=GREATEST(last_engaged_at,$15), created_at=LEAST(created_at, COALESCE($16, created_at)), updated_at=now()
+      last_engaged_at=GREATEST(last_engaged_at,$15), created_at=LEAST(created_at, COALESCE($16, created_at)),
+      stores=(SELECT ARRAY(SELECT DISTINCT unnest(stores || ARRAY[store, $17::text]))), store=CASE WHEN $17='lb' THEN 'lb' ELSE store END, updated_at=now()
     WHERE id=$1 RETURNING *`,
     [cur.id, email, phone, p.first_name || null, p.last_name || null, p.shopify_id || null, p.klaviyo_id || null, p.city || null, p.region || null, p.country || null, p.zip || null, p.timezone || null,
-     JSON.stringify(p.props || {}), [source], p.last_engaged_at || null, p.created_at || null]);
+     JSON.stringify(p.props || {}), [source], p.last_engaged_at || null, p.created_at || null, store]);
   return r.rows[0];
 }
 
@@ -409,6 +416,7 @@ async function track(store, type, { profileId, email, phone, at, value, props, s
 
 async function init() {
   await migrate();
+  await require("./mk-merge").init();
   // Start the first sync shortly after boot; each step runs once and is remembered.
   setTimeout(() => syncAll({ who: "boot" }).catch(() => {}), 90 * 1000);
   // While the Klaviyo copy is still in progress, check again every 10 minutes so the merge runs when it finishes.

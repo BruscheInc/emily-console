@@ -3,6 +3,15 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.81.0
+- **One Brusche profile per customer.** Customers belong to Brusche, not to one store: the same email is one profile whether they shopped Larkspur Baby, the Outlet, or both. A profile's store is now its home brand (Larkspur Baby if they shopped both) and "Shopped" shows every brand.
+- New **Marketing → Merge & import** page (admins):
+  1. **Back up**: copies every profile, consent record, event, list, segment and send table before anything changes (`mk_bak_<time>_*`).
+  2. **Merge duplicate profiles**: same email → one profile. The strictest consent wins (an unsubscribe or bounce in either store stays). Orders and spend from both stores are added up. A no-email profile folds into the one profile that has its phone. The same phone on different emails is never merged; download the list to review. Old unsubscribe and preference links keep working.
+  3. **Import Shopify customer files** (CSV): names, address, tags, order totals and the survey answers (child's size and gender, adult size, DFW, ratings, feedback). Shows the counts before you press Import. Email "yes" only fills in someone with no consent record; it never overrides an unsubscribe.
+- **Text consent is never taken from the files.** It comes only from Shopify's own SMS consent record or a Buzzin sign-up/keyword. Email subscribers who can't get texts are marked as SMS candidates and put on the **SMS candidates (email subscribers)** list, to invite with a join-texts email.
+- New profiles from any source now land on the existing profile when the email matches, in either store. A phone number only matches a profile when no email says it's someone else.
+
 ## 4.80.0
 - New email editor, built 1:1 on Klaviyo's own template format (sections → columns → blocks, with Klaviyo's field names).
   - Left side: **Add content** (Blocks · Pre-built · Universal) and **Styles** (the whole email: backgrounds, width, border, Normal text, Heading 1–4, links, mobile).

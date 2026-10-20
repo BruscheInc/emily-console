@@ -110,6 +110,7 @@ const SECTIONS = [
   { id: 'overview', icon: 'layout-dashboard', label: 'Overview', render: renderOverview },
   { id: 'profiles', icon: 'users', label: 'Profiles', render: renderProfiles },
   { id: 'lists', icon: 'list-details', label: 'Lists', render: renderLists },
+  { id: 'consolidate', icon: 'git-merge', label: 'Merge & import', render: renderConsolidate },
   { h: 'Build' },
   { id: 'settings', icon: 'settings', label: 'Settings', render: renderSettings },
 ];
@@ -193,7 +194,7 @@ async function openProfile(id) {
   d.innerHTML = `<div class="hd"><b style="font-size:16px">${esc(name)}</b>${pill(TIER, p.tier)}<span class="sp"></span><button class="btn xs" id="dx" aria-label="Close"><i class="ti ti-x"></i></button></div>
   <div class="bd">
     <div class="kv"><div>Email</div><div>${esc(p.email || '—')} ${pill(CONSENT, p.email_consent)}</div><div>Phone</div><div>${esc(p.phone || '—')} ${pill(CONSENT, p.sms_consent)}</div>
-      <div>Store</div><div>${p.store === 'lbo' ? 'Larkspur Baby Outlet' : 'Larkspur Baby'}</div><div>Location</div><div>${esc([p.city, p.region, p.country].filter(Boolean).join(', ') || '—')}</div>
+      <div>Shopped</div><div>${esc((p.stores && p.stores.length ? p.stores : [p.store]).map((x) => x === 'lbo' ? 'Outlet' : 'Larkspur Baby').join(' + '))}</div><div>Location</div><div>${esc([p.city, p.region, p.country].filter(Boolean).join(', ') || '—')}</div>
       <div>Orders</div><div>${fmtN(p.orders_count)} · ${fmt$(p.total_spent)} · last ${fmtD(p.last_order_at)}</div><div>Last activity</div><div>${fmtD(p.last_engaged_at)}</div>
       <div>Sizes last bought</div><div>${esc(((p.props || {}).last_sizes || []).join(', ') || '—')}</div><div>Came from</div><div>${esc((p.sources || []).join(', '))}</div></div>
     <div style="display:flex;gap:8px;margin-top:12px">${p.email_consent === 'subscribed' ? '<button class="btn xs danger" data-un="email">Unsubscribe from email</button>' : ''}${p.sms_consent === 'subscribed' ? '<button class="btn xs danger" data-un="sms">Unsubscribe from texts</button>' : ''}</div>
@@ -205,6 +206,69 @@ async function openProfile(id) {
   document.body.appendChild(d);
   $('dx').onclick = () => d.remove();
   d.querySelectorAll('[data-un]').forEach((b) => b.onclick = async () => { if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Click again to confirm'; return; } try { await api(`/api/mk/profiles/${id}/consent`, { method: 'POST', body: JSON.stringify({ channel: b.dataset.un, state: 'unsubscribed' }) }); toast('Unsubscribed'); openProfile(id); } catch (e) { toast(e.message, 1); } });
+}
+
+/* ---------- Merge & import: one Brusche profile per customer ---------- */
+async function renderConsolidate(el) {
+  const s = await api('/api/mk/consolidate');
+  const m = s.merge, st = s.staged, c = s.counts, b = (s.backups || [])[0];
+  const fresh = b && (Date.now() - new Date(b.at)) < 6 * 3600e3;
+  const merged = !!c.one_per_email;
+  const busy = !!s.job;
+  el.innerHTML = `<h1>Merge & import</h1><p class="sub">One Brusche profile per customer. Same email = same person, whichever store they shopped. Text consent comes only from Shopify's SMS record or a Buzzin sign-up; the files' SMS column is not used.</p>
+  ${busy ? `<div class="card" style="margin-bottom:12px"><b>${esc(s.job.name)}</b> <span class="pill hon">Running</span> <span style="color:var(--muted)">${esc(s.job.progress || '')}</span></div>` : ''}
+  <div class="grid g4">
+    <div class="card kpi"><div class="l">Profiles now</div><div class="v">${fmtN(c.profiles)}</div><div class="s">${fmtN(c.both_stores)} shopped both stores</div></div>
+    <div class="card kpi"><div class="l">Can get email</div><div class="v">${fmtN(c.email_ok)}</div></div>
+    <div class="card kpi"><div class="l">Can get texts</div><div class="v">${fmtN(c.sms_ok)}</div><div class="s">real SMS consent only</div></div>
+    <div class="card kpi"><div class="l">SMS candidates</div><div class="v">${fmtN(c.sms_candidates)}</div><div class="s">invite by email, don't text</div></div>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><b>1 · Back up</b><p class="sub" style="margin:4px 0 10px">Copies every profile, consent record, event, list and send before anything changes.</p>
+      ${b ? `<p>Last backup <b>${esc(b.stamp)}</b> · ${fmtN(b.profiles)} profiles · ${fmtDT(b.at)} ${fresh ? '<span class="pill ok">ready</span>' : '<span class="pill off">older than 6h</span>'}</p>` : '<p style="color:var(--muted)">No backup yet.</p>'}
+      <button class="btn" id="cb"${busy ? ' disabled' : ''}>Back up now</button></div>
+    <div class="card"><b>2 · Merge duplicate profiles</b><p class="sub" style="margin:4px 0 10px">Strictest consent wins; orders and spend from both stores are added up; old unsubscribe links keep working.</p>
+      ${merged ? '<p><span class="pill ok">Done</span> one profile per email is now enforced.</p>' : ''}
+      <table><tbody>
+        <tr><td>Emails with more than one profile</td><td class="n">${fmtN(m.email_groups)}</td></tr>
+        <tr><td>Profiles that fold into another (same email)</td><td class="n">${fmtN(m.email_extra)}</td></tr>
+        <tr><td>No-email profiles that fold in by phone</td><td class="n">${fmtN(m.phone_only_foldable)}</td></tr>
+        <tr><td>Profiles after merge</td><td class="n"><b>${fmtN(m.after)}</b></td></tr>
+        <tr><td>Same phone on different emails (not merged)</td><td class="n">${fmtN(m.shared_phones)} <a href="#" id="csp">download for review</a></td></tr>
+      </tbody></table>
+      <button class="btn" id="cm" style="margin-top:10px"${busy || !fresh || (!m.email_extra && !m.phone_only_foldable && merged) ? ' disabled' : ''}>${fresh ? 'Merge now' : 'Back up first'}</button></div>
+  </div>
+  <div class="card" style="margin-top:12px"><b>3 · Import Shopify customer files</b><p class="sub" style="margin:4px 0 10px">Upload each export with the store it came from. Nothing is written to profiles until you press Import.</p>
+    <div class="bar"><select id="cs"><option value="lb">Larkspur Baby file</option><option value="lbo">Outlet file</option></select><input type="file" id="cf" accept=".csv,text/csv" multiple><button class="btn" id="cu"${busy ? ' disabled' : ''}>Upload</button><span id="cup" style="color:var(--muted)"></span></div>
+    <table style="margin-top:8px"><tbody>
+      ${st.files.map((f) => `<tr><td>${esc(f.file || 'file')}</td><td>${f.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'}</td><td class="n">${fmtN(f.rows)} rows</td></tr>`).join('') || '<tr><td class="empty">No files uploaded.</td></tr>'}
+    </tbody></table>
+    ${st.rows ? `<table style="margin-top:10px"><tbody>
+      <tr><td>Unique customers in the files</td><td class="n">${fmtN(st.people)}</td></tr>
+      <tr><td>In both stores' files</td><td class="n">${fmtN(st.in_both)}</td></tr>
+      <tr><td>Already in Buzzin / new</td><td class="n">${fmtN(st.already_in_buzzin)} / ${fmtN(st.new_people)}</td></tr>
+      <tr><td>Email "yes" in the files</td><td class="n">${fmtN(st.email_yes)}</td></tr>
+      <tr><td>Email "yes" but unsubscribed in Buzzin (stays unsubscribed)</td><td class="n">${fmtN(st.yes_but_unsubscribed_in_buzzin)}</td></tr>
+      <tr><td>Rows with no email or phone (skipped)</td><td class="n">${fmtN(st.skipped)}</td></tr></tbody></table>
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="ci"${busy || !merged ? ' disabled' : ''}>${merged ? 'Import' : 'Merge first'}</button><button class="btn xs" id="cc"${busy ? ' disabled' : ''}>Clear uploads</button></div>` : ''}
+  </div>
+  ${s.log && s.log.length ? `<div class="card" style="margin-top:12px"><b>Log</b><div class="log" style="margin-top:8px">${esc(s.log.join('\n'))}</div></div>` : ''}`;
+  const post = async (u, okMsg) => { try { await api(u, { method: 'POST', body: JSON.stringify({}) }); toast(okMsg); setTimeout(go, 1200); } catch (e) { toast(e.message, 1); } };
+  $('cb').onclick = () => post('/api/mk/consolidate/backup', 'Backup started');
+  $('cm').onclick = () => { const btn = $('cm'); if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = 'Click again to merge'; return; } post('/api/mk/consolidate/merge', 'Merge started'); };
+  if ($('ci')) $('ci').onclick = () => { const btn = $('ci'); if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = 'Click again to import'; return; } post('/api/mk/consolidate/import', 'Import started'); };
+  if ($('cc')) $('cc').onclick = () => post('/api/mk/consolidate/clear', 'Uploads cleared');
+  $('csp').onclick = async (e) => { e.preventDefault(); try { const r = await fetch('/api/mk/consolidate/shared-phones.csv', { headers: { Authorization: 'Bearer ' + KEY } }); if (!r.ok) throw new Error('Download failed'); const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'shared-phones-review.csv'; a.click(); } catch (x) { toast(x.message, 1); } };
+  $('cu').onclick = async () => {
+    const files = [...$('cf').files]; if (!files.length) return toast('Pick a file', 1);
+    for (const f of files) {
+      $('cup').textContent = `Uploading ${f.name}…`;
+      try { const r = await api(`/api/mk/consolidate/upload?store=${$('cs').value}&file=${encodeURIComponent(f.name)}`, { method: 'POST', body: f, headers: { 'Content-Type': 'text/csv' } }); toast(`${f.name}: ${fmtN(r.rows)} rows`); }
+      catch (e) { toast(`${f.name}: ${e.message}`, 1); }
+    }
+    $('cup').textContent = ''; go();
+  };
+  if (busy) setTimeout(() => { if (current === 'consolidate') go(); }, 5000);
 }
 
 /* ---------- Lists ---------- */
