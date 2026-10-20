@@ -144,14 +144,18 @@ async function submit(store, b, ip) {
     await db(`UPDATE mk_profiles SET phone=COALESCE(phone,$2), updated_at=now() WHERE id=$1`, [prof.id, phone]); prof.phone = prof.phone || phone;
     await MK().setConsent(prof, "sms", "subscribed", { source: src, detail: `${form.name} · checkbox ticked`, wording: form.sms_consent_text || SMS_CONSENT(brand) });
   }
+  const stp0 = (form.steps || []).find((x) => x.id === b.step_id) || {};
+  const btn = (stp0.blocks || []).find((x) => x.type === "button" && x.id && x.id === b.button_id) || null;   // the submit button that was clicked
   const props = {};
+  for (const h of (btn && btn.hidden) || []) { const k = String(h.key || "").trim().replace(/\s+/g, "_").toLowerCase().replace(/[^a-z0-9_]/g, ""); if (k && !["email", "phone"].includes(k)) props[k] = String(h.value || "").slice(0, 200); }
   for (const [k, v] of Object.entries(vals)) if (!["email", "phone", "sms_consent_checked"].includes(k) && /^[a-z0-9_]{1,40}$/i.test(k) && String(v).length < 200) props[k] = String(v);
   if (Object.keys(props).length) await db(`UPDATE mk_profiles SET props = props || $2::jsonb, updated_at=now() WHERE id=$1`, [prof.id, JSON.stringify(props)]);
   const kinds = [hasEmail && "email", hasPhone && "phone", Object.keys(props).length && "question"].filter(Boolean);
   for (const k of kinds.length ? kinds : ["question"]) await db(`INSERT INTO mk_form_events (form_id, type, vid, profile_id, preview) VALUES ($1,$2,$3,$4,$5)`, [form.id, `submitted_${k}`, b.vid || null, prof.id, isPreview || !!b.preview]);
   let code = null;
   if (hasEmail) {
-    if (form.list_id) { await MK().addToList(form.list_id, prof.id, src); await MK().track(store, "joined_list", { profileId: prof.id, props: { list_id: form.list_id, form_id: form.id, preview: isPreview }, source: "form" }); }
+    const listId = (btn && btn.list_id) || form.list_id;
+    if (listId) { await MK().addToList(listId, prof.id, src); await MK().track(store, "joined_list", { profileId: prof.id, props: { list_id: listId, form_id: form.id, preview: isPreview }, source: "form" }); }
     await MK().track(store, "submitted_form", { profileId: prof.id, props: { form_id: form.id, form: form.name, preview: isPreview }, source: "form" });
     // Spin-to-win on this step: the prize is picked here, never in the browser
     const stp = (form.steps || []).find((x) => x.id === b.step_id) || {};

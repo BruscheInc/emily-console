@@ -96,7 +96,8 @@ async function upsertProfile(from, p, source) {
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16, now()), ARRAY[$17::text]) ON CONFLICT DO NOTHING RETURNING *`,
       [store, email, phone, p.first_name || null, p.last_name || null, p.shopify_id || null, p.klaviyo_id || null, p.city || null, p.region || null, p.country || null, p.zip || null, p.timezone || null,
        JSON.stringify(p.props || {}), [source], p.last_engaged_at || null, p.created_at || null, from || store]);
-    return r.rows[0] || (await findProfile(null, { email, phone }));
+    if (r.rows[0]) { allContactsList().then((id) => addToList(id, r.rows[0].id, "all contacts")).catch(() => {}); return r.rows[0]; }
+    return await findProfile(null, { email, phone });
   }
   const r = await db(`UPDATE mk_profiles SET
       email=COALESCE(email,$2), phone=COALESCE(phone,$3), first_name=COALESCE(NULLIF(first_name,''),$4), last_name=COALESCE(NULLIF(last_name,''),$5),
@@ -137,6 +138,26 @@ async function ensureList(store, name, { source = "buzzin", ext_id = null, descr
     if (r) { if (r.name !== name) await db(`UPDATE mk_lists SET name=$2 WHERE id=$1`, [r.id, name]); return r; }
   }
   return (await db(`INSERT INTO mk_lists (store, name, description, source, ext_id) VALUES ($1,$2,$3,$4,$5) RETURNING *`, [store, name, description, source, ext_id])).rows[0];
+}
+/* One list that holds every Brusche contact, like Klaviyo's "Shopify Merged Newsletter". New profiles join it automatically. */
+const ALL_LIST = "Shopify Merged Newsletter";
+let allListId = null;
+async function allContactsList() {
+  if (allListId) return allListId;
+  let r = (await db(`SELECT id FROM mk_lists WHERE source='buzzin' AND ext_id='all_contacts'`)).rows[0];
+  if (!r) {   // reuse the copy that came over from Klaviyo when there is one
+    r = (await db(`SELECT id FROM mk_lists WHERE lower(name)=lower($1) ORDER BY (store='lb') DESC, id LIMIT 1`, [ALL_LIST])).rows[0];
+    if (r) await db(`UPDATE mk_lists SET store='lb', source='buzzin', ext_id='all_contacts', name=$2, description=$3 WHERE id=$1`, [r.id, ALL_LIST, "Every Brusche contact. New contacts are added automatically."]);
+    else r = await ensureList("lb", ALL_LIST, { ext_id: "all_contacts", description: "Every Brusche contact. New contacts are added automatically." });
+  }
+  allListId = r.id;
+  return allListId;
+}
+async function fillAllContacts() {
+  const id = await allContactsList();
+  const r = await db(`INSERT INTO mk_list_members (list_id, profile_id, source) SELECT $1, p.id, 'all contacts' FROM mk_profiles p ON CONFLICT DO NOTHING`, [id]);
+  await db(`DELETE FROM mk_list_members m WHERE m.list_id=$1 AND NOT EXISTS (SELECT 1 FROM mk_profiles p WHERE p.id=m.profile_id)`, [id]);
+  return r.rowCount;
 }
 async function addToList(listId, profileId, source) {
   await db(`INSERT INTO mk_list_members (list_id, profile_id, source) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [listId, profileId, source || null]);
@@ -422,7 +443,10 @@ async function init() {
   // While the Klaviyo copy is still in progress, check again every 10 minutes so the merge runs when it finishes.
   setInterval(() => { syncAll({ who: "retry" }).catch(() => {}); }, 10 * 60 * 1000);   // finished steps are skipped
   setInterval(() => recomputeTiers().catch(() => {}), 6 * 3600 * 1000);
+  // Keep the all-contacts list complete (catches imports and merges that skip upsertProfile).
+  const fill = () => fillAllContacts().then((n) => n && console.log(`📋 ${ALL_LIST}: added ${n} contacts`)).catch((e) => console.log(`📋 ${ALL_LIST} failed: ${e.message}`));
+  setTimeout(fill, 30 * 1000); setInterval(fill, 30 * 60 * 1000);
 }
 
-module.exports = { STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track,
+module.exports = { STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
   recomputeTiers, syncAll, syncFromKlaviyo, syncShopifyCustomers, syncShopifyOrders, overview, search, profile, lists, sizeOf };

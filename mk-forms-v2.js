@@ -148,6 +148,11 @@ function cleanSteps(steps) {
       if (o.type === "wheel") o.slices = (Array.isArray(o.slices) ? o.slices : []).slice(0, 12).map((x) => ({ label: String((x && x.label) || "").slice(0, 24), percent: Math.max(0, Math.min(90, Number(x && x.percent) || 0)), weight: Math.max(0, Number(x && x.weight) || 0), color: /^#[0-9a-f]{3,8}$/i.test((x && x.color) || "") ? x.color : undefined }));
       if (o.type === "reviews") o.items = (Array.isArray(o.items) ? o.items : []).slice(0, 12).map((x) => ({ text: String((x && x.text) || "").slice(0, 400), name: String((x && x.name) || "").slice(0, 60), stars: Math.max(1, Math.min(5, Number(x && x.stars) || 5)) }));
       if (o.show && !["desktop", "mobile"].includes(o.show)) delete o.show;
+      if (o.type === "button") {
+        o.hidden = (Array.isArray(o.hidden) ? o.hidden : []).slice(0, 20).map((h) => ({ key: String((h && h.key) || "").slice(0, 40), value: String((h && h.value) || "").slice(0, 200) })).filter((h) => h.key);
+        if (o.after_url && !/^https?:\/\//i.test(o.after_url) && !/^\//.test(o.after_url)) o.after_url = "https://" + String(o.after_url).replace(/^[a-z]+:/i, "");
+        if (o.list_id) o.list_id = Number(o.list_id) || null;
+      }
       o.beside = !!o.beside || undefined;
       return o;
     }),

@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.87.0
+Sign-up forms: Klaviyo-style button settings, and one list with every contact.
+- **Choose where people go.** Click a Submit / Continue button: pick the **List to submit** (or keep the form's list), what happens **After submit** (next step, a chosen step, close, or a URL), and **Submit hidden fields** (profile properties saved on submit, e.g. Source = Spring popup).
+- **Button text styling** like Klaviyo: font, size, bold / italic / underline / strikethrough, letter spacing and color.
+- **Klaviyo selection look.** A selected block gets a blue outline and label, with the tools in a vertical strip on its left.
+- **Shopify Merged Newsletter** list: holds every Brusche contact (LB and LBO), and every new contact joins it automatically. The Klaviyo copy of that list is reused when there is one.
+
 ## 4.86.0
 Sign-up forms: everything left to match Klaviyo, plus copy & paste.
 - **Type on the form.** Click a text block, click again (or double-click) and type right on the canvas; a B / I / U / link bar appears on the block. Double-click a button to rename it.
