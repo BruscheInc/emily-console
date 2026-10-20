@@ -3,6 +3,23 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.86.0
+Sign-up forms: everything left to match Klaviyo, plus copy & paste.
+- **Type on the form.** Click a text block, click again (or double-click) and type right on the canvas; a B / I / U / link bar appears on the block. Double-click a button to rename it.
+- **Side-by-side blocks.** Drag a block onto the left or right edge of another to put them in one row (up to 3), set each one's width, and choose whether the row stacks on phones.
+- **Mobile design.** Each block can show on desktop & mobile, desktop only or mobile only. Click a block in the Mobile canvas (or pick "Mobile only") to change its padding, alignment and text size just for phones.
+- **New blocks:** Spin-to-win (slices with % off and chances; the prize is picked on the server and a single-use code at that % is made), Sign-up counter (live number of sign-ups), Reviews (rotating customer quotes).
+- **Copy & paste blocks.** ⌘C / ⌘V (or Copy, and Paste in Add blocks) between steps and forms; "Copy to steps…" puts an identical copy on the steps you pick, in the same position. ⌘D duplicates.
+- **Side image panel like Klaviyo's:** preview with file name, size and dimensions; Crop (free, 1:1, 4:5, 3:4, 9:16, 16:9); Replace; delete; alt text; Cover / Contain with a focus-point grid; background color. Klaviyo's "medium" side image is now a true 50/50 split.
+- **A/B testing:** flask icon in the left rail or ⋮ → Create A/B test. Up to 4 versions, traffic split, views / sign-ups / rate / revenue per version, end the test keeping the winner. Each visitor always sees the same version.
+- **Publish or schedule:** publish now, or set a start and optional end time; the form turns on and off by itself. Scheduled / Ended show in the list.
+- **Targeting:** only show in / hide in countries (from the visitor's internet address), only show to / hide from lists and segments, and a custom JavaScript rule (admins).
+- **Comments** on a form, **Ask Emily** (describe a change to the step; undo works), and the "buttons inherit form defaults" tip.
+- **Preview on website** now shows the exact form you're editing, Drafts included, right away. Sign-ups made in a preview are marked as previews and never create real discount codes.
+- **Both stores:** Create form asks Larkspur Baby or Outlet (when "Both stores" is picked), the list shows the store, and ⋮ → Copy to Outlet / Copy to Larkspur Baby.
+- Klaviyo copies: images are copied into Buzzin's own image library (Klaviyo is cancelled), rows, desktop/mobile-only blocks, cover/focus, the US-only rule and spin-to-win come across.
+- Fix: double-clicking a button that wasn't selected yet lost what you typed.
+
 ## 4.84.4
 - Emily can change the email on an order. When a customer asks (typo at checkout, old address), she stages an email change for one-click approval that updates the order in Shopify and ShipStation, so order and shipping emails reach the right inbox — instead of leaving a to-do for the team (ticket 9000000642).
 

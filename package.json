@@ -1,8 +1,8 @@
 {
   "name": "buzzin",
-  "version": "4.84.4",
+  "version": "4.86.0",
   "private": true,
-  "description": "Buzzin — Brusche Inc.'s own support desk (Larkspur Baby · Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
+  "description": "Buzzin \u2014 Brusche Inc.'s own support desk (Larkspur Baby \u00b7 Larkspur Baby Outlet), with Emily, the CS agent, inside it.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -16,6 +16,7 @@
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "pdf-lib": "^1.17.1",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "geoip-lite": "2.0.3"
   }
 }

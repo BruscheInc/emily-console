@@ -39,6 +39,10 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS mk_coupons (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, code TEXT NOT NULL, profile_id BIGINT, form_id BIGINT, flow_id BIGINT, percent NUMERIC, amount NUMERIC,
     expires_at TIMESTAMPTZ, real BOOLEAN NOT NULL DEFAULT false, redeemed_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE UNIQUE INDEX IF NOT EXISTS mk_coupons_code ON mk_coupons (store, code)`);
+  await db(`ALTER TABLE mk_forms ADD COLUMN IF NOT EXISTS start_at TIMESTAMPTZ`);
+  await db(`ALTER TABLE mk_forms ADD COLUMN IF NOT EXISTS end_at TIMESTAMPTZ`);
+  await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS prize INT`);
+  await db(`CREATE TABLE IF NOT EXISTS mk_form_comments (id BIGSERIAL PRIMARY KEY, form_id BIGINT NOT NULL, who TEXT, body TEXT NOT NULL, step_id TEXT, resolved BOOLEAN NOT NULL DEFAULT false, at TIMESTAMPTZ DEFAULT now())`);
 }
 
 const DEFAULT_FORM = (brand) => ({
@@ -55,7 +59,8 @@ async function list(store) {
       (SELECT COALESCE(sum(o.value),0) FROM mk_events o WHERE o.type='placed_order' AND o.profile_id IN (SELECT e.profile_id FROM mk_form_events e WHERE e.form_id=f.id AND e.type='submitted_email' AND NOT e.preview)
          AND o.at > (SELECT min(e2.at) FROM mk_form_events e2 WHERE e2.form_id=f.id AND e2.profile_id=o.profile_id AND e2.type='submitted_email' AND NOT e2.preview)) revenue,
       (SELECT l.name FROM mk_lists l WHERE l.id=f.list_id) list_name
-    FROM mk_forms f ${store ? "WHERE f.store=$1" : ""} ORDER BY f.updated_at DESC`, store ? [store] : [])).rows;
+      , (SELECT count(*)::int FROM mk_forms v WHERE v.ab_of=f.id) variants
+    FROM mk_forms f WHERE f.ab_of IS NULL ${store ? "AND f.store=$1" : ""} ORDER BY f.updated_at DESC`, store ? [store] : [])).rows;
   return rows;
 }
 async function get(id) { return V2.toV2((await db(`SELECT * FROM mk_forms WHERE id=$1`, [Number(id)])).rows[0] || null); }
@@ -74,23 +79,35 @@ async function save(id, b, who, isAdmin) {
   const steps = V2.cleanSteps(Array.isArray(b.steps) ? b.steps : cur.steps);
   if (!steps.length) throw Object.assign(new Error("A form needs at least one step."), { status: 400 });
   const style = { ...(b.style || cur.style), v: 2 };
+  const tg = b.targeting || cur.targeting || {};
+  if (String(tg.custom_js || "") !== String((cur.targeting || {}).custom_js || "") && !isAdmin) throw Object.assign(new Error("Only an admin can change the custom JavaScript rule."), { status: 403 });
+  if (tg.custom_js) tg.custom_js = String(tg.custom_js).slice(0, 4000);
+  if (Array.isArray(tg.countries)) tg.countries = tg.countries.map((x) => String(x).trim().toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)).slice(0, 60);
+  b.targeting = tg;
+  const dt = (v, d) => (v === undefined ? d : v ? new Date(v) : null);
+  const startAt = dt(b.start_at, cur.start_at), endAt = dt(b.end_at, cur.end_at);
+  if (startAt && endAt && endAt <= startAt) throw Object.assign(new Error("The end date has to be after the start date."), { status: 400 });
+  if (b.ab_split != null) await db(`UPDATE mk_forms SET ab_split=$2 WHERE id=$1`, [cur.id, Math.max(5, Math.min(95, Number(b.ab_split) || 50))]);
+  if (cur.ab_of) status = (await db(`SELECT status FROM mk_forms WHERE id=$1`, [cur.ab_of])).rows[0]?.status || "draft";
+  else if (status !== cur.status) await db(`UPDATE mk_forms SET status=$2 WHERE ab_of=$1`, [cur.id, status]);
+  await db(`UPDATE mk_forms SET start_at=$2, end_at=$3 WHERE id=$1 OR ab_of=$1`, [cur.id, startAt, endAt]);
   return (await db(`UPDATE mk_forms SET name=$2, status=$3, priority=$4, steps=$5, style=$6, targeting=$7, teaser=$8, coupon=$9, list_id=$10, sms_consent_text=$11, email_consent_text=$12, updated_by=$13, updated_at=now() WHERE id=$1 RETURNING *`,
     [cur.id, b.name || cur.name, status, Number(b.priority != null ? b.priority : cur.priority) || 0, JSON.stringify(steps), JSON.stringify(style), JSON.stringify(b.targeting || cur.targeting),
      JSON.stringify(b.teaser || cur.teaser), JSON.stringify(b.coupon || cur.coupon), b.list_id != null ? Number(b.list_id) : cur.list_id, b.sms_consent_text != null ? b.sms_consent_text : cur.sms_consent_text,
      b.email_consent_text != null ? b.email_consent_text : cur.email_consent_text, who || null])).rows[0];
 }
-const publicForm = (f0) => { const f = V2.toV2(f0); return { id: f.id, shop_url: SHOP_URL[f.store] || "", priority: f.priority, steps: f.steps, style: f.style, targeting: f.targeting, teaser: f.teaser, sms_consent_text: f.sms_consent_text, email_consent_text: f.email_consent_text, coupon_on: !!(f.coupon && f.coupon.enabled) }; };
+const publicForm = (f0, extra) => { const f = V2.toV2(f0); return { ...(extra || {}), id: f.id, shop_url: SHOP_URL[f.store] || "", priority: f.priority, steps: f.steps, style: f.style, targeting: f.targeting, teaser: f.teaser, sms_consent_text: f.sms_consent_text, email_consent_text: f.email_consent_text, coupon_on: !!(f.coupon && f.coupon.enabled) }; };
 
 /* ---------------- coupons ---------------- */
-async function issueCoupon(store, form, profile) {
-  const c = form.coupon || {};
-  if (!c.enabled) return null;
+async function issueCoupon(store, form, profile, over = {}) {
+  const c = { ...(form.coupon || {}), ...(over.percent != null ? { enabled: true, percent: over.percent } : {}) };
+  if (!c.enabled || !(Number(c.percent) > 0)) return null;
   const prior = (await db(`SELECT code FROM mk_coupons WHERE store=$1 AND form_id=$2 AND profile_id=$3 ORDER BY id DESC LIMIT 1`, [store, form.id, profile.id])).rows[0];
   if (prior) return prior.code;
   const code = `${String(c.prefix || "WELCOME").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12)}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
   const expires = new Date(Date.now() + (Number(c.expires_days) || 14) * 864e5);
   let real = false;
-  if (form.status === "live") {
+  if ((over.status || form.status) === "live") {
     // Real single-use code in Shopify, only for live forms.
     const st = require("./returns").shopFor(store);
     const basic = { title: `${form.name} · ${code}`, code, startsAt: new Date().toISOString(), endsAt: expires.toISOString(), customerSelection: { all: true },
@@ -99,7 +116,7 @@ async function issueCoupon(store, form, profile) {
     const ue = r.discountCodeBasicCreate.userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
     real = true;
   }
-  await db(`INSERT INTO mk_coupons (store, code, profile_id, form_id, percent, expires_at, real) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [store, code, profile.id, form.id, Number(c.percent) || 10, expires, real]);
+  await db(`INSERT INTO mk_coupons (store, code, profile_id, form_id, percent, expires_at, real, prize) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [store, code, profile.id, form.id, Number(c.percent) || 10, expires, real, over.prize == null ? null : over.prize]);
   await db(`UPDATE mk_profiles SET props = props || jsonb_build_object('coupon', $2::text, 'coupon_expires', $3::text) WHERE id=$1`, [profile.id, code, expires.toISOString()]);
   return code;
 }
@@ -108,8 +125,11 @@ async function issueCoupon(store, form, profile) {
 async function submit(store, b, ip) {
   const form = await get(b.form_id);
   if (!form || form.store !== store) return { error: "This form isn't available." };
-  if (form.status === "draft") return { error: "This form isn't available." };
-  const isPreview = form.status !== "live";
+  const parent = form.ab_of ? await get(form.ab_of) : null;
+  const status = parent ? parent.status : form.status;   // an A/B variant follows its test
+  const previewing = !!b.preview && String(b.preview_id || "") === String(form.ab_of || form.id);
+  if (status === "draft" && !previewing) return { error: "This form isn't available." };
+  const isPreview = status !== "live" || previewing;
   const vals = b.values || {};
   // Old store scripts send kind email/phone/question; the v2 script sends kind "step" with every field on the step.
   const hasEmail = !!vals.email, hasPhone = !!vals.phone;
@@ -133,7 +153,23 @@ async function submit(store, b, ip) {
   if (hasEmail) {
     if (form.list_id) { await MK().addToList(form.list_id, prof.id, src); await MK().track(store, "joined_list", { profileId: prof.id, props: { list_id: form.list_id, form_id: form.id, preview: isPreview }, source: "form" }); }
     await MK().track(store, "submitted_form", { profileId: prof.id, props: { form_id: form.id, form: form.name, preview: isPreview }, source: "form" });
-    try { code = await issueCoupon(store, form, prof); } catch (e) { console.error("form coupon:", e.message); }
+    // Spin-to-win on this step: the prize is picked here, never in the browser
+    const stp = (form.steps || []).find((x) => x.id === b.step_id) || {};
+    const wheel = (stp.blocks || []).find((x) => x.type === "wheel");
+    if (wheel && (wheel.slices || []).length >= 2) {
+      const prior = (await db(`SELECT code, prize FROM mk_coupons WHERE store=$1 AND form_id=$2 AND profile_id=$3 AND prize IS NOT NULL ORDER BY id DESC LIMIT 1`, [store, form.id, prof.id])).rows[0];
+      let k;
+      if (prior) { k = Number(prior.prize); code = prior.code; }
+      else {
+        const sl = wheel.slices, tot = sl.reduce((t, x) => t + (Number(x.weight) || 0), 0) || sl.length; let r = crypto.randomInt(0, 1e9) / 1e9 * tot; k = sl.length - 1;
+        for (let i = 0; i < sl.length; i++) { r -= (Number(sl[i].weight) || (tot === sl.length ? 1 : 0)); if (r < 0) { k = i; break; } }
+        const pct = Number(sl[k].percent) || 0;
+        if (pct > 0) { try { code = await issueCoupon(store, form, prof, { percent: pct, prize: k, status: isPreview ? "preview" : status }); } catch (e) { console.error("wheel coupon:", e.message); } }
+        await db(`UPDATE mk_profiles SET props = props || jsonb_build_object('wheel_prize', $2::text) WHERE id=$1`, [prof.id, String(sl[k].label || "")]);
+      }
+      return { ok: true, code, slice: k };
+    }
+    try { code = await issueCoupon(store, form, prof, { status: isPreview ? "preview" : status }); } catch (e) { console.error("form coupon:", e.message); }
   }
   return { ok: true, code };
 }
@@ -151,9 +187,38 @@ const CACHE = new Map();
 async function config(store, preview) {
   const k = `${store}:${preview ? 1 : 0}`; const hit = CACHE.get(k); if (hit && hit.t > Date.now() - 60000) return hit.v;
   const st = await MK().settings();
-  const rows = (await db(`SELECT * FROM mk_forms WHERE store=$1 AND (status='live' ${preview ? "OR status='preview'" : ""}) ORDER BY priority DESC`, [store])).rows;
-  const v = { forms: rows.map(publicForm), tracking: !!(st.tracking && st.tracking[store]) };
+  // Live forms inside their schedule (previews ignore the schedule). A/B variants ride along with their test.
+  const rows = (await db(`SELECT * FROM mk_forms WHERE store=$1 AND ab_of IS NULL AND (${preview ? "status IN ('live','preview')" : "status='live' AND (start_at IS NULL OR start_at <= now()) AND (end_at IS NULL OR end_at > now())"}) ORDER BY priority DESC`, [store])).rows;
+  const ids = rows.map((r) => r.id);
+  const vars = ids.length ? (await db(`SELECT * FROM mk_forms WHERE ab_of = ANY($1) ORDER BY id`, [ids])).rows : [];
+  const counts = {}; if (ids.length) for (const r of (await db(`SELECT COALESCE(f.ab_of, f.id) gid, count(DISTINCT e.profile_id)::int n FROM mk_form_events e JOIN mk_forms f ON f.id=e.form_id WHERE (f.id = ANY($1) OR f.ab_of = ANY($1)) AND e.type LIKE 'submitted_%' AND NOT e.preview GROUP BY 1`, [ids])).rows) counts[r.gid] = r.n;
+  const v = { forms: rows.map((r) => { const vs = vars.filter((x) => Number(x.ab_of) === Number(r.id)); return publicForm(r, { signups: counts[r.id] || 0, ...(vs.length ? { variants: vs.map((x) => publicForm(x, { signups: counts[r.id] || 0 })), split: r.ab_split } : {}) }); }),
+    tracking: !!(st.tracking && st.tracking[store]), audience: rows.some((r) => { const a = (r.targeting || {}).audience || {}; return ["show_lists", "show_segments", "hide_lists", "hide_segments"].some((x) => (a[x] || []).length); }) };
   CACHE.set(k, { t: Date.now(), v }); return v;
+}
+/** Per-visitor parts of the config: country (from the visitor's IP) and list/segment rules. */
+let geo = null; try { geo = require("geoip-lite"); } catch (e) { geo = null; }
+async function visitorConfig(store, preview, vid, ip, formId) {
+  const base = await config(store, preview);
+  const out = { ...base, country: null, aud: null };
+  // "Preview on website" for one form: show it whatever its status (drafts too), like Klaviyo's preview
+  if (preview && formId && !base.forms.some((f) => String(f.id) === String(formId))) {
+    const f = (await db(`SELECT * FROM mk_forms WHERE id=$1 AND store=$2`, [Number(formId), store])).rows[0];
+    if (f) { const vs = (await db(`SELECT * FROM mk_forms WHERE ab_of=$1 ORDER BY id`, [f.id])).rows; out.forms = [publicForm(f, { signups: 0, ...(vs.length ? { variants: vs.map((x) => publicForm(x)), split: f.ab_split } : {}) }), ...base.forms]; }
+  }
+  try { const g = geo && ip ? geo.lookup(String(ip).replace(/^::ffff:/, "")) : null; out.country = g ? g.country : null; } catch (e) {}
+  if (base.audience) {
+    const prof = vid ? (await db(`SELECT profile_id FROM mk_visitors WHERE vid=$1`, [String(vid).slice(0, 40)])).rows[0] : null; const pid = prof && prof.profile_id;
+    const lists = pid ? (await db(`SELECT list_id FROM mk_list_members WHERE profile_id=$1`, [pid])).rows.map((r) => Number(r.list_id)) : [];
+    const segs = pid ? (await db(`SELECT segment_id FROM mk_segment_members WHERE profile_id=$1`, [pid]).catch(() => ({ rows: [] }))).rows.map((r) => Number(r.segment_id)) : [];
+    out.aud = {};
+    const check = (f) => { const a = (f.targeting || {}).audience || {}; const has = (arr, set) => (arr || []).some((x) => set.includes(Number(x)));
+      if (has(a.hide_lists, lists) || has(a.hide_segments, segs)) return false;
+      if ((a.show_lists || []).length || (a.show_segments || []).length) return has(a.show_lists, lists) || has(a.show_segments, segs);
+      return true; };
+    for (const f of base.forms) { out.aud[f.id] = check(f); for (const v of f.variants || []) out.aud[v.id] = check(v); }
+  }
+  delete out.audience; return out;
 }
 async function anyLive(store) { const st = await MK().settings(); const n = (await db(`SELECT count(*)::int n FROM mk_forms WHERE store=$1 AND status='live'`, [store])).rows[0].n; return n > 0 || !!(st.tracking && st.tracking[store]); }
 
@@ -179,7 +244,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     catch (e) { res.type("application/javascript").send("/* forms unavailable */"); }
   });
   app.options("/api/mkf/:store/:what", (req, res) => { cors(res); res.status(204).end(); });
-  app.get("/api/mkf/:store/config", async (req, res) => { cors(res); const s = store(req.params.store); if (!s) return res.status(404).json({ forms: [] }); try { res.json(await config(s, req.query.preview === "1")); } catch (e) { res.json({ forms: [] }); } });
+  app.get("/api/mkf/:store/config", async (req, res) => { cors(res); const s = store(req.params.store); if (!s) return res.status(404).json({ forms: [] }); try { res.setHeader("Cache-Control", "no-store"); res.json(await visitorConfig(s, req.query.preview === "1", req.query.vid, req.ip, req.query.form)); } catch (e) { res.json({ forms: [] }); } });
   app.post("/api/mkf/:store/submit", async (req, res) => {
     cors(res); const s = store(req.params.store); if (!s) return res.status(404).json({ error: "unknown store" });
     if (limited(req.ip)) return res.status(429).json({ error: "Too many tries. Please try again later." });
@@ -198,6 +263,44 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
       res.json({ ok: true }); } catch (e) { res.json({ ok: false }); }
   });
 
+  /* staff: A/B tests — variant B is its own form row (ab_of = the test), shown to a share of visitors */
+  app.post("/api/mk/forms/:id/ab", async (req, res) => {
+    if (!guard(req, res)) return;
+    try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" }); if (f.ab_of) return res.status(400).json({ error: "This is already a variant." });
+      const n = (await db(`SELECT count(*)::int n FROM mk_forms WHERE ab_of=$1`, [f.id])).rows[0].n; if (n >= 3) return res.status(400).json({ error: "A test can have up to 4 variants." });
+      const letter = "BCD"[n];
+      const r = (await db(`INSERT INTO mk_forms (store, name, status, priority, steps, style, targeting, teaser, coupon, list_id, sms_consent_text, email_consent_text, source, updated_by, ab_of, start_at, end_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'buzzin',$13,$14,$15,$16) RETURNING id`, [f.store, `${f.name} · ${letter}`.slice(0, 120), f.status, f.priority || 0, JSON.stringify(f.steps), JSON.stringify(f.style), JSON.stringify(f.targeting), JSON.stringify(f.teaser), JSON.stringify(f.coupon), f.list_id, f.sms_consent_text, f.email_consent_text, actorOf(req), f.id, f.start_at, f.end_at])).rows[0];
+      if (!n) await db(`UPDATE mk_forms SET ab_split=50 WHERE id=$1`, [f.id]);
+      CACHE.clear(); res.json({ id: r.id, letter }); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/mk/forms/:id/ab/end", async (req, res) => {
+    if (!guard(req, res)) return;
+    try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" }); const fid = Number(f.id), keep = Number((req.body || {}).keep) || fid;
+      if (keep !== fid) { const w = await get(keep); if (!w || Number(w.ab_of) !== fid) return res.status(400).json({ error: "That variant isn't part of this test." });
+        await db(`UPDATE mk_forms SET steps=$2, style=$3, targeting=$4, teaser=$5, coupon=$6, list_id=$7, sms_consent_text=$8, email_consent_text=$9, updated_by=$10, updated_at=now() WHERE id=$1`,
+          [f.id, JSON.stringify(w.steps), JSON.stringify(w.style), JSON.stringify(w.targeting), JSON.stringify(w.teaser), JSON.stringify(w.coupon), w.list_id, w.sms_consent_text, w.email_consent_text, actorOf(req)]); }
+      await db(`DELETE FROM mk_forms WHERE ab_of=$1`, [f.id]); CACHE.clear(); res.json({ ok: true }); } catch (e) { fail(res, e); }
+  });
+  /* staff: comments on a form */
+  app.get("/api/mk/forms/:id/comments", async (req, res) => { if (!guard(req, res)) return; try { res.json({ comments: (await db(`SELECT * FROM mk_form_comments WHERE form_id=$1 ORDER BY resolved, at DESC LIMIT 200`, [Number(req.params.id)])).rows }); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/forms/:id/comments", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const t = String(b.body || "").trim().slice(0, 2000); if (!t) return res.status(400).json({ error: "Write a comment first." });
+    res.json((await db(`INSERT INTO mk_form_comments (form_id, who, body, step_id) VALUES ($1,$2,$3,$4) RETURNING *`, [Number(req.params.id), actorOf(req), t, b.step_id ? String(b.step_id).slice(0, 20) : null])).rows[0]); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/forms/comments/:cid/resolve", async (req, res) => { if (!guard(req, res)) return; try { await db(`UPDATE mk_form_comments SET resolved = NOT resolved WHERE id=$1`, [Number(req.params.cid)]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
+  /* staff: Ask Emily to change the step being edited */
+  app.post("/api/mk/forms/:id/ai", async (req, res) => {
+    if (!guard(req, res)) return;
+    try { const b = req.body || {}; const k = require("./emily").claimsKit(); if (!k.anthropic) return res.status(400).json({ error: "The AI isn't configured." });
+      const step = (V2.cleanSteps([b.step || {}])[0]) || { blocks: [] };
+      const sys = `You edit one step of a website sign-up popup for ${MK().STORES.lb || "Larkspur Baby"}, a baby clothing brand (Brusche Inc.). Return ONLY JSON: {"blocks":[...], "note":"one short sentence about what you changed"}.
+Blocks keep this shape: {"id","type","st":{"pad":[top,right,bottom,left],"align","bg"}, ...type fields}. Types: text {html using <h1>,<h2>,<p>,<b>,<a>}, image {src,alt,width}, button {text,action:"submit"|"next"|"close"|"url",url}, email {placeholder,label,required}, phone {placeholder,label,required}, input {label,key,placeholder}, radio/checkboxes/dropdown {label,key,options[]}, date {label,key}, coupon {}, countdown {mode:"minutes",minutes}, counter {text with {{count}}}, reviews {items:[{text,name,stars}]}, wheel {slices:[{label,percent,weight}]}, spacer {height}, divider {}.
+Keep every existing block id you keep. Keep the email/phone fields unless asked to remove them. Never invent discounts larger than the form already offers unless asked. Keep the brand voice warm, simple and mom-friendly. Optional "beside":true puts a block next to the one before it.`;
+      const r = await k.anthropic.messages.create({ model: k.model, max_tokens: 4000, system: sys, messages: [{ role: "user", content: `Current step JSON:\n${JSON.stringify({ name: step.name, blocks: step.blocks }).slice(0, 12000)}\n\nChange requested: ${String(b.ask || "").slice(0, 800)}` }] });
+      const txt = (r.content || []).map((c) => c.text || "").join(""); const m = txt.match(/\{[\s\S]*\}/); if (!m) throw new Error("Emily didn't return a form step.");
+      const j = JSON.parse(m[0]); const out = V2.cleanSteps([{ ...step, blocks: j.blocks || [] }])[0];
+      if (!out.blocks.length) throw new Error("Emily's version had no blocks; nothing changed.");
+      res.json({ blocks: out.blocks, note: String(j.note || "").slice(0, 300) }); } catch (e) { fail(res, e); }
+  });
   /* staff: universal blocks (saved blocks reused in any form) */
   app.get("/api/mk/forms-universal", async (req, res) => { if (!guard(req, res)) return; try { res.json({ items: (await core.setting("mk_form_universal", null)) || [] }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/forms-universal", async (req, res) => {
@@ -209,7 +312,10 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   /* staff: Form Studio */
   app.get("/api/mk/forms", async (req, res) => { if (!guard(req, res)) return; try { res.json({ forms: await list(store(req.query.store)), klaviyo: (await db(`SELECT id, name, data FROM hd_klaviyo WHERE kind='form'`).catch(() => ({ rows: [] }))).rows.map((r) => ({ id: r.id, name: r.name, status: r.data && r.data.attributes && r.data.attributes.status })) }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/forms", async (req, res) => { if (!guard(req, res)) return; try { const s = store((req.body || {}).store); if (!s) return res.status(400).json({ error: "Pick a store first" }); res.json(await create(s, (req.body || {}).name, actorOf(req))); } catch (e) { fail(res, e); } });
-  app.get("/api/mk/forms/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" }); res.json({ ...f, stats: await stats(f.id), lists: await MK().lists(f.store), import_notes: await require("./mk-forms-klaviyo").notesFor(f.id) }); } catch (e) { fail(res, e); } });
+  app.get("/api/mk/forms/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" }); const variants = (await db(`SELECT id, name FROM mk_forms WHERE ab_of=$1 ORDER BY id`, [f.ab_of || f.id])).rows; const parent = f.ab_of ? (await db(`SELECT id, name, status, ab_split FROM mk_forms WHERE id=$1`, [f.ab_of])).rows[0] : null;
+      const cc = (await db(`SELECT count(*)::int n FROM mk_form_comments WHERE form_id=$1 AND NOT resolved`, [f.id])).rows[0].n;
+      const su = (await db(`SELECT count(DISTINCT profile_id)::int n FROM mk_form_events WHERE form_id=$1 AND type LIKE 'submitted_%' AND NOT preview`, [f.id])).rows[0].n;
+      res.json({ ...f, variants, parent, comment_count: cc, signups: su, stats: await stats(f.id), lists: await MK().lists(f.store), import_notes: await require("./mk-forms-klaviyo").notesFor(f.id) }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/forms/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await save(req.params.id, req.body || {}, actorOf(req), isAdmin(req)); CACHE.clear(); res.json(f); } catch (e) { fail(res, e); } });
   app.get("/api/mk/forms/:id/analytics", async (req, res) => {
     if (!guard(req, res)) return;
@@ -230,8 +336,9 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   app.post("/api/mk/forms/:id/clone", async (req, res) => {
     if (!guard(req, res)) return;
     try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" });
+      const to = store((req.body || {}).store) || f.store, other = to !== f.store;
       const r = (await db(`INSERT INTO mk_forms (store, name, status, priority, steps, style, targeting, teaser, coupon, list_id, sms_consent_text, email_consent_text, source, updated_by)
-        VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,'buzzin',$12) RETURNING id`, [f.store, `${f.name} (copy)`.slice(0, 120), f.priority || 0, JSON.stringify(f.steps), JSON.stringify(f.style), JSON.stringify(f.targeting), JSON.stringify(f.teaser), JSON.stringify(f.coupon), f.list_id, f.sms_consent_text, f.email_consent_text, actorOf(req)])).rows[0];
+        VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,'buzzin',$12) RETURNING id`, [to, (other ? f.name : `${f.name} (copy)`).slice(0, 120), f.priority || 0, JSON.stringify(f.steps), JSON.stringify(f.style), JSON.stringify(f.targeting), JSON.stringify(f.teaser), JSON.stringify(f.coupon), f.list_id, f.sms_consent_text, f.email_consent_text, actorOf(req)])).rows[0];
       res.json({ id: r.id }); } catch (e) { fail(res, e); }
   });
   app.delete("/api/mk/forms/:id", async (req, res) => { if (!admin(req, res)) return; try { await db(`DELETE FROM mk_forms WHERE id=$1`, [Number(req.params.id)]); await db(`DELETE FROM mk_form_imports WHERE form_id=$1`, [Number(req.params.id)]).catch(() => {}); CACHE.clear(); res.json({ ok: true }); } catch (e) { fail(res, e); } });
@@ -249,4 +356,4 @@ async function init() {
     }
   } catch (e) { console.error("form consent wording:", e.message); }
 }
-module.exports = { clearCache: () => CACHE.clear(), init, migrate, routes, list, get, create, save, submit, config, issueCoupon, SMS_CONSENT, EMAIL_CONSENT };
+module.exports = { clearCache: () => CACHE.clear(), visitorConfig, init, migrate, routes, list, get, create, save, submit, config, issueCoupon, SMS_CONSENT, EMAIL_CONSENT };

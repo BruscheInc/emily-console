@@ -15,7 +15,7 @@
  *  toV2() converts old forms (fixed email/phone/question/success steps) on read, so nothing breaks.
  * ============================================================================================= */
 const rid = () => "b" + Math.random().toString(36).slice(2, 8);
-const BLOCK_TYPES = ["text", "image", "button", "email", "phone", "input", "checkboxes", "radio", "dropdown", "date", "coupon", "countdown", "spacer", "divider", "html"];
+const BLOCK_TYPES = ["text", "image", "button", "email", "phone", "input", "checkboxes", "radio", "dropdown", "date", "coupon", "countdown", "spacer", "divider", "html", "wheel", "counter", "reviews"];
 
 const STYLE_DEFAULT = () => ({
   v: 2, type: "popup", position: "center", width: 460, min_height: 0,
@@ -138,13 +138,17 @@ function cleanSteps(steps) {
   return (Array.isArray(steps) ? steps : []).slice(0, 10).map((s, i) => ({
     id: String(s.id || `s${i + 1}`).slice(0, 20), name: String(s.name || `Step ${i + 1}`).slice(0, 40), kind: s.kind === "success" ? "success" : "step",
     skip_if_sms: !!s.skip_if_sms, next: s.next || undefined, branches: Array.isArray(s.branches) ? s.branches.slice(0, 10) : undefined,
-    image: { src: String((s.image && s.image.src) || "").slice(0, 1000), pos: ["left", "right", "top", "none"].includes(s.image && s.image.pos) ? s.image.pos : "none", width: Math.min(60, Math.max(20, Number(s.image && s.image.width) || 42)) },
+    image: { src: String((s.image && s.image.src) || "").slice(0, 1000), pos: ["left", "right", "top", "none"].includes(s.image && s.image.pos) ? s.image.pos : "none", width: Math.min(70, Math.max(20, Number(s.image && s.image.width) || 50)) },
     blocks: (Array.isArray(s.blocks) ? s.blocks : []).filter((b) => b && BLOCK_TYPES.includes(b.type)).slice(0, 40).map((b) => {
       const o = { ...b, id: String(b.id || rid()).slice(0, 20) };
       if (o.type === "text") o.html = cleanHtml(o.html, false);
       if (o.type === "html") o.html = cleanHtml(o.html, false);
       if (o.key) o.key = String(o.key).replace(/[^a-z0-9_]/gi, "_").toLowerCase().slice(0, 40);
       if (o.options) o.options = (Array.isArray(o.options) ? o.options : []).map(String).filter(Boolean).slice(0, 30);
+      if (o.type === "wheel") o.slices = (Array.isArray(o.slices) ? o.slices : []).slice(0, 12).map((x) => ({ label: String((x && x.label) || "").slice(0, 24), percent: Math.max(0, Math.min(90, Number(x && x.percent) || 0)), weight: Math.max(0, Number(x && x.weight) || 0), color: /^#[0-9a-f]{3,8}$/i.test((x && x.color) || "") ? x.color : undefined }));
+      if (o.type === "reviews") o.items = (Array.isArray(o.items) ? o.items : []).slice(0, 12).map((x) => ({ text: String((x && x.text) || "").slice(0, 400), name: String((x && x.name) || "").slice(0, 60), stars: Math.max(1, Math.min(5, Number(x && x.stars) || 5)) }));
+      if (o.show && !["desktop", "mobile"].includes(o.show)) delete o.show;
+      o.beside = !!o.beside || undefined;
       return o;
     }),
   }));

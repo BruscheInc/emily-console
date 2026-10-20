@@ -14,7 +14,7 @@ const BLOCKS = [
   ['input', 'Text input', 'forms'], ['checkboxes', 'Checkboxes', 'checkbox'], ['radio', 'Radio buttons', 'circle-dot'], ['dropdown', 'Dropdown', 'selector'], ['date', 'Date', 'calendar'],
   ['coupon', 'Coupon', 'ticket'], ['countdown', 'Countdown timer', 'clock'], ['spacer', 'Spacer', 'arrows-vertical'], ['divider', 'Divider', 'minus'], ['html', 'HTML', 'code'],
 ];
-const BNAME = Object.fromEntries(BLOCKS.map(([k, l]) => [k, l]));
+const BNAME = { ...Object.fromEntries(BLOCKS.map(([k, l]) => [k, l])), wheel: 'Spin-to-win', counter: 'Sign-up counter', reviews: 'Reviews' };
 const FONTS = [['inherit', 'Store font'], ['Helvetica, Arial, sans-serif', 'Helvetica'], ['Georgia, serif', 'Georgia'], ["'Playfair Display', Georgia, serif", 'Playfair Display'], ["'Lora', Georgia, serif", 'Lora'],
   ["'Cormorant Garamond', Georgia, serif", 'Cormorant Garamond'], ["'Libre Baskerville', Georgia, serif", 'Libre Baskerville'], ["'DM Serif Display', Georgia, serif", 'DM Serif Display'],
   ["'Montserrat', Helvetica, sans-serif", 'Montserrat'], ["'Poppins', Helvetica, sans-serif", 'Poppins'], ["'DM Sans', Helvetica, sans-serif", 'DM Sans'], ["'Inter', Helvetica, sans-serif", 'Inter'],
@@ -53,10 +53,10 @@ async function renderForms(el, id) {
   let imp = null; try { imp = await api('/api/mk/forms/import-klaviyo'); } catch (e) { imp = null; }
   el.innerHTML = LCSS + `<div class="kl"><div class="kl-h"><h1>Sign-up forms</h1>
       ${imp ? `<button class="btn" id="fki"${imp.running ? ' disabled' : ''} title="${esc((imp.last && imp.last.out) || 'Copies Klaviyo forms in as drafts')}"><i class="ti ti-download"></i> ${imp.running ? 'Copying from Klaviyo…' : 'Copy forms from Klaviyo'}</button>` : ''}
-      <button class="btn pri" id="fn"${STORE ? '' : ' disabled title="Pick the store the form goes on (top)"'}>Create form</button></div>
+      <button class="btn pri" id="fn">Create form${STORE ? '' : ` ${ICON('chevron-down')}`}</button></div>
     <div class="kl-b"><div class="kl-f"><input type="search" id="fq" placeholder="Search forms"><select id="fsf"><option value="">Status</option><option value="draft">Draft</option><option value="preview">Preview only</option><option value="live">Live</option></select>
       <select id="ftf"><option value="">Form type</option>${Object.entries(TYPE_NAME).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
-    <table><thead><tr><th>Name</th><th>Type</th><th>Status</th><th class="n">Submitted</th><th class="n">Submit rate</th><th class="n">Total revenue</th><th style="width:44px"></th></tr></thead><tbody id="ftb"></tbody></table>
+    <table><thead><tr><th>Name</th><th>Store</th><th>Type</th><th>Status</th><th class="n">Submitted</th><th class="n">Submit rate</th><th class="n">Total revenue</th><th style="width:44px"></th></tr></thead><tbody id="ftb"></tbody></table>
     <div id="fcount" style="padding:14px 0;color:#3F3F46"></div></div></div>`;
   const typeOf = (f) => (f.style || {}).type || (f.style || {}).layout || 'popup';
   const TYPE_ICON = { popup: 'app-window', flyout: 'layout-bottombar', full: 'maximize', embedded: 'layout-list', banner: 'layout-navbar' };
@@ -65,16 +65,17 @@ async function renderForms(el, id) {
     const q = ($('fq').value || '').toLowerCase(), sf = $('fsf').value, tf = $('ftf').value;
     const rows = r.forms.filter((f) => (!q || f.name.toLowerCase().includes(q)) && (!sf || f.status === sf) && (!tf || typeOf(f) === tf));
     $('ftb').innerHTML = rows.map((f) => { const rate = f.views ? (f.submitted || 0) / f.views * 100 : 0, rc = rateCls(rate, f.views);
-      return `<tr class="row" data-id="${f.id}"><td><a class="nm" href="#forms/${f.id}">${esc(f.name)}</a><div class="sub2">${esc(f.list_name || '')}</div></td>
-      <td title="${esc(TYPE_NAME[typeOf(f)] || 'Popup')}"><i class="ti ti-${TYPE_ICON[typeOf(f)] || 'app-window'}" style="font-size:20px"></i></td><td><span class="st ${f.status}">${SN[f.status] || f.status}</span></td>
+      return `<tr class="row" data-id="${f.id}"><td><a class="nm" href="#forms/${f.id}">${esc(f.name)}</a><div class="sub2">${esc(f.list_name || '')}</div></td><td><span class="st">${f.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'}</span></td>
+      <td title="${esc(TYPE_NAME[typeOf(f)] || 'Popup')}"><i class="ti ti-${TYPE_ICON[typeOf(f)] || 'app-window'}" style="font-size:20px"></i></td><td><span class="st ${f.status}">${f.status === 'live' && f.start_at && new Date(f.start_at) > new Date() ? 'Scheduled' : f.status === 'live' && f.end_at && new Date(f.end_at) < new Date() ? 'Ended' : SN[f.status] || f.status}</span>${f.variants ? ` <span class="st" title="A/B test with ${f.variants + 1} versions">A/B</span>` : ''}</td>
       <td class="n"><span class="link" data-an="${f.id}">${fmtN(f.submitted || 0)}</span></td><td class="n"><span class="rt ${rc}">${rc ? `<i class="ti ti-${rateIcon(rc)}"></i>` : ''}${f.views ? rate.toFixed(1) + '%' : '—'}</span></td><td class="n">${fmt$(f.revenue || 0)}</td>
-      <td><button class="dots" data-fm="${f.id}" aria-label="Form options"><i class="ti ti-dots-vertical"></i></button></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No forms match.</td></tr>';
+      <td><button class="dots" data-fm="${f.id}" aria-label="Form options"><i class="ti ti-dots-vertical"></i></button></td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">No forms match.</td></tr>';
     $('fcount').textContent = rows.length ? `1 - ${rows.length} of ${rows.length}` : '';
     $('ftb').querySelectorAll('[data-an]').forEach((x) => x.onclick = (e) => { e.stopPropagation(); location.hash = '#forms/a-' + x.dataset.an; });
     $('ftb').querySelectorAll('[data-fm]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); formMenu(r.forms.find((f) => String(f.id) === b.dataset.fm), b); });
   };
   $('fq').oninput = drawRows; $('fsf').onchange = drawRows; $('ftf').onchange = drawRows; drawRows();
-  $('fn').onclick = async () => { try { const f = await api('/api/mk/forms', { method: 'POST', body: JSON.stringify({ store: STORE, name: 'Welcome popup' }) }); location.hash = '#forms/' + f.id; } catch (e) { toast(e.message, 1); } };
+  const createIn = async (st) => { try { const f = await api('/api/mk/forms', { method: 'POST', body: JSON.stringify({ store: st, name: 'Welcome popup' }) }); location.hash = '#forms/' + f.id; } catch (e) { toast(e.message, 1); } };
+  $('fn').onclick = () => STORE ? createIn(STORE) : menu($('fn'), [['For Larkspur Baby', 'building-store', () => createIn('lb')], ['For Larkspur Baby Outlet', 'building-store', () => createIn('lbo')]], { plain: true, alignRight: true });
   const ki = $('fki'); if (ki) ki.onclick = async () => { try { await api('/api/mk/forms/import-klaviyo', { method: 'POST', body: JSON.stringify({}) }); toast('Copying your Klaviyo forms'); setTimeout(go, 1500); } catch (e) { toast(e.message, 1); } };
   if (imp && imp.running) setTimeout(() => { if ((location.hash || '') === '#forms') go(); }, 6000);
 }
@@ -110,6 +111,9 @@ function formMenu(f, anchor) {
     ['Edit', 'pencil', () => { location.hash = '#forms/' + f.id; }],
     ['Analytics', 'chart-line', () => { location.hash = '#forms/a-' + f.id; }],
     ['Rename', 'forms', async () => { const n = prompt('Form name', f.name); if (!n || n === f.name) return; try { await api('/api/mk/forms/' + f.id, { method: 'PUT', body: JSON.stringify({ name: n.slice(0, 120) }) }); toast('Renamed'); go(); } catch (e) { toast(e.message, 1); } }],
+    ['Schedule', 'calendar', () => { OPEN_SCHED = String(f.id); location.hash = '#forms/' + f.id; }],
+    ['Create A/B test', 'flask', async () => { try { const r = await api(`/api/mk/forms/${f.id}/ab`, { method: 'POST', body: JSON.stringify({}) }); toast(`Variant ${r.letter} created`); location.hash = '#forms/' + r.id; } catch (e) { toast(e.message, 1); } }],
+    [f.store === 'lbo' ? 'Copy to Larkspur Baby' : 'Copy to Outlet', 'arrows-exchange', async () => { const to = f.store === 'lbo' ? 'lb' : 'lbo'; try { const c = await api('/api/mk/forms/' + f.id + '/clone', { method: 'POST', body: JSON.stringify({ store: to }) }); toast(`Copied to ${to === 'lbo' ? 'the Outlet' : 'Larkspur Baby'} as a draft`); location.hash = '#forms/' + c.id; } catch (e) { toast(e.message, 1); } }],
     ['Clone', 'copy', async () => { try { const c = await api('/api/mk/forms/' + f.id + '/clone', { method: 'POST', body: JSON.stringify({}) }); toast('Cloned as a draft'); location.hash = '#forms/' + c.id; } catch (e) { toast(e.message, 1); } }],
     [f.status === 'live' ? 'Unpublish (back to draft)' : 'Publish', f.status === 'live' ? 'player-pause' : 'player-play', async () => { if (f.status !== 'live' && !confirm(`Make "${f.name}" live on the store?`)) return; try { await api('/api/mk/forms/' + f.id, { method: 'PUT', body: JSON.stringify({ status: f.status === 'live' ? 'draft' : 'live' }) }); toast(f.status === 'live' ? 'Back to draft' : 'Live'); go(); } catch (e) { toast(e.message, 1); } }],
     ['Delete', 'trash', async () => { if (!confirm(`Delete "${f.name}"? This can't be undone.`)) return; try { await api('/api/mk/forms/' + f.id, { method: 'DELETE' }); toast('Deleted'); go(); } catch (e) { toast(e.message, 1); } }, { danger: true }],
@@ -118,7 +122,7 @@ function formMenu(f, anchor) {
 window.addEventListener('hashchange', () => { if (!/^#forms\/\d+$/.test(location.hash || '')) document.querySelectorAll('.ke').forEach((x) => x.remove()); });
 
 /* ---------------- editor state ---------------- */
-let MEDIA = false;
+let MEDIA = false, SELDEV = 'd', TYPING = false, OPEN_SCHED = null;
 let F = null, RAIL = 'add', SI = 0, SEL = null, STEPSET = false, VIEW = 'both', ZOOM = 'fit', MODE = 'edit', ADDTAB = 'basic', fdirty = false, saving = false, UNIV = [];
 const ready = { d: false, m: false };
 const step = () => F.steps[SI] || F.steps[0];
@@ -171,6 +175,7 @@ async function editForm(el, id) {
   F = await api('/api/mk/forms/' + id); fdirty = false; SI = 0; SEL = null; STEPSET = false; RAIL = 'add'; MODE = 'edit'; ready.d = ready.m = false;
   HIST.past = []; HIST.future = []; HIST.last = JSON.stringify(snap());
   try { UNIV = (await api('/api/mk/forms-universal')).items || []; } catch (e) { UNIV = []; }
+  try { F.segments = (await api('/api/mk/segments?' + qs({ store: F.store }))).segments || []; } catch (e) { F.segments = []; }
   document.querySelectorAll('.ke').forEach((x) => x.remove());
   const k = document.createElement('div'); k.className = 'ke'; document.body.appendChild(k);
   k.innerHTML = CSS + `
@@ -179,10 +184,13 @@ async function editForm(el, id) {
     <span class="ke-st"><span class="ke-dot" id="kdot"></span><select id="kst" aria-label="Status"><option value="draft">Draft</option><option value="preview">Preview only</option><option value="live">Live</option></select></span>
     <span class="pill off">${esc(STORE_NAME[F.store] || '')}</span>
     <span class="sp" style="flex:1"></span><span id="kstat" style="color:var(--muted);font-size:12px"></span>
-    <a class="btn" target="_blank" rel="noopener" href="${SHOP[F.store]}/?buzzin_form=preview">${ICON('device-desktop')} Preview on website</a>
-    <button class="btn pri" id="kpub">${F.status === 'live' ? 'Update live form' : 'Publish'}</button></div>
+    ${F.parent ? `<span class="pill hon" title="This is an A/B test variant. It goes live with the test.">Variant of “${esc(F.parent.name)}” · <a href="#forms/${F.parent.id}" style="color:inherit">open test</a></span>` : ''}
+    <button class="ke-ib" id="kcm" aria-label="Comments" title="Comments" style="position:relative">${ICON('message')}${F.comment_count ? `<span style="position:absolute;top:2px;right:0;background:#DC2626;color:#fff;border-radius:9px;font:700 10px/1 sans-serif;padding:2px 4px">${F.comment_count}</span>` : ''}</button>
+    <a class="btn" id="kprev" target="_blank" rel="noopener" href="${SHOP[F.store]}/?buzzin_form=preview&bzf_id=${F.parent ? F.parent.id : F.id}">${ICON('device-desktop')} Preview on website</a>
+    ${F.parent ? '' : `<button class="btn pri" id="kpub">Publish or schedule ${ICON('chevron-down')}</button>`}
+    <button class="ke-ib" id="kai" aria-label="Ask Emily" title="Ask Emily to change this step">${ICON('sparkles')}</button></div>
   <div class="ke-body">
-    <div class="ke-rail"><button data-r="add" title="Add blocks" aria-label="Add blocks">${ICON('circle-plus')}</button><button data-r="styles" title="Styles" aria-label="Styles">${ICON('palette')}</button><button data-r="targeting" title="Targeting & behaviors" aria-label="Targeting and behaviors">${ICON('target-arrow')}</button></div>
+    <div class="ke-rail"><button data-r="add" title="Add blocks" aria-label="Add blocks">${ICON('circle-plus')}</button><button data-r="styles" title="Styles" aria-label="Styles">${ICON('palette')}</button><button data-r="targeting" title="Targeting & behaviors" aria-label="Targeting and behaviors">${ICON('target-arrow')}</button><button data-r="ab" title="A/B test" aria-label="A/B test">${ICON('flask')}</button></div>
     <div class="ke-side" id="kside"><div id="fpanel" style="display:flex;flex-direction:column;min-height:0;height:100%"></div></div>
     <div class="ke-canvas"><div class="ke-bar" id="kbar"></div>
       <div class="ke-stage" id="kstage"><div class="ke-zoomwrap" id="kzw">
@@ -197,7 +205,14 @@ async function editForm(el, id) {
   $('kx').onclick = async () => { if (fdirty) await save(true); k.remove(); window.onbeforeunload = null; location.hash = '#forms'; };
   $('knm').oninput = () => { F.name = $('knm').value; mark(false); };
   $('kst').onchange = () => { F.status = $('kst').value; dot(); mark(false); };
-  $('kpub').onclick = async () => { const b = $('kpub'); if (F.status !== 'live' && b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'Click again to go live'; return; } F.status = 'live'; $('kst').value = 'live'; dot(); await save(); b.dataset.c = ''; b.textContent = 'Update live form'; };
+  if (F.parent) { $('kst').disabled = true; $('kst').title = 'A variant goes live with its A/B test'; }
+  const kp = $('kpub'); if (kp) kp.onclick = () => menu(kp, [
+    [F.status === 'live' ? 'Update live form' : 'Publish now', 'player-play', async () => { if (F.status !== 'live' && !confirm('Publish this form on the store now?')) return; F.status = 'live'; F.start_at = null; $('kst').value = 'live'; dot(); await save(); toast('Live'); }],
+    ['Schedule…', 'calendar', () => scheduleDialog()],
+    ...(F.status === 'live' ? [['Unpublish (back to draft)', 'player-pause', async () => { F.status = 'draft'; $('kst').value = 'draft'; dot(); await save(); }]] : []),
+  ], { alignRight: true });
+  $('kprev').onclick = async () => { if (fdirty) await save(true); };   // preview what's on screen
+  $('kcm').onclick = commentsDrawer; $('kai').onclick = askEmily;
   k.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { MEDIA = false; if (RAIL === b.dataset.r && !SEL && !STEPSET && SI >= 0) { $('kside').classList.toggle('closed'); } else { $('kside').classList.remove('closed'); RAIL = b.dataset.r; SEL = null; STEPSET = false; if (SI < 0) SI = 0; } rail(); bar(); panel(); draw(); });
   $('kzi').onclick = () => setZoom(cz() + 0.1); $('kzo').onclick = () => setZoom(cz() - 0.1); $('kzf').onclick = () => { ZOOM = 'fit'; layout(); };
   window.onbeforeunload = () => fdirty ? 'Unsaved changes' : undefined;
@@ -205,12 +220,16 @@ async function editForm(el, id) {
   window.removeEventListener('resize', layout); window.addEventListener('resize', layout);
   document.removeEventListener('keydown', onKey); document.addEventListener('keydown', onKey);
   loadFrame('d'); loadFrame('m'); rail(); bar(); panel(); layout();
+  if (OPEN_SCHED === String(F.id)) { OPEN_SCHED = null; scheduleDialog(); }
 }
 function onKey(e) {
   if (!document.querySelector('.ke')) return;
   const inField = /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '') || (e.target && e.target.isContentEditable);
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
   else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && !inField && sel()) { e.preventDefault(); copyBlock(sel()); }
+  else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v' && !inField && SI >= 0 && clip()) { e.preventDefault(); pasteBlock(); }
+  else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd' && !inField && sel()) { e.preventDefault(); const c = clone(sel()); c.id = rid(); step().blocks.splice(SEL + 1, 0, c); SEL++; panel(); mark(); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && sel()) { e.preventDefault(); step().blocks.splice(SEL, 1); SEL = null; panel(); mark(); }
   else if (e.key === 'Escape' && !inField && (SEL != null || STEPSET || MEDIA)) { SEL = null; STEPSET = false; MEDIA = false; panel(); draw(); }
 }
@@ -264,9 +283,11 @@ function layout() {
 }
 let drawT = null;
 function draw() {
+  if (TYPING) return;
   clearTimeout(drawT);
   drawT = setTimeout(() => {
-    const pub = clone({ id: F.id, shop_url: SHOP[F.store], steps: F.steps, style: F.style, targeting: F.targeting, teaser: F.teaser, sms_consent_text: F.sms_consent_text, email_consent_text: F.email_consent_text });
+    if (TYPING) return;
+    const pub = clone({ id: F.id, shop_url: SHOP[F.store], steps: F.steps, style: F.style, targeting: F.targeting, teaser: F.teaser, sms_consent_text: F.sms_consent_text, email_consent_text: F.email_consent_text, signups: F.signups });
     const opts = SI === -1 ? { teaser: true } : MODE === 'edit' ? { edit: { step: SI, sel: STEPSET || MEDIA ? null : SEL, media: MEDIA, names: BNAME } } : {};
     for (const w of ['d', 'm']) { const fr = $(w === 'd' ? 'fpd' : 'fpm'); if (fr && fr.contentWindow && ready[w]) fr.contentWindow.postMessage({ bzfRender: 1, form: pub, opts }, '*'); }
   }, 50);
@@ -278,18 +299,66 @@ function onFrame(e) {
   if (d.t === 'h') { const h = Math.min(1600, Math.max(200, Number(d.h) || 0) + 8); if (Math.abs((FH[d.frame] || 0) - h) > 2) { FH[d.frame] = h; layout(); } return; }
   if (MODE !== 'edit' || SI < 0) return;
   const bl = step().blocks;
-  if (d.t === 'sel') { MEDIA = false; SEL = d.i >= 0 ? d.i : null; STEPSET = false; if (d.i < 0) { RAIL = 'styles'; $('kside').classList.remove('closed'); rail(); } panel(); draw(); return; }
+  if (d.t === 'text') { const b = bl[d.i]; if (b) { b.html = d.html; TYPING = true; const ed = $('rte'); if (ed && document.activeElement !== ed) ed.innerHTML = d.html; mark(false); syncOther(d.frame); } return; }
+  if (d.t === 'btntext') { const b = bl[d.i]; if (b) { b.text = String(d.text || '').replace(/\s+/g, ' ').trim().slice(0, 80); TYPING = true; const t = document.querySelector('#kpane input[data-p="text"]'); if (t) t.value = b.text; mark(false); syncOther(d.frame); } return; }
+  if (d.t === 'textdone') { TYPING = false; draw(); return; }
+  if (d.t === 'editstart') { TYPING = true; clearTimeout(drawT); if (SEL !== d.i) { SEL = d.i; MEDIA = false; STEPSET = false; SELDEV = d.frame || SELDEV; panel(); } return; }
+  if (d.t === 'sel') { SELDEV = d.frame || 'd'; if (d.keep && SEL === d.i) return; MEDIA = false; SEL = d.i >= 0 ? d.i : null; STEPSET = false; if (d.i < 0) { RAIL = 'styles'; $('kside').classList.remove('closed'); rail(); } panel(); draw(); return; }
   if (d.t === 'media') { SEL = null; STEPSET = false; MEDIA = true; $('kside').classList.remove('closed'); bar(); panel(); draw(); return; }
-  if (d.t === 'move') { const [m] = bl.splice(d.from, 1); bl.splice(d.to, 0, m); SEL = d.to; panel(); mark(); return; }
-  if (d.t === 'add') { addBlock(d.type, d.at); return; }
+  if (d.t === 'move') {
+    if (d.side) { const [m] = bl.splice(d.from, 1); let ref = d.to > d.from ? d.to - 1 : d.to; placeBeside(bl, m, ref, d.side); SEL = bl.indexOf(m); panel(); mark(); return; }
+    const [m] = bl.splice(d.from, 1); if (m.beside && !(bl[d.to - 1])) m.beside = false; bl.splice(d.to, 0, m); fixRows(bl); SEL = bl.indexOf(m); panel(); mark(); return; }
+  if (d.t === 'add') { addBlock(d.type, d.at, d.side); return; }
   if (d.t === 'tool' && SEL != null) {
     if (d.act === 'up' && SEL > 0) { [bl[SEL - 1], bl[SEL]] = [bl[SEL], bl[SEL - 1]]; SEL--; }
     else if (d.act === 'down' && SEL < bl.length - 1) { [bl[SEL + 1], bl[SEL]] = [bl[SEL], bl[SEL + 1]]; SEL++; }
     else if (d.act === 'dup') { const c = clone(bl[SEL]); c.id = rid(); bl.splice(SEL + 1, 0, c); SEL++; }
+    else if (d.act === 'copy') { copyBlock(bl[SEL]); return; }
     else if (d.act === 'del') { bl.splice(SEL, 1); SEL = null; }
     panel(); mark();
   }
 }
+
+/* ---------------- copy / paste blocks (works across steps and forms) ---------------- */
+const clip = () => { try { return JSON.parse(localStorage.getItem('bzf_clip') || 'null'); } catch (e) { return null; } };
+function copyBlock(b) { const c = clone(b); delete c.beside; try { localStorage.setItem('bzf_clip', JSON.stringify({ block: c, from: step().name, at: Date.now() })); } catch (e) {} toast(`Copied ${BNAME[b.type] || b.type}. Go to any step and press ⌘V or click Paste.`); if (RAIL === 'add' && !sel()) panel(); }
+function pasteBlock(stepIdx, at) {
+  const c0 = clip(); if (!c0 || !c0.block) return toast('Nothing copied yet', 1);
+  const target = stepIdx != null ? F.steps[stepIdx] : step(); target.blocks = target.blocks || [];
+  const nb = clone(c0.block); nb.id = rid(); delete nb.beside;
+  if (['email', 'phone'].includes(nb.type) && target.blocks.some((x) => x.type === nb.type)) return toast(`That step already has ${nb.type === 'email' ? 'an email' : 'a phone'} field`, 1);
+  const pos = at != null ? Math.min(at, target.blocks.length) : stepIdx == null && SEL != null && SEL >= 0 ? SEL + 1 : target.blocks.length;
+  target.blocks.splice(pos, 0, nb); fixRows(target.blocks);
+  if (stepIdx == null) { SEL = pos; STEPSET = false; MEDIA = false; panel(); }
+  mark(); return nb;
+}
+function copyToSteps(b) {
+  const here = F.steps.indexOf(step()), pos = step().blocks.indexOf(b);
+  const m = document.createElement('div'); m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', 'Copy to steps');
+  m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+  m.innerHTML = `<div style="background:#fff;border-radius:14px;padding:20px;width:360px;max-width:calc(100vw - 32px)"><b style="font-size:16px">Copy “${esc(BNAME[b.type] || b.type)}” to…</b>
+    <div style="margin:12px 0;display:flex;flex-direction:column;gap:8px">${F.steps.map((x, i) => i === here ? '' : `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-cs="${i}" checked> ${esc(x.name || 'Step ' + (i + 1))}</label>`).join('')}</div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)"><input type="checkbox" id="csp" checked> Same position (${pos === 0 ? 'top of the step' : 'block #' + (pos + 1)})</label>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn" id="csx">Cancel</button><button class="btn pri" id="csok">Copy</button></div></div>`;
+  document.body.appendChild(m);
+  m.querySelector('#csx').onclick = () => m.remove();
+  m.querySelector('#csok').onclick = () => { const same = m.querySelector('#csp').checked; copyBlock(b); let n = 0;
+    m.querySelectorAll('[data-cs]:checked').forEach((x) => { if (pasteBlock(Number(x.dataset.cs), same ? pos : null)) n++; });
+    m.remove(); bar(); toast(`Copied to ${n} step${n === 1 ? '' : 's'}`); };
+}
+
+/** Put block m next to block at index ref (left or right), making them one row. */
+function placeBeside(bl, m, ref, side) {
+  const r = bl[ref]; if (!r) { bl.push(m); return; }
+  if (side === 'r') { m.beside = true; bl.splice(ref + 1, 0, m); }
+  else { m.beside = !!r.beside; r.beside = true; bl.splice(ref, 0, m); }
+  fixRows(bl);
+}
+/** A block can't sit beside nothing; rows hold at most 3 blocks. */
+function fixRows(bl) { let n = 1; bl.forEach((b, i) => { if (i === 0) { b.beside = false; n = 1; return; } if (b.beside) { n++; if (n > 3) { b.beside = false; n = 1; } } else n = 1; }); }
+/** While typing in one canvas, refresh the other one without touching the one being typed in. */
+let otherT = null;
+function syncOther(frame) { clearTimeout(otherT); otherT = setTimeout(() => { const w = frame === 'm' ? 'd' : 'm', fr = $(w === 'd' ? 'fpd' : 'fpm'); if (fr && fr.contentWindow && ready[w]) fr.contentWindow.postMessage({ bzfRender: 1, form: clone({ id: F.id, shop_url: SHOP[F.store], steps: F.steps, style: F.style, targeting: F.targeting, teaser: F.teaser, sms_consent_text: F.sms_consent_text, email_consent_text: F.email_consent_text, signups: F.signups }), opts: { edit: { step: SI, sel: SEL, names: BNAME } } }, '*'); }, 250); }
 
 /* ---------------- floating step bar: undo/redo · Teaser · steps › Success · views ---------------- */
 function bar() {
@@ -396,13 +465,14 @@ function panel() {
   if (b) return blockPanel(shell(BNAME[b.type] || b.type, { back: 'Add blocks' }));
   if (RAIL === 'styles') return stylesPanel(shell('Styles'));
   if (RAIL === 'targeting') return targetingPanel(shell('Targeting & behaviors'));
+  if (RAIL === 'ab') return abPanel(shell('A/B test'));
   return addPanel(shell('Add blocks', { tabs: `<div class="ke-tabs"><button data-at="basic" class="${ADDTAB === 'basic' ? 'on' : ''}">Basic</button><button data-at="universal" class="${ADDTAB === 'universal' ? 'on' : ''}">Universal</button></div>` }));
 }
 
 /* Add blocks: drag a tile onto the canvas, or click it to add after the selected block */
 const SECTIONS = [
-  ['Integrations', [['coupon', 'Coupon', 'ticket']]],
-  ['Elements', [['text', 'Text', 'typography'], ['button', 'Button', 'click'], ['image', 'Image', 'photo'], ['countdown', 'Countdown timer', 'clock'], ['spacer', 'Spacer', 'arrows-vertical'], ['divider', 'Divider', 'separator-horizontal'], ['html', 'HTML', 'code']]],
+  ['Integrations', [['coupon', 'Coupon', 'ticket'], ['reviews', 'Reviews', 'message-star']]],
+  ['Elements', [['text', 'Text', 'typography'], ['button', 'Button', 'click'], ['image', 'Image', 'photo'], ['countdown', 'Countdown timer', 'clock'], ['counter', 'Sign-up counter', 'trending-up'], ['wheel', 'Spin-to-win', 'chart-pie'], ['spacer', 'Spacer', 'arrows-vertical'], ['divider', 'Divider', 'separator-horizontal'], ['html', 'HTML', 'code']]],
   ['Input fields', [['email', 'Email input', 'mail'], ['phone', 'Phone number', 'phone'], ['input', 'Text input', 'forms'], ['radio', 'Radio button', 'circle-dot'], ['checkboxes', 'Checkboxes', 'checkbox'], ['dropdown', 'Dropdown', 'selector'], ['date', 'Date', 'calendar']]],
 ];
 function addPanel(P) {
@@ -413,13 +483,18 @@ function addPanel(P) {
     P.innerHTML = `<div class="ke-note" style="margin-top:14px">Universal blocks are blocks you saved to reuse in any form. Select a block and choose "Save as universal block".</div>
       <div class="ke-tiles" style="margin-top:14px">${UNIV.map((u) => tile(u.block.type, u.name, (SECTIONS.flatMap((x) => x[1]).find((x) => x[0] === u.block.type) || [, , 'box'])[2], false, 'u:' + u.id)).join('') || '<div style="grid-column:1/-1;color:var(--muted)">None saved yet.</div>'}</div>`;
   } else {
-    P.innerHTML = SECTIONS.map(([h, items]) => `<div class="ke-sec">${esc(h)}</div><div class="ke-tiles">${items.map(([k, l, ic]) => tile(k, l, ic, SI >= 0 && (k === 'email' || k === 'phone' || k === 'coupon') && has(k))).join('')}</div>`).join('') +
+    const cb = clip();
+    let tipOff = false; try { tipOff = localStorage.getItem('bzf_tip_defaults') === '1'; } catch (e) {}
+    P.innerHTML = (tipOff ? '' : `<div class="ke-note" id="ktip" style="display:flex;gap:8px;align-items:flex-start"><span style="flex:1">Buttons you drag in inherit the styles set in form defaults.<br><a href="#" id="ktipgo" style="color:#1D4ED8">Go to form defaults</a></span><button class="ke-ib" id="ktipx" aria-label="Dismiss" style="width:24px;height:24px">${ICON('x')}</button></div>`) + (cb && cb.block ? `<div class="ke-sec">Clipboard</div><div class="ke-tiles"><div class="ke-tile" id="kpaste" title="Paste (⌘V)"><span class="g">⋮⋮⋮</span>${ICON('clipboard')}<span>Paste ${esc(BNAME[cb.block.type] || cb.block.type)}</span></div></div>` : '') + SECTIONS.map(([h, items]) => `<div class="ke-sec">${esc(h)}</div><div class="ke-tiles">${items.map(([k, l, ic]) => tile(k, l, ic, SI >= 0 && (k === 'email' || k === 'phone' || k === 'coupon') && has(k))).join('')}</div>`).join('') +
       `<div style="font-size:12px;color:var(--muted);margin-top:14px">Drag a block onto the form, or click it to add it after the selected block. Click any block on the form to edit it.</div>`;
   }
+  const kps = $('kpaste'); if (kps) kps.onclick = (e) => { e.stopPropagation(); pasteBlock(); };
+  const tx = $('ktipx'); if (tx) tx.onclick = () => { try { localStorage.setItem('bzf_tip_defaults', '1'); } catch (e) {} $('ktip').remove(); };
+  const tg = $('ktipgo'); if (tg) tg.onclick = (e) => { e.preventDefault(); RAIL = 'styles'; rail(); panel(); };
   P.querySelectorAll('[data-drag]').forEach((t) => t.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', 'bzf-add:' + t.dataset.drag); }));
-  P.querySelectorAll('.ke-tile:not(.off)').forEach((t) => t.onclick = () => addBlock(t.dataset.add));
+  P.querySelectorAll('.ke-tile:not(.off):not(#kpaste)').forEach((t) => t.onclick = () => addBlock(t.dataset.add));
 }
-function addBlock(type, at) {
+function addBlock(type, at, side) {
   if (SI < 0) SI = 0;
   const s = step(); s.blocks = s.blocks || [];
   let nb;
@@ -428,28 +503,92 @@ function addBlock(type, at) {
     const d = { text: { html: '<p>Your text here</p>' }, image: { src: '', alt: '', width: 100 }, button: { text: 'Continue', action: 'submit' }, email: { placeholder: 'Email', label: 'Email', required: true, show_consent: true },
       phone: { placeholder: 'Phone Number', label: 'Phone', required: false }, input: { label: 'First name', placeholder: 'First name', key: 'first_name' }, checkboxes: { label: 'Interested in', key: 'interests', options: ['Newborn', 'Toddler', 'Matching family'] },
       radio: { label: 'Are you…', key: 'baby_stage', options: ['Expecting', 'Parent of a little one', 'Shopping for a gift'], display: 'buttons' }, dropdown: { label: 'Size', key: 'child_size', options: ['NB', '0-3M', '3-6M', '6-12M', '12-18M', '18-24M', '2T', '3T', '4T', '5T'], placeholder: 'Choose a size' },
-      date: { label: "Baby's due date or birthday", key: 'baby_date' }, coupon: { copy: true, copy_text: 'Copy' }, countdown: { mode: 'minutes', minutes: 15, expired_text: 'Offer ended' }, spacer: { height: 16 }, divider: { thickness: 1, color: '#E5E5E5', width: 100 }, html: { html: '' } }[type];
+      date: { label: "Baby's due date or birthday", key: 'baby_date' }, coupon: { copy: true, copy_text: 'Copy' }, countdown: { mode: 'minutes', minutes: 15, expired_text: 'Offer ended' }, spacer: { height: 16 }, divider: { thickness: 1, color: '#E5E5E5', width: 100 }, html: { html: '' },
+      counter: { text: '{{count}} people have already joined', start: 0 }, reviews: { items: [{ text: 'So soft and the fit is perfect. My little one sleeps so well in these!', name: 'Sarah M.', stars: 5 }, { text: 'Beautiful colors and great quality. Already ordered more.', name: 'Jess R.', stars: 5 }], star_color: '#F5B301' },
+      wheel: { size: 240, slices: [{ label: '10% OFF', percent: 10, weight: 30 }, { label: 'NO LUCK', percent: 0, weight: 15 }, { label: '15% OFF', percent: 15, weight: 25 }, { label: 'NOT TODAY', percent: 0, weight: 15 }, { label: '20% OFF', percent: 20, weight: 10 }, { label: '25% OFF', percent: 25, weight: 5 }] } }[type];
     if (!d) return;
     nb = { id: rid(), type, ...d, st: { pad: [4, 0, type === 'text' ? 10 : 4, 0], align: 'center' } };
   }
-  const pos = at != null ? Math.max(0, Math.min(at, s.blocks.length)) : SEL != null && SEL >= 0 ? SEL + 1 : s.blocks.length;
-  s.blocks.splice(pos, 0, nb);
+  if (side && at != null) placeBeside(s.blocks, nb, at, side);
+  else { const pos = at != null ? Math.max(0, Math.min(at, s.blocks.length)) : SEL != null && SEL >= 0 ? SEL + 1 : s.blocks.length; if (pos > 0 && s.blocks[pos] && s.blocks[pos].beside && at == null) { /* keep rows intact */ } s.blocks.splice(pos, 0, nb); fixRows(s.blocks); }
+  const pos = s.blocks.indexOf(nb);
+  if (nb.type === 'wheel' && !s.blocks.some((x) => x.type === 'email')) toast('Spin-to-win needs an email field on the same step to give the prize');
+  if (nb.type === 'wheel') { const sb = s.blocks.find((x) => x.type === 'button' && (x.action || 'submit') === 'submit'); if (sb && /continue|submit/i.test(sb.text || '')) sb.text = 'Spin to win'; }
   if (nb.type === 'coupon' && F.coupon && !F.coupon.enabled) F.coupon.enabled = true;
   SEL = pos; STEPSET = false; panel(); mark();
 }
 
-/* Side image (click the photo on the canvas) */
+/* Side image (click the photo on the canvas) — laid out like Klaviyo's Side image panel */
+const imgBlob = async (src) => { const u = new URL(src, location.href); const same = u.origin === location.origin;
+  const r = await fetch(same ? u.pathname + u.search : '/api/mk/img-proxy?u=' + encodeURIComponent(src), { headers: { Authorization: 'Bearer ' + KEY } }); if (!r.ok) throw new Error('Could not load the image'); return r.blob(); };
+const fmtBytes = (n) => n > 1048576 ? (n / 1048576).toFixed(2) + 'MB' : Math.round(n / 1024) + 'KB';
 function mediaPanel(P) {
   const s = step(); s.image = s.image || { src: '', pos: 'right', width: 42 }; const im = s.image;
-  P.innerHTML = `<div style="margin-top:8px">${im.src ? `<div style="border:1px solid var(--line);border-radius:10px;height:150px;background:#F4F4F5 url('${esc(im.src)}') center/cover no-repeat"></div>` : '<div class="ke-note">No image yet. Upload one or pick from the library.</div>'}</div>
-    ${fl('Image', `<div id="mimg"></div>${txt('src', im.src, 'Image address')}`)}
-    ${grid(fl('Position', selp('pos', im.pos || 'right', [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['none', 'No image']])), fl('Width (%)', num('width', im.width || 42, { min: 20, max: 60 })))}
-    <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Side images are hidden on phones unless placed on top. This is the image for step "${esc(s.name)}"; each step has its own.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn xs" id="mall">${ICON('copy')} Use on every step</button>${im.src ? `<button class="btn xs danger" id="mrm">${ICON('trash')} Remove image</button>` : ''}</div>`;
-  bind(P, im, (x) => { if (x.dataset.p === 'pos' || x.dataset.p === 'src') panel(); });
-  if (window.MK_imagePicker) window.MK_imagePicker($('mimg'), (url) => { im.src = location.origin + url; if (!im.pos || im.pos === 'none') im.pos = 'right'; panel(); mark(); });
+  const name = im.src ? decodeURIComponent((im.name || im.src.split('?')[0].split('/').pop() || 'image')).slice(0, 60) : '';
+  const FOC = ['left top', 'center top', 'right top', 'left center', 'center center', 'right center', 'left bottom', 'center bottom', 'right bottom'];
+  P.innerHTML = `<div class="ke-sec">Image</div>
+    ${im.src ? `<div style="border:1px solid var(--line);border-radius:12px;overflow:hidden">
+        <div style="height:190px;background:url('${esc(im.src)}') center/contain no-repeat,repeating-conic-gradient(#EDEDED 0 25%,#fff 0 50%) 0 0/16px 16px"></div>
+        <div style="padding:12px 16px"><div style="font-weight:500">${esc(name)}</div><div id="mdims" style="font:13px ui-monospace,Menlo,monospace;color:#3F3F46;margin-top:2px">&nbsp;</div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><button class="btn" id="mcrop">Crop</button><button class="btn" id="mrep">Replace</button><span style="flex:1"></span><button class="ke-ib" id="mrm" aria-label="Remove image" title="Remove image">${ICON('trash')}</button></div>
+        <div id="mpick" style="display:none;margin-top:8px"></div></div></div>`
+      : `<div style="border:1.5px dashed #A1A1AA;border-radius:12px;padding:22px;text-align:center;color:var(--muted)">No image yet<div id="mpick" style="margin-top:10px"></div></div>`}
+    ${fl('Alt text', txt('alt', im.alt, 'Describe the image'), 'Required if not decorative')}
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-top:12px"><div style="flex:1">${selp('fit', im.fit || 'cover', [['cover', 'Cover'], ['contain', 'Contain']])}</div>
+      <div role="group" aria-label="Image focus point" style="display:grid;grid-template-columns:repeat(3,24px);gap:4px;border:1px solid var(--line);border-radius:10px;padding:8px">${FOC.map((f) => `<button data-foc="${f}" title="${f}" aria-label="Focus ${f}" style="all:unset;cursor:pointer;width:24px;height:24px;display:flex;align-items:center;justify-content:center"><span style="display:block;width:${(im.focus || 'center center') === f ? 18 : 5}px;height:${(im.focus || 'center center') === f ? 18 : 5}px;border-radius:${(im.focus || 'center center') === f ? 3 : 50}${(im.focus || 'center center') === f ? 'px' : '%'};background:#18181B"></span></button>`).join('')}</div></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:20px 0 4px"><div class="ke-sec">Background color</div>${color('bg', im.bg || '#FFFFFF')}
+    <hr style="border:0;border-top:1px solid var(--line);margin:20px 0 4px"><div class="ke-sec">Placement</div>
+    ${grid(fl('Side', selp('pos', im.pos || 'right', [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['none', 'Hide image']])), fl('Width (%)', num('width', im.width || 50, { min: 20, max: 70 })))}
+    <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Each step has its own side image. Side images are hidden on phones unless placed on top.</div>
+    <button class="btn xs" id="mall" style="margin-top:10px">${ICON('copy')} Use this image on every step</button>`;
+  bind(P, im, (x) => { if (x.dataset.p === 'pos') panel(); });
+  P.querySelectorAll('[data-foc]').forEach((x) => x.onclick = () => { im.focus = x.dataset.foc; panel(); mark(); });
+  const picker = () => { const h = $('mpick'); h.style.display = ''; if (window.MK_imagePicker) window.MK_imagePicker(h, (url, meta) => { im.src = location.origin + url; im.name = (meta && meta.name) || ''; if (!im.pos || im.pos === 'none') im.pos = 'right'; panel(); mark(); }); };
+  if (!im.src) picker();
+  const rp = $('mrep'); if (rp) rp.onclick = picker;
+  const rm = $('mrm'); if (rm) rm.onclick = () => { im.src = ''; im.name = ''; panel(); mark(); };
   $('mall').onclick = () => { F.steps.forEach((x) => { if (x.kind !== 'success' || (x.image && x.image.src)) x.image = { ...im }; }); toast('Image set on every form step'); mark(); };
-  const rm = $('mrm'); if (rm) rm.onclick = () => { im.src = ''; panel(); mark(); };
+  if (im.src) {
+    const i = new Image(); i.onload = () => { const d = $('mdims'); if (d) d.textContent = `${i.naturalWidth} x ${i.naturalHeight}`; imgBlob(im.src).then((bl) => { const d2 = $('mdims'); if (d2) d2.textContent = `${i.naturalWidth} x ${i.naturalHeight} • ${fmtBytes(bl.size)}`; }).catch(() => {}); }; i.src = im.src;
+    $('mcrop').onclick = () => cropImage(im.src, name, (url) => { im.src = location.origin + url; panel(); mark(); });
+  }
+}
+/** Crop dialog: drag to draw or move the box, pick a shape, save a new copy to the image library. */
+async function cropImage(src, name, done) {
+  let blob; try { blob = await imgBlob(src); } catch (e) { return toast(e.message, 1); }
+  const url = URL.createObjectURL(blob), img = new Image(); img.src = url; await img.decode().catch(() => {});
+  const W = img.naturalWidth, Hh = img.naturalHeight, maxW = Math.min(760, window.innerWidth - 80), maxH = Math.min(520, window.innerHeight - 220), k = Math.min(maxW / W, maxH / Hh, 1);
+  const dw = Math.round(W * k), dh = Math.round(Hh * k); let r = { x: 0, y: 0, w: dw, h: dh }, ratio = 0;
+  const m = document.createElement('div'); m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', 'Crop image');
+  m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center';
+  m.innerHTML = `<div style="background:#fff;border-radius:14px;padding:18px;max-width:calc(100vw - 32px)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><b style="flex:1;font-size:16px">Crop</b>
+      ${[['0', 'Free'], ['1', '1:1'], ['0.8', '4:5'], ['0.75', '3:4'], ['0.5625', '9:16'], ['1.7778', '16:9']].map(([v, l]) => `<button class="btn xs" data-ar="${v}">${l}</button>`).join('')}</div>
+    <div id="cw" style="position:relative;width:${dw}px;height:${dh}px;background:url('${url}') 0 0/${dw}px ${dh}px;user-select:none;cursor:crosshair;touch-action:none">
+      <div id="cb" style="position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.45);cursor:move"></div></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><span id="cdim" style="flex:1;color:var(--muted);font:13px ui-monospace,Menlo,monospace"></span><button class="btn" id="cx">Cancel</button><button class="btn pri" id="cok">Apply crop</button></div></div>`;
+  document.body.appendChild(m);
+  const cw = m.querySelector('#cw'), cb = m.querySelector('#cb');
+  const paint = () => { cb.style.left = r.x + 'px'; cb.style.top = r.y + 'px'; cb.style.width = r.w + 'px'; cb.style.height = r.h + 'px'; m.querySelector('#cdim').textContent = `${Math.round(r.w / k)} x ${Math.round(r.h / k)}`; };
+  const clampR = () => { r.w = Math.max(10, Math.min(r.w, dw)); r.h = Math.max(10, Math.min(r.h, dh)); r.x = Math.max(0, Math.min(r.x, dw - r.w)); r.y = Math.max(0, Math.min(r.y, dh - r.h)); };
+  const setRatio = (a) => { ratio = a; if (!a) return paint(); let w = dw, h = w / a; if (h > dh) { h = dh; w = h * a; } r = { x: (dw - w) / 2, y: (dh - h) / 2, w, h }; paint(); };
+  m.querySelectorAll('[data-ar]').forEach((b) => b.onclick = () => setRatio(Number(b.dataset.ar)));
+  let drag = null;
+  cw.addEventListener('pointerdown', (e) => { const b = cw.getBoundingClientRect(), px0 = e.clientX - b.left, py0 = e.clientY - b.top; cw.setPointerCapture(e.pointerId);
+    drag = e.target === cb ? { mode: 'move', dx: px0 - r.x, dy: py0 - r.y } : { mode: 'draw', x0: px0, y0: py0 }; });
+  cw.addEventListener('pointermove', (e) => { if (!drag) return; const b = cw.getBoundingClientRect(), x = Math.max(0, Math.min(dw, e.clientX - b.left)), y = Math.max(0, Math.min(dh, e.clientY - b.top));
+    if (drag.mode === 'move') { r.x = x - drag.dx; r.y = y - drag.dy; }
+    else { let w = Math.abs(x - drag.x0), h = ratio ? w / ratio : Math.abs(y - drag.y0); r = { x: Math.min(x, drag.x0), y: ratio ? (y < drag.y0 ? drag.y0 - h : drag.y0) : Math.min(y, drag.y0), w, h }; }
+    clampR(); paint(); });
+  cw.addEventListener('pointerup', () => { drag = null; });
+  m.querySelector('#cx').onclick = () => { m.remove(); URL.revokeObjectURL(url); };
+  m.querySelector('#cok').onclick = async () => {
+    const c = document.createElement('canvas'); c.width = Math.round(r.w / k); c.height = Math.round(r.h / k);
+    c.getContext('2d').drawImage(img, r.x / k, r.y / k, r.w / k, r.h / k, 0, 0, c.width, c.height);
+    const type = /png|gif/.test(blob.type) ? 'image/png' : 'image/jpeg';
+    c.toBlob(async (out) => { try { const res = await fetch(`/api/mk/images?store=${F.store}&name=${encodeURIComponent((name || 'image').replace(/\.\w+$/, '') + '-crop')}`, { method: 'POST', headers: { 'Content-Type': type, Authorization: 'Bearer ' + KEY }, body: out }); const j = await res.json(); if (!res.ok) throw new Error(j.error || 'Upload failed');
+      m.remove(); URL.revokeObjectURL(url); toast('Cropped'); done(j.url); } catch (e) { toast(e.message, 1); } }, type, 0.92);
+  };
+  paint();
 }
 
 /* Step settings (from a step's ⋮ menu) */
@@ -457,7 +596,7 @@ function stepPanel(P) {
   const s = step();
   P.innerHTML = `${grid(fl('Step name', txt('name', s.name)), fl('Step type', selp('kind', s.kind || 'step', [['step', 'Form step'], ['success', 'Success (end)']])))}
     ${H('Side image')}${fl('Image', `<div id="simg"></div>${txt('image.src', (s.image || {}).src, 'Image address')}`)}
-    ${grid(fl('Position', selp('image.pos', (s.image || {}).pos || 'none', [['none', 'No image'], ['left', 'Left'], ['right', 'Right'], ['top', 'Top']])), fl('Width (%)', num('image.width', (s.image || {}).width || 42, { min: 20, max: 60 })))}
+    ${grid(fl('Position', selp('image.pos', (s.image || {}).pos || 'none', [['none', 'No image'], ['left', 'Left'], ['right', 'Right'], ['top', 'Top']])), fl('Width (%)', num('image.width', (s.image || {}).width || 50, { min: 20, max: 70 })))}
     <div style="font-size:11.5px;color:var(--muted);margin-top:3px">Side images are hidden on phones unless placed on top.</div>
     ${s.kind !== 'success' ? `${H('After this step')}${chk('skip_if_sms', s.skip_if_sms, 'Skip this step for people who already get texts')}
     ${fl('Go to', `<select id="snext" style="width:100%"><option value="">The next step</option>${F.steps.filter((x) => x.id !== s.id).map((x) => `<option value="${x.id}"${s.next === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`)}
@@ -468,6 +607,81 @@ function stepPanel(P) {
   P.querySelectorAll('[data-br]').forEach((x) => x.addEventListener(x.tagName === 'SELECT' ? 'change' : 'input', () => { s.branches[Number(x.dataset.br)][x.dataset.bk] = x.value; mark(); }));
   P.querySelectorAll('[data-brm]').forEach((x) => x.onclick = () => { s.branches.splice(Number(x.dataset.brm), 1); panel(); mark(); });
   const ba = $('badd'); if (ba) ba.onclick = () => { s.branches = s.branches || []; const k = (s.blocks || []).find((b) => b.key); s.branches.push({ field: k ? k.key : '', equals: '', go: (F.steps[SI + 1] || F.steps[0]).id }); panel(); mark(); };
+}
+
+/* A/B test */
+async function abPanel(P) {
+  const testId = F.parent ? F.parent.id : F.id;
+  if (!F.variants.length) {
+    P.innerHTML = `<div class="ke-note" style="margin-top:12px">Test two versions of this form against each other. Buzzin shows each visitor one version (always the same one for them) and counts views, sign-ups and revenue for each.</div>
+      <button class="btn pri" id="abnew" style="margin-top:14px">${ICON('flask')} Create A/B test</button>`;
+    $('abnew').onclick = async () => { try { if (fdirty) await save(true); const r = await api(`/api/mk/forms/${F.id}/ab`, { method: 'POST', body: JSON.stringify({}) }); toast(`Variant ${r.letter} created as a copy. Change it, then publish the test.`); location.hash = '#forms/' + r.id; } catch (e) { toast(e.message, 1); } };
+    return;
+  }
+  P.innerHTML = '<div class="empty">Loading results…</div>';
+  const ids = [testId, ...F.variants.map((v) => v.id)], names = ['A · ' + (F.parent ? F.parent.name : F.name), ...F.variants.map((v) => v.name)];
+  const res = await Promise.all(ids.map((id) => api(`/api/mk/forms/${id}/analytics?days=3650`).catch(() => ({}))));
+  const split = F.parent ? F.parent.ab_split : (F.ab_split == null ? 50 : F.ab_split);
+  const best = res.reduce((bi, r, i) => ((r.rate || 0) > (res[bi].rate || 0) ? i : bi), 0);
+  P.innerHTML = `<div style="margin-top:10px;font-size:13px;color:var(--muted)">Status follows variant A: <b>${esc((F.parent || F).status)}</b>.</div>
+    <table style="width:100%;margin-top:12px;font-size:13px;border-collapse:collapse"><thead><tr><th style="text-align:left">Variant</th><th style="text-align:right">Views</th><th style="text-align:right">Sign-ups</th><th style="text-align:right">Rate</th><th style="text-align:right">Revenue</th></tr></thead>
+    <tbody>${ids.map((id, i) => `<tr style="border-top:1px solid var(--line)${Number(id) === Number(F.id) ? ';background:#EEF2FF' : ''}"><td style="padding:6px 0"><a href="#forms/${id}">${esc(names[i])}</a>${i === best && (res[i].viewed || 0) > 0 ? ' 🏆' : ''}</td><td style="text-align:right">${fmtN(res[i].viewed || 0)}</td><td style="text-align:right">${fmtN(res[i].submitted || 0)}</td><td style="text-align:right">${(res[i].rate || 0).toFixed(1)}%</td><td style="text-align:right">${fmt$(res[i].revenue || 0)}</td></tr>`).join('')}</tbody></table>
+    ${ids.length === 2 ? `${fl(`Traffic: A ${split}% · B ${100 - split}%`, `<input type="range" id="absp" min="5" max="95" step="5" value="${split}" style="width:100%">`)}` : `<div style="font-size:12px;color:var(--muted);margin-top:8px">A gets ${split}%; the rest is shared equally by the other variants.</div>`}
+    ${F.variants.length < 3 ? `<button class="btn xs" id="abadd" style="margin-top:10px">${ICON('plus')} Add another variant</button>` : ''}
+    <div class="ke-sec">End the test</div><div style="display:flex;gap:6px;flex-wrap:wrap">${ids.map((id, i) => `<button class="btn xs" data-keep="${id}">Keep ${esc(names[i].split(' · ').pop().length < 3 ? names[i].split(' · ').pop() : 'A')}</button>`).join('')}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:4px">The kept version becomes the form; the others are deleted.</div>`;
+  const sp = $('absp'); if (sp) sp.onchange = async () => { try { await api(`/api/mk/forms/${testId}`, { method: 'PUT', body: JSON.stringify({ ab_split: Number(sp.value) }) }); if (F.parent) F.parent.ab_split = Number(sp.value); else F.ab_split = Number(sp.value); panel(); toast('Split saved'); } catch (e) { toast(e.message, 1); } };
+  const aa = $('abadd'); if (aa) aa.onclick = async () => { try { const r = await api(`/api/mk/forms/${testId}/ab`, { method: 'POST', body: JSON.stringify({}) }); location.hash = '#forms/' + r.id; } catch (e) { toast(e.message, 1); } };
+  P.querySelectorAll('[data-keep]').forEach((b) => b.onclick = async () => { if (!confirm('End the test and keep this version? The other versions are deleted.')) return; try { await api(`/api/mk/forms/${testId}/ab/end`, { method: 'POST', body: JSON.stringify({ keep: Number(b.dataset.keep) }) }); toast('Test ended'); document.querySelectorAll('.ke').forEach((x) => x.remove()); location.hash = '#forms/' + testId; go(); } catch (e) { toast(e.message, 1); } });
+}
+/* Publish or schedule */
+function scheduleDialog() {
+  const toLocal = (v) => { if (!v) return ''; const d = new Date(v); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  const m = document.createElement('div'); m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', 'Schedule');
+  m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+  m.innerHTML = `<div style="background:#fff;border-radius:14px;padding:20px;width:380px;max-width:calc(100vw - 32px)"><b style="font-size:16px">Schedule</b>
+    <label class="lab">Start showing</label><input type="datetime-local" id="sds" value="${toLocal(F.start_at) || toLocal(new Date(Date.now() + 3600e3))}" style="width:100%">
+    <label class="lab">Stop showing (optional)</label><input type="datetime-local" id="sde" value="${toLocal(F.end_at)}" style="width:100%">
+    <div style="font-size:12px;color:var(--muted);margin-top:6px">Times are in your time zone. The form turns on and off by itself.</div>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px">${F.start_at || F.end_at ? '<button class="btn" id="sdc">Clear schedule</button>' : '<span></span>'}<span style="display:flex;gap:8px"><button class="btn" id="sdx">Cancel</button><button class="btn pri" id="sdok">Schedule</button></span></div></div>`;
+  document.body.appendChild(m);
+  m.querySelector('#sdx').onclick = () => m.remove();
+  const c = m.querySelector('#sdc'); if (c) c.onclick = async () => { F.start_at = null; F.end_at = null; m.remove(); await save(); };
+  m.querySelector('#sdok').onclick = async () => { const a = m.querySelector('#sds').value, b = m.querySelector('#sde').value; if (!a) return toast('Pick a start time', 1);
+    F.start_at = new Date(a).toISOString(); F.end_at = b ? new Date(b).toISOString() : null; F.status = 'live'; $('kst').value = 'live'; dot(); m.remove(); await save();
+    toast(`Scheduled for ${new Date(a).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`); };
+}
+/* Comments on the form (top bar) */
+async function commentsDrawer() {
+  document.querySelectorAll('.ke-cm').forEach((x) => x.remove());
+  const d = document.createElement('aside'); d.className = 'ke-cm'; d.setAttribute('aria-label', 'Comments');
+  d.style.cssText = 'position:fixed;top:60px;right:0;bottom:0;width:360px;max-width:100vw;background:#fff;border-left:1px solid var(--line);z-index:70;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.06)';
+  document.body.appendChild(d);
+  const load = async () => {
+    const { comments } = await api(`/api/mk/forms/${F.id}/comments`);
+    d.innerHTML = `<div style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)"><b style="flex:1;font-size:16px">Comments</b><button class="ke-ib" id="cmx" aria-label="Close">${ICON('x')}</button></div>
+      <div style="flex:1;overflow:auto;padding:12px 16px">${comments.map((c) => `<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;${c.resolved ? 'opacity:.55' : ''}"><div style="display:flex;gap:6px;font-size:12px;color:var(--muted)"><b style="color:#18181B">${esc(c.who || '')}</b><span>${fmtDT(c.at)}</span>${c.step_id ? `<span>· ${esc((F.steps.find((x) => x.id === c.step_id) || {}).name || '')}</span>` : ''}<span style="flex:1"></span><button class="btn xs" data-cr="${c.id}">${c.resolved ? 'Reopen' : 'Resolve'}</button></div><div style="margin-top:6px;white-space:pre-wrap">${esc(c.body)}</div></div>`).join('') || '<div class="empty">No comments yet.</div>'}</div>
+      <div style="padding:12px 16px;border-top:1px solid var(--line)"><textarea id="cmt" rows="3" placeholder="Comment on step “${esc(step().name || '')}”…" style="width:100%"></textarea><button class="btn pri" id="cmok" style="margin-top:8px;width:100%">Comment</button></div>`;
+    d.querySelector('#cmx').onclick = () => d.remove();
+    d.querySelectorAll('[data-cr]').forEach((b) => b.onclick = async () => { await api(`/api/mk/forms/comments/${b.dataset.cr}/resolve`, { method: 'POST', body: '{}' }); load(); });
+    d.querySelector('#cmok').onclick = async () => { const t = d.querySelector('#cmt').value.trim(); if (!t) return; try { await api(`/api/mk/forms/${F.id}/comments`, { method: 'POST', body: JSON.stringify({ body: t, step_id: SI >= 0 ? step().id : null }) }); load(); } catch (e) { toast(e.message, 1); } };
+  };
+  load();
+}
+/* Ask Emily to change the step being edited */
+function askEmily() {
+  if (SI < 0) SI = 0;
+  const m = document.createElement('div'); m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', 'Ask Emily');
+  m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+  m.innerHTML = `<div style="background:#fff;border-radius:14px;padding:20px;width:480px;max-width:calc(100vw - 32px)"><b style="font-size:16px">${ICON('sparkles')} Ask Emily</b><div style="color:var(--muted);font-size:13px;margin-top:4px">Describe what to change on step “${esc(step().name || '')}”. You can undo it.</div>
+    <textarea id="aiq" rows="4" style="width:100%;margin-top:10px" placeholder="e.g. Make the headline shorter and warmer, add a line about free shipping over $75, and put the logo on top"></textarea>
+    <div id="aist" style="font-size:13px;color:var(--muted);min-height:18px;margin-top:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button class="btn" id="aix">Cancel</button><button class="btn pri" id="aiok">Change it</button></div></div>`;
+  document.body.appendChild(m); m.querySelector('#aiq').focus();
+  m.querySelector('#aix').onclick = () => m.remove();
+  m.querySelector('#aiok').onclick = async () => { const q = m.querySelector('#aiq').value.trim(); if (!q) return; const b = m.querySelector('#aiok'); b.disabled = true; m.querySelector('#aist').textContent = 'Emily is working on it…';
+    try { const r = await api(`/api/mk/forms/${F.id}/ai`, { method: 'POST', body: JSON.stringify({ ask: q, step: step() }) }); step().blocks = r.blocks; SEL = null; m.remove(); panel(); mark(); toast(r.note || 'Done. Use undo to go back.'); }
+    catch (e) { b.disabled = false; m.querySelector('#aist').textContent = e.message; } };
 }
 
 /* Targeting & behaviors (Klaviyo keeps these together) */
@@ -485,12 +699,25 @@ function targetingPanel(P) {
     ${fl('Device', selp('device', t.device || 'all', [['all', 'Desktop and mobile'], ['desktop', 'Desktop only'], ['mobile', 'Mobile only']]))}
     ${fl('Show to', selp('visitors', t.visitors || 'all', [['all', 'All visitors'], ['new', 'New visitors only'], ['returning', 'Returning visitors only']]))}
     ${fl('Only when the link has utm_source', txt('utm_source', t.utm_source, 'e.g. facebook'), 'For a form just for ad traffic, like your Meta URL-based forms.')}
+    ${H('Location')}${grid(fl('Rule', selp('countries_mode', t.countries_mode || 'include', [['include', 'Only show in'], ['exclude', 'Hide in']])), fl('Countries', `<input type="text" id="tcc" value="${esc((t.countries || []).join(', '))}" placeholder="US, CA" style="width:100%">`))}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${['US', 'CA', 'GB', 'AU', 'MX'].map((c) => `<button class="btn xs${(t.countries || []).includes(c) ? ' pri' : ''}" data-cc="${c}">${c}</button>`).join('')}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Two-letter country codes, from the visitor's internet address. Empty = everywhere.</div>
+    ${H('Lists & segments')}<div style="font-size:12px;color:var(--muted)">Works for visitors Buzzin already knows (they signed up or clicked an email before).</div>
+      ${['show', 'hide'].map((m) => `<div style="margin-top:10px;font-weight:600">${m === 'show' ? 'Only show to people in' : "Don't show to people in"}</div><div style="max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin-top:4px">
+        ${(F.lists || []).map((l) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:2px 0"><input type="checkbox" data-aud="${m}_lists" value="${l.id}"${((t.audience || {})[m + '_lists'] || []).map(Number).includes(Number(l.id)) ? ' checked' : ''}> ${esc(l.name)} <span style="color:var(--muted)">list</span></label>`).join('')}
+        ${(F.segments || []).map((g) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:2px 0"><input type="checkbox" data-aud="${m}_segments" value="${g.id}"${((t.audience || {})[m + '_segments'] || []).map(Number).includes(Number(g.id)) ? ' checked' : ''}> ${esc(g.name)} <span style="color:var(--muted)">segment</span></label>`).join('')}</div>`).join('')}
+    ${H('Custom JavaScript')}${fl('Show only when this returns true', `<textarea id="tjs" rows="4" style="width:100%;font:12px ui-monospace,Menlo,monospace" placeholder="return location.search.includes('utm_source=facebook');">${esc(t.custom_js || '')}</textarea>`, 'Runs on the store page. Admins only. Leave empty for none.')}
     ${H('Pages')}${fl('Only on these pages', area('only_paths', t.only_paths, 2), 'One per line, like /collections/*. Empty = every page except cart and checkout.')}${fl('Never on these pages', area('hide_paths', t.hide_paths, 2))}
     ${H('Submissions')}${fl('Add people who sign up to this list', `<select id="ol" style="width:100%">${(F.lists || []).map((l) => `<option value="${l.id}"${Number(F.list_id) === Number(l.id) ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select>`, 'Joining the list starts any flow triggered by it, like the welcome series.')}
     ${fl('Close the success step after (seconds)', num('success_close_s', t.success_close_s, { min: 1, max: 120, ph: 'stay open' }))}
     ${H('Priority')}${fl('Priority', `<input type="number" id="tpr" value="${F.priority || 0}" style="width:100%">`, 'When two forms could show, the higher number wins. Only one popup shows at a time.')}
     ${F.import_notes && F.import_notes.length ? `${H('Copied from Klaviyo')}<div class="ke-note">${F.import_notes.map((n) => '• ' + esc(n)).join('<br>')}</div>` : ''}`;
   bind(P, t);
+  const setCC = (arr) => { t.countries = [...new Set(arr.map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)))]; mark(false); };
+  $('tcc').onchange = () => { setCC($('tcc').value.split(/[\s,]+/)); panel(); };
+  P.querySelectorAll('[data-cc]').forEach((x) => x.onclick = () => { const c = x.dataset.cc, cur = t.countries || []; setCC(cur.includes(c) ? cur.filter((y) => y !== c) : [...cur, c]); panel(); });
+  P.querySelectorAll('[data-aud]').forEach((x) => x.onchange = () => { t.audience = t.audience || {}; const k = x.dataset.aud; t.audience[k] = [...P.querySelectorAll(`[data-aud="${k}"]:checked`)].map((y) => Number(y.value)); mark(false); });
+  $('tjs').onchange = () => { t.custom_js = $('tjs').value.trim(); mark(false); };
   $('ol').onchange = (e) => { F.list_id = Number(e.target.value); mark(false); };
   $('tpr').oninput = (e) => { F.priority = Number(e.target.value) || 0; mark(false); };
 }
@@ -529,21 +756,45 @@ function blockPanel(P) {
       ${fl('Code starts with', `<input type="text" id="cpx" value="${esc(c.prefix || 'WELCOME')}" style="width:100%">`)}${chk('copy', b.copy !== false, 'Show a copy button')}${fl('Copy button text', txt('copy_text', b.copy_text || 'Copy'))}`; break; }
     case 'countdown': body = `${fl('Count down', selp('mode', b.mode || 'minutes', [['minutes', 'Minutes after they first see the form'], ['date', 'To a date and time']]))}${b.mode === 'date' ? fl('Ends', `<input type="datetime-local" data-p="date" value="${esc(b.date || '')}" style="width:100%">`) : fl('Minutes', num('minutes', b.minutes || 15, { min: 1, max: 10080 }))}${fl('When it ends, show', txt('expired_text', b.expired_text || 'Offer ended'))}`; break;
     case 'spacer': body = fl('Height (px)', num('height', b.height || 16, { min: 0, max: 200 })); break;
+    case 'counter': body = `${fl('Text', txt('text', b.text, '{{count}} people have already joined'), 'Put {{count}} where the number goes.')}${fl('Add to the count', num('start', b.start || 0, { min: 0, max: 1000000 }), 'The real number of sign-ups through this form is added to this.')}`; break;
+    case 'reviews': body = `${(b.items || []).map((it, i) => `<div class="card" style="padding:10px;margin-top:8px">${fl('Review', `<textarea data-ri="${i}" data-rk="text" rows="3" style="width:100%">${esc(it.text || '')}</textarea>`)}${grid(fl('Name', `<input type="text" data-ri="${i}" data-rk="name" value="${esc(it.name || '')}" style="width:100%">`), fl('Stars', `<select data-ri="${i}" data-rk="stars" style="width:100%">${[5, 4, 3].map((n) => `<option${Number(it.stars || 5) === n ? ' selected' : ''}>${n}</option>`).join('')}</select>`))}<button class="btn xs danger" data-rrm="${i}" style="margin-top:6px">Remove</button></div>`).join('')}
+      <button class="btn xs" id="radd" style="margin-top:8px">${ICON('plus')} Add review</button>${fl('Star color', color('star_color', b.star_color || '#F5B301'))}<div style="font-size:11.5px;color:var(--muted);margin-top:4px">With 2 or more reviews they rotate every 5 seconds.</div>`; break;
+    case 'wheel': { const tot = (b.slices || []).reduce((t, x) => t + (Number(x.weight) || 0), 0) || 1;
+      body = `<div class="ke-note">People enter their email, then spin. The prize is picked on the server by the chances below, and a single-use code for that % off is made (only when the form is Live). Put a Coupon block on the next step to show the code.</div>
+      ${(b.slices || []).map((x, i) => `<div style="display:grid;grid-template-columns:1.4fr .8fr .8fr 34px auto;gap:4px;margin-top:6px;align-items:center"><input type="text" data-wi="${i}" data-wk="label" value="${esc(x.label || '')}" placeholder="Label" aria-label="Slice label"><input type="number" data-wi="${i}" data-wk="percent" value="${x.percent || 0}" min="0" max="90" title="% off (0 = no prize)" aria-label="Percent off"><input type="number" data-wi="${i}" data-wk="weight" value="${x.weight || 1}" min="0" title="Chance weight" aria-label="Chance weight"><input type="color" data-wi="${i}" data-wk="color" value="${/^#[0-9a-f]{6}$/i.test(x.color || '') ? x.color : '#F4C9C3'}" aria-label="Slice color" style="width:34px;height:32px;padding:1px"><button class="btn xs" data-wrm="${i}" aria-label="Remove slice">×</button></div><div style="font-size:11px;color:var(--muted);margin-left:2px">${Math.round((Number(x.weight) || 0) / tot * 100)}% chance · ${Number(x.percent) ? x.percent + '% off' : 'no prize'}</div>`).join('')}
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Label · % off · chance weight · color</div><button class="btn xs" id="wadd" style="margin-top:8px"${(b.slices || []).length >= 12 ? ' disabled' : ''}>${ICON('plus')} Add slice</button>${fl('Wheel size (px)', num('size', b.size || 240, { min: 160, max: 360 }))}`; break; }
     case 'divider': body = `${grid(fl('Thickness', num('thickness', b.thickness || 1, { min: 1, max: 10 })), fl('Width (%)', num('width', b.width || 100, { min: 10, max: 100 })))}${fl('Color', color('color', b.color || '#E5E5E5'))}`; break;
     case 'html': body = `${fl('HTML', area('html', b.html, 10), 'Scripts are removed. For layout and styling only.')}`; break;
   }
   P.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin:8px 0 2px"><span style="flex:1;color:var(--muted);font-size:12px">On step "${esc(s.name)}"</span>
       <button class="btn xs" id="bup" aria-label="Move up"${SEL > 0 ? '' : ' disabled'}>${ICON('arrow-up')}</button><button class="btn xs" id="bdn" aria-label="Move down"${SEL < s.blocks.length - 1 ? '' : ' disabled'}>${ICON('arrow-down')}</button>
-      <button class="btn xs" id="bdup" aria-label="Duplicate">${ICON('copy')}</button><button class="btn xs danger" id="bdel" aria-label="Delete">${ICON('trash')}</button></div>
+      <button class="btn xs" id="bdup" aria-label="Duplicate" title="Duplicate (⌘D)">${ICON('copy')}</button><button class="btn xs danger" id="bdel" aria-label="Delete">${ICON('trash')}</button></div>
+    <div style="display:flex;gap:6px;margin:8px 0 2px"><button class="btn xs" id="bcp" title="⌘C, then ⌘V on any step">${ICON('clipboard')} Copy</button>${F.steps.length > 1 ? `<button class="btn xs" id="bcs">${ICON('copy')} Copy to steps…</button>` : ''}</div>
     ${body}
-    ${H('Block style')}${fl('Padding (px)', pad4('st.pad', (b.st || {}).pad))}${grid(fl('Alignment', selp('st.align', (b.st || {}).align || 'center', [['left', 'Left'], ['center', 'Center'], ['right', 'Right']])), fl('Background', color('st.bg', (b.st || {}).bg || '')))}
+    ${H('Layout')}${SEL > 0 ? chk('beside', b.beside, 'Place next to the block before it (same row)') : '<div style="font-size:12px;color:var(--muted)">Drag a block onto the left or right edge of another to put them side by side.</div>'}
+      ${b.beside || ((s.blocks[SEL + 1] || {}).beside) ? grid(fl('Width in row (%)', num('st.w', (b.st || {}).w || '', { min: 10, max: 90, ph: 'equal' })), fl('On phones', `<select id="krm" style="width:100%"><option value="stack"${b.keep_row_mobile ? '' : ' selected'}>Stack</option><option value="keep"${b.keep_row_mobile ? ' selected' : ''}>Keep side by side</option></select>`)) : ''}
+    ${H('Show on')}<div class="seg" id="kshow" style="display:flex;margin-top:6px">${[['all', 'Desktop & mobile'], ['desktop', 'Desktop only'], ['mobile', 'Mobile only']].map(([k, l]) => `<button data-sh="${k}" class="${(b.show || 'all') === k ? 'on' : ''}" style="flex:1">${l}</button>`).join('')}</div>
+    ${H('Block style')}<div class="seg" id="kdevst" style="display:flex;margin:6px 0 4px"><button data-ds="d" class="${SELDEV !== 'm' ? 'on' : ''}" style="flex:1">${ICON('devices')} All devices</button><button data-ds="m" class="${SELDEV === 'm' ? 'on' : ''}" style="flex:1">${ICON('device-mobile')} Mobile only</button></div>
+    ${SELDEV === 'm' ? `<div style="font-size:12px;color:var(--muted)">Changes here only apply on phones.</div>${fl('Padding on mobile (px)', pad4('mst.pad', (b.mst || {}).pad || (b.st || {}).pad))}${grid(fl('Alignment on mobile', selp('mst.align', (b.mst || {}).align || '', [['', 'Same as desktop'], ['left', 'Left'], ['center', 'Center'], ['right', 'Right']])), fl('Text size on mobile (%)', num('mst.scale', (b.mst || {}).scale || 100, { min: 50, max: 150 })))}${b.mst ? '<button class="btn xs" id="kmclr" style="margin-top:8px">Reset mobile to desktop</button>' : ''}`
+      : `${fl('Padding (px)', pad4('st.pad', (b.st || {}).pad))}${grid(fl('Alignment', selp('st.align', (b.st || {}).align || 'center', [['left', 'Left'], ['center', 'Center'], ['right', 'Right']])), fl('Background', color('st.bg', (b.st || {}).bg || '')))}`}
     <button class="btn xs" id="buni" style="margin-top:16px">${ICON('star')} Save as universal block</button>`;
-  bind(P, b, (x) => { if (['action', 'look', 'mode', 'display'].includes(x.dataset.p)) panel(); });
+  bind(P, b, (x) => { if (['action', 'look', 'mode', 'display', 'beside'].includes(x.dataset.p)) { if (x.dataset.p === 'beside') fixRows(s.blocks); panel(); } });
+  P.querySelectorAll('[data-sh]').forEach((x) => x.onclick = () => { b.show = x.dataset.sh === 'all' ? undefined : x.dataset.sh; panel(); mark(); });
+  P.querySelectorAll('[data-ds]').forEach((x) => x.onclick = () => { SELDEV = x.dataset.ds; panel(); });
+  const krm = $('krm'); if (krm) krm.onchange = () => { b.keep_row_mobile = krm.value === 'keep' || undefined; mark(); };
+  const kmc = $('kmclr'); if (kmc) kmc.onclick = () => { delete b.mst; panel(); mark(); };
+  P.querySelectorAll('[data-ri]').forEach((x) => x.addEventListener(x.tagName === 'SELECT' ? 'change' : 'input', () => { b.items[Number(x.dataset.ri)][x.dataset.rk] = x.dataset.rk === 'stars' ? Number(x.value) : x.value; mark(); }));
+  P.querySelectorAll('[data-rrm]').forEach((x) => x.onclick = () => { b.items.splice(Number(x.dataset.rrm), 1); panel(); mark(); });
+  const ra = $('radd'); if (ra) ra.onclick = () => { b.items = b.items || []; b.items.push({ text: '', name: '', stars: 5 }); panel(); mark(); };
+  P.querySelectorAll('[data-wi]').forEach((x) => x.addEventListener(x.type === 'color' ? 'change' : 'input', () => { const sl = b.slices[Number(x.dataset.wi)]; sl[x.dataset.wk] = x.type === 'number' ? Math.max(0, Number(x.value) || 0) : x.value; mark(); if (x.dataset.wk === 'weight' || x.dataset.wk === 'percent') { clearTimeout(window.__wT); window.__wT = setTimeout(panel, 600); } }));
+  P.querySelectorAll('[data-wrm]').forEach((x) => x.onclick = () => { if (b.slices.length <= 2) return toast('A wheel needs at least 2 slices', 1); b.slices.splice(Number(x.dataset.wrm), 1); panel(); mark(); });
+  const wa = $('wadd'); if (wa) wa.onclick = () => { b.slices.push({ label: '5% OFF', percent: 5, weight: 10 }); panel(); mark(); };
   const fullSel = P.querySelector('[data-k="full"]'); if (fullSel) fullSel.onchange = () => { b.full = fullSel.value === '' ? undefined : fullSel.value === '1'; mark(); };
   $('bup').onclick = () => { [s.blocks[SEL - 1], s.blocks[SEL]] = [s.blocks[SEL], s.blocks[SEL - 1]]; SEL--; panel(); mark(); };
   $('bdn').onclick = () => { [s.blocks[SEL + 1], s.blocks[SEL]] = [s.blocks[SEL], s.blocks[SEL + 1]]; SEL++; panel(); mark(); };
   $('bdup').onclick = () => { const c = clone(b); c.id = rid(); s.blocks.splice(SEL + 1, 0, c); SEL++; panel(); mark(); };
   $('bdel').onclick = () => { s.blocks.splice(SEL, 1); SEL = null; panel(); mark(); };
+  $('bcp').onclick = () => copyBlock(b); const bcs = $('bcs'); if (bcs) bcs.onclick = () => copyToSteps(b);
   $('buni').onclick = async () => { const n = prompt('Name for this universal block', BNAME[b.type] || b.type); if (!n) return; const item = { id: Math.random().toString(36).slice(2, 9), name: n.slice(0, 40), block: clone(b) };
     try { UNIV = (await api('/api/mk/forms-universal', { method: 'PUT', body: JSON.stringify({ items: [...UNIV, item] }) })).items || UNIV; toast('Saved to Universal'); } catch (e) { toast(e.message, 1); } };
   const emc = $('emc'); if (emc) emc.oninput = () => { F.email_consent_text = emc.value; mark(); };

@@ -66,20 +66,42 @@ function findById(o, id) {
     vals.forEach(([, v]) => walk(v)); };
   walk(o); return hit;
 }
+const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
+const hosted = new Map();
+/** Copy a Klaviyo-hosted image into Buzzin's image library (Klaviyo is cancelled; its CDN may go away). */
+async function rehost(url, alt) {
+  if (!url || url.startsWith(PUBLIC_URL())) return url;
+  if (hosted.has(url)) return hosted.get(url);
+  let out = url;
+  try {
+    const name = `klaviyo:${url.split("?")[0].split("/").pop()}`.slice(0, 120);
+    const prior = (await db(`SELECT id FROM mk_images WHERE name=$1 ORDER BY id DESC LIMIT 1`, [name])).rows[0];
+    if (prior) out = `${PUBLIC_URL()}/mk/img/${prior.id}`;
+    else {
+      const r = await fetch(url, { signal: AbortSignal.timeout(30000) }); const ct = (r.headers.get("content-type") || "").split(";")[0];
+      if (r.ok && /^image\/(png|jpe?g|gif|webp|svg\+xml)$/.test(ct)) { const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length < 15 * 1024 * 1024) { const id = (await db(`INSERT INTO mk_images (store, name, mime, bytes, created_by) VALUES ('lb',$1,$2,$3,'klaviyo import') RETURNING id`, [name, ct, buf])).rows[0].id; out = `${PUBLIC_URL()}/mk/img/${id}`; } }
+      else note(`image copy: ${r.status} ${ct} for ${url.slice(0, 120)}`);
+    }
+  } catch (e) { note(`image copy failed (kept Klaviyo's address): ${e.message.slice(0, 120)}`); }
+  hosted.set(url, out); return out;
+}
 async function imageUrl(id, raw) {
-  const inline = urlsIn(raw)[0]; if (inline) return inline;
+  const inline = urlsIn(raw)[0]; if (inline) return rehost(inline);
   if (!id) return "";
   if (imgCache.has(id)) return imgCache.get(id);
   let url = "";
   try { const j = await kget(`/images/${id}/`); const at = (j.data && j.data.attributes) || {}; url = at.image_url || at.url || at.src || ""; }
   catch (e) { if (!imgErr) { imgErr = true; note(`image ${id}: Images API ${e.status || ""} (form images aren't in the image library); trying the storefront copy`); } }
   if (!url) { const os = await onsiteForms(); if (os) { url = findById(os, id); note(`image ${id}: ${url ? "found on the storefront copy" : "not found on the storefront copy"}`); } }
-  imgCache.set(id, url); await sleep(300); return url;
+  url = await rehost(url); imgCache.set(id, url); await sleep(300); return url;
 }
 
 /** One Klaviyo block → Buzzin block (or null), with notes for anything dropped. */
 async function block(b, notes, ctx) {
   const p = b.properties || {}, s = b.styles || {};
+  const dd = Array.isArray(p.display_device) ? p.display_device.map(String) : null;
+  ctx.show = dd && dd.length === 1 ? (dd[0] === "desktop" ? "desktop" : dd[0] === "mobile" ? "mobile" : undefined) : undefined;
   const st = { pad: pad(s.padding, [0, 0, 10, 0]), align: s.horizontal_alignment || (s.text_styles && s.text_styles.alignment) || "center", ...(s.background_color && rgba(s.background_color) && rgba(s.background_color).pct > 0 ? { bg: col(s.background_color) } : {}) };
   const t = String(b.type || "").toLowerCase();
   const key = (n, d) => String((n || d || "answer")).replace(/^\$/, "").replace(/[^a-z0-9_]/gi, "_").toLowerCase().slice(0, 40);
@@ -122,6 +144,9 @@ async function block(b, notes, ctx) {
     case "dropdown": case "select": return { id: rid(), type: "dropdown", label: p.label || "", show_label: !!p.show_label, placeholder: p.placeholder || "Choose…", key: key(p.property_name, p.label), options: options(p.options || p.choices), required: !!p.required, st };
     case "radio_buttons": case "radio": case "radio_button": return { id: rid(), type: "radio", label: p.label || "", key: key(p.property_name, p.label), options: options(p.options || p.choices), display: "buttons", required: !!p.required, st };
     case "checkboxes": case "checkbox": return { id: rid(), type: "checkboxes", label: p.label || "", key: key(p.property_name, p.label), options: options(p.options || p.choices), required: !!p.required, st };
+    case "spin_to_win": case "wheel": { const sl = (p.slices || p.wheel_slices || p.options || []).map((x, i) => ({ label: String(x.label || x.text || x.value || `Prize ${i + 1}`).slice(0, 24), percent: Number(String(x.discount || x.value || "").replace(/\D/g, "")) || 0, weight: Number(x.weight || x.probability || x.chance) || 1, color: x.color || x.background_color || undefined }));
+      ctx.coupon = true; return { id: rid(), type: "wheel", size: 240, slices: sl.length >= 2 ? sl : [{ label: "10% OFF", percent: 10, weight: 50 }, { label: "15% OFF", percent: 15, weight: 30 }, { label: "NO LUCK", percent: 0, weight: 20 }], st }; }
+    case "signup_counter": case "sign_up_counter": return { id: rid(), type: "counter", text: String(p.content || p.text || "{{count}} people have already joined").replace(/<[^>]+>/g, ""), start: 0, st };
     default: notes.push(`"${t}" block isn't in Buzzin yet (left out)`); ctx.unknown.add(t); return null;
   }
 }
@@ -154,7 +179,7 @@ async function convertVersion(form, v) {
   if (is.corner_radius != null) style.input.radius = Number(is.corner_radius); if (is.field_height) style.input.height = Number(is.field_height); if (its.font_size) style.input.font_size = Number(its.font_size);
   if (s.mobile_overlay) style.mobile.sheet = !s.mobile_overlay.enabled ? style.mobile.sheet : true;
   const side = P.side_image_settings || {};
-  const sideW = { small: 33, medium: 42, large: 50 }[side.size] || 42;
+  const sideW = { small: 40, medium: 50, large: 60 }[side.size] || 50;   // Klaviyo "medium" is a 50/50 split
 
   const steps = [];
   const vsteps = v.steps || [];
@@ -171,11 +196,13 @@ async function convertVersion(form, v) {
       if (cols.length > 1 && (isImgOnly(c) || (ci0 && !bl.length))) {
         const img = ci0 ? (ci0.properties || ci0) : (bl[0].properties && bl[0].properties.image) || {};
         const pos = side.alignment ? (side.alignment === "left" ? "left" : "right") : ci === 0 ? "left" : "right";
-        out.image = { src: await imageUrl(img.id, ci0 || bl[0]), pos, width: sideW };
+        const bis = (ci0 && ci0.styles) || {};
+        out.image = { src: await imageUrl(img.id, ci0 || bl[0]), pos, width: sideW, alt: img.alt_text || "", fit: /contain/.test(bis.position || "") ? "contain" : "cover",
+          focus: `${bis.horizontal_alignment || "center"} ${({ top: "top", bottom: "bottom" })[bis.vertical_alignment] || "center"}`, bg: (c.styles && c.styles.background_color) || undefined };
         if (!out.image.src) notes.push(`step "${k.name || i + 1}": side photo couldn't be copied; the split is kept, add the photo in Step ⋮ → Step settings → Side image`);
         continue;
       }
-      for (const r of rows) for (const b0 of r.blocks || []) { const nb = await block(b0, notes, ctx); if (nb) out.blocks.push(nb); }
+      for (const r of rows) { let k2 = 0; for (const b0 of r.blocks || []) { const nb = await block(b0, notes, ctx); if (nb) { if (ctx.show) nb.show = ctx.show; if (k2 > 0) nb.beside = true; out.blocks.push(nb); k2++; } } }
     }
     // Klaviyo can also keep the side image only in the version settings
     if (out.image.pos === "none" && side && side.alignment && (P.side_image || P.side_image_settings && P.side_image_settings.image)) {
@@ -224,6 +251,8 @@ async function convertVersion(form, v) {
       if (!ip.length && !ep.length && !targeting.utm_source && hasAny && !inc.every(all)) notes.push(`page rule "${t}" needs to be set again`);
     }
     else if (/utm/.test(t)) targeting.utm_source = String(tp.utm_source || tp.value || "");
+    else if (t === "location" || /country|geo/.test(t)) { const al = (tp.allow_list || []).map(String), dl = (tp.deny_list || []).map(String); if (al.length) { targeting.countries = al; targeting.countries_mode = "include"; } else if (dl.length) { targeting.countries = dl; targeting.countries_mode = "exclude"; } }
+    else if (t === "custom_javascript") { if (tp.code || tp.script || tp.javascript) targeting.custom_js = String(tp.code || tp.script || tp.javascript).slice(0, 4000); else notes.push("Klaviyo's custom JavaScript rule couldn't be read through the API; if the form should only show to Meta ad traffic, set utm_source in Targeting"); }
     else { notes.push(t === "custom_javascript" ? "Klaviyo's custom JavaScript display rule isn't in Buzzin; check Targeting (utm_source / pages) does what it did" : t === "location" ? "Klaviyo's visitor-location rule isn't in Buzzin yet (shows everywhere)" : `display rule "${t}" isn't in Buzzin yet`); note(`rule "${t}": ${JSON.stringify(tp).slice(0, 500)}`); }
   }
   if (!timing) targeting.immediate = true;
@@ -311,7 +340,7 @@ function routes(app, { admin, actorOf, fail }) {
 
 async function init() {
   // Copy the Klaviyo forms once, shortly after boot (later copies run from the Sign-up forms page).
-  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v5").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v5", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
+  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v6").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v6", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
 }
 
 module.exports = { init, routes, importAll, convertVersion, notesFor };
