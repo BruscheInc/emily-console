@@ -50,8 +50,12 @@ const DEFAULT_FORM = (brand) => ({
 async function list(store) {
   const rows = (await db(`SELECT f.*, (SELECT count(*)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type='viewed' AND NOT e.preview) views,
       (SELECT count(*)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type='submitted_email' AND NOT e.preview) emails,
-      (SELECT count(*)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type='submitted_phone' AND NOT e.preview) phones
-    FROM mk_forms f ${store ? "WHERE f.store=$1" : ""} ORDER BY f.priority DESC, f.updated_at DESC`, store ? [store] : [])).rows;
+      (SELECT count(*)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type='submitted_phone' AND NOT e.preview) phones,
+      (SELECT count(DISTINCT e.profile_id)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type LIKE 'submitted_%' AND NOT e.preview) submitted,
+      (SELECT COALESCE(sum(o.value),0) FROM mk_events o WHERE o.type='placed_order' AND o.profile_id IN (SELECT e.profile_id FROM mk_form_events e WHERE e.form_id=f.id AND e.type='submitted_email' AND NOT e.preview)
+         AND o.at > (SELECT min(e2.at) FROM mk_form_events e2 WHERE e2.form_id=f.id AND e2.profile_id=o.profile_id AND e2.type='submitted_email' AND NOT e2.preview)) revenue,
+      (SELECT l.name FROM mk_lists l WHERE l.id=f.list_id) list_name
+    FROM mk_forms f ${store ? "WHERE f.store=$1" : ""} ORDER BY f.updated_at DESC`, store ? [store] : [])).rows;
   return rows;
 }
 async function get(id) { return V2.toV2((await db(`SELECT * FROM mk_forms WHERE id=$1`, [Number(id)])).rows[0] || null); }
@@ -207,7 +211,30 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   app.post("/api/mk/forms", async (req, res) => { if (!guard(req, res)) return; try { const s = store((req.body || {}).store); if (!s) return res.status(400).json({ error: "Pick a store first" }); res.json(await create(s, (req.body || {}).name, actorOf(req))); } catch (e) { fail(res, e); } });
   app.get("/api/mk/forms/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" }); res.json({ ...f, stats: await stats(f.id), lists: await MK().lists(f.store), import_notes: await require("./mk-forms-klaviyo").notesFor(f.id) }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/forms/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await save(req.params.id, req.body || {}, actorOf(req), isAdmin(req)); CACHE.clear(); res.json(f); } catch (e) { fail(res, e); } });
-  app.delete("/api/mk/forms/:id", async (req, res) => { if (!admin(req, res)) return; try { await db(`DELETE FROM mk_forms WHERE id=$1`, [Number(req.params.id)]); CACHE.clear(); res.json({ ok: true }); } catch (e) { fail(res, e); } });
+  app.get("/api/mk/forms/:id/analytics", async (req, res) => {
+    if (!guard(req, res)) return;
+    try {
+      const id = Number(req.params.id), days = Math.min(3650, Math.max(1, Number(req.query.days) || 30));
+      const W = `form_id=$1 AND NOT preview AND at > now() - ($2 || ' days')::interval`;
+      const t = (await db(`SELECT count(*) FILTER (WHERE type='viewed')::int viewed, count(*) FILTER (WHERE type='closed')::int closed,
+          count(DISTINCT profile_id) FILTER (WHERE type LIKE 'submitted_%')::int submitted, count(*) FILTER (WHERE type='submitted_email')::int emails,
+          count(*) FILTER (WHERE type='submitted_phone')::int phones, count(*) FILTER (WHERE type='submitted_question')::int answers FROM mk_form_events WHERE ${W}`, [id, days])).rows[0];
+      const rev = (await db(`SELECT count(*)::int orders, COALESCE(sum(o.value),0) revenue FROM mk_events o
+          JOIN (SELECT profile_id, min(at) at FROM mk_form_events WHERE ${W} AND type='submitted_email' GROUP BY profile_id) s ON s.profile_id=o.profile_id
+          WHERE o.type='placed_order' AND o.at > s.at AND NOT COALESCE((o.props->>'cancelled')::boolean,false)`, [id, days])).rows[0];
+      const daily = (await db(`SELECT to_char(d,'YYYY-MM-DD') day, COALESCE(v,0)::int viewed, COALESCE(sb,0)::int submitted FROM generate_series((now() - ($2 || ' days')::interval)::date, now()::date, '1 day') d
+          LEFT JOIN (SELECT at::date dd, count(*) FILTER (WHERE type='viewed') v, count(DISTINCT profile_id) FILTER (WHERE type LIKE 'submitted_%') sb FROM mk_form_events WHERE ${W} GROUP BY 1) x ON x.dd=d::date ORDER BY d`, [id, Math.min(days, 365)])).rows;
+      res.json({ days, ...t, rate: t.viewed ? Math.round(t.submitted / t.viewed * 1000) / 10 : 0, orders: rev.orders, revenue: Number(rev.revenue), rpv: t.viewed ? Number(rev.revenue) / t.viewed : 0, daily });
+    } catch (e) { fail(res, e); }
+  });
+  app.post("/api/mk/forms/:id/clone", async (req, res) => {
+    if (!guard(req, res)) return;
+    try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" });
+      const r = (await db(`INSERT INTO mk_forms (store, name, status, priority, steps, style, targeting, teaser, coupon, list_id, sms_consent_text, email_consent_text, source, updated_by)
+        VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9,$10,$11,'buzzin',$12) RETURNING id`, [f.store, `${f.name} (copy)`.slice(0, 120), f.priority || 0, JSON.stringify(f.steps), JSON.stringify(f.style), JSON.stringify(f.targeting), JSON.stringify(f.teaser), JSON.stringify(f.coupon), f.list_id, f.sms_consent_text, f.email_consent_text, actorOf(req)])).rows[0];
+      res.json({ id: r.id }); } catch (e) { fail(res, e); }
+  });
+  app.delete("/api/mk/forms/:id", async (req, res) => { if (!admin(req, res)) return; try { await db(`DELETE FROM mk_forms WHERE id=$1`, [Number(req.params.id)]); await db(`DELETE FROM mk_form_imports WHERE form_id=$1`, [Number(req.params.id)]).catch(() => {}); CACHE.clear(); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/tracking", async (req, res) => { if (!admin(req, res)) return; try { const b = req.body || {}; const cur = await MK().settings(); const t = { ...(cur.tracking || {}) }; for (const k of ["lb", "lbo"]) if (b[k] != null) t[k] = !!b[k]; const out = await MK().saveSettings({ tracking: t }, actorOf(req)); CACHE.clear(); res.json(out); } catch (e) { fail(res, e); } });
 }
 

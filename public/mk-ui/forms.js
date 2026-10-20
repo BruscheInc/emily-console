@@ -22,24 +22,94 @@ const FONTS = [['inherit', 'Store font'], ['Helvetica, Arial, sans-serif', 'Helv
 const rid = () => 'b' + Math.random().toString(36).slice(2, 8);
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
+const LCSS = `<style>
+.kl{background:#fff;border:1px solid var(--line);border-radius:14px;min-height:calc(100vh - 120px)}
+.kl-h{display:flex;align-items:center;gap:10px;padding:16px 24px;border-bottom:1px solid var(--line)}.kl-h h1{margin:0;font-size:19px;flex:1}
+.kl-b{padding:20px 24px}
+.kl-f{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}.kl-f input{min-width:230px}
+.kl-f select{border:1.5px dashed #A1A1AA;border-radius:8px;background:#fff;padding:0 30px 0 12px;height:38px;appearance:auto}
+.kl table{width:100%;border-collapse:collapse}.kl th{font-weight:500;text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);color:#3F3F46}
+.kl td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}.kl tr.row:hover td{background:#FAFAFA}.kl .n{text-align:right}
+.kl a.nm{color:#2563EB;text-decoration:none;font-weight:500;font-size:15px}.kl a.nm:hover{text-decoration:underline}.kl .sub2{color:#52525B;font-size:13px;margin-top:2px}
+.kl .st{display:inline-block;background:#F4F4F5;border-radius:8px;padding:4px 10px;font-weight:500}.kl .st.live{background:#DCFCE7;color:#166534}.kl .st.preview{background:#FEF3C7;color:#92400E}
+.kl .rt{display:inline-flex;align-items:center;gap:6px;justify-content:flex-end}.kl .rt i{font-size:17px}.kl .rt.bad i{color:#DC2626}.kl .rt.meh i{color:#D97706}.kl .rt.ok i{color:#16A34A}
+.kl .link{color:#2563EB;cursor:pointer}.kl .dots{all:unset;cursor:pointer;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:18px}.kl .dots:hover{background:#F4F4F5}
+.kl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}.kl-kpi{border:1px solid var(--line);border-radius:12px;padding:14px 16px}.kl-kpi .l{color:#52525B;font-size:13px}.kl-kpi .v{font-size:24px;font-weight:700;margin-top:4px}.kl-kpi .s{color:var(--muted);font-size:12px;margin-top:2px}
+.kl-chart{border:1px solid var(--line);border-radius:12px;padding:14px 16px}.kl-legend{display:flex;gap:16px;font-size:13px;margin-bottom:6px}.kl-legend span{display:inline-flex;align-items:center;gap:6px}.kl-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+</style>`;
+const rateCls = (r, v) => (!v ? '' : r < 0.5 ? 'bad' : r < 2 ? 'meh' : 'ok');
+const rateIcon = (c) => (c === 'bad' ? 'alert-circle' : c === 'meh' ? 'alert-triangle' : c === 'ok' ? 'circle-check' : '');
 async function renderForms(el, id) {
+  if (id && String(id).indexOf('a-') === 0) return formAnalytics(el, String(id).slice(2));
   if (id) return editForm(el, id);
   document.querySelectorAll('.ke').forEach((x) => x.remove());
   const r = await api('/api/mk/forms?' + qs({ store: STORE }));
   let imp = null; try { imp = await api('/api/mk/forms/import-klaviyo'); } catch (e) { imp = null; }
-  el.innerHTML = `<h1>Sign-up forms</h1><p class="sub">Popups, flyouts, full-page, banners and embedded forms for the store. A form only appears on the store when it's Live, or when you open the store with the preview link.</p>
-  <div class="bar"><button class="btn pri" id="fn"${STORE ? '' : ' disabled title="Pick a store first"'}><i class="ti ti-plus"></i> Create form</button>${STORE ? '' : '<span style="color:var(--muted)">Pick the store the form goes on (top) to create one.</span>'}
-    ${imp ? `<span class="sp" style="flex:1"></span><button class="btn" id="fki"${imp.running ? ' disabled' : ''}><i class="ti ti-download"></i> ${imp.running ? 'Copying from Klaviyo…' : 'Copy forms from Klaviyo'}</button>` : ''}</div>
-  ${imp && (imp.running || imp.last) ? `<div class="card" style="margin-bottom:12px;font-size:13px"><b>Klaviyo forms</b> · ${imp.running ? 'copying now…' : esc((imp.last && imp.last.out) || '')}${imp.last && imp.last.at ? ` <span style="color:var(--muted)">(${fmtDT(imp.last.at)})</span>` : ''}<div style="color:var(--muted);margin-top:4px">Copies come in as Drafts named after the Klaviyo form. Running it again only adds forms that aren't here yet. Nothing in Klaviyo changes.</div></div>` : ''}
-  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Form</th><th>Status</th><th>Type</th><th>From</th><th class="n">Views</th><th class="n">Emails</th><th class="n">Phones</th><th class="n">Sign-up rate</th></tr></thead><tbody>
-  ${r.forms.map((f) => `<tr class="click" data-id="${f.id}"><td><b>${esc(f.name)}</b></td><td>${pill(STATUS, f.status)}</td><td>${esc(TYPE_NAME[(f.style || {}).type || (f.style || {}).layout] || 'Popup')}</td><td>${f.source === 'klaviyo' ? 'Klaviyo copy' : 'Buzzin'}</td><td class="n">${fmtN(f.views)}</td><td class="n">${fmtN(f.emails)}</td><td class="n">${fmtN(f.phones)}</td><td class="n">${f.views ? (Math.round(f.emails / f.views * 1000) / 10) + '%' : '—'}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No forms yet.</td></tr>'}
-  </tbody></table></div></div>`;
-  el.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => { location.hash = '#forms/' + tr.dataset.id; });
+  el.innerHTML = LCSS + `<div class="kl"><div class="kl-h"><h1>Sign-up forms</h1>
+      ${imp ? `<button class="btn" id="fki"${imp.running ? ' disabled' : ''} title="${esc((imp.last && imp.last.out) || 'Copies Klaviyo forms in as drafts')}"><i class="ti ti-download"></i> ${imp.running ? 'Copying from Klaviyo…' : 'Copy forms from Klaviyo'}</button>` : ''}
+      <button class="btn pri" id="fn"${STORE ? '' : ' disabled title="Pick the store the form goes on (top)"'}>Create form</button></div>
+    <div class="kl-b"><div class="kl-f"><input type="search" id="fq" placeholder="Search forms"><select id="fsf"><option value="">Status</option><option value="draft">Draft</option><option value="preview">Preview only</option><option value="live">Live</option></select>
+      <select id="ftf"><option value="">Form type</option>${Object.entries(TYPE_NAME).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+    <table><thead><tr><th>Name</th><th>Type</th><th>Status</th><th class="n">Submitted</th><th class="n">Submit rate</th><th class="n">Total revenue</th><th style="width:44px"></th></tr></thead><tbody id="ftb"></tbody></table>
+    <div id="fcount" style="padding:14px 0;color:#3F3F46"></div></div></div>`;
+  const typeOf = (f) => (f.style || {}).type || (f.style || {}).layout || 'popup';
+  const TYPE_ICON = { popup: 'app-window', flyout: 'layout-bottombar', full: 'maximize', embedded: 'layout-list', banner: 'layout-navbar' };
+  const SN = { draft: 'Draft', preview: 'Preview only', live: 'Live' };
+  const drawRows = () => {
+    const q = ($('fq').value || '').toLowerCase(), sf = $('fsf').value, tf = $('ftf').value;
+    const rows = r.forms.filter((f) => (!q || f.name.toLowerCase().includes(q)) && (!sf || f.status === sf) && (!tf || typeOf(f) === tf));
+    $('ftb').innerHTML = rows.map((f) => { const rate = f.views ? (f.submitted || 0) / f.views * 100 : 0, rc = rateCls(rate, f.views);
+      return `<tr class="row" data-id="${f.id}"><td><a class="nm" href="#forms/${f.id}">${esc(f.name)}</a><div class="sub2">${esc(f.list_name || '')}</div></td>
+      <td title="${esc(TYPE_NAME[typeOf(f)] || 'Popup')}"><i class="ti ti-${TYPE_ICON[typeOf(f)] || 'app-window'}" style="font-size:20px"></i></td><td><span class="st ${f.status}">${SN[f.status] || f.status}</span></td>
+      <td class="n"><span class="link" data-an="${f.id}">${fmtN(f.submitted || 0)}</span></td><td class="n"><span class="rt ${rc}">${rc ? `<i class="ti ti-${rateIcon(rc)}"></i>` : ''}${f.views ? rate.toFixed(1) + '%' : '—'}</span></td><td class="n">${fmt$(f.revenue || 0)}</td>
+      <td><button class="dots" data-fm="${f.id}" aria-label="Form options"><i class="ti ti-dots-vertical"></i></button></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No forms match.</td></tr>';
+    $('fcount').textContent = rows.length ? `1 - ${rows.length} of ${rows.length}` : '';
+    $('ftb').querySelectorAll('[data-an]').forEach((x) => x.onclick = (e) => { e.stopPropagation(); location.hash = '#forms/a-' + x.dataset.an; });
+    $('ftb').querySelectorAll('[data-fm]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); formMenu(r.forms.find((f) => String(f.id) === b.dataset.fm), b); });
+  };
+  $('fq').oninput = drawRows; $('fsf').onchange = drawRows; $('ftf').onchange = drawRows; drawRows();
   $('fn').onclick = async () => { try { const f = await api('/api/mk/forms', { method: 'POST', body: JSON.stringify({ store: STORE, name: 'Welcome popup' }) }); location.hash = '#forms/' + f.id; } catch (e) { toast(e.message, 1); } };
   const ki = $('fki'); if (ki) ki.onclick = async () => { try { await api('/api/mk/forms/import-klaviyo', { method: 'POST', body: JSON.stringify({}) }); toast('Copying your Klaviyo forms'); setTimeout(go, 1500); } catch (e) { toast(e.message, 1); } };
   if (imp && imp.running) setTimeout(() => { if ((location.hash || '') === '#forms') go(); }, 6000);
 }
-window.addEventListener('hashchange', () => { if (!/^#forms\/\d+/.test(location.hash || '')) document.querySelectorAll('.ke').forEach((x) => x.remove()); });
+
+/* Form analytics (⋮ → Analytics, or click the Submitted number) */
+async function formAnalytics(el, id, days = 30) {
+  const [f, a] = await Promise.all([api('/api/mk/forms/' + id), api(`/api/mk/forms/${id}/analytics?days=${days}`)]);
+  const rc = rateCls(a.rate, a.viewed);
+  const k = (l, v, s) => `<div class="kl-kpi"><div class="l">${esc(l)}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`;
+  el.innerHTML = LCSS + `<div class="kl"><div class="kl-h"><a href="#forms" class="dots" aria-label="Back"><i class="ti ti-arrow-left"></i></a><h1>${esc(f.name)} <span style="font-weight:400;color:var(--muted);font-size:15px">· Analytics</span></h1>
+      <select id="anr" aria-label="Date range" style="height:38px;border-radius:8px">${[[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [365, 'Last 365 days'], [3650, 'All time']].map(([d, l]) => `<option value="${d}"${d === days ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <a class="btn" href="#forms/${f.id}"><i class="ti ti-pencil"></i> Edit form</a></div>
+    <div class="kl-b"><div class="kl-kpis">
+      ${k('Submit rate', `<span class="rt ${rc}" style="justify-content:flex-start">${rc ? `<i class="ti ti-${rateIcon(rc)}"></i>` : ''}${a.rate.toFixed(1)}%</span>`, 'submitted ÷ viewed')}
+      ${k('Submitted', fmtN(a.submitted), `${fmtN(a.emails)} emails · ${fmtN(a.phones)} phones`)}${k('Viewed', fmtN(a.viewed), `${fmtN(a.closed)} closed it`)}
+      ${k('Total revenue', fmt$(a.revenue), `${fmtN(a.orders)} orders after signing up`)}${k('Revenue per view', '$' + Number(a.rpv || 0).toFixed(2))}
+      ${k('Text sign-up rate', a.emails ? Math.round(a.phones / a.emails * 100) + '%' : '—', 'of email sign-ups also gave a phone')}</div>
+      <div class="kl-chart"><div class="kl-legend"><span><i style="background:#93C5FD"></i>Viewed</span><span><i style="background:#2563EB"></i>Submitted</span></div><div id="anc"></div></div>
+      <p style="color:var(--muted);font-size:12px;margin-top:10px">Counts live traffic only (previews aren't counted). Revenue is orders placed after someone signed up through this form.</p></div></div>`;
+  $('anr').onchange = (e) => formAnalytics(el, id, Number(e.target.value));
+  const d = a.daily || [], W = 900, Hh = 220, pad = 28, mx = Math.max(1, ...d.map((x) => x.viewed), ...d.map((x) => x.submitted));
+  const X = (i) => pad + (d.length < 2 ? 0 : i * (W - pad * 2) / (d.length - 1)), Y = (v) => Hh - pad - v / mx * (Hh - pad * 2);
+  const line = (key) => d.map((x, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(x[key]).toFixed(1)}`).join(' ');
+  const ticks = d.length ? [0, Math.floor((d.length - 1) / 2), d.length - 1] : [];
+  $('anc').innerHTML = d.length ? `<svg viewBox="0 0 ${W} ${Hh}" width="100%" role="img" aria-label="Views and submissions per day">
+    ${[0, 0.5, 1].map((t) => `<line x1="${pad}" x2="${W - pad}" y1="${Y(mx * t)}" y2="${Y(mx * t)}" stroke="#E4E4E7"/><text x="${pad - 6}" y="${Y(mx * t) + 4}" text-anchor="end" font-size="11" fill="#71717A">${Math.round(mx * t)}</text>`).join('')}
+    <path d="${line('viewed')}" fill="none" stroke="#93C5FD" stroke-width="2"/><path d="${line('submitted')}" fill="none" stroke="#2563EB" stroke-width="2.5"/>
+    ${ticks.map((i) => `<text x="${X(i)}" y="${Hh - 8}" text-anchor="middle" font-size="11" fill="#71717A">${d[i].day.slice(5)}</text>`).join('')}</svg>` : '<div class="empty">No data yet.</div>';
+}
+
+function formMenu(f, anchor) {
+  menu(anchor, [
+    ['Edit', 'pencil', () => { location.hash = '#forms/' + f.id; }],
+    ['Analytics', 'chart-line', () => { location.hash = '#forms/a-' + f.id; }],
+    ['Rename', 'forms', async () => { const n = prompt('Form name', f.name); if (!n || n === f.name) return; try { await api('/api/mk/forms/' + f.id, { method: 'PUT', body: JSON.stringify({ name: n.slice(0, 120) }) }); toast('Renamed'); go(); } catch (e) { toast(e.message, 1); } }],
+    ['Clone', 'copy', async () => { try { const c = await api('/api/mk/forms/' + f.id + '/clone', { method: 'POST', body: JSON.stringify({}) }); toast('Cloned as a draft'); location.hash = '#forms/' + c.id; } catch (e) { toast(e.message, 1); } }],
+    [f.status === 'live' ? 'Unpublish (back to draft)' : 'Publish', f.status === 'live' ? 'player-pause' : 'player-play', async () => { if (f.status !== 'live' && !confirm(`Make "${f.name}" live on the store?`)) return; try { await api('/api/mk/forms/' + f.id, { method: 'PUT', body: JSON.stringify({ status: f.status === 'live' ? 'draft' : 'live' }) }); toast(f.status === 'live' ? 'Back to draft' : 'Live'); go(); } catch (e) { toast(e.message, 1); } }],
+    ['Delete', 'trash', async () => { if (!confirm(`Delete "${f.name}"? This can't be undone.`)) return; try { await api('/api/mk/forms/' + f.id, { method: 'DELETE' }); toast('Deleted'); go(); } catch (e) { toast(e.message, 1); } }, { danger: true }],
+  ]);
+}
+window.addEventListener('hashchange', () => { if (!/^#forms\/\d+$/.test(location.hash || '')) document.querySelectorAll('.ke').forEach((x) => x.remove()); });
 
 /* ---------------- editor state ---------------- */
 let F = null, RAIL = 'add', SI = 0, SEL = null, STEPSET = false, VIEW = 'both', ZOOM = 'fit', MODE = 'edit', ADDTAB = 'basic', fdirty = false, saving = false, UNIV = [];
