@@ -137,6 +137,7 @@ async function convertVersion(form, v) {
       // a column that only holds one image is the side image
       if (cols.length > 1 && bl.length === 1 && String(bl[0].type).toLowerCase() === "image") {
         out.image = { src: await imageUrl(bl[0].properties && bl[0].properties.image && bl[0].properties.image.id), pos: side.alignment === "left" ? "left" : "right", width: sideW };
+        if (!out.image.src) notes.push(`step "${k.name || i + 1}": side image needs re-adding (Step ⋮ → Step settings → Side image)`);
         continue;
       }
       for (const r of rows) for (const b0 of r.blocks || []) { const nb = await block(b0, notes, ctx); if (nb) out.blocks.push(nb); }
@@ -173,10 +174,12 @@ async function convertVersion(form, v) {
         if (Array.isArray(o)) return o.forEach((x) => walk(x, bad)); if (typeof o === "object") for (const [k2, v2] of Object.entries(o)) walk(v2, bad || /exclude|deny|block|not_/i.test(k2) || (o.match_type && /not|exclude/i.test(String(o.match_type)))); };
       walk(tp, /exclude|not/.test(t) || !!tp.exclude);
       const toPath = (u) => { const m = String(u).match(/[?&]utm_source=([^&#]+)/i); if (m) { targeting.utm_source = decodeURIComponent(m[1]); return null; } try { const x = new URL(u, "https://x"); return x.pathname === "/" && /^https?:/.test(u) ? null : x.pathname + (/\*$/.test(u) ? "" : ""); } catch (e) { return u; } };
-      const ip = inc.map(toPath).filter(Boolean), ep = exc.map(toPath).filter(Boolean);
+      const all = (x) => x === "*" || x === "/*" || x === "/";   // "*" = every page, which is Buzzin's default
+      const ip = inc.filter((x) => !all(x)).map(toPath).filter(Boolean), ep = exc.filter((x) => !all(x)).map(toPath).filter(Boolean);
       if (ip.length) targeting.only_paths = [...new Set(ip)].join("\n"); if (ep.length) targeting.hide_paths = [...new Set(ep)].join("\n");
       note(`rule "${t}" on "${form.attributes ? form.attributes.name : form.id}": ${JSON.stringify(tp).slice(0, 500)}`);
-      if (!ip.length && !ep.length && !targeting.utm_source) notes.push(`page rule "${t}" needs to be set again`);
+      const hasAny = inc.length || exc.length || JSON.stringify(tp).replace(/null|\[\]|\{\}|"[a-z_]+":|[,\s]/g, "").length;
+      if (!ip.length && !ep.length && !targeting.utm_source && hasAny && !inc.every(all)) notes.push(`page rule "${t}" needs to be set again`);
     }
     else if (/utm/.test(t)) targeting.utm_source = String(tp.utm_source || tp.value || "");
     else { notes.push(t === "custom_javascript" ? "Klaviyo's custom JavaScript display rule isn't in Buzzin; check Targeting (utm_source / pages) does what it did" : t === "location" ? "Klaviyo's visitor-location rule isn't in Buzzin yet (shows everywhere)" : `display rule "${t}" isn't in Buzzin yet`); note(`rule "${t}": ${JSON.stringify(tp).slice(0, 500)}`); }
@@ -266,7 +269,7 @@ function routes(app, { admin, actorOf, fail }) {
 
 async function init() {
   // Copy the Klaviyo forms once, shortly after boot (later copies run from the Sign-up forms page).
-  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v2").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v2", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
+  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v3").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v3", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
 }
 
 module.exports = { init, routes, importAll, convertVersion, notesFor };

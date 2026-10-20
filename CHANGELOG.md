@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.84.2
+- Klaviyo form copy: "all pages" rules no longer flagged; import notes say exactly which images to re-add (Klaviyo's API doesn't provide form images).
+
 ## 4.84.1
 - Klaviyo form copy: page rules (URL patterns) and utm_source links now carry over; image errors and unsupported display rules are logged clearly. The two copies are refreshed once, unless someone already edited them.
 
