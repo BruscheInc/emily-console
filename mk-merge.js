@@ -1,9 +1,9 @@
 /* =============================================================================================
  *  Buzzin Marketing · one Brusche profile per customer
  *
- *  Customers belong to Brusche, not to a single store. A profile's `store` is now its HOME brand
- *  (the brand it is marketed as: Larkspur Baby when someone shopped both), and `stores` lists every
- *  brand they've shopped or signed up with.
+ *  Customers belong to Brusche, not to a store: there is one Brusche audience and profiles show no
+ *  store. Internally every profile's `store` is 'lb' (the brand Brusche sends as); `stores` quietly
+ *  keeps which shops someone came from, for history only.
  *
  *  1. backup()  — copies every profile-linked table to mk_bak_<stamp>_<table> before any change.
  *  2. merge()   — profiles with the same email become one. The strictest consent wins (an unsubscribe
@@ -157,7 +157,10 @@ async function merge(who) {
   const byPhone = (await db(`SELECT count(*)::int n FROM tmp_merge`)).rows[0].n;
   if (byPhone) await foldMap("same phone, no email");
   await db(`DROP TABLE IF EXISTS tmp_merge`);
-  // From now on one email = one profile, whatever the store.
+  // One Brusche audience: no profile belongs to a single store any more.
+  await db(`UPDATE mk_profiles SET store='lb' WHERE store <> 'lb'`);
+  await db(`UPDATE mk_lists SET store='lb' WHERE store <> 'lb'`);
+  // From now on one email = one profile.
   await db(`DROP INDEX IF EXISTS mk_profiles_store_email`);
   await db(`CREATE UNIQUE INDEX IF NOT EXISTS mk_profiles_email_one ON mk_profiles (email) WHERE email IS NOT NULL`);
   await MK().recomputeTiers();
@@ -191,8 +194,8 @@ const SURVEY = { childs_gender: "child_gender", what_clothing_size_best_fits_you
   what_could_we_do_to_improve_your_experience_with_our_brand: "improve_feedback", what_influenced_your_decision_not_to_purchase_from_us_in_the_las: "no_purchase_reason",
   please_select_an_option_below: "survey_option", tell_us_more: "survey_note", tell_us_more_1: "survey_note", tell_us_more_1_1: "survey_note", order_no: "survey_order_no" };
 
-async function upload(store, file, text, who) {
-  if (!["lb", "lbo"].includes(store)) throw Object.assign(new Error("Pick the store this file came from."), { status: 400 });
+async function upload(file, text, who) {
+  const store = "brusche";
   const rows = parseCsv(text);
   const head = (rows.shift() || []).map((h) => h.trim());
   if (!head.includes("Email") || !head.includes("Accepts Email Marketing")) throw Object.assign(new Error("This doesn't look like a Shopify customer export (no Email / Accepts Email Marketing columns)."), { status: 400 });
@@ -204,19 +207,19 @@ async function upload(store, file, text, who) {
     await db(`INSERT INTO mk_import_rows (batch, store, file, row) SELECT $1, $2, $3, x FROM jsonb_array_elements($4::jsonb) x`, [batch, store, file || null, JSON.stringify(chunk)]);
     n += chunk.length;
   }
-  note(`uploaded ${file || "file"} (${store.toUpperCase()}): ${n} rows by ${who || "staff"}`);
-  return { file, store, rows: n };
+  note(`uploaded ${file || "file"}: ${n} rows by ${who || "staff"}`);
+  return { file, rows: n };
 }
 
 async function importPreview() {
-  const files = (await db(`SELECT store, file, count(*)::int rows FROM mk_import_rows WHERE batch='current' GROUP BY store, file ORDER BY store, file`)).rows;
-  const r = (await db(`WITH x AS (SELECT store, lower(trim(row->>'Email')) email, row->>'Accepts Email Marketing' em,
+  const files = (await db(`SELECT file, count(*)::int rows FROM mk_import_rows WHERE batch='current' GROUP BY file ORDER BY file`)).rows;
+  const r = (await db(`WITH x AS (SELECT file, lower(trim(row->>'Email')) email, row->>'Accepts Email Marketing' em,
         regexp_replace(COALESCE(NULLIF(row->>'Phone',''), row->>'Default Address Phone',''), '\\D', '', 'g') ph FROM mk_import_rows WHERE batch='current'),
-      u AS (SELECT email, bool_or(em='yes') em_yes, array_agg(DISTINCT store) sts FROM x WHERE email <> '' GROUP BY email)
+      u AS (SELECT email, bool_or(em='yes') em_yes, count(DISTINCT file) nf FROM x WHERE email <> '' GROUP BY email)
     SELECT (SELECT count(*)::int FROM x) rows,
       (SELECT count(*)::int FROM x WHERE email='' AND length(ph) < 10) skipped,
       (SELECT count(*)::int FROM u) people,
-      (SELECT count(*)::int FROM u WHERE array_length(sts,1)=2) in_both,
+      (SELECT count(*)::int FROM u WHERE nf > 1) in_several_files,
       (SELECT count(*)::int FROM u WHERE em_yes) email_yes,
       (SELECT count(*)::int FROM u WHERE EXISTS (SELECT 1 FROM mk_profiles p WHERE p.email=u.email)) already_in_buzzin,
       (SELECT count(*)::int FROM u WHERE NOT EXISTS (SELECT 1 FROM mk_profiles p WHERE p.email=u.email)) new_people,
@@ -230,9 +233,9 @@ async function runImport(progress, who) {
   let last = 0, done = 0, emailSet = 0, skipped = 0;
   const before = (await db(`SELECT count(*)::int n FROM mk_profiles`)).rows[0].n;
   for (;;) {
-    const rows = (await db(`SELECT id, store, file, row FROM mk_import_rows WHERE batch='current' AND id > $1 ORDER BY id LIMIT 1000`, [last])).rows;
+    const rows = (await db(`SELECT id, file, row FROM mk_import_rows WHERE batch='current' AND id > $1 ORDER BY id LIMIT 1000`, [last])).rows;
     if (!rows.length) break;
-    for (const { id, store, file, row: r } of rows) {
+    for (const { id, file, row: r } of rows) {
       last = id; done++;
       const email = MK().normEmail(clean(r["Email"]));
       const phone = MK().normPhone(clean(r["Phone"])) || MK().normPhone(clean(r["Default Address Phone"]));
@@ -240,27 +243,31 @@ async function runImport(progress, who) {
       const survey = {};
       for (const [h, v] of Object.entries(r)) { const m = h.match(/\(customer\.metafields\.custom\.([a-z0-9_]+)\)/); if (m && clean(v)) { const k = SURVEY[m[1]] || m[1]; survey[k] = survey[k] ? `${survey[k]} / ${clean(v)}` : clean(v); } }
       const tags = clean(r["Tags"]).split(",").map((t) => t.trim()).filter(Boolean);
-      const props = { ...survey };
-      if (tags.length) props[`shopify_tags_${store}`] = tags;
-      props[`shopify_${store}`] = { id: clean(r["Customer ID"]), orders: Number(clean(r["Total Orders"])) || 0, spent: Number(clean(r["Total Spent"])) || 0, email_marketing: clean(r["Accepts Email Marketing"]), file: file || null };
-      const prof = await MK().upsertProfile(store, {
+      const fileKey = String(file || "file").replace(/[^A-Za-z0-9_ .-]/g, "").slice(0, 60) || "file";
+      const totals = { orders: Number(clean(r["Total Orders"])) || 0, spent: Number(clean(r["Total Spent"])) || 0 };
+      const prof = await MK().upsertProfile("lb", {
         email, phone, first_name: clean(r["First Name"]) || null, last_name: clean(r["Last Name"]) || null,
         city: clean(r["Default Address City"]) || null, region: clean(r["Default Address Province Code"]) || null, country: clean(r["Default Address Country Code"]) || null, zip: clean(r["Default Address Zip"]) || null,
-        props,
+        props: survey,
       }, "shopify_export");
+      if (prof) await db(`UPDATE mk_profiles SET
+          props = jsonb_set(jsonb_set(props, '{shopify_files}', COALESCE(props->'shopify_files','{}'::jsonb) || jsonb_build_object($2::text, $3::jsonb)),
+                  '{shopify_tags}', to_jsonb(ARRAY(SELECT DISTINCT x FROM (SELECT jsonb_array_elements_text(COALESCE(props->'shopify_tags','[]'::jsonb)) x UNION SELECT unnest($4::text[])) t)))
+          WHERE id=$1`, [prof.id, fileKey, JSON.stringify(totals), tags]);
       if (!prof) { skipped++; continue; }
       // Email: "yes" fills in someone with no record yet; it never overrides an unsubscribe or a bounce.
       if (clean(r["Accepts Email Marketing"]).toLowerCase() === "yes" && (prof.email_consent || "never") === "never") {
-        if (await MK().setConsent(prof, "email", "subscribed", { source: "shopify_export", detail: `${store.toUpperCase()} customer export${file ? " · " + file : ""}`, at: new Date("2026-10-20T00:00:00Z") })) emailSet++;
+        if (await MK().setConsent(prof, "email", "subscribed", { source: "shopify_export", detail: `Shopify customer export${file ? " · " + file : ""}`, at: new Date("2026-10-20T00:00:00Z") })) emailSet++;
       }
       // The file's SMS column is deliberately not used.
     }
     progress(`${done.toLocaleString()} of ${total.toLocaleString()} rows`);
   }
   // Orders and spend: the sum of each store's export, if higher than what Buzzin already counted.
-  await db(`UPDATE mk_profiles SET orders_count = GREATEST(orders_count, COALESCE((props->'shopify_lb'->>'orders')::int,0) + COALESCE((props->'shopify_lbo'->>'orders')::int,0)),
-              total_spent = GREATEST(total_spent, COALESCE((props->'shopify_lb'->>'spent')::numeric,0) + COALESCE((props->'shopify_lbo'->>'spent')::numeric,0))
-            WHERE props ? 'shopify_lb' OR props ? 'shopify_lbo'`);
+  await db(`UPDATE mk_profiles p SET orders_count = GREATEST(p.orders_count, t.o), total_spent = GREATEST(p.total_spent, t.s)
+            FROM (SELECT id, sum((v->>'orders')::int) o, sum((v->>'spent')::numeric) s FROM mk_profiles, jsonb_each(props->'shopify_files') e(k, v) WHERE props ? 'shopify_files' GROUP BY id) t
+            WHERE p.id = t.id`);
+  await db(`UPDATE mk_profiles SET store='lb' WHERE store <> 'lb'`);   // one Brusche audience
   const made = (await db(`SELECT count(*)::int n FROM mk_profiles`)).rows[0].n - before;
   const sms = await tagSmsCandidates();
   await MK().recomputeTiers();
@@ -282,7 +289,7 @@ async function tagSmsCandidates() {
 async function status() {
   const backups = (await core.setting("mk_backups", null)) || [];
   const counts = (await db(`SELECT count(*)::int profiles, count(*) FILTER (WHERE email_consent='subscribed')::int email_ok, count(*) FILTER (WHERE sms_consent='subscribed')::int sms_ok,
-      count(*) FILTER (WHERE (props->>'sms_candidate')::boolean)::int sms_candidates, count(*) FILTER (WHERE array_length(stores,1) > 1)::int both_stores,
+      count(*) FILTER (WHERE (props->>'sms_candidate')::boolean)::int sms_candidates,
       (SELECT count(*)::int FROM mk_profile_merges) merged_away,
       (SELECT count(*)::int FROM pg_indexes WHERE indexname='mk_profiles_email_one') one_per_email FROM mk_profiles`)).rows[0];
   return { job, log: log.slice(-30), backups, counts, merge: await mergePreview(), staged: await importPreview() };
@@ -300,7 +307,7 @@ function routes(app, { admin, actorOf, fail }) {
   });
   app.post("/api/mk/consolidate/upload", express.text({ type: () => true, limit: "60mb" }), async (req, res) => {
     if (!admin(req, res)) return;
-    try { if (job) return res.status(409).json({ error: `"${job.name}" is still running.` }); res.json(await upload(String(req.query.store || ""), String(req.query.file || "").slice(0, 120), String(req.body || ""), actorOf(req))); } catch (e) { fail(res, e); }
+    try { if (job) return res.status(409).json({ error: `"${job.name}" is still running.` }); res.json(await upload(String(req.query.file || "").slice(0, 120), String(req.body || ""), actorOf(req))); } catch (e) { fail(res, e); }
   });
   app.post("/api/mk/consolidate/clear", async (req, res) => { if (!admin(req, res)) return; try { await db(`DELETE FROM mk_import_rows WHERE batch='current'`); note("cleared uploaded files"); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/consolidate/import", async (req, res) => {

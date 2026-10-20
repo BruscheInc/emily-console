@@ -134,7 +134,7 @@ const qs = (o) => Object.entries(o).filter(([, v]) => v !== '' && v != null).map
 /* ---------- Overview ---------- */
 const SYNC_LABEL = { klaviyo: 'Klaviyo profiles and consent', shopify_customers_lb: 'Larkspur Baby customers', shopify_customers_lbo: 'Outlet customers', shopify_orders_lb: 'Larkspur Baby orders since 2023', shopify_orders_lbo: 'Outlet orders since 2023', tiers: 'Engagement tiers' };
 async function renderOverview(el) {
-  const o = await api('/api/mk/overview?' + qs({ store: STORE }));
+  const o = await api('/api/mk/overview');
   const kc = o.klaviyo_copy;
   el.innerHTML = `<h1>Audience</h1><p class="sub">Everyone Buzzin can market to, built from Klaviyo and Shopify. Nobody is billed per profile, so nobody needs to be removed to save money.</p>
   <div class="grid g4">
@@ -160,18 +160,18 @@ async function renderOverview(el) {
 /* ---------- Profiles ---------- */
 let PQ = { q: '', consent: '', tier: '', list: '', offset: 0 };
 async function renderProfiles(el, openId) {
-  const lists = (await api('/api/mk/lists?' + qs({ store: STORE }))).lists;
+  const lists = (await api('/api/mk/lists')).lists;
   el.innerHTML = `<h1>Profiles</h1><p class="sub">Search anyone, see their consent history, orders, lists and customer-service tickets in one place.</p>
   <div class="bar"><input type="search" id="pq" placeholder="Name, email or phone" value="${esc(PQ.q)}" style="min-width:240px">
     <select id="pc"><option value="">Any consent</option><option value="email">Can get email</option><option value="sms">Can get texts</option><option value="none">Neither</option></select>
     <select id="pt"><option value="">Any tier</option>${Object.entries(TIER).map(([k, [, l]]) => `<option value="${k}">${l}</option>`).join('')}</select>
     <select id="pl"><option value="">Any list</option>${lists.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
-  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Store</th><th>Email</th><th>Texts</th><th>Tier</th><th class="n">Orders</th><th class="n">Spent</th><th>Last order</th></tr></thead><tbody id="pr"></tbody></table></div>
+  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Email</th><th>Texts</th><th>Tier</th><th class="n">Orders</th><th class="n">Spent</th><th>Last order</th></tr></thead><tbody id="pr"></tbody></table></div>
   <div class="pager"><span id="pn"></span><button class="btn xs" id="pp">Previous</button><button class="btn xs" id="px">Next</button></div></div>`;
   $('pc').value = PQ.consent; $('pt').value = PQ.tier; $('pl').value = PQ.list;
   const load = async () => {
-    const r = await api('/api/mk/profiles?' + qs({ store: STORE, ...PQ, limit: 50 }));
-    $('pr').innerHTML = r.rows.map((p) => `<tr class="click" data-id="${p.id}"><td>${esc([p.first_name, p.last_name].filter(Boolean).join(' ') || '—')}</td><td>${esc(p.email || p.phone || '')}</td><td>${p.store === 'lbo' ? 'Outlet' : 'LB'}</td><td>${pill(CONSENT, p.email_consent)}</td><td>${pill(CONSENT, p.sms_consent)}</td><td>${pill(TIER, p.tier)}</td><td class="n">${fmtN(p.orders_count)}</td><td class="n">${fmt$(p.total_spent)}</td><td>${fmtD(p.last_order_at)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty">No one matches.</td></tr>';
+    const r = await api('/api/mk/profiles?' + qs({ ...PQ, limit: 50 }));
+    $('pr').innerHTML = r.rows.map((p) => `<tr class="click" data-id="${p.id}"><td>${esc([p.first_name, p.last_name].filter(Boolean).join(' ') || '—')}</td><td>${esc(p.email || p.phone || '')}</td><td>${pill(CONSENT, p.email_consent)}</td><td>${pill(CONSENT, p.sms_consent)}</td><td>${pill(TIER, p.tier)}</td><td class="n">${fmtN(p.orders_count)}</td><td class="n">${fmt$(p.total_spent)}</td><td>${fmtD(p.last_order_at)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No one matches.</td></tr>';
     $('pn').textContent = r.total ? `${fmtN(PQ.offset + 1)}–${fmtN(Math.min(PQ.offset + 50, r.total))} of ${fmtN(r.total)}` : '';
     $('pp').disabled = PQ.offset <= 0; $('px').disabled = PQ.offset + 50 >= r.total;
     document.querySelectorAll('#pr tr.click').forEach((tr) => tr.onclick = () => openProfile(tr.dataset.id));
@@ -194,7 +194,7 @@ async function openProfile(id) {
   d.innerHTML = `<div class="hd"><b style="font-size:16px">${esc(name)}</b>${pill(TIER, p.tier)}<span class="sp"></span><button class="btn xs" id="dx" aria-label="Close"><i class="ti ti-x"></i></button></div>
   <div class="bd">
     <div class="kv"><div>Email</div><div>${esc(p.email || '—')} ${pill(CONSENT, p.email_consent)}</div><div>Phone</div><div>${esc(p.phone || '—')} ${pill(CONSENT, p.sms_consent)}</div>
-      <div>Shopped</div><div>${esc((p.stores && p.stores.length ? p.stores : [p.store]).map((x) => x === 'lbo' ? 'Outlet' : 'Larkspur Baby').join(' + '))}</div><div>Location</div><div>${esc([p.city, p.region, p.country].filter(Boolean).join(', ') || '—')}</div>
+<div>Location</div><div>${esc([p.city, p.region, p.country].filter(Boolean).join(', ') || '—')}</div>
       <div>Orders</div><div>${fmtN(p.orders_count)} · ${fmt$(p.total_spent)} · last ${fmtD(p.last_order_at)}</div><div>Last activity</div><div>${fmtD(p.last_engaged_at)}</div>
       <div>Sizes last bought</div><div>${esc(((p.props || {}).last_sizes || []).join(', ') || '—')}</div><div>Came from</div><div>${esc((p.sources || []).join(', '))}</div></div>
     <div style="display:flex;gap:8px;margin-top:12px">${p.email_consent === 'subscribed' ? '<button class="btn xs danger" data-un="email">Unsubscribe from email</button>' : ''}${p.sms_consent === 'subscribed' ? '<button class="btn xs danger" data-un="sms">Unsubscribe from texts</button>' : ''}</div>
@@ -215,10 +215,10 @@ async function renderConsolidate(el) {
   const fresh = b && (Date.now() - new Date(b.at)) < 6 * 3600e3;
   const merged = !!c.one_per_email;
   const busy = !!s.job;
-  el.innerHTML = `<h1>Merge & import</h1><p class="sub">One Brusche profile per customer. Same email = same person, whichever store they shopped. Text consent comes only from Shopify's SMS record or a Buzzin sign-up; the files' SMS column is not used.</p>
+  el.innerHTML = `<h1>Merge & import</h1><p class="sub">One Brusche audience, one profile per customer. Same email = same person. Text consent comes only from Shopify's SMS record or a Buzzin sign-up; the files' SMS column is not used.</p>
   ${busy ? `<div class="card" style="margin-bottom:12px"><b>${esc(s.job.name)}</b> <span class="pill hon">Running</span> <span style="color:var(--muted)">${esc(s.job.progress || '')}</span></div>` : ''}
   <div class="grid g4">
-    <div class="card kpi"><div class="l">Profiles now</div><div class="v">${fmtN(c.profiles)}</div><div class="s">${fmtN(c.both_stores)} shopped both stores</div></div>
+    <div class="card kpi"><div class="l">Brusche profiles</div><div class="v">${fmtN(c.profiles)}</div></div>
     <div class="card kpi"><div class="l">Can get email</div><div class="v">${fmtN(c.email_ok)}</div></div>
     <div class="card kpi"><div class="l">Can get texts</div><div class="v">${fmtN(c.sms_ok)}</div><div class="s">real SMS consent only</div></div>
     <div class="card kpi"><div class="l">SMS candidates</div><div class="v">${fmtN(c.sms_candidates)}</div><div class="s">invite by email, don't text</div></div>
@@ -227,7 +227,7 @@ async function renderConsolidate(el) {
     <div class="card"><b>1 · Back up</b><p class="sub" style="margin:4px 0 10px">Copies every profile, consent record, event, list and send before anything changes.</p>
       ${b ? `<p>Last backup <b>${esc(b.stamp)}</b> · ${fmtN(b.profiles)} profiles · ${fmtDT(b.at)} ${fresh ? '<span class="pill ok">ready</span>' : '<span class="pill off">older than 6h</span>'}</p>` : '<p style="color:var(--muted)">No backup yet.</p>'}
       <button class="btn" id="cb"${busy ? ' disabled' : ''}>Back up now</button></div>
-    <div class="card"><b>2 · Merge duplicate profiles</b><p class="sub" style="margin:4px 0 10px">Strictest consent wins; orders and spend from both stores are added up; old unsubscribe links keep working.</p>
+    <div class="card"><b>2 · Merge duplicate profiles</b><p class="sub" style="margin:4px 0 10px">Strictest consent wins; orders and spend are added up; everyone becomes part of one Brusche audience; old unsubscribe links keep working.</p>
       ${merged ? '<p><span class="pill ok">Done</span> one profile per email is now enforced.</p>' : ''}
       <table><tbody>
         <tr><td>Emails with more than one profile</td><td class="n">${fmtN(m.email_groups)}</td></tr>
@@ -238,14 +238,14 @@ async function renderConsolidate(el) {
       </tbody></table>
       <button class="btn" id="cm" style="margin-top:10px"${busy || !fresh || (!m.email_extra && !m.phone_only_foldable && merged) ? ' disabled' : ''}>${fresh ? 'Merge now' : 'Back up first'}</button></div>
   </div>
-  <div class="card" style="margin-top:12px"><b>3 · Import Shopify customer files</b><p class="sub" style="margin:4px 0 10px">Upload each export with the store it came from. Nothing is written to profiles until you press Import.</p>
-    <div class="bar"><select id="cs"><option value="lb">Larkspur Baby file</option><option value="lbo">Outlet file</option></select><input type="file" id="cf" accept=".csv,text/csv" multiple><button class="btn" id="cu"${busy ? ' disabled' : ''}>Upload</button><span id="cup" style="color:var(--muted)"></span></div>
+  <div class="card" style="margin-top:12px"><b>3 · Import Shopify customer files</b><p class="sub" style="margin:4px 0 10px">Upload all the customer exports. Nothing is written to profiles until you press Import.</p>
+    <div class="bar"><input type="file" id="cf" accept=".csv,text/csv" multiple><button class="btn" id="cu"${busy ? ' disabled' : ''}>Upload</button><span id="cup" style="color:var(--muted)"></span></div>
     <table style="margin-top:8px"><tbody>
-      ${st.files.map((f) => `<tr><td>${esc(f.file || 'file')}</td><td>${f.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'}</td><td class="n">${fmtN(f.rows)} rows</td></tr>`).join('') || '<tr><td class="empty">No files uploaded.</td></tr>'}
+      ${st.files.map((f) => `<tr><td>${esc(f.file || 'file')}</td><td class="n">${fmtN(f.rows)} rows</td></tr>`).join('') || '<tr><td class="empty">No files uploaded.</td></tr>'}
     </tbody></table>
     ${st.rows ? `<table style="margin-top:10px"><tbody>
       <tr><td>Unique customers in the files</td><td class="n">${fmtN(st.people)}</td></tr>
-      <tr><td>In both stores' files</td><td class="n">${fmtN(st.in_both)}</td></tr>
+      <tr><td>In more than one file (one profile each)</td><td class="n">${fmtN(st.in_several_files)}</td></tr>
       <tr><td>Already in Buzzin / new</td><td class="n">${fmtN(st.already_in_buzzin)} / ${fmtN(st.new_people)}</td></tr>
       <tr><td>Email "yes" in the files</td><td class="n">${fmtN(st.email_yes)}</td></tr>
       <tr><td>Email "yes" but unsubscribed in Buzzin (stays unsubscribed)</td><td class="n">${fmtN(st.yes_but_unsubscribed_in_buzzin)}</td></tr>
@@ -263,7 +263,7 @@ async function renderConsolidate(el) {
     const files = [...$('cf').files]; if (!files.length) return toast('Pick a file', 1);
     for (const f of files) {
       $('cup').textContent = `Uploading ${f.name}…`;
-      try { const r = await api(`/api/mk/consolidate/upload?store=${$('cs').value}&file=${encodeURIComponent(f.name)}`, { method: 'POST', body: f, headers: { 'Content-Type': 'text/csv' } }); toast(`${f.name}: ${fmtN(r.rows)} rows`); }
+      try { const r = await api(`/api/mk/consolidate/upload?file=${encodeURIComponent(f.name)}`, { method: 'POST', body: f, headers: { 'Content-Type': 'text/csv' } }); toast(`${f.name}: ${fmtN(r.rows)} rows`); }
       catch (e) { toast(`${f.name}: ${e.message}`, 1); }
     }
     $('cup').textContent = ''; go();
@@ -273,14 +273,14 @@ async function renderConsolidate(el) {
 
 /* ---------- Lists ---------- */
 async function renderLists(el) {
-  const { lists } = await api('/api/mk/lists?' + qs({ store: STORE }));
+  const { lists } = await api('/api/mk/lists');
   el.innerHTML = `<h1>Lists</h1><p class="sub">Lists are who signed up for what. Segments, which update on their own, come with campaigns.</p>
-  <div class="bar"><input type="text" id="ln" placeholder="New list name" style="min-width:240px"><button class="btn" id="la"${STORE ? '' : ' disabled title="Pick a store first"'}>Add list</button></div>
-  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>List</th><th>Store</th><th>From</th><th class="n">Members</th><th class="n">Can get email</th></tr></thead><tbody>
-  ${lists.map((l) => `<tr class="click" data-id="${l.id}"><td>${esc(l.name)}</td><td>${l.store === 'lbo' ? 'Outlet' : 'LB'}</td><td>${esc(l.source || '')}</td><td class="n">${fmtN(l.members)}</td><td class="n">${fmtN(l.email_ok)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No lists yet.</td></tr>'}
+  <div class="bar"><input type="text" id="ln" placeholder="New list name" style="min-width:240px"><button class="btn" id="la">Add list</button></div>
+  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>List</th><th>From</th><th class="n">Members</th><th class="n">Can get email</th></tr></thead><tbody>
+  ${lists.map((l) => `<tr class="click" data-id="${l.id}"><td>${esc(l.name)}</td><td>${esc(l.source || '')}</td><td class="n">${fmtN(l.members)}</td><td class="n">${fmtN(l.email_ok)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No lists yet.</td></tr>'}
   </tbody></table></div></div>`;
   el.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => { PQ = { q: '', consent: '', tier: '', list: tr.dataset.id, offset: 0 }; location.hash = '#profiles'; });
-  $('la').onclick = async () => { const name = $('ln').value.trim(); if (!name) return; try { await api('/api/mk/lists', { method: 'POST', body: JSON.stringify({ store: STORE, name }) }); toast('List added'); go(); } catch (e) { toast(e.message, 1); } };
+  $('la').onclick = async () => { const name = $('ln').value.trim(); if (!name) return; try { await api('/api/mk/lists', { method: 'POST', body: JSON.stringify({ store: 'lb', name }) }); toast('List added'); go(); } catch (e) { toast(e.message, 1); } };
 }
 
 /* ---------- Settings ---------- */

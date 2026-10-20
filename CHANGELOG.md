@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.82.0
+- **Profiles are Brusche only.** No Larkspur Baby / Outlet field on profiles, lists or the import anymore: the Profiles, Lists and Overview pages always show the whole Brusche audience, and every profile is part of it (merge and import move everyone over).
+- Import no longer asks which store a file is from. Upload all the customer exports together; order totals from each file are added up per customer, and tags from every file are combined.
+
 ## 4.81.0
 - **One Brusche profile per customer.** Customers belong to Brusche, not to one store: the same email is one profile whether they shopped Larkspur Baby, the Outlet, or both. A profile's store is now its home brand (Larkspur Baby if they shopped both) and "Shopped" shows every brand.
 - New **Marketing → Merge & import** page (admins):

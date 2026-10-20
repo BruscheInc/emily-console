@@ -1,8 +1,7 @@
 /* =============================================================================================
  *  Buzzin Marketing · contacts, consent and events  (Phase 1)
  *
- *  One profile per person across Brusche (Larkspur Baby + Outlet); `store` is the home brand, `stores` every
- *  brand they've shopped (see mk-merge.js). Built from:
+ *  One Brusche profile per person; profiles don't belong to a store (see mk-merge.js). Built from:
  *    • the Klaviyo copy (hd_klaviyo_profiles)  — consent, properties, last activity, lists
  *    • Shopify customers (bulk export)          — consent, orders count, spend, address
  *    • Shopify orders (bulk export)             — "placed order" events with items and sizes
@@ -87,26 +86,27 @@ async function findProfile(_store, { email, phone, shopifyId, klaviyoId }) {
 }
 
 /** Create or fill in a profile. Existing values are kept unless the new value is filled and the old one isn't. */
-async function upsertProfile(store, p, source) {
+async function upsertProfile(from, p, source) {
+  const store = "lb";   // one Brusche audience; `from` (the shop the record came from) is only kept in `stores`
   const email = normEmail(p.email), phone = normPhone(p.phone);
   if (!email && !phone) return null;
-  const cur = await findProfile(store, { email, phone, shopifyId: p.shopify_id, klaviyoId: p.klaviyo_id });
+  const cur = await findProfile(null, { email, phone, shopifyId: p.shopify_id, klaviyoId: p.klaviyo_id });
   if (!cur) {
     const r = await db(`INSERT INTO mk_profiles (store, email, phone, first_name, last_name, shopify_id, klaviyo_id, city, region, country, zip, timezone, props, sources, last_engaged_at, created_at, stores)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16, now()), ARRAY[$1::text]) ON CONFLICT DO NOTHING RETURNING *`,
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16, now()), ARRAY[$17::text]) ON CONFLICT DO NOTHING RETURNING *`,
       [store, email, phone, p.first_name || null, p.last_name || null, p.shopify_id || null, p.klaviyo_id || null, p.city || null, p.region || null, p.country || null, p.zip || null, p.timezone || null,
-       JSON.stringify(p.props || {}), [source], p.last_engaged_at || null, p.created_at || null]);
-    return r.rows[0] || (await findProfile(store, { email, phone }));
+       JSON.stringify(p.props || {}), [source], p.last_engaged_at || null, p.created_at || null, from || store]);
+    return r.rows[0] || (await findProfile(null, { email, phone }));
   }
   const r = await db(`UPDATE mk_profiles SET
       email=COALESCE(email,$2), phone=COALESCE(phone,$3), first_name=COALESCE(NULLIF(first_name,''),$4), last_name=COALESCE(NULLIF(last_name,''),$5),
       shopify_id=COALESCE(shopify_id,$6), klaviyo_id=COALESCE(klaviyo_id,$7), city=COALESCE(city,$8), region=COALESCE(region,$9), country=COALESCE(country,$10), zip=COALESCE(zip,$11),
       timezone=COALESCE(timezone,$12), props=props || $13::jsonb, sources=(SELECT ARRAY(SELECT DISTINCT unnest(sources || $14::text[]))),
       last_engaged_at=GREATEST(last_engaged_at,$15), created_at=LEAST(created_at, COALESCE($16, created_at)),
-      stores=(SELECT ARRAY(SELECT DISTINCT unnest(stores || ARRAY[store, $17::text]))), store=CASE WHEN $17='lb' THEN 'lb' ELSE store END, updated_at=now()
+      stores=(SELECT ARRAY(SELECT DISTINCT unnest(stores || ARRAY[$17::text]))), updated_at=now()
     WHERE id=$1 RETURNING *`,
     [cur.id, email, phone, p.first_name || null, p.last_name || null, p.shopify_id || null, p.klaviyo_id || null, p.city || null, p.region || null, p.country || null, p.zip || null, p.timezone || null,
-     JSON.stringify(p.props || {}), [source], p.last_engaged_at || null, p.created_at || null, store]);
+     JSON.stringify(p.props || {}), [source], p.last_engaged_at || null, p.created_at || null, from || store]);
   return r.rows[0];
 }
 
