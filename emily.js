@@ -390,6 +390,13 @@ async function ssUpdateAddress(orderId, addr) {
   const r = await ssReq("POST", `/orders/createorder`, o);       // upsert keeps identity via orderKey
   return { ok: true, order_number: r.orderNumber, ship_to: ssShipTo(r) };
 }
+async function ssUpdateEmail(orderId, email) {
+  const o = await ssReq("GET", `/orders/${orderId}`);
+  if (!o || !o.orderId) throw new Error(`ShipStation order ${orderId} not found.`);
+  o.customerEmail = email;
+  const r = await ssReq("POST", `/orders/createorder`, o);       // full-object upsert, same as the address fix
+  return { ok: true, order_number: r.orderNumber };
+}
 async function ssHold(orderId, holdUntil) {
   const date = holdUntil || new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10);
   await ssReq("POST", `/orders/holduntil`, { orderId: Number(orderId), holdUntilDate: date });
@@ -828,6 +835,36 @@ async function shopifyProposeCancel(input) {
     summary: `🛑 Cancel ${o.name} ($${o.total.toFixed(2)}, ${o.items.length} item line${o.items.length === 1 ? "" : "s"}) → ${o.email || "?"}${refund ? "\nRefund the payment in full and return stock" : "\nNO refund (cancel only)"}${input.reason ? `\nReason: ${input.reason}` : ""}`,
     exec: async () => await cancelOrder(o, { reason: input.reason_code || "CUSTOMER", refund, restock: true, notify: false, note: input.reason || `Requested via ticket ${input.ticket_id || "?"}` }) });
   return { ok: true, staged: true, note: `Staged a cancellation of ${o.name}${refund ? " with a full refund" : ""} for Jose's approval. Nothing happens until he clicks Apply — tell the customer we're taking care of the cancellation; do NOT say it's done or that the refund has been issued.` };
+}
+// Change the email on an order (Shopify + ShipStation) so order and shipping emails go to the right inbox.
+async function shopifyProposeEmailChange(input) {
+  if (!input.order) return { error: "Provide the order number." };
+  const email = String(input.email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return { error: "Provide a valid new email address." };
+  const o = await orderDetail(input.order);
+  if (o.error || o.note) return o;
+  if (String(o.email || "").toLowerCase() === email) return { note: `Order ${o.name} already uses ${email} — nothing to change.` };
+  const st = storeByBrand(o.store);
+  await stageAction({ kind: "shopify_propose_email_change", input, title: `Email change — order ${o.name} (${o.store})`, ticketId: input.ticket_id,
+    summary: `✉️ Change the email on ${o.name}
+From: ${o.email || "(none)"}
+To: ${email}`,
+    exec: async () => {
+      const parts = [];
+      const m = await storeGraphQL(st, `mutation($input:OrderInput!){orderUpdate(input:$input){order{id email} userErrors{field message}}}`, { input: { id: o.id, email } });
+      const ue = m.orderUpdate.userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
+      parts.push(`Shopify ${o.name} → ${email} ✅`);
+      if (shipstationConfigured()) {
+        try {
+          const fresh = await shipstationLookup(ssOrderNo(o.name));
+          const so = Array.isArray(fresh) ? fresh.find((x) => x.order_id) : null;
+          if (so) { await ssUpdateEmail(so.order_id, email); parts.push(`ShipStation ${so.order_number} ✅`); }
+          else parts.push("ShipStation ⏳ not synced yet — it will import the new email");
+        } catch (e) { parts.push(`ShipStation ✖ ${e.message}`); }
+      }
+      return { note: parts.join(" · ") };
+    } });
+  return { ok: true, staged: true, note: `Staged the email change on ${o.name} (${o.email || "none"} → ${email}) for Jose's one-click approval. Tell the customer we're updating it so future order and shipping emails go to ${email}; don't say it's already done.` };
 }
 async function shopifyProposeRefund(input) {
   if (!input.order) return { error: "Provide the order number." };
@@ -1510,6 +1547,8 @@ const TOOLS = [
     input_schema: { type: "object", properties: { email: { type: "string" }, brand: { type: "string" } }, required: ["email"] } },
   { name: "shipstation_lookup", description: "LIVE shipping status from ShipStation (the fulfillment system) by order number or customer email: order status, on-hold, the ship-to address on file, carrier, service, tracking number, ship date, and whether the address can still be changed (only before it ships). Use for any 'where is my order / tracking / did it ship / can I change my address' question — it's the source of truth for fulfillment.",
     input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
+  { name: "shopify_propose_email_change", description: "STAGE a change to the EMAIL on an order (Shopify + ShipStation) for Jose's one-click approval, so order and shipping emails go to the right inbox. Use whenever a customer asks to update/correct the email on an order (typo at checkout, old address). Pass the order number, the new email, and ticket_id. Handle it yourself — never leave it as a to-do for the team.",
+    input_schema: { type: "object", properties: { order: { type: "string" }, email: { type: "string" }, ticket_id: { type: "number" } }, required: ["order", "email"] } },
   { name: "shipstation_propose_change", description: "STAGE a change to an order for Jose's one-click approval (does NOT execute until he clicks Apply in Slack). An address change is written to BOTH ShipStation AND Shopify (Shopify doesn't push address edits to ShipStation after an order is placed, so both are kept in sync; ShipStation is re-checked at Apply time). This WORKS EVEN IF the order hasn't synced to ShipStation yet — it corrects Shopify now and ShipStation imports the fix on sync (Apply also writes ShipStation directly the moment it has synced). Use it WHENEVER the customer asked to correct their shipping ADDRESS and gave the new address (or to HOLD/UNHOLD) and the order has NOT shipped/been fulfilled — do NOT decline just because shipstation_lookup didn't find it yet; that only means it hasn't synced. action='update_address' (needs street1, city, state, postal_code; use the 2-letter state code e.g. TX and 2-letter country e.g. US; name/street2/phone optional) | 'hold' (optional hold_until YYYY-MM-DD, needs the order in ShipStation) | 'unhold'. Never tell the customer it's done — say we're getting it updated. Pass ticket_id.",
     input_schema: { type: "object", properties: { order: { type: "string" }, action: { type: "string" }, name: { type: "string" }, street1: { type: "string" }, street2: { type: "string" }, city: { type: "string" }, state: { type: "string" }, postal_code: { type: "string" }, country: { type: "string" }, phone: { type: "string" }, hold_until: { type: "string" }, ticket_id: { type: "number" } }, required: ["order", "action"] } },
   { name: "shopify_propose_replacement", description: "LAST RESORT ONLY: stage a separate NO-CHARGE replacement order (new $0 order, free shipping) for Jose's approval. Use it ONLY when the original order has ALREADY SHIPPED and the package was lost/damaged (Package Protection) so an order edit is impossible. For anything on an order that hasn't shipped — out-of-stock swaps, wrong item, size change — use shopify_propose_order_edit instead; never create an additional order for those. Pass the original order number, items, and ticket_id. SHIP-TO: by default it ships to the shipping address on that order. If it must go anywhere else — the order went to a wrong/old address, or the customer gave or confirmed a different address — you MUST pass the correct one in address (with the recipient's full name). Never put an address only in reason: reason is a note and is never used for shipping. Check the 'Ship to' line in the result before telling the customer where it's going.",
@@ -1545,6 +1584,7 @@ async function runTool(name, input) {
     if (name === "shopify_check_subscription") return await shopifyCheckSubscription(input.email, input.brand);
     if (name === "shipstation_lookup") return await shipstationLookup(input.query);
     if (name === "shipstation_propose_change") return await shipstationProposeChange(input);
+    if (name === "shopify_propose_email_change") return await shopifyProposeEmailChange(input);
     if (name === "shopify_propose_replacement") return await shopifyProposeReplacement(input);
     if (name === "shopify_check_discount") { const st = storeFromOrderOrBrand(input.order, input.brand || "Larkspur Baby"); const outlet = st && /outlet/i.test(st.brand || "");
       return await require("./discounts").check(outlet ? "LBO" : "LB", String(input.code || ""), { codes: [String(input.code || "")] }); }
@@ -2152,7 +2192,7 @@ async function maybeRedraftCommand(text) {
   const r = await handleTicket(id, { force: true, guidance });
   return r && r.category === "cs" ? `🔁 Redrafted ticket ${id}${guidance ? ` with your notes` : ""} — new card in <#${APPROVALS_CH}>.` : `Looked at ticket ${id} — ${r && (r.skipped || r.category) || "nothing to draft"}.`;
 }
-const RESTAGE = { faq_publish: (i) => require("./faqs").stageFaq(i), shipstation_propose_change: (i) => shipstationProposeChange(i), shopify_propose_replacement: (i) => shopifyProposeReplacement(i),
+const RESTAGE = { shopify_propose_email_change: (i) => shopifyProposeEmailChange(i), faq_publish: (i) => require("./faqs").stageFaq(i), shipstation_propose_change: (i) => shipstationProposeChange(i), shopify_propose_replacement: (i) => shopifyProposeReplacement(i),
                   shopify_propose_discount: (i) => shopifyProposeDiscount(i), shopify_propose_store_credit: (i) => shopifyProposeStoreCredit(i),
                   shopify_propose_cancel: (i) => shopifyProposeCancel(i), shopify_propose_refund: (i) => shopifyProposeRefund(i), shopify_propose_order_edit: (i) => shopifyProposeOrderEdit(i), return_propose: (i) => returnPropose(i) };
 function wireSlack() {
