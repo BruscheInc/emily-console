@@ -3,6 +3,18 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.83.0
+- **Sign-up form builder rebuilt to mirror Klaviyo's.**
+  - **Blocks** on every step: Text (rich text: headings, bold, italic, underline, lists, links, color), Image, Button, Email, Phone number, Text input, Checkboxes, Radio buttons, Dropdown, Date, Coupon, Countdown timer, Spacer, Divider, HTML. Each block has padding, alignment and background.
+  - **Canvas**: click a block to edit it, drag blocks to reorder, duplicate, move, delete. Step tabs over the canvas (Teaser, each step, Success, + Step). Edit / Try it, desktop / mobile.
+  - **Buttons** do what Klaviyo's do: submit form, go to next step, go to a step, close form, go to URL, copy coupon code; button or text-link look; per-button colors.
+  - **Styles**: Popup, Flyout (4 corners), Full page, Embed, Banner (top/bottom); width, min height, animation; background color/image; border, corner radius, shadow; padding; overlay color and opacity; close button style, size, color, outside placement; text, Heading 1, Heading 2 fonts (incl. Google fonts), sizes, weights, colors; input fields; buttons; mobile bottom sheet, width, text scale, padding.
+  - **Behaviors**: show right away, after X seconds, after scrolling X%, on exit intent, after X pages; show again X days after closing; auto-close the success step; teaser before/after/both with its own text, position and colors.
+  - **Targeting**: device, new/returning visitors, hide from people who signed up, utm_source, page include/exclude, priority.
+  - Email and phone can be on the same step. The SMS step is skipped for people who already get texts. The phone block always shows the text consent wording with an unchecked box.
+  - Existing forms convert automatically; nothing on the store changes until a form is saved.
+- Segments: the store column is gone (one Brusche audience).
+
 ## 4.82.1
 - Fix: the **Size-up due** segment hadn't counted since Oct 10. A last order with no recognizable size saved an empty size value that broke the count; those are cleaned up and can't happen again.
 

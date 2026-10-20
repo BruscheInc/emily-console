@@ -14,6 +14,7 @@ const crypto = require("crypto");
 const core = require("./core");
 const { db } = core;
 const MK = () => require("./mk-core");
+const V2 = require("./mk-forms-v2");
 
 const RUNTIME = () => fs.readFileSync(path.join(__dirname, "public", "mk-forms-runtime.js"), "utf8");
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
@@ -37,15 +38,7 @@ async function migrate() {
 }
 
 const DEFAULT_FORM = (brand) => ({
-  steps: [
-    { id: "s1", kind: "email", eyebrow: "Welcome to the family", title: "Take 10% off your first order", text: "Join for early access to new prints and members-only offers.", button: "Continue", decline: "No thanks" },
-    { id: "s2", kind: "phone", title: "Get texts for early access", text: "Be first to know when new prints drop.", button: "Sign me up", skip: "No thanks" },
-    { id: "s3", kind: "question", title: "One last thing", text: "So we can send the right sizes.", button: "Finish", skip: "Skip", fields: [{ key: "baby_stage", label: "Are you…", type: "choice", options: ["Expecting", "Parent of a little one", "Shopping for a gift"] }, { key: "baby_date", label: "Baby's due date or birthday", type: "date" }] },
-    { id: "s4", kind: "success", title: "You're in!", text: "Here's your 10% off code. It also went to your inbox.", button: "Start shopping", link: "/collections/all" },
-  ],
-  style: { layout: "popup", width: 460, radius: 16, align: "center", colors: { bg: "#FFFFFF", text: "#242F3F", button: "#242F3F", button_text: "#FFFFFF" }, heading_font: "Georgia, serif", font: "Helvetica, Arial, sans-serif", image: "" },
-  targeting: { delay_s: 6, scroll_pct: null, exit_intent: true, device: "all", visitors: "all", hide_subscribed: true, hide_days_after_close: 14, only_paths: "", hide_paths: "" },
-  teaser: { text: "Get 10% off" },
+  steps: V2.defaultSteps(), style: V2.STYLE_DEFAULT(), targeting: V2.TARGET_DEFAULT(), teaser: V2.TEASER_DEFAULT(),
   coupon: { enabled: true, percent: 10, prefix: "WELCOME", expires_days: 14 },
   sms_consent_text: SMS_CONSENT(brand), email_consent_text: EMAIL_CONSENT(brand),
 });
@@ -57,7 +50,7 @@ async function list(store) {
     FROM mk_forms f ${store ? "WHERE f.store=$1" : ""} ORDER BY f.priority DESC, f.updated_at DESC`, store ? [store] : [])).rows;
   return rows;
 }
-async function get(id) { return (await db(`SELECT * FROM mk_forms WHERE id=$1`, [Number(id)])).rows[0] || null; }
+async function get(id) { return V2.toV2((await db(`SELECT * FROM mk_forms WHERE id=$1`, [Number(id)])).rows[0] || null); }
 async function create(store, name, who) {
   const brand = MK().STORES[store] || store;
   const d = DEFAULT_FORM(brand);
@@ -70,13 +63,15 @@ async function save(id, b, who, isAdmin) {
   let status = b.status || cur.status;
   if (!["draft", "preview", "live"].includes(status)) status = cur.status;
   if (status === "live" && cur.status !== "live" && !isAdmin) throw Object.assign(new Error("Only an admin can make a form live."), { status: 403 });
-  const steps = (Array.isArray(b.steps) ? b.steps : cur.steps).slice(0, 8).map((s, i) => ({ ...s, id: s.id || `s${i + 1}`, kind: ["email", "phone", "question", "success"].includes(s.kind) ? s.kind : "email" }));
+  const steps = V2.cleanSteps(Array.isArray(b.steps) ? b.steps : cur.steps);
+  if (!steps.length) throw Object.assign(new Error("A form needs at least one step."), { status: 400 });
+  const style = { ...(b.style || cur.style), v: 2 };
   return (await db(`UPDATE mk_forms SET name=$2, status=$3, priority=$4, steps=$5, style=$6, targeting=$7, teaser=$8, coupon=$9, list_id=$10, sms_consent_text=$11, email_consent_text=$12, updated_by=$13, updated_at=now() WHERE id=$1 RETURNING *`,
-    [cur.id, b.name || cur.name, status, Number(b.priority != null ? b.priority : cur.priority) || 0, JSON.stringify(steps), JSON.stringify(b.style || cur.style), JSON.stringify(b.targeting || cur.targeting),
+    [cur.id, b.name || cur.name, status, Number(b.priority != null ? b.priority : cur.priority) || 0, JSON.stringify(steps), JSON.stringify(style), JSON.stringify(b.targeting || cur.targeting),
      JSON.stringify(b.teaser || cur.teaser), JSON.stringify(b.coupon || cur.coupon), b.list_id != null ? Number(b.list_id) : cur.list_id, b.sms_consent_text != null ? b.sms_consent_text : cur.sms_consent_text,
      b.email_consent_text != null ? b.email_consent_text : cur.email_consent_text, who || null])).rows[0];
 }
-const publicForm = (f) => ({ id: f.id, shop_url: SHOP_URL[f.store] || "", priority: f.priority, steps: f.steps, style: f.style, targeting: f.targeting, teaser: f.teaser, sms_consent_text: f.sms_consent_text, email_consent_text: f.email_consent_text });
+const publicForm = (f0) => { const f = V2.toV2(f0); return { id: f.id, shop_url: SHOP_URL[f.store] || "", priority: f.priority, steps: f.steps, style: f.style, targeting: f.targeting, teaser: f.teaser, sms_consent_text: f.sms_consent_text, email_consent_text: f.email_consent_text, coupon_on: !!(f.coupon && f.coupon.enabled) }; };
 
 /* ---------------- coupons ---------------- */
 async function issueCoupon(store, form, profile) {
@@ -108,24 +103,26 @@ async function submit(store, b, ip) {
   if (form.status === "draft") return { error: "This form isn't available." };
   const isPreview = form.status !== "live";
   const vals = b.values || {};
+  // Old store scripts send kind email/phone/question; the v2 script sends kind "step" with every field on the step.
+  const hasEmail = !!vals.email, hasPhone = !!vals.phone;
+  if (hasPhone && vals.sms_consent_checked !== true) return { error: "Please check the box to agree to texts." };
   const prof = await findOrCreateFromVisitor(store, b.vid, vals);
-  if (!prof) return { error: b.kind === "email" ? "Please enter a valid email." : "Please enter your email first." };
+  if (!prof) return { error: hasPhone && !hasEmail ? "Please enter your email first." : "Please enter a valid email." };
   const brand = MK().STORES[store];
   const src = `form:${form.id}${isPreview ? ":preview" : ""}`;
-  if (b.kind === "email" && vals.email) { await MK().setConsent(prof, "email", "subscribed", { source: src, detail: form.name, wording: form.email_consent_text || EMAIL_CONSENT(brand) }); }
-  if (b.kind === "phone" && vals.phone && vals.sms_consent_checked !== true) return { error: "Please check the box to agree to texts." };
-  if (b.kind === "phone" && vals.phone) {
+  if (hasEmail) await MK().setConsent(prof, "email", "subscribed", { source: src, detail: form.name, wording: form.email_consent_text || EMAIL_CONSENT(brand) });
+  if (hasPhone) {
     const phone = MK().normPhone(vals.phone);
     await db(`UPDATE mk_profiles SET phone=COALESCE(phone,$2), updated_at=now() WHERE id=$1`, [prof.id, phone]); prof.phone = prof.phone || phone;
     await MK().setConsent(prof, "sms", "subscribed", { source: src, detail: `${form.name} · checkbox ticked`, wording: form.sms_consent_text || SMS_CONSENT(brand) });
   }
-  if (b.kind === "question") {
-    const props = {}; for (const [k, v] of Object.entries(vals)) if (/^[a-z0-9_]{1,40}$/i.test(k) && String(v).length < 200) props[k] = String(v);
-    if (Object.keys(props).length) await db(`UPDATE mk_profiles SET props = props || $2::jsonb, updated_at=now() WHERE id=$1`, [prof.id, JSON.stringify(props)]);
-  }
-  await db(`INSERT INTO mk_form_events (form_id, type, vid, profile_id, preview) VALUES ($1,$2,$3,$4,$5)`, [form.id, `submitted_${b.kind}`, b.vid || null, prof.id, isPreview || !!b.preview]);
+  const props = {};
+  for (const [k, v] of Object.entries(vals)) if (!["email", "phone", "sms_consent_checked"].includes(k) && /^[a-z0-9_]{1,40}$/i.test(k) && String(v).length < 200) props[k] = String(v);
+  if (Object.keys(props).length) await db(`UPDATE mk_profiles SET props = props || $2::jsonb, updated_at=now() WHERE id=$1`, [prof.id, JSON.stringify(props)]);
+  const kinds = [hasEmail && "email", hasPhone && "phone", Object.keys(props).length && "question"].filter(Boolean);
+  for (const k of kinds.length ? kinds : ["question"]) await db(`INSERT INTO mk_form_events (form_id, type, vid, profile_id, preview) VALUES ($1,$2,$3,$4,$5)`, [form.id, `submitted_${k}`, b.vid || null, prof.id, isPreview || !!b.preview]);
   let code = null;
-  if (b.kind === "email") {
+  if (hasEmail) {
     if (form.list_id) { await MK().addToList(form.list_id, prof.id, src); await MK().track(store, "joined_list", { profileId: prof.id, props: { list_id: form.list_id, form_id: form.id, preview: isPreview }, source: "form" }); }
     await MK().track(store, "submitted_form", { profileId: prof.id, props: { form_id: form.id, form: form.name, preview: isPreview }, source: "form" });
     try { code = await issueCoupon(store, form, prof); } catch (e) { console.error("form coupon:", e.message); }
