@@ -143,7 +143,7 @@ const CSS = `<style>
 .ke-side{width:370px;flex:none;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .ke-side.closed{display:none}
 .ke-sh{display:flex;align-items:center;gap:8px;padding:16px 18px 6px}.ke-sh b{font-size:17px;flex:1}
-.ke-tabs{display:flex;gap:18px;padding:0 18px;border-bottom:1px solid var(--line)}.ke-tabs button{all:unset;cursor:pointer;padding:10px 2px;color:var(--muted);font-weight:500}.ke-tabs button.on{color:#18181B;font-weight:700;box-shadow:inset 0 -2px 0 #18181B}
+.ke-tsec{padding:16px 0;border-bottom:1px solid var(--line)}.ke-tsec:last-child{border-bottom:0}.ke-tt{font-weight:700;font-size:15px;margin-bottom:10px}.ke-hint{font-size:11.5px;color:var(--muted);margin-top:6px}.ke-swr{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.ke-sw{all:unset;cursor:pointer;flex:none;width:36px;height:20px;border-radius:999px;background:#52525B;position:relative;transition:background .15s}.ke-sw::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s}.ke-sw.on{background:#2563EB}.ke-sw.on::after{left:19px}.ke-sw:focus-visible{outline:2px solid #2563EB;outline-offset:2px}.ke-unit{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;margin-top:6px;max-width:170px;background:#fff}.ke-unit input{border:0!important;flex:1;min-width:0;width:100%}.ke-unit span{padding:0 10px;color:var(--muted);font-size:12.5px}.ke-ck{display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:3px 0}.ke-ck input{margin-top:2px}.ke-radios{border:1px solid var(--line);border-radius:10px;overflow:hidden}.ke-radios label{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;font-weight:500}.ke-radios label+label{border-top:1px solid var(--line)}.ke-radios label.on{box-shadow:inset 0 0 0 2px #2563EB}.ke-ccbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px;margin-top:8px}.ke-chip{display:inline-flex;align-items:center;gap:4px;background:#F4F4F5;border-radius:6px;padding:3px 4px 3px 8px;font-size:12.5px}.ke-chip button{all:unset;cursor:pointer;padding:0 4px;color:var(--muted)}.ke-ccbox select{border:0!important;flex:1;min-width:110px;background:transparent}.ke-code{background:#F4F4F5;border-radius:8px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all;margin:10px 0 8px}.ke-tabs{display:flex;gap:18px;padding:0 18px;border-bottom:1px solid var(--line)}.ke-tabs button{all:unset;cursor:pointer;padding:10px 2px;color:var(--muted);font-weight:500}.ke-tabs button.on{color:#18181B;font-weight:700;box-shadow:inset 0 -2px 0 #18181B}
 .ke-pane{flex:1;overflow-y:auto;padding:4px 18px 40px}
 .ke-sec{font-weight:700;font-size:15px;margin:20px 0 10px}
 .ke-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
@@ -464,7 +464,7 @@ function panel() {
   const b = sel();
   if (b) return blockPanel(shell(BNAME[b.type] || b.type, { back: 'Add blocks' }));
   if (RAIL === 'styles') return stylesPanel(shell('Styles'));
-  if (RAIL === 'targeting') return targetingPanel(shell('Targeting & behaviors'));
+  if (RAIL === 'targeting') return targetingPanel(shell('Targeting & display behavior', { tabs: `<div class="ke-tabs" id="ttabs"><button data-tt="targeting">Targeting</button><button data-tt="display">Display</button></div>` }));
   if (RAIL === 'ab') return abPanel(shell('A/B test'));
   return addPanel(shell('Add blocks', { tabs: `<div class="ke-tabs"><button data-at="basic" class="${ADDTAB === 'basic' ? 'on' : ''}">Basic</button><button data-at="universal" class="${ADDTAB === 'universal' ? 'on' : ''}">Universal</button></div>` }));
 }
@@ -685,41 +685,92 @@ function askEmily() {
 }
 
 /* Targeting & behaviors (Klaviyo keeps these together) */
+const CC = 'US CA MX GB IE AU NZ DE FR ES IT NL BE AT CH SE NO DK FI PL PT CZ GR HU RO IL AE SA IN JP KR CN HK TW SG MY PH TH ID VN BR AR CL CO PE ZA NG EG TR UA PR GU VI'.split(' ');
+const ccName = (c) => { try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c); } catch (e) { return c; } };
+const sw = (id, on, label) => `<div class="ke-swr"><span>${label}</span><button class="ke-sw${on ? ' on' : ''}" data-sw="${id}" role="switch" aria-checked="${on ? 'true' : 'false'}" aria-label="${esc(label)}"></button></div>`;
+const ccPick = (key, arr) => `<div class="ke-ccbox">${(arr || []).map((c) => `<span class="ke-chip">${esc(ccName(c))}<button data-ccx="${key}" data-c="${c}" aria-label="Remove">×</button></span>`).join('')}<select data-ccadd="${key}" aria-label="Add a country"><option value="">${(arr || []).length ? 'Add…' : 'Pick countries…'}</option>${CC.filter((c) => !(arr || []).includes(c)).map((c) => `<option value="${c}">${esc(ccName(c))}</option>`).join('')}</select></div>`;
+let TTAB = 'targeting';
+/* Targeting & display behavior, laid out like Klaviyo's panel */
 function targetingPanel(P) {
-  const t = F.targeting;
-  P.innerHTML = `${H('Display timing')}<div style="font-size:12px;color:var(--muted)">Shows at the first of these that happens.</div>
-    ${chk('immediate', t.immediate, 'Show immediately on page load')}
-    ${fl('After a delay (seconds)', num('delay_s', t.delay_s, { min: 0, max: 300, ph: 'off' }))}
-    ${fl('After scrolling (% of page)', num('scroll_pct', t.scroll_pct, { min: 0, max: 100, ph: 'off' }))}
-    ${chk('exit_intent', t.exit_intent, 'On exit intent (desktop)')}
-    ${fl('After this many pages viewed', num('page_views', t.page_views, { min: 1, max: 20, ph: 'off' }))}
-    ${H('Frequency')}${fl('If closed, show again after (days)', num('hide_days_after_close', t.hide_days_after_close == null ? 14 : t.hide_days_after_close, { min: 0, max: 365 }))}
-    <div style="font-size:11.5px;color:var(--muted);margin-top:3px">Once someone submits, they don't see it again.</div>
-    ${H('Visitors')}${chk('hide_subscribed', t.hide_subscribed !== false, "Don't show to existing subscribers")}
-    ${fl('Device', selp('device', t.device || 'all', [['all', 'Desktop and mobile'], ['desktop', 'Desktop only'], ['mobile', 'Mobile only']]))}
-    ${fl('Show to', selp('visitors', t.visitors || 'all', [['all', 'All visitors'], ['new', 'New visitors only'], ['returning', 'Returning visitors only']]))}
-    ${fl('Only when the link has utm_source', txt('utm_source', t.utm_source, 'e.g. facebook'), 'For a form just for ad traffic, like your Meta URL-based forms.')}
-    ${H('Location')}${grid(fl('Rule', selp('countries_mode', t.countries_mode || 'include', [['include', 'Only show in'], ['exclude', 'Hide in']])), fl('Countries', `<input type="text" id="tcc" value="${esc((t.countries || []).join(', '))}" placeholder="US, CA" style="width:100%">`))}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${['US', 'CA', 'GB', 'AU', 'MX'].map((c) => `<button class="btn xs${(t.countries || []).includes(c) ? ' pri' : ''}" data-cc="${c}">${c}</button>`).join('')}</div>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Two-letter country codes, from the visitor's internet address. Empty = everywhere.</div>
-    ${H('Lists & segments')}<div style="font-size:12px;color:var(--muted)">Works for visitors Buzzin already knows (they signed up or clicked an email before).</div>
-      ${['show', 'hide'].map((m) => `<div style="margin-top:10px;font-weight:600">${m === 'show' ? 'Only show to people in' : "Don't show to people in"}</div><div style="max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin-top:4px">
-        ${(F.lists || []).map((l) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:2px 0"><input type="checkbox" data-aud="${m}_lists" value="${l.id}"${((t.audience || {})[m + '_lists'] || []).map(Number).includes(Number(l.id)) ? ' checked' : ''}> ${esc(l.name)} <span style="color:var(--muted)">list</span></label>`).join('')}
-        ${(F.segments || []).map((g) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:2px 0"><input type="checkbox" data-aud="${m}_segments" value="${g.id}"${((t.audience || {})[m + '_segments'] || []).map(Number).includes(Number(g.id)) ? ' checked' : ''}> ${esc(g.name)} <span style="color:var(--muted)">segment</span></label>`).join('')}</div>`).join('')}
-    ${H('Custom JavaScript')}${fl('Show only when this returns true', `<textarea id="tjs" rows="4" style="width:100%;font:12px ui-monospace,Menlo,monospace" placeholder="return location.search.includes('utm_source=facebook');">${esc(t.custom_js || '')}</textarea>`, 'Runs on the store page. Admins only. Leave empty for none.')}
-    ${H('Pages')}${fl('Only on these pages', area('only_paths', t.only_paths, 2), 'One per line, like /collections/*. Empty = every page except cart and checkout.')}${fl('Never on these pages', area('hide_paths', t.hide_paths, 2))}
-    ${H('Submissions')}${fl('Add people who sign up to this list', `<select id="ol" style="width:100%">${(F.lists || []).map((l) => `<option value="${l.id}"${Number(F.list_id) === Number(l.id) ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select>`, 'Joining the list starts any flow triggered by it, like the welcome series.')}
-    ${fl('Close the success step after (seconds)', num('success_close_s', t.success_close_s, { min: 1, max: 120, ph: 'stay open' }))}
-    ${H('Priority')}${fl('Priority', `<input type="number" id="tpr" value="${F.priority || 0}" style="width:100%">`, 'When two forms could show, the higher number wins. Only one popup shows at a time.')}
-    ${F.import_notes && F.import_notes.length ? `${H('Copied from Klaviyo')}<div class="ke-note">${F.import_notes.map((n) => '• ' + esc(n)).join('<br>')}</div>` : ''}`;
-  bind(P, t);
-  const setCC = (arr) => { t.countries = [...new Set(arr.map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)))]; mark(false); };
-  $('tcc').onchange = () => { setCC($('tcc').value.split(/[\s,]+/)); panel(); };
-  P.querySelectorAll('[data-cc]').forEach((x) => x.onclick = () => { const c = x.dataset.cc, cur = t.countries || []; setCC(cur.includes(c) ? cur.filter((y) => y !== c) : [...cur, c]); panel(); });
-  P.querySelectorAll('[data-aud]').forEach((x) => x.onchange = () => { t.audience = t.audience || {}; const k = x.dataset.aud; t.audience[k] = [...P.querySelectorAll(`[data-aud="${k}"]:checked`)].map((y) => Number(y.value)); mark(false); });
-  $('tjs').onchange = () => { t.custom_js = $('tjs').value.trim(); mark(false); };
-  $('ol').onchange = (e) => { F.list_id = Number(e.target.value); mark(false); };
-  $('tpr').oninput = (e) => { F.priority = Number(e.target.value) || 0; mark(false); };
+  const t = F.targeting, a = t.audience = t.audience || {};
+  // older forms: work out the Klaviyo-style switches from what was saved
+  if (t.aud_mode == null) t.aud_mode = ['show_lists', 'show_segments', 'hide_lists', 'hide_segments'].some((x) => (a[x] || []).length) ? 'lists' : t.hide_subscribed === false ? 'all' : 'not_subscribed';
+  if (t.only_on == null) t.only_on = !!String(t.only_paths || '').trim();
+  if (t.hide_on == null) t.hide_on = !!String(t.hide_paths || '').trim();
+  if (t.cc_on == null) { t.cc_on = !!(t.countries || []).length && (t.countries_mode || 'include') === 'include'; t.cc_hide_on = !!(t.countries || []).length && t.countries_mode === 'exclude'; if (t.cc_hide_on) { t.hide_countries = t.countries; t.countries = []; } }
+  if (t.utm_on == null) { t.utm_on = !!t.utm_source; t.utm_rules = t.utm_source ? [{ param: 'utm_source', op: 'equals', value: t.utm_source }] : []; }
+  if (t.show_mode == null) t.show_mode = t.immediate ? 'immediately' : 'rules';
+  const tabs = $('ttabs'); if (tabs) tabs.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.tt === TTAB); b.onclick = () => { TTAB = b.dataset.tt; panel(); }; });
+  const listBox = (m) => `<div style="max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin-top:8px">
+    ${(F.lists || []).map((l) => `<label class="ke-ck"><input type="checkbox" data-aud="${m}_lists" value="${l.id}"${(a[m + '_lists'] || []).map(Number).includes(Number(l.id)) ? ' checked' : ''}> ${esc(l.name)} <span style="color:var(--muted)">list</span></label>`).join('')}
+    ${(F.segments || []).map((g) => `<label class="ke-ck"><input type="checkbox" data-aud="${m}_segments" value="${g.id}"${(a[m + '_segments'] || []).map(Number).includes(Number(g.id)) ? ' checked' : ''}> ${esc(g.name)} <span style="color:var(--muted)">segment</span></label>`).join('')}</div>`;
+  const sec = (title, body) => `<div class="ke-tsec"><div class="ke-tt">${title}</div>${body}</div>`;
+  if (TTAB === 'targeting') {
+    P.innerHTML = sec('Audience', `<select id="taud" style="width:100%">${[['all', 'Show to all visitors'], ['not_profiles', "Don't show to existing Buzzin profiles"], ['profiles_only', 'Show to existing Buzzin profiles only'], ['not_subscribed', "Don't show to existing subscribers"], ['lists', 'Show or hide for certain lists & segments']].map(([v, l]) => `<option value="${v}"${t.aud_mode === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+        ${t.aud_mode === 'lists' ? `<div style="margin-top:12px;font-weight:600">Only show to people in</div>${listBox('show')}<div style="margin-top:12px;font-weight:600">Don't show to people in</div>${listBox('hide')}` : ''}
+        <div class="ke-hint">Buzzin knows a visitor once they've signed up or clicked one of your emails.</div>`)
+      + sec('URLs', `<div style="color:var(--muted)">Use * as a wild card</div>
+        ${sw('only_on', t.only_on, 'Only show on certain URLs')}${t.only_on ? `<textarea data-p="only_paths" rows="3" style="width:100%;margin-top:6px" placeholder="/collections/*&#10;https://larkspurbaby.com/pages/sale">${esc(t.only_paths || '')}</textarea>` : ''}
+        ${sw('hide_on', t.hide_on, "Don't show on certain URLs")}${t.hide_on ? `<textarea data-p="hide_paths" rows="3" style="width:100%;margin-top:6px" placeholder="/cart*">${esc(t.hide_paths || '')}</textarea>` : ''}
+        <div class="ke-hint">One per line: a full link or a path like /collections/*. Cart and checkout are always skipped unless you list them.</div>`)
+      + sec('Location', `${sw('cc_on', t.cc_on, 'Show to audience in certain locations')}${t.cc_on ? ccPick('countries', t.countries) : ''}
+        ${sw('cc_hide_on', t.cc_hide_on, "Don't show to audience in certain locations")}${t.cc_hide_on ? ccPick('hide_countries', t.hide_countries) : ''}`)
+      + sec('UTM parameters', `${sw('store_utm', !!t.store_utm, "Store UTM parameters in shopper's profile upon consent")}
+        ${sw('utm_on', t.utm_on, 'Show based on UTM parameters')}${t.utm_on ? `${(t.utm_rules || []).map((r, i) => `<div style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,1fr) auto;gap:6px;margin-top:8px">
+            <select data-ur="${i}" data-uk="param" aria-label="Parameter">${['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((x) => `<option${r.param === x ? ' selected' : ''}>${x}</option>`).join('')}</select>
+            <select data-ur="${i}" data-uk="op" aria-label="Rule">${[['equals', 'equals'], ['contains', 'contains'], ['not', "doesn't equal"]].map(([v, l]) => `<option value="${v}"${r.op === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+            <input type="text" data-ur="${i}" data-uk="value" value="${esc(r.value || '')}" placeholder="facebook" style="min-width:0" aria-label="Value"><button class="ke-ib" data-urm="${i}" aria-label="Remove">${ICON('trash')}</button></div>`).join('')}
+          <button class="btn xs" id="uadd" style="margin-top:8px">${ICON('plus')} Add rule</button><div class="ke-hint">Every rule has to match. The link a visitor first landed on counts for their whole visit.</div>` : ''}`)
+      + (window.EC_ADMIN !== false ? sec('Custom JavaScript', `<textarea id="tjs" rows="3" style="width:100%;font:12px ui-monospace,Menlo,monospace" placeholder="return location.search.includes('utm_source=facebook');">${esc(t.custom_js || '')}</textarea><div class="ke-hint">Show only when this returns true. Admins only. Leave empty for none.</div>`) : '')
+      + (F.import_notes && F.import_notes.length ? sec('Copied from Klaviyo', `<div class="ke-note">${F.import_notes.map((n) => '• ' + esc(n)).join('<br>')}</div>`) : '');
+  } else {
+    const pr = Number(F.priority || 0);
+    P.innerHTML = sec('Display priority', `<div class="ke-hint" style="margin-top:0">Decides which form shows first when several could show at the same time. Only one popup shows at a time.</div>
+        <select id="tpr" style="width:100%;margin-top:8px">${[[-10, 'Low'], [0, 'Medium (default)'], [10, 'High'], [20, 'Highest']].map(([v, l]) => `<option value="${v}"${(pr <= -10 ? -10 : pr >= 20 ? 20 : pr >= 10 ? 10 : 0) === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`)
+      + sec('Timing', `<label class="lab">Show form</label><select id="tsm" style="width:100%">${[['rules', 'Based on rules'], ['immediately', 'Immediately'], ['custom', 'Only with custom trigger']].map(([v, l]) => `<option value="${v}"${t.show_mode === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+        ${t.show_mode === 'rules' ? `${sw('exit_intent', !!t.exit_intent, 'When visitor is exiting the page')}
+          ${sw('delay_s', t.delay_s != null && t.delay_s !== '', 'After time delay')}${t.delay_s != null && t.delay_s !== '' ? `<div class="ke-unit"><input type="number" data-p="delay_s" value="${esc(t.delay_s)}" min="0" max="300"><span>seconds</span></div>` : ''}
+          ${sw('scroll_pct', !!t.scroll_pct, 'After visitor has scrolled a certain amount')}${t.scroll_pct ? `<div class="ke-unit"><input type="number" data-p="scroll_pct" value="${esc(t.scroll_pct)}" min="1" max="100"><span>%</span></div>` : ''}
+          ${sw('page_views', !!t.page_views, 'After visitor sees a certain number of pages')}${t.page_views ? `<div class="ke-unit"><input type="number" data-p="page_views" value="${esc(t.page_views)}" min="1" max="20"><span>pages</span></div>` : ''}
+          <div class="ke-hint">Shows at the first of these that happens.</div>` : ''}`)
+      + sec('Frequency', `<label class="lab">If visitor closes form, show again after</label><div class="ke-unit"><input type="number" data-p="hide_days_after_close" value="${t.hide_days_after_close == null ? 14 : esc(t.hide_days_after_close)}" min="0" max="365"><span>days</span></div>
+        <label class="ke-ck" style="margin-top:10px"><input type="checkbox" id="thas"${t.hide_after_submit !== false ? ' checked' : ''}> Don't show again if form was submitted or go to URL button was clicked</label>`)
+      + sec('Devices', `<div class="ke-radios">${[['all', 'devices', 'All devices'], ['desktop', 'device-desktop', 'Desktop only'], ['mobile', 'device-mobile', 'Mobile only']].map(([v, ic, l]) => `<label class="${(t.device || 'all') === v ? 'on' : ''}"><input type="radio" name="tdev" value="${v}"${(t.device || 'all') === v ? ' checked' : ''}> ${ICON(ic)} ${l}</label>`).join('')}</div>`)
+      + sec('Click outside form to close', `<div class="ke-radios">${[['click_close_desktop', 'device-desktop', 'On desktop'], ['click_close_mobile', 'device-mobile', 'On mobile']].map(([k, ic, l]) => `<label class="${t[k] !== false ? 'on' : ''}"><input type="checkbox" data-cco="${k}"${t[k] !== false ? ' checked' : ''}> ${ICON(ic)} ${l}</label>`).join('')}</div>`)
+      + sec('Custom trigger', `<div>Open the form based on any condition, such as on a button click or in your own code.</div>
+        <pre class="ke-code">window._bzf = window._bzf || [];
+window._bzf.push(['openForm', '${F.id}']);</pre><button class="btn xs" id="tcp">${ICON('copy')} Copy code</button>`)
+      + sec('After sign-up', `${fl("Form's list", `<select id="ol" style="width:100%">${(F.lists || []).map((l) => `<option value="${l.id}"${Number(F.list_id) === Number(l.id) ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select>`, 'Used when a submit button is set to "Form\'s list". Joining a list starts any flow triggered by it.')}
+        ${fl('Close the success step after (seconds)', num('success_close_s', t.success_close_s, { min: 1, max: 120, ph: 'stay open' }))}`);
+  }
+  bind(P, t, (x) => { if (['delay_s', 'scroll_pct', 'page_views'].includes(x.dataset.p) && x.value === '') panel(); });
+  const re = () => { mark(false); panel(); };
+  P.querySelectorAll('[data-sw]').forEach((x) => x.onclick = () => {
+    const k = x.dataset.sw, on = !x.classList.contains('on');
+    if (k === 'delay_s') t.delay_s = on ? 5 : null; else if (k === 'scroll_pct') t.scroll_pct = on ? 30 : null; else if (k === 'page_views') t.page_views = on ? 2 : null;
+    else t[k] = on;
+    if (k === 'utm_on' && on && !(t.utm_rules || []).length) t.utm_rules = [{ param: 'utm_source', op: 'equals', value: '' }];
+    re();
+  });
+  // keep the older fields the store script also reads in step with the switches
+  const sync = () => { t.immediate = t.show_mode === 'immediately'; t.hide_subscribed = t.aud_mode === 'not_subscribed'; t.countries_mode = 'include'; t.utm_source = ''; };
+  sync();
+  const on = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
+  on('taud', 'onchange', (e) => { t.aud_mode = e.target.value; sync(); re(); });
+  on('tsm', 'onchange', (e) => { t.show_mode = e.target.value; sync(); re(); });
+  on('thas', 'onchange', (e) => { t.hide_after_submit = e.target.checked; mark(false); });
+  on('tjs', 'onchange', () => { t.custom_js = $('tjs').value.trim(); mark(false); });
+  on('ol', 'onchange', (e) => { F.list_id = Number(e.target.value); mark(false); });
+  on('tpr', 'onchange', (e) => { F.priority = Number(e.target.value) || 0; mark(false); });
+  on('uadd', 'onclick', () => { (t.utm_rules = t.utm_rules || []).push({ param: 'utm_source', op: 'equals', value: '' }); re(); });
+  on('tcp', 'onclick', () => { try { navigator.clipboard.writeText(P.querySelector('.ke-code').textContent); toast('Copied'); } catch (e) {} });
+  P.querySelectorAll('[name="tdev"]').forEach((x) => x.onchange = () => { t.device = x.value; re(); });
+  P.querySelectorAll('[data-cco]').forEach((x) => x.onchange = () => { t[x.dataset.cco] = x.checked; re(); });
+  P.querySelectorAll('[data-ccadd]').forEach((x) => x.onchange = () => { const k = x.dataset.ccadd; if (x.value) { t[k] = [...new Set([...(t[k] || []), x.value])]; re(); } });
+  P.querySelectorAll('[data-ccx]').forEach((x) => x.onclick = () => { const k = x.dataset.ccx; t[k] = (t[k] || []).filter((c) => c !== x.dataset.c); re(); });
+  P.querySelectorAll('[data-ur]').forEach((x) => x[x.tagName === 'SELECT' ? 'onchange' : 'oninput'] = () => { t.utm_rules[Number(x.dataset.ur)][x.dataset.uk] = x.value.slice(0, 100); mark(false); });
+  P.querySelectorAll('[data-urm]').forEach((x) => x.onclick = () => { t.utm_rules.splice(Number(x.dataset.urm), 1); re(); });
+  P.querySelectorAll('[data-aud]').forEach((x) => x.onchange = () => { const k = x.dataset.aud; a[k] = [...P.querySelectorAll(`[data-aud="${k}"]:checked`)].map((y) => Number(y.value)); mark(false); });
 }
 
 /* Content: a selected block */

@@ -46,7 +46,17 @@
   /* ---------- forms ---------- */
   var path = location.pathname;
   var listOf = function (s) { return String(s || '').split(/[\n,]+/).map(function (x) { return x.trim(); }).filter(Boolean); };
-  var pmatch = function (p) { return p.slice(-1) === '*' ? path.indexOf(p.slice(0, -1)) === 0 : path === p; };
+  var pmatch = function (p) {   // a full link or a path; * is a wild card
+    var strip = function (u) { return String(u).replace(/^https?:\/\//i, '').replace(/^www\./i, ''); };
+    var full = /^https?:\/\//i.test(p) || /^(www\.)?[\w-]+(\.[\w-]+)+\//i.test(p), hay = full ? strip(location.href.split('#')[0]) : path;
+    if (full) p = strip(p);
+    var rx = '^' + p.split('*').map(function (x) { return x.replace(/[.+?^${}()|[\]\\]/g, '\\$&'); }).join('.*') + (p.slice(-1) === '*' ? '' : '/?(\\?.*)?$');
+    try { return new RegExp(rx, 'i').test(hay); } catch (e) { return false; }
+  };
+  // UTM parameters from the link the visitor landed on (kept for the visit)
+  var UTM = (function () { var o = {}; try { o = JSON.parse(ss.get('bz_utm') || '{}') || {}; } catch (e) {} var sp = new URLSearchParams(q), got = false, n = {};
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].forEach(function (k) { var v = sp.get(k); if (v) { n[k] = v.slice(0, 100); got = true; } });
+    if (got) { o = n; ss.set('bz_utm', JSON.stringify(o)); } return o; })();
   var CFG = {};
   function eligible(f) {
     var t = f.targeting || {};
@@ -54,16 +64,20 @@
     if (PID && preview && String(f.id) === PID) return true;   // "Preview on website": always show the form being previewed
     if (t.device === 'mobile' && !mobile()) return false; if (t.device === 'desktop' && mobile()) return false;
     if (t.visitors === 'new' && returning) return false; if (t.visitors === 'returning' && !returning) return false;
-    var only = listOf(t.only_paths), hide = listOf(t.hide_paths);
+    var only = t.only_on === false ? [] : listOf(t.only_paths), hide = t.hide_on === false ? [] : listOf(t.hide_paths);
     if (hide.some(pmatch)) return false; if (only.length && !only.some(pmatch)) return false;
     if (/^\/(cart|checkout)/.test(path) && !only.length) return false;
-    if (t.hide_subscribed !== false && ls.get('bz_sub_' + STORE)) return false;
+    if ((t.aud_mode ? t.aud_mode === 'not_subscribed' || t.aud_mode === 'not_profiles' : t.hide_subscribed !== false) && ls.get('bz_sub_' + STORE)) return false;
     var gk = f.gid || f.id, closed = Number(ls.get('bzf_closed_' + gk) || 0), done = Number(ls.get('bzf_done_' + gk) || 0);
-    if (done && !preview) return false;
+    if (done && !preview && t.hide_after_submit !== false) return false;
     if (closed && !preview && Date.now() - closed < (Number(t.hide_days_after_close == null ? 14 : t.hide_days_after_close) * 864e5)) return 'teaser';
     if (t.utm_source && !(new RegExp('[?&]utm_source=' + t.utm_source.replace(/[^\w-]/g, '') + '\\b').test(q))) return false;
     var cc = (CFG.country || '').toUpperCase(), cl = (t.countries || []).map(function (x) { return String(x).toUpperCase(); });
+    if (t.cc_on === false) cl = [];
     if (cl.length && cc) { var inL = cl.indexOf(cc) >= 0; if ((t.countries_mode || 'include') === 'include' ? !inL : inL) return false; }
+    var hl = t.cc_hide_on ? (t.hide_countries || []).map(function (x) { return String(x).toUpperCase(); }) : [];
+    if (hl.length && cc && hl.indexOf(cc) >= 0) return false;
+    if (t.utm_on) { var okU = (t.utm_rules || []).every(function (r) { var v = String(UTM[r.param] || '').toLowerCase(), w = String(r.value || '').toLowerCase(); if (!w) return true; return r.op === 'contains' ? v.indexOf(w) >= 0 : r.op === 'not' ? v !== w : v === w; }); if (!okU) return false; }
     if (CFG.aud && CFG.aud[f.id] === false) return false;
     if (t.custom_js) { try { if (!(new Function(String(t.custom_js)))()) return false; } catch (e) { return false; } }
     return true;
@@ -236,7 +250,8 @@
       if (edit) { wireEdit(); setTimeout(function () { try { window.parent.postMessage({ bzf: 1, t: 'h', frame: window.BZF_FRAME || '', h: Math.ceil(wrap.getBoundingClientRect().height) + 150 }, '*'); } catch (e) {} }, 30); return; }
       var form = wrap.querySelector('form'), err = wrap.querySelector('.err');
       var x = wrap.querySelector('.x'); if (x) x.onclick = function () { close(); };
-      var ov = wrap.querySelector('.ov'); if (ov && ((f.style || {}).overlay || {}).close_on_click !== false) ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+      var tg = f.targeting || {}, cco = mobile() ? tg.click_close_mobile : tg.click_close_desktop;
+      var ov = wrap.querySelector('.ov'); if (ov && ((f.style || {}).overlay || {}).close_on_click !== false && cco !== false) ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
       wrap.querySelectorAll('[data-chip]').forEach(function (b) { b.onclick = function () { values[b.dataset.chip] = b.dataset.v; wrap.querySelectorAll('[data-chip="' + b.dataset.chip + '"]').forEach(function (z) { z.classList.toggle('on', z === b); }); }; });
       wrap.querySelectorAll('[data-copy]').forEach(function (b) { b.onclick = function () { try { navigator.clipboard.writeText(sub.code || ''); b.textContent = 'Copied'; } catch (e) {} }; });
       wrap.querySelectorAll('[data-cd]').forEach(function (el) {
@@ -283,7 +298,7 @@
           if (wheelB) { var sl = (wheelB.slices || []).filter(Boolean), tot = sl.reduce(function (t, x) { return t + (Number(x.weight) || 1); }, 0), r0 = Math.random() * tot, k = 0; for (; k < sl.length - 1; k++) { r0 -= Number(sl[k].weight) || 1; if (r0 < 0) break; } sub.prize = sl[k]; return spinTo(k, function () { after(btn); }); }
           return after(btn);
         }
-        post('/api/mkf/' + STORE + '/submit', { form_id: f.id, step_id: s.id, button_id: btn ? ((s.blocks || [])[Number(btn.dataset.i)] || {}).id : null, kind: 'step', values: vals, all: values, vid: vid, page: location.pathname, preview: preview, preview_id: preview ? PID : '' }).then(function (r) {
+        post('/api/mkf/' + STORE + '/submit', { form_id: f.id, step_id: s.id, button_id: btn ? ((s.blocks || [])[Number(btn.dataset.i)] || {}).id : null, kind: 'step', values: vals, all: values, utm: UTM, vid: vid, page: location.pathname, preview: preview, preview_id: preview ? PID : '' }).then(function (r) {
           if (btn) btn.disabled = false;
           if (r && r.error) { err.textContent = r.error; return; }
           if (r && r.code) sub.code = r.code;
@@ -303,7 +318,7 @@
           if (a === 'step') { for (var i = 0; i < steps.length; i++) if (steps[i].id === b.step) return go(i); return go(idx + 1); }
           if (a === 'close') return close();
           if (a === 'copy') { try { navigator.clipboard.writeText(sub.code || ''); btn.textContent = 'Copied'; } catch (e) {} return; }
-          if (a === 'url') { var u = b.url || '/'; if (b.new_tab) window.open(u, '_blank', 'noopener'); else location.href = u; }
+          if (a === 'url') { var u = b.url || '/'; ls.set('bzf_done_' + (f.gid || f.id), String(Date.now())); if (b.new_tab) window.open(u, '_blank', 'noopener'); else location.href = u; }
         };
       });
     }
@@ -384,12 +399,13 @@
     var show = function () { if (shown) return; shown = true; document.querySelectorAll('buzzin-form[data-teaser="' + f.id + '"]').forEach(function (h) { h.remove(); }); if (document.querySelector('buzzin-form[data-form]:not([data-emb])')) return; mount(f); };
     if (STUDIO || (PID && preview && String(f.id) === PID)) return show();
     var tz = f.teaser || {}; if (tz.enabled && tz.text && (tz.when === 'before' || tz.when === 'both')) teaser(f);
+    if (t.show_mode === 'custom') return;   // opens only from window._bzf.push(['openForm', id])
     if (t.page_views && views < Number(t.page_views)) return;
-    if (t.immediate) return show();
+    if (t.immediate || t.show_mode === 'immediately') return show();
     if (t.delay_s != null && t.delay_s !== '') setTimeout(show, Math.max(0, Number(t.delay_s)) * 1000);
     if (t.scroll_pct) window.addEventListener('scroll', function () { var h = document.documentElement; if ((h.scrollTop + innerHeight) / h.scrollHeight * 100 >= Number(t.scroll_pct)) show(); }, { passive: true });
     if (t.exit_intent && !mobile()) document.addEventListener('mouseout', function (e) { if (!e.relatedTarget && e.clientY <= 0) show(); });
-    if ((t.delay_s == null || t.delay_s === '') && !t.scroll_pct && !t.exit_intent) setTimeout(show, 5000);
+    if (!t.show_mode && (t.delay_s == null || t.delay_s === '') && !t.scroll_pct && !t.exit_intent) setTimeout(show, 5000);
   }
   function pickVariant(f) {   // A/B test: each visitor keeps the same variant
     if (!f.variants || !f.variants.length) return f;
@@ -406,6 +422,10 @@
     forms.filter(isEmb).forEach(function (f) { if (eligible(f) !== true) return; document.querySelectorAll('[data-buzzin-form="' + f.id + '"]').forEach(function (el) { mount(f, null, el).setAttribute('data-emb', '1'); }); });
     var pick = null; forms.filter(function (f) { return !isEmb(f); }).some(function (f) { var e = eligible(f); if (e === true) { pick = f; return true; } if (e === 'teaser' && f.teaser && f.teaser.enabled !== false && f.teaser.text) { teaser(f); return true; } return false; });
     if (pick) arm(pick);
+    // Custom trigger: window._bzf.push(['openForm', '12']) opens that form (targeting still applies, timing doesn't)
+    var openForm = function (id) { var f = forms.filter(function (x) { return String(x.id) === String(id) || String(x.gid) === String(id); })[0]; if (!f || document.querySelector('buzzin-form[data-form]:not([data-emb])')) return; var e = eligible(f); if (e === true || e === 'teaser') { document.querySelectorAll('buzzin-form[data-teaser]').forEach(function (h) { h.remove(); }); mount(f); } };
+    var qq = window._bzf = window._bzf || [], handle = function (c) { if (c && c[0] === 'openForm') openForm(c[1]); };
+    if (!qq.__bz) { qq.forEach(handle); qq.length = 0; qq.push = function () { for (var i = 0; i < arguments.length; i++) handle(arguments[i]); return 0; }; qq.__bz = 1; }
   }
   window.BuzzinFormsShow = function (f, opts) {
     document.querySelectorAll('buzzin-form').forEach(function (h) { h.remove(); });

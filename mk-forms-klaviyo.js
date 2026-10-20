@@ -234,7 +234,8 @@ async function convertVersion(form, v) {
     else if (t === "scroll_percentage") { targeting.scroll_pct = Number(tp.percentage) || 30; timing = true; }
     else if (t === "exit_intent") { targeting.exit_intent = true; timing = true; }
     else if (t === "after_close_or_submit_timeout") targeting.hide_days_after_close = Number(tp.timeout_days) || 0;
-    else if (t === "previously_submitted" || t === "unidentified_profiles") targeting.hide_subscribed = true;
+    else if (t === "unidentified_profiles") { targeting.aud_mode = "not_profiles"; targeting.hide_subscribed = false; }   // "Don't show to existing Klaviyo profiles"
+    else if (t === "previously_submitted") targeting.hide_after_submit = true;
     else if (t === "page_visits" || t === "page_views") targeting.page_views = Number(tp.count || tp.page_visits || tp.pages) || null;
     else if (/device/.test(t)) targeting.device = /mobile/i.test(JSON.stringify(tp)) && !/desktop/i.test(JSON.stringify(tp)) ? "mobile" : /desktop/i.test(JSON.stringify(tp)) && !/mobile/i.test(JSON.stringify(tp)) ? "desktop" : "all";
     else if (/url|page/.test(t)) {
@@ -340,7 +341,7 @@ function routes(app, { admin, actorOf, fail }) {
 
 async function init() {
   // Copy the Klaviyo forms once, shortly after boot (later copies run from the Sign-up forms page).
-  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v6").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v6", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
+  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v7").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v7", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
 }
 
 module.exports = { init, routes, importAll, convertVersion, notesFor };

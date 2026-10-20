@@ -83,6 +83,8 @@ async function save(id, b, who, isAdmin) {
   if (String(tg.custom_js || "") !== String((cur.targeting || {}).custom_js || "") && !isAdmin) throw Object.assign(new Error("Only an admin can change the custom JavaScript rule."), { status: 403 });
   if (tg.custom_js) tg.custom_js = String(tg.custom_js).slice(0, 4000);
   if (Array.isArray(tg.countries)) tg.countries = tg.countries.map((x) => String(x).trim().toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)).slice(0, 60);
+  if (Array.isArray(tg.hide_countries)) tg.hide_countries = tg.hide_countries.map((x) => String(x).trim().toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)).slice(0, 60);
+  if (Array.isArray(tg.utm_rules)) tg.utm_rules = tg.utm_rules.slice(0, 10).map((r) => ({ param: ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"].includes(r && r.param) ? r.param : "utm_source", op: ["equals", "contains", "not"].includes(r && r.op) ? r.op : "equals", value: String((r && r.value) || "").slice(0, 100) }));
   b.targeting = tg;
   const dt = (v, d) => (v === undefined ? d : v ? new Date(v) : null);
   const startAt = dt(b.start_at, cur.start_at), endAt = dt(b.end_at, cur.end_at);
@@ -148,6 +150,7 @@ async function submit(store, b, ip) {
   const btn = (stp0.blocks || []).find((x) => x.type === "button" && x.id && x.id === b.button_id) || null;   // the submit button that was clicked
   const props = {};
   for (const h of (btn && btn.hidden) || []) { const k = String(h.key || "").trim().replace(/\s+/g, "_").toLowerCase().replace(/[^a-z0-9_]/g, ""); if (k && !["email", "phone"].includes(k)) props[k] = String(h.value || "").slice(0, 200); }
+  if ((form.targeting || {}).store_utm && b.utm && typeof b.utm === "object") for (const k of ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]) if (b.utm[k]) props[k] = String(b.utm[k]).slice(0, 100);
   for (const [k, v] of Object.entries(vals)) if (!["email", "phone", "sms_consent_checked"].includes(k) && /^[a-z0-9_]{1,40}$/i.test(k) && String(v).length < 200) props[k] = String(v);
   if (Object.keys(props).length) await db(`UPDATE mk_profiles SET props = props || $2::jsonb, updated_at=now() WHERE id=$1`, [prof.id, JSON.stringify(props)]);
   const kinds = [hasEmail && "email", hasPhone && "phone", Object.keys(props).length && "question"].filter(Boolean);
@@ -197,7 +200,7 @@ async function config(store, preview) {
   const vars = ids.length ? (await db(`SELECT * FROM mk_forms WHERE ab_of = ANY($1) ORDER BY id`, [ids])).rows : [];
   const counts = {}; if (ids.length) for (const r of (await db(`SELECT COALESCE(f.ab_of, f.id) gid, count(DISTINCT e.profile_id)::int n FROM mk_form_events e JOIN mk_forms f ON f.id=e.form_id WHERE (f.id = ANY($1) OR f.ab_of = ANY($1)) AND e.type LIKE 'submitted_%' AND NOT e.preview GROUP BY 1`, [ids])).rows) counts[r.gid] = r.n;
   const v = { forms: rows.map((r) => { const vs = vars.filter((x) => Number(x.ab_of) === Number(r.id)); return publicForm(r, { signups: counts[r.id] || 0, ...(vs.length ? { variants: vs.map((x) => publicForm(x, { signups: counts[r.id] || 0 })), split: r.ab_split } : {}) }); }),
-    tracking: !!(st.tracking && st.tracking[store]), audience: rows.some((r) => { const a = (r.targeting || {}).audience || {}; return ["show_lists", "show_segments", "hide_lists", "hide_segments"].some((x) => (a[x] || []).length); }) };
+    tracking: !!(st.tracking && st.tracking[store]), audience: rows.some((r) => { const a = (r.targeting || {}).audience || {}; if (["not_profiles", "profiles_only", "not_subscribed"].includes((r.targeting || {}).aud_mode)) return true; return ["show_lists", "show_segments", "hide_lists", "hide_segments"].some((x) => (a[x] || []).length); }) };
   CACHE.set(k, { t: Date.now(), v }); return v;
 }
 /** Per-visitor parts of the config: country (from the visitor's IP) and list/segment rules. */
@@ -216,7 +219,12 @@ async function visitorConfig(store, preview, vid, ip, formId) {
     const lists = pid ? (await db(`SELECT list_id FROM mk_list_members WHERE profile_id=$1`, [pid])).rows.map((r) => Number(r.list_id)) : [];
     const segs = pid ? (await db(`SELECT segment_id FROM mk_segment_members WHERE profile_id=$1`, [pid]).catch(() => ({ rows: [] }))).rows.map((r) => Number(r.segment_id)) : [];
     out.aud = {};
-    const check = (f) => { const a = (f.targeting || {}).audience || {}; const has = (arr, set) => (arr || []).some((x) => set.includes(Number(x)));
+    const subd = pid && base.forms.some((f) => (f.targeting || {}).aud_mode === "not_subscribed") ? !!(await db(`SELECT 1 FROM mk_profiles WHERE id=$1 AND email_consent='subscribed'`, [pid]).catch(() => ({ rows: [] }))).rows[0] : false;
+    const check = (f) => { const tg = f.targeting || {}, a = tg.audience || {}; const has = (arr, set) => (arr || []).some((x) => set.includes(Number(x)));
+      if (tg.aud_mode === "not_profiles") return !pid;
+      if (tg.aud_mode === "profiles_only") return !!pid;
+      if (tg.aud_mode === "not_subscribed") return !subd;
+      if (tg.aud_mode && tg.aud_mode !== "lists") return true;
       if (has(a.hide_lists, lists) || has(a.hide_segments, segs)) return false;
       if ((a.show_lists || []).length || (a.show_segments || []).length) return has(a.show_lists, lists) || has(a.show_segments, segs);
       return true; };

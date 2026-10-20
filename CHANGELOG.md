@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.88.0
+Sign-up forms: Targeting & display behavior laid out like Klaviyo.
+- **Targeting tab:** Audience (all visitors, not existing Buzzin profiles, existing profiles only, not subscribers, or lists & segments); URLs with on/off switches and * wild cards (full links or paths); Location with "show in" and "don't show in" country pickers; UTM parameters (save them on the profile when someone signs up, and show only when the link's UTM rules match).
+- **Display tab:** Display priority, Timing (based on rules / immediately / custom trigger only, with switches for exit, delay, scroll and pages), Frequency (show again after N days; don't show again once submitted or a go-to-URL button was clicked), Devices, Click outside form to close (desktop and mobile separately), and a Custom trigger code to open the form from your own button.
+- Klaviyo's "Don't show to existing Klaviyo profiles" rule now carries over as "Don't show to existing Buzzin profiles".
+
 ## 4.87.0
 Sign-up forms: Klaviyo-style button settings, and one list with every contact.
 - **Choose where people go.** Click a Submit / Continue button: pick the **List to submit** (or keep the form's list), what happens **After submit** (next step, a chosen step, close, or a URL), and **Submit hidden fields** (profile properties saved on submit, e.g. Source = Spring popup).
