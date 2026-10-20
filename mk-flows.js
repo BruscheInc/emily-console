@@ -412,7 +412,7 @@ async function importKlaviyoFlows(store = "lb", who = "import") {
 /** Paths that do exactly the same thing collapse into one (emails compare by subject and HTML, not Klaviyo's copy ids). */
 function mergeDuplicates(graph, tpls) {
   const byId = {}; for (const t of Object.values(tpls || {})) byId[t.id] = t;
-  const htmlHash = (tid) => { const t = byId[tid]; return t ? crypto.createHash("sha1").update(JSON.stringify((t.blocks || []).map((b) => [b.type, b.props]))).digest("hex").slice(0, 12) : String(tid); };
+  const htmlHash = (tid) => { const t = byId[tid]; return t ? crypto.createHash("sha1").update(JSON.stringify(t.doc ? t.doc.body : (t.blocks || []).map((b) => [b.type, b.props]))).digest("hex").slice(0, 12) : String(tid); };
   const memo = {};
   const sig = (id, depth = 0) => {
     if (!id || !graph.nodes[id] || depth > 400) return "∅";

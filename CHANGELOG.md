@@ -3,6 +3,18 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.80.0
+- New email editor, built 1:1 on Klaviyo's own template format (sections → columns → blocks, with Klaviyo's field names).
+  - Left side: **Add content** (Blocks · Pre-built · Universal) and **Styles** (the whole email: backgrounds, width, border, Normal text, Heading 1–4, links, mobile).
+  - Blocks: Text, Image, Split, Button, Header/link bar, Drop shadow, Divider, Social links, Spacer, Product, Coupon, Table, Review quote, Video, HTML, Countdown. Layout: Columns (11 column layouts) and Section.
+  - Click a block to select it: Styles + Display tabs, and a side toolbar (move, duplicate, save as universal, Ask Emily, comment, delete). Drag blocks and sections anywhere; drag image edges to resize.
+  - Text is typed straight onto the email, with a formatting bar (Normal/H1–H4, font, size, bold, italic, underline, color, highlight, align, lists, links, personalization).
+  - Image settings match Klaviyo: crop, replace, alt text, link, width/height with lock, alignment, Fill column, Fill column on mobile, image area padding/background/border/corner radius, block background, block padding, Full width on mobile. All padding 0 + Fill column = flush, edge-to-edge image.
+  - Display tab on every block and section: All devices / Desktop only / Mobile only, show/hide logic (builder or Klaviyo-style code), content repeat.
+  - Undo/redo, desktop/phone view, Preview (filled in for a sample person), universal content that updates everywhere it's used.
+- Klaviyo templates are re-read with their drag-and-drop layout (read-only) and open as real blocks. Runs once by itself after this deploy; "Re-import from Klaviyo" runs it again. Templates already edited in Buzzin aren't overwritten.
+- Social icons in four styles (color, black, grey, white) are hosted by Buzzin as PNGs so every inbox shows them.
+
 ## 4.79.2
 - Refunds for out-of-stock items never put the item back in stock (it isn't on the shelf, so restocking would make it sellable again). The refund card says "No restock (out of stock)".
 

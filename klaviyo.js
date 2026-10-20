@@ -83,8 +83,8 @@ async function importAll(who = "system") {
     }
     // Templates used by flow emails (HTML kept so emails can be rebuilt)
     for (const t of tids) {
-      try { const j = await kget(`/templates/${t}/`); await save("template", t, j.data.attributes.name, j.data); counts.templates++; } catch (e) { /* skip one bad template */ }
-      await sleep(150);
+      try { const j = await kget(`/templates/${t}/?additional-fields[template]=definition`); await save("template", t, j.data.attributes.name, j.data); counts.templates++; } catch (e) { /* skip one bad template */ }
+      await sleep(1100);   // drag-and-drop template reads are rate-limited to 60 a minute
     }
     // Lists, segments, sign-up forms
     for (const l of await kall("/lists/")) { await save("list", l.id, l.attributes.name, l); counts.lists++; }
@@ -206,4 +206,17 @@ async function init() {
   }
 }
 
-module.exports = { init, importAll, exportProfiles, list, get, status };
+/** Re-read every saved template with its drag-and-drop layout (sections, columns, blocks). Read-only. */
+async function refreshTemplateDefinitions() {
+  if (!KEY()) throw new Error("KLAVIYO_API_KEY isn't set.");
+  const ids = (await db(`SELECT id FROM hd_klaviyo WHERE kind='template'`)).rows.map((r) => r.id);
+  let withLayout = 0, failed = 0;
+  for (const t of ids) {
+    try { const j = await kget(`/templates/${t}/?additional-fields[template]=definition`); await save("template", t, j.data.attributes.name, j.data); if (j.data.attributes.definition) withLayout++; }
+    catch (e) { failed++; if (failed <= 3) console.error(`Klaviyo template ${t}:`, e.message.slice(0, 200)); }
+    await sleep(1100);
+  }
+  return { templates: ids.length, with_layout: withLayout, failed };
+}
+
+module.exports = { refreshTemplateDefinitions, init, importAll, exportProfiles, list, get, status };
