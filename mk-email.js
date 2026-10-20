@@ -318,11 +318,23 @@ async function renderDocument(store, tpl, profile, extra = {}, opts = {}) {
   const b = await brand(store);
   const ctx = await contextFor(store, profile, extra);
   const doc = await withUniversal(typeof tpl.doc === "string" ? JSON.parse(tpl.doc) : tpl.doc);
+  // Each coupon block with its own offer shows its own code (in the box and in its link).
+  let doc2 = doc;
+  if (extra.coupons && Object.keys(extra.coupons).length) {
+    doc2 = JSON.parse(JSON.stringify(doc));
+    const CP = require("./mk-coupons"), d0 = await CP.defaults();
+    const walk = (x) => { if (!x || typeof x !== "object") return; if (Array.isArray(x)) return x.forEach(walk);
+      if (x.type === "coupon" && x.data && x.data.properties && x.data.properties.offer && x.data.properties.offer.mode !== "shared") {
+        const code = extra.coupons[CP.offerKey(CP.cleanOffer(x.data.properties.offer, d0))];
+        if (code) { const sub = (v) => String(v || "").replace(/\{\{\s*coupon\s*\}\}/g, code); x.data.content = sub(x.data.content || "{{ coupon }}"); if (x.data.properties.href) x.data.properties.href = sub(x.data.properties.href); } }
+      Object.values(x).forEach(walk); };
+    walk(doc2);
+  }
   const prods = await productsForDoc(store, doc, ctx);
   const person = { ...((profile && profile.props) || {}), first_name: ctx.first_name, last_name: ctx.last_name, email: ctx.email, phone_number: ctx.phone, orders_count: ctx.orders_count, total_spent: ctx.total_spent, last_sizes: ctx.last_sizes, props: (profile && profile.props) || {} };
   const base = { ...ctx, person, event: extra.event || { extra: { line_items: ctx.items || [] }, items: ctx.items || [] } };
   const brandAbs = { ...b, logo_abs: absUrl(b.logo) };
-  const out = MKDoc.render(doc, {
+  const out = MKDoc.render(doc2, {
     brand: brandAbs, editor: !!opts.editor, assetBase: PUBLIC_URL(),
     text: (s, scope) => personalize(s, scope && Object.keys(scope).length ? { ...ctx, ...scope } : ctx),
     visible: (vis, scope) => visibleFor(vis, { ...base, ...(scope || {}) }),
@@ -401,7 +413,12 @@ function cleanDoc(doc) {
   if (JSON.stringify(out).length > 2_000_000) throw new Error("This email is too big to save (over 2 MB).");
   return out;
 }
-async function saveTemplate({ id, store, name, subject, preview, blocks, doc }, who) {
+async function saveTemplate(args, who) {
+  const row = await saveTemplate0(args, who);
+  try { const CP = require("./mk-coupons"); if (row && CP.usesCoupon(row)) { const offers = CP.offersIn(row); CP.prepare(row.store, offers.length ? offers : ["default"]).catch(() => {}); } } catch (e) {}   // codes ready before the first send
+  return row;
+}
+async function saveTemplate0({ id, store, name, subject, preview, blocks, doc }, who) {
   const b = cleanBlocks(blocks || []);
   const d = doc ? cleanDoc(doc) : null;
   if (id) return (await db(`UPDATE mk_templates SET name=COALESCE($2,name), subject=$3, preview=$4, blocks=CASE WHEN $7::boolean THEN blocks ELSE $5 END, doc=COALESCE($8::jsonb, doc), updated_by=$6, updated_at=now() WHERE id=$1 RETURNING *`, [Number(id), name || null, subject || "", preview || "", JSON.stringify(b), who || null, !!d && !(blocks || []).length, d ? JSON.stringify(d) : null])).rows[0];
@@ -552,7 +569,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     try { const t = await getTemplate(req.params.id); if (!t) return res.status(404).json({ error: "not found" });
       const to = String((req.body && req.body.to) || "").trim().toLowerCase(); if (!to) return res.status(400).json({ error: "Enter an address from the internal test list" });
       const tp = await require("./mk-coupons").forTest(t.store, to, "email", t);   // the real profile and a working code, like the live email
-      const r = await render(t.store, t, tp.profile, tp.coupon ? { coupon: tp.coupon } : {});
+      const r = await render(t.store, t, tp.profile, tp.coupon ? { coupon: tp.coupon, coupons: tp.coupons } : {});
       const row = await SEND().send({ store: t.store, channel: "email", profile: { id: null, email: to, email_consent: "subscribed" }, msg: r, test: true, messageId: `tpl:${t.id}`, idem: `test:${t.id}:${to}:${Date.now()}` });
       res.json({ status: row.status, reason: row.reason }); } catch (e) { fail(res, e); }
   });
@@ -564,6 +581,14 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   app.delete("/api/mk/saved-blocks/:id", async (req, res) => { if (!guard(req, res)) return; try { await db(`DELETE FROM mk_saved_blocks WHERE id=$1`, [Number(req.params.id)]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/saved-blocks/:id", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const blk = b.block ? (b.block.data || b.block.rows ? cleanStrings(b.block) : cleanBlocks([b.block])[0]) : null; res.json((await db(`UPDATE mk_saved_blocks SET name=COALESCE($2,name), block=COALESCE($3,block), updated_at=now() WHERE id=$1 RETURNING *`, [Number(req.params.id), b.name || null, blk ? JSON.stringify(blk) : null])).rows[0]); } catch (e) { fail(res, e); } });
   app.post("/api/mk/templates/convert-html", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; res.json({ blocks: await htmlToBlocks({ store: store(b.store) || "lb", html: String(b.html || "") }) }); } catch (e) { fail(res, e); } });
+  // Coupon offers: pick Shopify collections or products the discount applies to.
+  app.get("/api/mk/shopify-items", async (req, res) => {
+    if (!guard(req, res)) return;
+    try { const R = require("./returns"), st = R.shopFor(store(req.query.store) || "lb"), kind = req.query.kind === "products" ? "products" : "collections";
+      const q = String(req.query.q || "").replace(/["\\]/g, "").slice(0, 60);
+      const r = await R.gql(st, `query($q:String){ ${kind}(first: 20, query: $q, sortKey: TITLE) { nodes { id title } } }`, { q: q ? `title:*${q}*` : null });
+      res.json({ items: ((r[kind] || {}).nodes || []).map((x) => ({ id: x.id, title: x.title })) }); } catch (e) { fail(res, e); }
+  });
   // Product picker for product blocks: search the store's catalog by name.
   app.get("/api/mk/products", async (req, res) => {
     if (!guard(req, res)) return;
@@ -624,6 +649,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
 
 async function init() {
   await migrate();
+  try { const CP = require("./mk-coupons"); await CP.migrate(); CP.start(); } catch (e) { console.error("coupon pool:", e.message); }
   // One-time: send as hello@larkspurbaby.com (the address customers know), not hello@mail.… — a saved brand kit that still has the old default is updated.
   try { if (!(await core.syncGet("mk_sender_root_domain_v1").catch(() => null))) {
     for (const st of Object.keys(BRAND_DEFAULTS)) { const r = (await db(`SELECT data FROM mk_brand WHERE store=$1`, [st])).rows[0];

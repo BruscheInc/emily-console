@@ -221,13 +221,13 @@ async function deliver(c, r, S) {
     const tpl = await E().getTemplate(v.template_id); if (!tpl) return { status: "skipped", note: "email missing" };
     const subject = r.round === "resend" && c.resend.subject ? c.resend.subject : v.subject || tpl.subject;
     let cpn; try { cpn = await campCoupon(c, p, "email", { ...tpl, subject }); } catch (e) { return { status: "skipped", note: `couldn't make a coupon code (${e.message})` }; }
-    const msg = await E().render(c.store, { ...tpl, subject, preview: v.preview || tpl.preview }, p, { campaign: c.name, ...(cpn ? { coupon: cpn } : {}) });
+    const msg = await E().render(c.store, { ...tpl, subject, preview: v.preview || tpl.preview }, p, { campaign: c.name, ...(cpn && cpn.coupon ? { coupon: cpn.coupon, coupons: cpn.coupons } : {}) });
     const row = await SEND().send({ store: c.store, channel: "email", profile: p, msg, idem, campaignId: c.id, messageId: `camp:${c.id}:${variant || "main"}` });
     return { status: row.status, send_id: row.id, note: row.reason };
   }
   const SMS = require("./mk-sms");
   let cpn; try { cpn = await campCoupon(c, p, "sms", { body: v.body }); } catch (e) { return { status: "skipped", note: `couldn't make a coupon code (${e.message})` }; }
-  const body = await SMS.compose(c.store, { body: v.body, add_opt_out: v.add_opt_out !== false }, p, cpn ? { coupon: cpn } : {});
+  const body = await SMS.compose(c.store, { body: v.body, add_opt_out: v.add_opt_out !== false }, p, cpn && cpn.coupon ? { coupon: cpn.coupon } : {});
   const row = await SEND().send({ store: c.store, channel: "sms", profile: p, msg: { body, media: v.media || null }, idem, campaignId: c.id, messageId: `camp:${c.id}:${variant || "main"}` });
   if (row.status === "deferred") return { status: "queued", later: true, note: "quiet hours" };
   return { status: row.status, send_id: row.id, note: row.reason };
@@ -284,7 +284,7 @@ async function testSend(id, to) {
     if (c.channel === "email") {
       const tpl = await E().getTemplate(x.template_id); if (!tpl) throw new Error("Choose an email first.");
       const tp = await require("./mk-coupons").forTest(c.store, to, "email", { ...tpl, subject: x.subject || tpl.subject });
-      const msg = await E().render(c.store, { ...tpl, subject: `${v ? `[${v}] ` : ""}${x.subject || tpl.subject}`, preview: x.preview || tpl.preview }, tp.profile, tp.coupon ? { coupon: tp.coupon } : {});
+      const msg = await E().render(c.store, { ...tpl, subject: `${v ? `[${v}] ` : ""}${x.subject || tpl.subject}`, preview: x.preview || tpl.preview }, tp.profile, tp.coupon ? { coupon: tp.coupon, coupons: tp.coupons } : {});
       const row = await SEND().send({ store: c.store, channel: "email", profile: { id: null, email: to, email_consent: "subscribed" }, msg, test: true, campaignId: null, messageId: `camp:${c.id}:${v || "main"}`, idem: `ctest:${c.id}:${v}:${to}:${Date.now()}` });
       out.push({ version: v, status: row.status, reason: row.reason });
     } else {
@@ -333,6 +333,6 @@ async function campCoupon(c, p, channel, msg) {
   const CP = require("./mk-coupons"); if (!CP.usesCoupon(msg)) return null;
   const S = await MK().settings();
   const live = !!(S.sending[c.store] && S.sending[c.store][channel]) && p[channel === "sms" ? "sms_consent" : "email_consent"] === "subscribed";
-  return CP.forProfile(c.store, p, { real: live, source: `campaign ${c.name}` });
+  return CP.codesFor(c.store, p, msg, { real: live, source: `campaign ${c.name}` });
 }
 module.exports = { init, migrate, routes, list, get, create, update, estimate, problems, schedule, unschedule, cancel, tick, testSend, report, audienceWhere, startFor };

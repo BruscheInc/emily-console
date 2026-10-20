@@ -394,9 +394,14 @@ const PANELS = {
   },
   coupon(blk, st, def) {
     const p = blk.data.properties = blk.data.properties || {};
-    return `<div class="kp-sec"><h4>Coupon</h4>${F.lab('Code', F.text(blk.data, 'content', { ph: '{{ coupon }}' }), '<code>{{ coupon }}</code> is each person’s own code from the sign-up form or flow. Or type a code everyone shares.')}
+    const o = p.offer = p.offer || { mode: /\{\{\s*coupon/.test(blk.data.content || '{{ coupon }}') ? 'unique' : 'shared', type: 'order', value_type: 'percent', value: 10, days: 7, prefix: 'WELCOME', min: 'none' };
+    if (o.mode === 'unique') blk.data.content = '{{ coupon }}';
+    document.getElementById('kxPanel')._after = (P) => wireOfferPickers(P, o);
+    return `<div class="kp-sec"><h4>Discount</h4>${F.seg(o, 'mode', [['unique', 'Unique code per person'], ['shared', 'Same code for everyone']], { def: 'unique', redraw: true, onSet: (v) => { if (v === 'unique') blk.data.content = '{{ coupon }}'; else if (/\{\{/.test(blk.data.content || '')) blk.data.content = ''; } })}
+      ${o.mode === 'shared' ? F.lab('Code', F.text(blk.data, 'content', { ph: 'WELCOME10' }), 'Type a code that already exists in Shopify.') : offerFields(o)}</div>
+    <div class="kp-sec"><h4>Coupon</h4>
       ${F.row('Header text', F.tog(p, 'header_enabled', { redraw: true }))}${p.header_enabled ? F.text(p, 'header', { ph: 'Use code' }) : ''}
-      ${F.lab('Link (optional)', F.text(p, 'href', { ph: 'https://…/discount/{{ coupon }}' }))}</div>
+      ${F.lab('Link (optional)', F.text(p, 'href', { ph: 'https://larkspurbaby.com/discount/{{ coupon }}' }), 'A /discount/{{ coupon }} link puts the code in their cart automatically.')}${p.href ? '' : F.btn('Use the auto-apply link', () => { p.href = ((E().ST.brand || {}).shop_url || 'https://larkspurbaby.com').replace(/\/$/, '') + '/discount/{{ coupon }}'; E().changed({}); E().drawPanel(); })}</div>
     ${textStyleSection(st, def, 'Code text')}
     <div class="kp-sec"><h4>Box</h4>${F.lab('Background', F.color(st, 'background_color', { ph: 'None' }))}${F.lab('Corner radius', F.num(st, 'border_radius', { ph: def.border_radius, min: 0, max: 60 }))}${F.lab('Padding inside', F.pad(st, 'inner_padding', { ph: { t: def.inner_padding_top, l: def.inner_padding_left } }))}${F.lab('Alignment', F.align(st, 'text_align', 'center'))}${F.row('Full width', F.tog(st, 'stretch'))}</div>
     ${F.opt('Border', bord(st), { add: () => { st.border_style = 'dashed'; st.border_width = 2; st.border_color = def.border_color; }, remove: () => { st.border_width = 0; } }, () => F.border(st))}
@@ -470,6 +475,42 @@ function colWidth(info) {
 function imgCard(src, meta, acts) {
   return `<div class="kp-imgcard"><div class="pv">${src ? `<img src="${esc(src)}" alt="">` : `<span style="color:var(--muted);font-size:13px">No image yet</span>`}</div>${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
     <div class="acts" style="margin-top:8px">${acts.crop ? F.btn('Crop', acts.crop) : ''}${F.btn(src ? 'Replace' : 'Choose image', acts.replace, src ? '' : 'pri')}${acts.remove ? `<button type="button" class="kp-ic" title="Remove" data-f="${bind({ t: 'act', fn: acts.remove })}">${I('trash')}</button>` : ''}</div></div>`;
+}
+
+/* Coupon block: what the code does, like Shopify's "Create discount" (4 types). Buzzin creates each person's code in Shopify. */
+function offerFields(o) {
+  const T = o.type || 'order';
+  const items = (key, appliesKey, label) => `${F.lab(label, F.sel(o, appliesKey, [['collections', 'Specific collections'], ['products', 'Specific products']], { def: 'collections', redraw: true }))}
+    <div class="kp-chips">${(o[key] || []).map((x, i) => `<span class="kp-chip">${esc(x.title)}<button type="button" data-oxrm="${key}:${i}" aria-label="Remove">×</button></span>`).join('')}</div>
+    <input class="kp-in" data-ops="${key}" data-kind="${o[appliesKey] === 'products' ? 'products' : 'collections'}" placeholder="Search ${o[appliesKey] === 'products' ? 'products' : 'collections'}…" style="margin-top:6px"><div data-opr="${key}"></div>`;
+  const val = () => `<div class="kp-2">${F.sel(o, 'value_type', [['percent', 'Percentage'], ['amount', 'Fixed amount']], { def: 'percent', redraw: true })}${F.num(o, 'value', { ph: '10', pre: o.value_type === 'amount' ? '$' : '%', min: 0 })}</div>`;
+  const minimum = () => `${F.lab('Minimum purchase', F.sel(o, 'min', [['none', 'No minimum'], ['amount', 'Minimum purchase amount ($)'], ['qty', 'Minimum quantity of items']], { def: 'none', redraw: true }))}${o.min && o.min !== 'none' ? F.num(o, 'min_value', { pre: o.min === 'amount' ? '$' : 'Items', min: 0 }) : ''}`;
+  let body = '';
+  if (T === 'order') body = F.lab('Discount value', val()) + minimum();
+  if (T === 'products') body = F.lab('Discount value', val()) + items('items', 'applies', 'Applies to') + minimum();
+  if (T === 'bxgy') body = `<label class="kp-lab">Customer buys</label>${F.seg(o, 'buy_mode', [['qty', 'Minimum quantity'], ['amount', 'Minimum amount']], { def: 'qty', redraw: true })}
+      <div style="margin-top:6px">${o.buy_mode === 'amount' ? F.num(o, 'buy_amount', { pre: '$', min: 0 }) : F.num(o, 'buy_qty', { pre: 'Quantity', min: 1 })}</div>${items('buy_items', 'buy_applies', 'Any items from')}
+    <label class="kp-lab" style="margin-top:12px">Customer gets</label>${F.num(o, 'get_qty', { pre: 'Quantity', min: 1 })}${items('get_items', 'get_applies', 'Any items from')}
+    ${F.lab('At a discounted value', F.seg(o, 'get_effect', [['percent', 'Percentage'], ['amount', 'Amount off each'], ['free', 'Free']], { def: 'free', redraw: true }))}${o.get_effect === 'percent' ? F.num(o, 'get_percent', { pre: '%', min: 1 }) : o.get_effect === 'amount' ? F.num(o, 'get_amount', { pre: '$', min: 0 }) : ''}
+    ${F.lab('Maximum uses per order', F.num(o, 'max_per_order', { ph: 'No limit', min: 0 }))}`;
+  if (T === 'shipping') body = `${F.lab('Countries', F.seg(o, 'ship_where', [['all', 'All countries'], ['some', 'Selected countries']], { def: 'all', redraw: true, onSet: (v) => { if (v === 'all') o.countries = []; else if (!(o.countries || []).length) o.countries = ['US']; } }))}
+      ${o.ship_where === 'some' ? F.lab('Country codes', `<input class="kp-in" data-occ value="${esc((o.countries || []).join(', '))}" placeholder="US, CA">`) : ''}
+      ${F.lab('Exclude shipping rates over', F.num(o, 'max_ship', { pre: '$', ph: 'No limit', min: 0 }))}${minimum()}`;
+  return `${F.lab('Type', F.sel(o, 'type', [['order', 'Amount off order'], ['products', 'Amount off products'], ['bxgy', 'Buy X get Y'], ['shipping', 'Free shipping']], { def: 'order', redraw: true }))}${body}
+    <label class="kp-lab">Combinations</label>${F.row('Product discounts', F.tog(o, 'combine_product'))}${F.row('Order discounts', F.tog(o, 'combine_order'))}${F.row('Shipping discounts', F.tog(o, 'combine_shipping'))}
+    <div class="kp-2" style="margin-top:8px">${F.num(o, 'days', { pre: 'Valid', min: 1, max: 365, ph: '7' })}${F.text(o, 'prefix', { ph: 'WELCOME' })}</div>
+    <div class="kp-hint">Each person gets their own single-use code (one use, one per customer), ready the moment it's sent. Valid days · code prefix.</div>`;
+}
+function wireOfferPickers(P, o) {
+  P.querySelectorAll('[data-oxrm]').forEach((b) => b.onclick = () => { const [k, i] = b.dataset.oxrm.split(':'); o[k].splice(Number(i), 1); E().changed({}); E().drawPanel(); });
+  const cc = P.querySelector('[data-occ]'); if (cc) cc.onchange = () => { o.countries = cc.value.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)); E().changed({}); };
+  P.querySelectorAll('[data-ops]').forEach((inp) => { const key = inp.dataset.ops, out = P.querySelector(`[data-opr="${key}"]`); let t;
+    inp.oninput = () => { clearTimeout(t); const q = inp.value.trim(); t = setTimeout(async () => {
+      const r = await api('/api/mk/shopify-items?' + qs({ store: E().ST.t.store, kind: inp.dataset.kind, q })).catch((e) => ({ items: [], error: e.message }));
+      out.innerHTML = r.error ? `<div class="kp-hint">${esc(r.error)}</div>` : `<div class="kp-list">${r.items.slice(0, 8).map((x) => `<div class="kp-li" style="cursor:pointer" data-oid="${esc(x.id)}"><span class="t">${esc(x.title)}</span>${I('plus')}</div>`).join('') || '<div class="kp-hint">Nothing found.</div>'}</div>`;
+      out.querySelectorAll('[data-oid]').forEach((el) => el.onclick = () => { const x = r.items.find((y) => y.id === el.dataset.oid); o[key] = o[key] || []; if (!o[key].some((y) => y.id === x.id)) o[key].push(x); E().changed({}); E().drawPanel(); });
+    }, 250); };
+    inp.onfocus = () => { if (!inp.value) inp.oninput(); }; });
 }
 function wireProductSearch(P, blk, S) {
   const inp = P.querySelector('#kpPS'), out = P.querySelector('#kpPR'); if (!inp) return;

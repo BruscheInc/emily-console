@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.91.0
+Coupon blocks create Shopify's 4 discount types, instantly.
+- **Choose what the coupon does** on the coupon block (Discount section), with the same choices as Shopify's "Create discount": **Amount off order**, **Amount off products** (pick collections or products), **Buy X get Y** (minimum quantity or amount, what they get, free / % off / $ off each, max uses per order) and **Free shipping** (countries, exclude rates over $X). Also minimum purchase, combinations, days valid and code prefix. Or switch to "Same code for everyone" and type an existing code.
+- **Unique code per person**, single use and one per customer. Each coupon block has its own offer, so one email can carry, for example, a 10% code and a free-shipping code.
+- **No waiting.** Buzzin keeps 25 ready-made codes in Shopify for every offer in use and tops them up in the background, so a code is there the moment an email sends or a form shows its success step. Codes get ready as soon as you save an email with a coupon or set a form live.
+- An "Auto-apply link" button on the coupon block fills in a link (/discount/your-code) that puts the code in the cart.
+
 ## 4.90.2
 - "Welcome Email (Klaviyo)" was edited in Buzzin, so the automatic re-copy left it alone. Now only the blocks that held Klaviyo's coupon tag get the code back, and the rest of your edits stay.
 - Any Klaviyo coupon tag still left in an email or link shows the person's code when it's sent.

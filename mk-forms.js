@@ -42,6 +42,7 @@ async function migrate() {
   await db(`ALTER TABLE mk_forms ADD COLUMN IF NOT EXISTS start_at TIMESTAMPTZ`);
   await db(`ALTER TABLE mk_forms ADD COLUMN IF NOT EXISTS end_at TIMESTAMPTZ`);
   await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS prize INT`);
+  await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS offer_key TEXT`);   // which coupon-block offer made it (null = the default code)
   await db(`CREATE TABLE IF NOT EXISTS mk_form_comments (id BIGSERIAL PRIMARY KEY, form_id BIGINT NOT NULL, who TEXT, body TEXT NOT NULL, step_id TEXT, resolved BOOLEAN NOT NULL DEFAULT false, at TIMESTAMPTZ DEFAULT now())`);
 }
 
@@ -93,10 +94,13 @@ async function save(id, b, who, isAdmin) {
   if (cur.ab_of) status = (await db(`SELECT status FROM mk_forms WHERE id=$1`, [cur.ab_of])).rows[0]?.status || "draft";
   else if (status !== cur.status) await db(`UPDATE mk_forms SET status=$2 WHERE ab_of=$1`, [cur.id, status]);
   await db(`UPDATE mk_forms SET start_at=$2, end_at=$3 WHERE id=$1 OR ab_of=$1`, [cur.id, startAt, endAt]);
-  return (await db(`UPDATE mk_forms SET name=$2, status=$3, priority=$4, steps=$5, style=$6, targeting=$7, teaser=$8, coupon=$9, list_id=$10, sms_consent_text=$11, email_consent_text=$12, updated_by=$13, updated_at=now() WHERE id=$1 RETURNING *`,
+  const saved = (await db(`UPDATE mk_forms SET name=$2, status=$3, priority=$4, steps=$5, style=$6, targeting=$7, teaser=$8, coupon=$9, list_id=$10, sms_consent_text=$11, email_consent_text=$12, updated_by=$13, updated_at=now() WHERE id=$1 RETURNING *`,
     [cur.id, b.name || cur.name, status, Number(b.priority != null ? b.priority : cur.priority) || 0, JSON.stringify(steps), JSON.stringify(style), JSON.stringify(b.targeting || cur.targeting),
      JSON.stringify(b.teaser || cur.teaser), JSON.stringify(b.coupon || cur.coupon), b.list_id != null ? Number(b.list_id) : cur.list_id, b.sms_consent_text != null ? b.sms_consent_text : cur.sms_consent_text,
      b.email_consent_text != null ? b.email_consent_text : cur.email_consent_text, who || null])).rows[0];
+  try { const c = saved.coupon || {}; if (saved.status === "live" && c.enabled && Number(c.percent) > 0) {   // codes ready before the first sign-up
+    const CP = require("./mk-coupons"); CP.prepare(saved.store, [{ type: "order", value_type: "percent", value: Number(c.percent) || 10, days: Number(c.expires_days) || 14, prefix: c.prefix || "WELCOME" }]).catch(() => {}); } } catch (e) {}
+  return saved;
 }
 const publicForm = (f0, extra) => { const f = V2.toV2(f0); return { ...(extra || {}), id: f.id, shop_url: SHOP_URL[f.store] || "", priority: f.priority, steps: f.steps, style: f.style, targeting: f.targeting, teaser: f.teaser, sms_consent_text: f.sms_consent_text, email_consent_text: f.email_consent_text, coupon_on: !!(f.coupon && f.coupon.enabled) }; };
 
@@ -106,16 +110,14 @@ async function issueCoupon(store, form, profile, over = {}) {
   if (!c.enabled || !(Number(c.percent) > 0)) return null;
   const prior = (await db(`SELECT code FROM mk_coupons WHERE store=$1 AND form_id=$2 AND profile_id=$3 ORDER BY id DESC LIMIT 1`, [store, form.id, profile.id])).rows[0];
   if (prior) return prior.code;
-  const code = `${String(c.prefix || "WELCOME").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12)}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
-  const expires = new Date(Date.now() + (Number(c.expires_days) || 14) * 864e5);
+  let code = `${String(c.prefix || "WELCOME").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12)}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+  let expires = new Date(Date.now() + (Number(c.expires_days) || 14) * 864e5);
   let real = false;
   if ((over.status || form.status) === "live") {
-    // Real single-use code in Shopify, only for live forms.
-    const st = require("./returns").shopFor(store);
-    const basic = { title: `${form.name} · ${code}`, code, startsAt: new Date().toISOString(), endsAt: expires.toISOString(), customerSelection: { all: true },
-      customerGets: { value: { percentage: (Number(c.percent) || 10) / 100 }, items: { all: true } }, appliesOncePerCustomer: true, usageLimit: 1 };
-    const r = await require("./returns").gql(st, `mutation($b:DiscountCodeBasicInput!){discountCodeBasicCreate(basicCodeDiscount:$b){codeDiscountNode{id} userErrors{field message}}}`, { b: basic });
-    const ue = r.discountCodeBasicCreate.userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
+    // Real single-use code in Shopify, only for live forms. Taken from the ready pool so the success step shows it instantly.
+    const CP = require("./mk-coupons");
+    const off = CP.cleanOffer({ type: "order", value_type: "percent", value: Number(c.percent) || 10, days: Number(c.expires_days) || 14, prefix: c.prefix || "WELCOME" });
+    const got = await CP.claim(store, off, form.name); code = got.code; expires = got.expires;
     real = true;
   }
   await db(`INSERT INTO mk_coupons (store, code, profile_id, form_id, percent, expires_at, real, prize) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [store, code, profile.id, form.id, Number(c.percent) || 10, expires, real, over.prize == null ? null : over.prize]);
