@@ -38,14 +38,43 @@ const col = (c, dflt) => { const r = rgba(c); if (!r) return dflt; return r.pct 
 const font = (f) => (f ? (/,/.test(f) ? f : `'${String(f).replace(/['"]/g, "")}', Helvetica, Arial, sans-serif`) : null);
 const WIDTHS = { small: 400, medium: 600, large: 800, full: 1000 };
 
-const imgCache = new Map(); let imgErr = false;
-async function imageUrl(id) {
+const imgCache = new Map(); let imgErr = false, onsite = undefined;
+const IMG_RE = /^https?:\/\/[^\s"']+\.(png|jpe?g|gif|webp|avif)(\?[^\s"']*)?$/i;
+function urlsIn(o, out = []) { if (o == null) return out; if (typeof o === "string") { if (IMG_RE.test(o.trim()) || /klaviyo.*\/images?\//i.test(o) && /^https?:/.test(o)) out.push(o.trim()); return out; }
+  if (Array.isArray(o)) o.forEach((x) => urlsIn(x, out)); else if (typeof o === "object") Object.values(o).forEach((x) => urlsIn(x, out)); return out; }
+/** Klaviyo's own storefront script loads each form with its image addresses; read that once (public, no key). */
+async function onsiteForms() {
+  if (onsite !== undefined) return onsite;
+  onsite = null;
+  try {
+    const acc = await kget("/accounts/"); const pk = acc.data && acc.data[0] && acc.data[0].attributes && acc.data[0].attributes.public_api_key;
+    if (!pk) { note("onsite: no public key on the account"); return null; }
+    for (const u of [`https://fast.a.klaviyo.com/forms/api/v7/${pk}/full-forms`, `https://fast.a.klaviyo.com/forms/api/v6/${pk}/full-forms`, `https://fast.a.klaviyo.com/forms/api/v4/${pk}/full-forms`, `https://fast.a.klaviyo.com/forms/api/v7/${pk}/forms`]) {
+      try { const r = await fetch(u, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20000) }); const t = await r.text();
+        note(`onsite ${u.replace(pk, "<site>")}: ${r.status} · ${t.length} bytes · ${urlsIn((() => { try { return JSON.parse(t); } catch (e) { return null; } })()).length} image links`);
+        if (r.ok && t.length > 50) { try { onsite = JSON.parse(t); break; } catch (e) {} } } catch (e) { note(`onsite ${u.replace(pk, "<site>")}: ${e.message}`); }
+    }
+  } catch (e) { note(`onsite: ${e.message.slice(0, 160)}`); }
+  return onsite;
+}
+/** Find the address of image <id>: an object that names the id and carries an image link. */
+function findById(o, id) {
+  let hit = ""; const want = String(id);
+  const walk = (x) => { if (hit || x == null || typeof x !== "object") return; if (Array.isArray(x)) return x.forEach(walk);
+    const vals = Object.entries(x);
+    if (vals.some(([k, v]) => /^(id|image_id|imageId|asset_id)$/.test(k) && String(v) === want)) { const u = urlsIn(x)[0]; if (u) { hit = u; return; } }
+    vals.forEach(([, v]) => walk(v)); };
+  walk(o); return hit;
+}
+async function imageUrl(id, raw) {
+  const inline = urlsIn(raw)[0]; if (inline) return inline;
   if (!id) return "";
   if (imgCache.has(id)) return imgCache.get(id);
   let url = "";
-  try { const j = await kget(`/images/${id}/`); const at = (j.data && j.data.attributes) || {}; url = at.image_url || at.url || at.src || ""; if (!url) note(`image ${id}: no URL in reply (${Object.keys(at).join(",")})`); }
-  catch (e) { url = ""; if (!imgErr) { imgErr = true; note(`image ${id} couldn't be read: ${e.message.slice(0, 200)}`); } }
-  imgCache.set(id, url); await sleep(350); return url;
+  try { const j = await kget(`/images/${id}/`); const at = (j.data && j.data.attributes) || {}; url = at.image_url || at.url || at.src || ""; }
+  catch (e) { if (!imgErr) { imgErr = true; note(`image ${id}: Images API ${e.status || ""} (form images aren't in the image library); trying the storefront copy`); } }
+  if (!url) { const os = await onsiteForms(); if (os) { url = findById(os, id); note(`image ${id}: ${url ? "found on the storefront copy" : "not found on the storefront copy"}`); } }
+  imgCache.set(id, url); await sleep(300); return url;
 }
 
 /** One Klaviyo block → Buzzin block (or null), with notes for anything dropped. */
@@ -60,7 +89,7 @@ async function block(b, notes, ctx) {
     case "email": return { id: rid(), type: "email", label: p.label || "Email", show_label: !!p.show_label, placeholder: p.placeholder || "Email", required: p.required !== false, show_consent: false, st };
     case "phone_number": return { id: rid(), type: "phone", label: p.label || "Phone", show_label: !!p.show_label, placeholder: p.placeholder || "Phone number", required: !!p.required, st };
     case "sms_disclosure": ctx.hadDisclosure = true; return null;   // Buzzin's phone block carries the consent wording + unchecked box
-    case "image": { const src = await imageUrl(p.image && p.image.id); if (!src) notes.push("an image couldn't be copied (re-add it)"); return { id: rid(), type: "image", src, alt: (p.image && p.image.alt_text) || "", width: s.width && Number(s.width) ? Math.min(100, Math.round(Number(s.width) / (ctx.width || 600) * 100)) : 100, st }; }
+    case "image": { const src = await imageUrl(p.image && p.image.id, b); if (!src) notes.push("an image block's picture couldn't be copied: re-add it with Upload"); return { id: rid(), type: "image", src, alt: (p.image && p.image.alt_text) || "", width: s.width && Number(s.width) ? Math.min(100, Math.round(Number(s.width) / (ctx.width || 600) * 100)) : 100, st }; }
     case "button": {
       const a = b.action || {}, at = String(a.type || "").toLowerCase(), ap = a.properties || {};
       if (ap.list_id) ctx.listIds.add(String(ap.list_id));
@@ -108,7 +137,7 @@ async function convertVersion(form, v) {
   style.width = s.width === "custom" ? Number(s.custom_width) || 600 : WIDTHS[s.width] || 600; ctx.width = style.width;
   if (s.minimum_height) style.min_height = Number(s.minimum_height);
   if (s.background_color) style.bg = col(s.background_color, "#FFFFFF");
-  if (s.background_image && s.background_image.properties) style.bg_image = await imageUrl(s.background_image.properties.id);
+  if (s.background_image && s.background_image.properties) style.bg_image = await imageUrl(s.background_image.properties.id, s.background_image);
   const bs = s.border_styles || {}; if (bs.radius != null) style.radius = Number(bs.radius); if (bs.thickness) { style.border_width = Number(bs.thickness); style.border_color = col(bs.color, style.border_color); }
   if (s.padding) style.pad = pad(s.padding, style.pad);
   if (s.drop_shadow) style.shadow = s.drop_shadow.enabled !== false;
@@ -132,15 +161,26 @@ async function convertVersion(form, v) {
   for (let i = 0; i < vsteps.length; i++) {
     const k = vsteps[i], cols = k.columns || [];
     const out = { id: `s${i + 1}`, name: k.name || `Step ${i + 1}`, kind: "step", image: { src: "", pos: "none", width: sideW }, blocks: [] };
-    for (const c of cols) {
-      const rows = c.rows || [], bl = rows.flatMap((r) => r.blocks || []);
-      // a column that only holds one image is the side image
-      if (cols.length > 1 && bl.length === 1 && String(bl[0].type).toLowerCase() === "image") {
-        out.image = { src: await imageUrl(bl[0].properties && bl[0].properties.image && bl[0].properties.image.id), pos: side.alignment === "left" ? "left" : "right", width: sideW };
-        if (!out.image.src) notes.push(`step "${k.name || i + 1}": side image needs re-adding (Step ⋮ → Step settings → Side image)`);
+    note(`step "${k.name}" layout: ${JSON.stringify(cols.map((c) => ({ keys: Object.keys(c).filter((x) => x !== "rows"), styles: c.styles, rows: (c.rows || []).map((r) => (r.blocks || []).map((b) => b.type === "image" ? { image: b.properties, styles: b.styles } : b.type)) }))).slice(0, 1500)}`);
+    const isImgOnly = (c) => { const bl = (c.rows || []).flatMap((r) => r.blocks || []); return bl.length >= 1 && bl.every((b) => String(b.type).toLowerCase() === "image") && bl.length <= 1; };
+    const colImg = (c) => (c.image || (c.properties && c.properties.image) || (c.styles && c.styles.background_image) || null);
+    for (let ci = 0; ci < cols.length; ci++) {
+      const c = cols[ci], rows = c.rows || [], bl = rows.flatMap((r) => r.blocks || []);
+      // Klaviyo's side image: a second column holding only an image (or a column whose own image/background is the picture)
+      const ci0 = colImg(c);
+      if (cols.length > 1 && (isImgOnly(c) || (ci0 && !bl.length))) {
+        const img = ci0 ? (ci0.properties || ci0) : (bl[0].properties && bl[0].properties.image) || {};
+        const pos = side.alignment ? (side.alignment === "left" ? "left" : "right") : ci === 0 ? "left" : "right";
+        out.image = { src: await imageUrl(img.id, ci0 || bl[0]), pos, width: sideW };
+        if (!out.image.src) notes.push(`step "${k.name || i + 1}": side photo couldn't be copied; the split is kept, add the photo in Step ⋮ → Step settings → Side image`);
         continue;
       }
       for (const r of rows) for (const b0 of r.blocks || []) { const nb = await block(b0, notes, ctx); if (nb) out.blocks.push(nb); }
+    }
+    // Klaviyo can also keep the side image only in the version settings
+    if (out.image.pos === "none" && side && side.alignment && (P.side_image || P.side_image_settings && P.side_image_settings.image)) {
+      const si = P.side_image || P.side_image_settings.image; out.image = { src: await imageUrl(si.id || (si.image && si.image.id), si), pos: side.alignment === "left" ? "left" : "right", width: sideW };
+      if (!out.image.src) notes.push(`step "${k.name || i + 1}": side photo couldn't be copied; add it in Step settings`);
     }
     if (out.blocks.some((b) => b.type === "phone")) out.skip_if_sms = true;
     steps.push(out);
@@ -269,7 +309,7 @@ function routes(app, { admin, actorOf, fail }) {
 
 async function init() {
   // Copy the Klaviyo forms once, shortly after boot (later copies run from the Sign-up forms page).
-  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v3").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v3", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
+  setTimeout(async () => { try { const done = await core.syncGet("mk_forms_klaviyo_v4").catch(() => null); if (!done && KEY()) { await importAll("boot", { refresh: true }); await core.syncSet("mk_forms_klaviyo_v4", new Date().toISOString(), {}).catch(() => {}); } } catch (e) { note(`failed: ${e.message}`); } }, 75 * 1000);
 }
 
 module.exports = { init, routes, importAll, convertVersion, notesFor };

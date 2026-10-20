@@ -204,6 +204,7 @@ function onFrame(e) {
   if (MODE !== 'edit' || SI < 0) return;
   const bl = step().blocks;
   if (d.t === 'sel') { SEL = d.i >= 0 ? d.i : null; STEPSET = false; if (d.i < 0) { RAIL = 'styles'; $('kside').classList.remove('closed'); rail(); } panel(); draw(); return; }
+  if (d.t === 'media') { SEL = null; STEPSET = true; $('kside').classList.remove('closed'); bar(); panel(); draw(); return; }
   if (d.t === 'move') { const [m] = bl.splice(d.from, 1); bl.splice(d.to, 0, m); SEL = d.to; panel(); mark(); return; }
   if (d.t === 'add') { addBlock(d.type, d.at); return; }
   if (d.t === 'tool' && SEL != null) {

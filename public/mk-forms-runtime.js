@@ -71,7 +71,7 @@
       '.anim-fade .card{animation:bzf .25s ease-out}.anim-slide .card{animation:bzs .3s ease-out}@keyframes bzf{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}@keyframes bzs{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}@media (prefers-reduced-motion:reduce){.card{animation:none!important}}' +
       '.card{position:relative;background:' + (s.bg || '#fff') + (s.bg_image ? ' url(' + esc(s.bg_image) + ') center/' + (s.bg_fit || 'cover') + ' no-repeat' : '') + ';color:' + (fo.color || '#242F3F') + ';border-radius:' + r + 'px;width:' + w + 'px;max-width:100%;' + (s.min_height ? 'min-height:' + s.min_height + 'px;' : '') + 'max-height:92vh;overflow:auto;' +
         'font:' + (fo.size || 16) + 'px/1.45 ' + fam(fo.family || 'Helvetica,Arial,sans-serif') + ';' + (s.shadow !== false ? 'box-shadow:0 18px 50px rgba(0,0,0,.25);' : '') + (s.border_width ? 'border:' + s.border_width + 'px solid ' + (s.border_color || '#ddd') + ';' : '') + 'display:flex}' +
-      '.card.img-top{flex-direction:column}.card.img-right{flex-direction:row-reverse}.media{background:center/cover no-repeat;flex:none;min-height:140px}.card.img-top .media{height:200px;width:100%!important}' +
+      '.media.ph{background:repeating-linear-gradient(45deg,#F4F4F5,#F4F4F5 10px,#ECECEE 10px,#ECECEE 20px);display:flex;align-items:center;justify-content:center;text-align:center;color:#71717A;font:600 13px/1.5 Helvetica,Arial,sans-serif;cursor:pointer}.card.img-top{flex-direction:column}.card.img-right{flex-direction:row-reverse}.media{background:center/cover no-repeat;flex:none;min-height:140px}.card.img-top .media{height:200px;width:100%!important}' +
       '.in{flex:1;min-width:0;padding:' + px(s.pad || [32, 28, 28, 28]) + '}' +
       '.fly{position:fixed;' + corner() + 'z-index:2147483600;width:' + Math.min(w, 420) + 'px;max-width:calc(100vw - 32px)}' +
       '.full .ov{padding:0}.full .card{width:100%;height:100%;max-height:none;border-radius:0;align-items:center;justify-content:center}.full .in{max-width:560px;margin:0 auto}' +
@@ -163,13 +163,14 @@
     function draw() {
       timers.forEach(clearInterval); timers = [];
       var s = steps[idx]; if (!s) return close('done');
-      var im = s.image || {}, showImg = im.src && im.pos && im.pos !== 'none' && type !== 'banner';
+      var im = s.image || {}, split = im.pos && im.pos !== 'none' && type !== 'banner', showImg = split && (im.src || edit);
       var clsImg = showImg ? ' img-' + im.pos : '';
       var cl = (f.style || {}).close || {};
       var blocks = (s.blocks || []).map(function (b, i) { return blockHtml(b, f, { i: i, edit: !!edit, code: sub.code || (edit || STUDIO ? 'WELCOME-8K2Q' : '') }); }).join('');
       if (edit && !(s.blocks || []).length) blocks = '<div class="empty">Add blocks from the left panel</div>';
       var inner = '<div class="card' + clsImg + (cl.outside ? ' has-out' : '') + (edit && edit.sel === -1 ? ' form-sel' : '') + '" role="dialog" aria-modal="' + (container ? 'false' : 'true') + '" aria-label="' + esc(s.name || 'Sign up') + '">' +
-        (showImg ? '<div class="media" style="background-image:url(' + esc(im.src) + ');width:' + (im.width || 42) + '%"></div>' : '') +
+        (showImg ? (im.src ? '<div class="media" style="background-image:url(' + esc(im.src) + ');width:' + (im.width || 42) + '%"></div>'
+          : '<div class="media ph" data-media="1" style="width:' + (im.width || 42) + '%"><span>&#128247;<br>Add side image</span></div>') : '') +
         '<form class="in" novalidate>' + (container || cl.show === false ? '' : '<button type="button" class="x" aria-label="Close">&times;</button>') + blocks + '<div class="err" role="alert"></div></form></div>';
       var anim = edit ? '' : ' anim-' + ((f.style || {}).anim || 'fade');
       wrap.className = anim;
@@ -242,6 +243,7 @@
       card.addEventListener('click', function (e) {
         var tool = e.target.closest ? e.target.closest('[data-tool]') : null;
         if (tool) { e.preventDefault(); e.stopPropagation(); return say({ t: 'tool', act: tool.dataset.tool, i: edit.sel }); }
+        if (e.target.closest && e.target.closest('[data-media]')) { e.preventDefault(); return say({ t: 'media' }); }
         var b = e.target.closest ? e.target.closest('.blk') : null; e.preventDefault(); say({ t: 'sel', i: b ? Number(b.dataset.i) : -1 });
       });
       var from = null, line = null;

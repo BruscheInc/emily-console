@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.84.3
+- Klaviyo form copy keeps the **image split** (form on one side, photo on the other). If the photo can't be downloaded, the editor shows an "Add side image" box in its place; click it to add the photo. Buzzin also tries Klaviyo's storefront copy of the form to get the real images.
+
 ## 4.84.2
 - Klaviyo form copy: "all pages" rules no longer flagged; import notes say exactly which images to re-add (Klaviyo's API doesn't provide form images).
 
