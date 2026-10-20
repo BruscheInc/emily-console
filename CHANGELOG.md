@@ -12,7 +12,7 @@ Every upload to the emily-console repo is one version. The number shows in the a
   - **Behaviors**: show right away, after X seconds, after scrolling X%, on exit intent, after X pages; show again X days after closing; auto-close the success step; teaser before/after/both with its own text, position and colors.
   - **Targeting**: device, new/returning visitors, hide from people who signed up, utm_source, page include/exclude, priority.
   - Email and phone can be on the same step. The SMS step is skipped for people who already get texts. The phone block always shows the text consent wording with an unchecked box.
-  - Existing forms convert automatically; nothing on the store changes until a form is saved.
+  - Existing forms convert automatically to the new layout, on the store too.
 - Segments: the store column is gone (one Brusche audience).
 
 ## 4.82.1
