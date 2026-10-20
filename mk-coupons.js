@@ -67,9 +67,9 @@ async function forProfile(store, profile, { real = true, source = "message", off
   if (cur) return cur.code;
   const off = o || cleanOffer({ type: "order", value_type: "percent", value: d0.percent, days: d0.days, prefix: d0.prefix }, d0);
   if (!real) return sample(off.prefix);
-  const { code, expires } = await claim(store, off, source);
-  await db(`INSERT INTO mk_coupons (store, code, profile_id, percent, amount, expires_at, real, offer_key) VALUES ($1,$2,$3,$4,$5,$6,true,$7)`,
-    [store, code, profile.id, off.type !== "shipping" && off.value_type === "percent" ? off.value : null, off.value_type === "amount" ? off.value : null, expires, key]);
+  const { code, expires, discount_id, redeem_id } = await claim(store, off, source);
+  await db(`INSERT INTO mk_coupons (store, code, profile_id, percent, amount, expires_at, real, offer_key, discount_id, redeem_id) VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8,$9)`,
+    [store, code, profile.id, off.type !== "shipping" && off.value_type === "percent" ? off.value : null, off.value_type === "amount" ? off.value : null, expires, key, discount_id || null, redeem_id || null]);
   if (key) return code;   // a block's own offer doesn't replace the person's main code
   await db(`UPDATE mk_profiles SET props = props || jsonb_build_object('coupon', $2::text, 'coupon_expires', $3::text) WHERE id=$1`, [profile.id, code, expires.toISOString()]);
   if (profile.props) { profile.props.coupon = code; profile.props.coupon_expires = expires.toISOString(); }
@@ -79,41 +79,67 @@ async function forProfile(store, profile, { real = true, source = "message", off
 /* ---- Ready-made codes, so a person never waits on Shopify ----
    For every offer in use Buzzin keeps a small pool of single-use codes already created in Shopify.
    Sending (or a form's success step) takes one instantly; a background job tops the pool back up. */
-const POOL = 25, POOL_MAX_AGE_H = 24 * 45, POOL_EXTRA_DAYS = 60;   // pool codes wait up to 45 days; their real end date is set when someone gets one
+const POOL = 25;
 let migrated = false;
 async function migrate() {
   if (migrated) return; migrated = true;
-  await db(`CREATE TABLE IF NOT EXISTS mk_coupon_pool (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, offer_key TEXT NOT NULL, code TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT now())`);
-  await db(`ALTER TABLE mk_coupon_pool ADD COLUMN IF NOT EXISTS node_id TEXT`);
-  await db(`ALTER TABLE mk_coupon_pool ADD COLUMN IF NOT EXISTS kind TEXT`);
+  await db(`CREATE TABLE IF NOT EXISTS mk_coupon_pool (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, offer_key TEXT NOT NULL, code TEXT NOT NULL, expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`ALTER TABLE mk_coupon_pool ADD COLUMN IF NOT EXISTS redeem_id TEXT`);
+  await db(`ALTER TABLE mk_coupon_pool ADD COLUMN IF NOT EXISTS discount_id TEXT`);
+  await db(`ALTER TABLE mk_coupon_pool ALTER COLUMN expires_at DROP NOT NULL`).catch(() => {});
   await db(`CREATE INDEX IF NOT EXISTS mk_coupon_pool_k ON mk_coupon_pool (store, offer_key, created_at)`);
   await db(`CREATE TABLE IF NOT EXISTS mk_coupon_offers (store TEXT NOT NULL, offer_key TEXT NOT NULL, offer JSONB NOT NULL, last_used TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (store, offer_key))`);
+  await db(`ALTER TABLE mk_coupon_offers ADD COLUMN IF NOT EXISTS discount_id TEXT`);
+  await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS discount_id TEXT`).catch(() => {});
+  await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS redeem_id TEXT`).catch(() => {});
+  await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ`).catch(() => {});
 }
-/** Make one code in Shopify right now. */
-async function createCode(store, off, source, extraDays = 0) {
-  const code = makeCode(off.prefix), expires = new Date(Date.now() + (off.days + extraDays) * 864e5);
-  const R = require("./returns"), st = R.shopFor(store), di = discountInput(off, code, `Buzzin ${source} · ${code}`, expires);
-  const r = await R.gql(st, `mutation($b:${di.type}!){${di.m}(${di.arg}:$b){codeDiscountNode{id} userErrors{field message}}}`, { b: di.input });
-  const ue = r[di.m].userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
-  return { code, expires, node_id: r[di.m].codeDiscountNode && r[di.m].codeDiscountNode.id, kind: di.m.replace(/Create$/, "") };
+/* One Shopify discount per offer, holding all of its codes (Shopify's limits — one use, one per customer — apply to each code).
+   Shopify's Discounts page shows one line per offer, not one per person. A code's days are enforced by Buzzin removing it from the discount when they're up. */
+const R = () => require("./returns");
+const gerr = (x) => { const ue = x && x.userErrors; if (ue && ue.length) throw new Error(ue.map((e) => e.message).join("; ")); };
+const making = new Map();
+function discountFor(store, key, off) {   // one at a time per offer, so two senders never make two discounts
+  const k = store + ":" + key; if (!making.has(k)) making.set(k, discountFor0(store, key, off).finally(() => making.delete(k)));
+  return making.get(k);
 }
-/** A pool code was made with a far end date; give it the offer's real one now that someone has it (in the background). */
-async function setEndDate(store, node_id, kind, expires) {
-  if (!node_id || !kind) return;
-  const R = require("./returns"), st = R.shopFor(store);
-  const arg = { discountCodeBasic: ["DiscountCodeBasicInput", "basicCodeDiscount"], discountCodeBxgy: ["DiscountCodeBxgyInput", "bxgyCodeDiscount"], discountCodeFreeShipping: ["DiscountCodeFreeShippingInput", "freeShippingCodeDiscount"] }[kind];
-  if (!arg) return;
-  const r = await R.gql(st, `mutation($id:ID!,$b:${arg[0]}!){${kind}Update(id:$id, ${arg[1]}:$b){codeDiscountNode{id} userErrors{field message}}}`, { id: node_id, b: { endsAt: expires.toISOString() } });
-  const ue = r[`${kind}Update`] && r[`${kind}Update`].userErrors; if (ue && ue.length) console.log(`🎟️  end date for ${node_id}: ${ue.map((x) => x.message).join("; ")}`);
+async function discountFor0(store, key, off) {
+  const row = (await db(`SELECT discount_id FROM mk_coupon_offers WHERE store=$1 AND offer_key=$2`, [store, key])).rows[0];
+  if (row && row.discount_id) return row.discount_id;
+  const seed = `${off.prefix}-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;   // Shopify needs one code to make the discount; this one is never sent
+  const di = discountInput(off, seed, `Buzzin · ${describe(off)} · ${key.slice(0, 6)}`, new Date());
+  delete di.input.endsAt;   // no end date on the discount itself; each code is removed when its days are up
+  const r = await R().gql(R().shopFor(store), `mutation($b:${di.type}!){${di.m}(${di.arg}:$b){codeDiscountNode{id} userErrors{field message}}}`, { b: di.input });
+  gerr(r[di.m]); const id = r[di.m].codeDiscountNode.id;
+  await db(`INSERT INTO mk_coupon_offers (store, offer_key, offer, discount_id) VALUES ($1,$2,$3,$4) ON CONFLICT (store, offer_key) DO UPDATE SET discount_id=EXCLUDED.discount_id`, [store, key, JSON.stringify(off), id]);
+  return id;
 }
-/** A code for this offer: from the ready pool when there is one, else made now. Also marks the offer as in use. */
+/** Add n new codes to the offer's discount and put them in the ready pool. */
+async function addCodes(store, key, off, n) {
+  const did = await discountFor(store, key, off), st = R().shopFor(store);
+  const codes = Array.from({ length: n }, () => makeCode(off.prefix));
+  const r = await R().gql(st, `mutation($id:ID!,$c:[DiscountRedeemCodeInput!]!){discountRedeemCodeBulkAdd(discountId:$id, codes:$c){bulkCreation{id} userErrors{field message}}}`, { id: did, c: codes.map((code) => ({ code })) });
+  gerr(r.discountRedeemCodeBulkAdd); const bid = r.discountRedeemCodeBulkAdd.bulkCreation.id;
+  let got = null;
+  for (let i = 0; i < 20; i++) {   // Shopify adds them in a few hundred milliseconds
+    const q = await R().gql(st, `query($id:ID!){ node(id:$id) { ... on DiscountRedeemCodeBulkCreation { done codes(first: 250) { nodes { code errors { message } discountRedeemCode { id } } } } } }`, { id: bid });
+    if (q.node && q.node.done) { got = q.node.codes.nodes; break; }
+    await new Promise((res) => setTimeout(res, 300));
+  }
+  const ok = (got || []).filter((x) => x.discountRedeemCode && !(x.errors || []).length);
+  for (const x of ok) await db(`INSERT INTO mk_coupon_pool (store, offer_key, code, redeem_id, discount_id) VALUES ($1,$2,$3,$4,$5)`, [store, key, x.code, x.discountRedeemCode.id, did]);
+  return ok.length;
+}
+/** A code for this offer: from the ready pool (instant), else added now (about a second). */
 async function claim(store, off, source) {
   await migrate(); const key = offerKey(off) || "default";
   await db(`INSERT INTO mk_coupon_offers (store, offer_key, offer, last_used) VALUES ($1,$2,$3,now()) ON CONFLICT (store, offer_key) DO UPDATE SET last_used=now(), offer=EXCLUDED.offer`, [store, key, JSON.stringify(off)]).catch(() => {});
-  const got = (await db(`DELETE FROM mk_coupon_pool WHERE id = (SELECT id FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2 AND created_at > now() - ($3 || ' hours')::interval ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING code, node_id, kind`, [store, key, POOL_MAX_AGE_H]).catch(() => ({ rows: [] }))).rows[0];
-  setImmediate(() => refill(store, key).catch(() => {}));
-  if (got) { const expires = new Date(Date.now() + off.days * 864e5); setImmediate(() => setEndDate(store, got.node_id, got.kind, expires).catch((e) => console.log(`🎟️  end date: ${e.message}`))); return { code: got.code, expires }; }
-  return createCode(store, off, source);
+  const take = async () => (await db(`DELETE FROM mk_coupon_pool WHERE id = (SELECT id FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2 ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING code, redeem_id, discount_id`, [store, key]).catch(() => ({ rows: [] }))).rows[0];
+  let got = await take();
+  if (!got) { await addCodes(store, key, off, 5); got = await take(); }
+  setImmediate(() => refill(store, key).catch((e) => console.log(`🎟️  coupon pool: ${e.message}`)));
+  if (!got) throw new Error("Shopify didn't make the code");
+  return { code: got.code, expires: new Date(Date.now() + off.days * 864e5), discount_id: got.discount_id, redeem_id: got.redeem_id };
 }
 const filling = new Set();
 async function refill(store, key) {
@@ -121,20 +147,32 @@ async function refill(store, key) {
   try {
     await migrate();
     const o = (await db(`SELECT offer FROM mk_coupon_offers WHERE store=$1 AND offer_key=$2`, [store, key])).rows[0]; if (!o) return;
-    await db(`DELETE FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2 AND created_at < now() - ($3 || ' hours')::interval`, [store, key, POOL_MAX_AGE_H]);   // old ones just expire unused in Shopify
     const have = (await db(`SELECT count(*)::int n FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2`, [store, key])).rows[0].n;
-    for (let i = have; i < POOL; i++) {
-      const c = await createCode(store, o.offer, "ready", POOL_EXTRA_DAYS);
-      await db(`INSERT INTO mk_coupon_pool (store, offer_key, code, expires_at, node_id, kind) VALUES ($1,$2,$3,$4,$5,$6)`, [store, key, c.code, c.expires, c.node_id || null, c.kind || null]);
-    }
+    if (have < POOL) await addCodes(store, key, o.offer, POOL - have);
   } finally { filling.delete(id); }
 }
-/** Keep pools full for offers used in the last 30 days (runs every few minutes). */
+/** Remove codes whose days are up (used or not) so they stop working at checkout. */
+async function expireCodes() {
+  await migrate();
+  const rows = (await db(`SELECT id, store, discount_id, redeem_id FROM mk_coupons WHERE real AND redeem_id IS NOT NULL AND removed_at IS NULL AND expires_at < now() ORDER BY id LIMIT 1000`)).rows;
+  const groups = {}; for (const r of rows) (groups[r.store + "|" + r.discount_id] = groups[r.store + "|" + r.discount_id] || []).push(r);
+  for (const [k, list] of Object.entries(groups)) {
+    const [store, did] = k.split("|");
+    for (let i = 0; i < list.length; i += 250) {
+      const part = list.slice(i, i + 250);
+      try { const r = await R().gql(R().shopFor(store), `mutation($id:ID!,$ids:[ID!]){discountCodeRedeemCodeBulkDelete(discountId:$id, ids:$ids){job{id} userErrors{field message}}}`, { id: did, ids: part.map((x) => x.redeem_id) });
+        gerr(r.discountCodeRedeemCodeBulkDelete); await db(`UPDATE mk_coupons SET removed_at=now() WHERE id = ANY($1)`, [part.map((x) => x.id)]);
+      } catch (e) { console.log(`🎟️  expiring codes: ${e.message}`); }
+    }
+  }
+  if (rows.length) console.log(`🎟️  ${rows.length} coupon codes past their days removed from Shopify`);
+}
+/** Keep pools full for offers used in the last 30 days. */
 async function refillAll() {
   await migrate();
   for (const r of (await db(`SELECT store, offer_key FROM mk_coupon_offers WHERE last_used > now() - interval '30 days'`)).rows) await refill(r.store, r.offer_key).catch((e) => console.log(`🎟️  coupon pool ${r.offer_key}: ${e.message}`));
 }
-/** Get pools ready before the first send: call when an email is saved or a form goes live. */
+/** Get pools ready before the first send: called when an email is saved or a form goes live. */
 async function prepare(store, offers) {
   await migrate(); const d0 = await defaults();
   for (const raw of offers) { const off = raw === "default" ? cleanOffer({ type: "order", value: d0.percent, days: d0.days, prefix: d0.prefix }, d0) : cleanOffer(raw, d0); if (!off) continue;
@@ -142,7 +180,7 @@ async function prepare(store, offers) {
     await db(`INSERT INTO mk_coupon_offers (store, offer_key, offer, last_used) VALUES ($1,$2,$3,now()) ON CONFLICT (store, offer_key) DO UPDATE SET last_used=now(), offer=EXCLUDED.offer`, [store, key, JSON.stringify(off)]);
     setImmediate(() => refill(store, key).catch((e) => console.log(`🎟️  coupon pool: ${e.message}`))); }
 }
-function start() { setTimeout(() => { refillAll().catch(() => {}); setInterval(() => refillAll().catch(() => {}), 3 * 60 * 1000); }, 60 * 1000); }
+function start() { setTimeout(() => { refillAll().catch(() => {}); expireCodes().catch(() => {}); setInterval(() => refillAll().catch(() => {}), 3 * 60 * 1000); setInterval(() => expireCodes().catch((e) => console.log(`🎟️  expiring codes: ${e.message}`)), 30 * 60 * 1000); }, 60 * 1000); }
 
 /** Every coupon block's offer in a template (unique-code blocks only). */
 function offersIn(tpl) {
@@ -176,4 +214,4 @@ async function forTest(store, to, channel, msg) {
   return { profile: view, coupon: codes.coupon || null, coupons: codes.coupons || {} };
 }
 
-module.exports = { start, prepare, claim, refillAll, migrate, codesFor, offersIn, cleanOffer, offerKey, describe, discountInput, forTest, DEFAULTS, defaults, forProfile, sample, usesCoupon, makeCode };
+module.exports = { start, prepare, claim, refillAll, expireCodes, addCodes, migrate, codesFor, offersIn, cleanOffer, offerKey, describe, discountInput, forTest, DEFAULTS, defaults, forProfile, sample, usesCoupon, makeCode };

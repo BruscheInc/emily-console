@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.92.0
+Coupon codes stay tidy in Shopify.
+- **One Shopify discount per offer.** Each discount holds all of that offer's codes, for example "Buzzin · 10% off entire order · valid 7 days". Shopify's Discounts page shows one line per offer, not one line per person. Shopify applies "one use" and "one per customer" to each code inside the discount.
+- **Days valid are enforced by removing the code.** When a person's days are up, Buzzin removes their code from the discount, so it stops working at checkout. This is checked every 30 minutes.
+- Ready codes are added to the discount 25 at a time, so a person still gets theirs instantly.
+
 ## 4.91.1
 - Ready-made codes no longer go to waste. They wait in the pool for up to 45 days, and when someone gets one, Buzzin sets its real end date in Shopify in the background, so a 7-day code is good for 7 days from when they get it.
 

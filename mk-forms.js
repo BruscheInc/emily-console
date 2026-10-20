@@ -42,7 +42,8 @@ async function migrate() {
   await db(`ALTER TABLE mk_forms ADD COLUMN IF NOT EXISTS start_at TIMESTAMPTZ`);
   await db(`ALTER TABLE mk_forms ADD COLUMN IF NOT EXISTS end_at TIMESTAMPTZ`);
   await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS prize INT`);
-  await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS offer_key TEXT`);   // which coupon-block offer made it (null = the default code)
+  await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS offer_key TEXT`);
+  await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS discount_id TEXT`); await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS redeem_id TEXT`); await db(`ALTER TABLE mk_coupons ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ`);   // which coupon-block offer made it (null = the default code)
   await db(`CREATE TABLE IF NOT EXISTS mk_form_comments (id BIGSERIAL PRIMARY KEY, form_id BIGINT NOT NULL, who TEXT, body TEXT NOT NULL, step_id TEXT, resolved BOOLEAN NOT NULL DEFAULT false, at TIMESTAMPTZ DEFAULT now())`);
 }
 
@@ -112,15 +113,15 @@ async function issueCoupon(store, form, profile, over = {}) {
   if (prior) return prior.code;
   let code = `${String(c.prefix || "WELCOME").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12)}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
   let expires = new Date(Date.now() + (Number(c.expires_days) || 14) * 864e5);
-  let real = false;
+  let real = false, ids = {};
   if ((over.status || form.status) === "live") {
     // Real single-use code in Shopify, only for live forms. Taken from the ready pool so the success step shows it instantly.
     const CP = require("./mk-coupons");
     const off = CP.cleanOffer({ type: "order", value_type: "percent", value: Number(c.percent) || 10, days: Number(c.expires_days) || 14, prefix: c.prefix || "WELCOME" });
-    const got = await CP.claim(store, off, form.name); code = got.code; expires = got.expires;
+    const got = await CP.claim(store, off, form.name); code = got.code; expires = got.expires; ids = got;
     real = true;
   }
-  await db(`INSERT INTO mk_coupons (store, code, profile_id, form_id, percent, expires_at, real, prize) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [store, code, profile.id, form.id, Number(c.percent) || 10, expires, real, over.prize == null ? null : over.prize]);
+  await db(`INSERT INTO mk_coupons (store, code, profile_id, form_id, percent, expires_at, real, prize, discount_id, redeem_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [store, code, profile.id, form.id, Number(c.percent) || 10, expires, real, over.prize == null ? null : over.prize, ids.discount_id || null, ids.redeem_id || null]);
   await db(`UPDATE mk_profiles SET props = props || jsonb_build_object('coupon', $2::text, 'coupon_expires', $3::text) WHERE id=$1`, [profile.id, code, expires.toISOString()]);
   return code;
 }
