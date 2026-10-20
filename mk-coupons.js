@@ -180,7 +180,20 @@ async function prepare(store, offers) {
     await db(`INSERT INTO mk_coupon_offers (store, offer_key, offer, last_used) VALUES ($1,$2,$3,now()) ON CONFLICT (store, offer_key) DO UPDATE SET last_used=now(), offer=EXCLUDED.offer`, [store, key, JSON.stringify(off)]);
     setImmediate(() => refill(store, key).catch((e) => console.log(`🎟️  coupon pool: ${e.message}`))); }
 }
-function start() { setTimeout(() => { refillAll().catch(() => {}); expireCodes().catch(() => {}); setInterval(() => refillAll().catch(() => {}), 3 * 60 * 1000); setInterval(() => expireCodes().catch((e) => console.log(`🎟️  expiring codes: ${e.message}`)), 30 * 60 * 1000); }, 60 * 1000); }
+/** One-time: ready codes made before v4.92 were one Shopify discount each; delete the unused ones. */
+async function cleanupOld() {
+  await migrate();
+  const old = (await db(`SELECT id, store, code FROM mk_coupon_pool WHERE redeem_id IS NULL LIMIT 500`)).rows; let n = 0;
+  for (const r of old) {
+    try { const st = R().shopFor(r.store); const q = await R().gql(st, `query($c:String!){ codeDiscountNodeByCode(code:$c){ id } }`, { c: r.code });
+      if (q.codeDiscountNodeByCode) { const d = await R().gql(st, `mutation($id:ID!){ discountCodeDelete(id:$id){ deletedCodeDiscountId userErrors{field message} } }`, { id: q.codeDiscountNodeByCode.id }); gerr(d.discountCodeDelete); n++; }
+      await db(`DELETE FROM mk_coupon_pool WHERE id=$1`, [r.id]);
+    } catch (e) { console.log(`🎟️  old ready code ${r.code}: ${e.message}`); }
+  }
+  if (old.length) console.log(`🎟️  removed ${n} single-code discounts left from the old ready pool`);
+}
+function start() { setTimeout(() => { cleanupOld().catch((e) => console.log(`🎟️  cleanup: ${e.message}`)); }, 30 * 1000);
+  setTimeout(() => { refillAll().catch(() => {}); expireCodes().catch(() => {}); setInterval(() => refillAll().catch(() => {}), 3 * 60 * 1000); setInterval(() => expireCodes().catch((e) => console.log(`🎟️  expiring codes: ${e.message}`)), 30 * 60 * 1000); }, 60 * 1000); }
 
 /** Every coupon block's offer in a template (unique-code blocks only). */
 function offersIn(tpl) {
