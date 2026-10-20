@@ -916,4 +916,5 @@ function stylesPanel(P) {
   if (window.MK_imagePicker) window.MK_imagePicker($('sbg'), (url) => { y.bg_image = location.origin + url; panel(); mark(); });
 }
 
+window.MK_KL = { LCSS, menu };   // the Klaviyo-style table look and ⋮ menu, shared with Lists & segments and Campaigns
 })();

@@ -8,27 +8,69 @@ const CSTATUS = { draft: ['off', 'Draft'], pending: ['hon', 'Waiting for approva
 let VIEW = (() => { try { return localStorage.getItem('mk_camp_view') || 'list'; } catch (e) { return 'list'; } })();
 let MONTH = null;
 
+let CQ = '', CSF = '', CCH = '', CCHK = new Set();
 async function renderCampaigns(el, id) {
   if (id) return editCampaign(el, id);
-  const r = await api('/api/mk/campaigns?' + qs({ store: STORE }));
-  el.innerHTML = `<h1>Campaigns</h1><p class="sub">One-time emails and texts to a list or segment. People with an open ticket, claim or recent return are left out by default. Nothing sends until a sender is connected and sending is turned on.</p>
-  <div class="bar"><button class="btn pri" id="cne"${STORE ? '' : ' disabled'}><i class="ti ti-mail"></i> New email campaign</button><button class="btn" id="cns"${STORE ? '' : ' disabled'}><i class="ti ti-message"></i> New text campaign</button>${STORE ? '' : '<span style="color:var(--muted)">Pick a store at the top to create one.</span>'}<span class="sp"></span>
-    <div class="seg" role="tablist"><button data-v="list" class="${VIEW === 'list' ? 'on' : ''}"><i class="ti ti-list"></i> List</button><button data-v="cal" class="${VIEW === 'cal' ? 'on' : ''}"><i class="ti ti-calendar"></i> Calendar</button></div></div>
-  <div id="cbody"></div>`;
-  const make = (channel) => api('/api/mk/campaigns', { method: 'POST', body: JSON.stringify({ store: STORE, channel }) }).then((c) => { location.hash = '#campaigns/' + c.id; }).catch((e) => toast(e.message, 1));
-  $('cne').onclick = () => make('email'); $('cns').onclick = () => make('sms');
-  el.querySelectorAll('.seg button').forEach((b) => b.onclick = () => { VIEW = b.dataset.v; try { localStorage.setItem('mk_camp_view', VIEW); } catch (e) {} el.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b)); draw(); });
-  const draw = () => (VIEW === 'cal' ? calendar($('cbody'), r.campaigns) : table($('cbody'), r.campaigns));
+  const KL = window.MK_KL || {};
+  let r = await api('/api/mk/campaigns?' + qs({ store: STORE }));
+  let names = {}; try { for (const g of (await api('/api/mk/groups')).items) names[g.kind + ':' + g.id] = g.name; } catch (e) {}
+  el.innerHTML = (KL.LCSS || '') + `<style>.kl .cb{width:18px;height:18px;accent-color:#18181B}.kl .bulk{display:flex;align-items:center;gap:10px;background:#F4F4F5;border-radius:10px;padding:8px 12px;margin-bottom:12px}
+    .kl .tico{font-size:21px}.kl .seg2{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}.kl .seg2 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:0 14px;height:38px;color:#52525B}.kl .seg2 button.on{background:#F4F4F5;color:#18181B;font-weight:600}.kl .seg2 button+button{border-left:1px solid var(--line)}</style>
+    <div class="kl"><div class="kl-h"><h1>Campaigns</h1><button class="dots" id="cmore" aria-label="More">${ICON('dots-vertical')}</button>
+      <div class="seg2" role="tablist"><button data-v="list" class="${VIEW === 'list' ? 'on' : ''}">${ICON('list')} List</button><button data-v="cal" class="${VIEW === 'cal' ? 'on' : ''}">${ICON('calendar')} Calendar</button></div>
+      <button class="btn pri" id="ccr">Create campaign</button></div>
+    <div class="kl-b"><div class="kl-f"><input type="search" id="cq" placeholder="Search campaigns" value="${esc(CQ)}" aria-label="Search campaigns">
+      <select id="csf" aria-label="Status"><option value="">Status</option>${Object.entries(CSTATUS).map(([k, [, l]]) => `<option value="${k}"${CSF === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <select id="cch" aria-label="Channels"><option value="">Channels</option><option value="email"${CCH === 'email' ? ' selected' : ''}>Email</option><option value="sms"${CCH === 'sms' ? ' selected' : ''}>Text</option></select></div>
+      <div id="cbulk"></div><div id="cbody"></div></div></div>`;
+  const reload = async () => { r = await api('/api/mk/campaigns?' + qs({ store: STORE })); draw(); };
+  const st = () => STORE || 'lb';
+  const make = (channel, store) => api('/api/mk/campaigns', { method: 'POST', body: JSON.stringify({ store: store || st(), channel }) }).then((c) => { location.hash = '#campaigns/' + c.id; }).catch((e) => toast(e.message, 1));
+  $('ccr').onclick = () => KL.menu($('ccr'), STORE ? [['Email', 'mail', () => make('email')], ['Text message', 'message', () => make('sms')]]
+    : [['Email · Larkspur Baby', 'mail', () => make('email', 'lb')], ['Text · Larkspur Baby', 'message', () => make('sms', 'lb')], ['Email · Outlet', 'mail', () => make('email', 'lbo')], ['Text · Outlet', 'message', () => make('sms', 'lbo')]], { alignRight: true });
+  $('cmore').onclick = () => KL.menu($('cmore'), [['Select all drafts', 'checkbox', () => { r.campaigns.filter((c) => c.status === 'draft').forEach((c) => CCHK.add(String(c.id))); draw(); }]], { alignRight: true });
+  el.querySelectorAll('.seg2 button').forEach((b) => b.onclick = () => { VIEW = b.dataset.v; try { localStorage.setItem('mk_camp_view', VIEW); } catch (e) {} el.querySelectorAll('.seg2 button').forEach((x) => x.classList.toggle('on', x === b)); draw(); });
+  $('cq').oninput = () => { CQ = $('cq').value; draw(); }; $('csf').onchange = () => { CSF = $('csf').value; draw(); }; $('cch').onchange = () => { CCH = $('cch').value; draw(); };
+  const del = async (list) => {
+    list = list.filter((c) => c.status !== 'sending'); if (!list.length) return toast('Stop a sending campaign before deleting it.', 1);
+    if (!confirm(list.length === 1 ? `Delete the campaign "${list[0].name}"?` : `Delete ${list.length} campaigns?`)) return;
+    let n = 0; for (const c of list) { try { await api('/api/mk/campaigns/' + c.id, { method: 'DELETE' }); n++; CCHK.delete(String(c.id)); } catch (e) { toast(e.message, 1); } }
+    toast(`Deleted ${n}`); reload();
+  };
+  const rowMenu = (c, anchor) => KL.menu(anchor, [
+    [c.status === 'sent' || c.status === 'sending' ? 'View report' : 'Edit', c.status === 'sent' ? 'chart-bar' : 'pencil', () => { location.hash = '#campaigns/' + c.id; }],
+    ['Rename', 'pencil', async () => { const n = prompt('Campaign name', c.name); if (!n || n === c.name) return; try { await api('/api/mk/campaigns/' + c.id, { method: 'PUT', body: JSON.stringify({ name: n.slice(0, 150) }) }); toast('Renamed'); reload(); } catch (e) { toast(e.message, 1); } }],
+    ['Clone', 'copy', async () => { try { const x = await api('/api/mk/campaigns', { method: 'POST', body: JSON.stringify({ copy_of: c.id }) }); location.hash = '#campaigns/' + x.id; } catch (e) { toast(e.message, 1); } }],
+    ['Delete', 'trash', () => del([c]), { danger: true, disabled: c.status === 'sending' }],
+  ], { alignRight: true });
+  const aud = (c) => ((c.audience || {}).include || []).map((x) => names[x.kind + ':' + x.id] || (x.kind === 'segment' ? 'Segment' : 'List')).join(', ');
+  const pct = (a, b) => (b ? `${(100 * a / b).toFixed(2)}%` : '—');
+  const draw = () => {
+    const rows = r.campaigns.filter((c) => (!CQ || (c.name + ' ' + (c.subject || '')).toLowerCase().includes(CQ.toLowerCase())) && (!CSF || c.status === CSF) && (!CCH || c.channel === CCH));
+    if (VIEW === 'cal') { $('cbulk').innerHTML = ''; return calendar($('cbody'), rows); }
+    $('cbody').innerHTML = `<table><thead><tr><th style="width:34px"><input type="checkbox" class="cb" id="call" aria-label="Select all"></th><th>Campaign</th><th>Type</th><th>Status</th><th>Send date</th><th class="n">Open rate</th><th class="n">Click rate</th><th style="width:44px"></th></tr></thead><tbody>
+      ${rows.map((c) => { const d = c.sent_at || c.start_at; return `<tr class="row"><td><input type="checkbox" class="cb" data-ck="${c.id}"${CCHK.has(String(c.id)) ? ' checked' : ''} aria-label="Select ${esc(c.name)}"></td>
+        <td><a class="nm" href="#campaigns/${c.id}">${esc(c.name)}</a><div class="sub2">${esc(aud(c) || 'No audience yet')}${STORE ? '' : ` · ${c.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'}`}</div>${c.note ? `<div class="sub2" style="color:var(--honey-ink)">${esc(c.note)}</div>` : ''}</td>
+        <td title="${c.channel === 'sms' ? 'Text' : 'Email'}" style="font-size:21px">${ICON(c.channel === 'sms' ? 'message' : 'mail')}${c.ab && c.ab.enabled ? ' <span class="st">A/B</span>' : ''}</td>
+        <td><span class="st${c.status === 'sent' ? ' live' : c.status === 'scheduled' || c.status === 'pending' ? ' preview' : ''}">${esc((CSTATUS[c.status] || [, c.status])[1])}</span></td>
+        <td>${d ? `${fmtD(d)}<div class="sub2">${new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>` : esc(when(c))}</td>
+        <td class="n">${c.channel === 'sms' ? '—' : pct(c.opened, c.delivered)}</td><td class="n">${pct(c.clicked, c.delivered)}${c.recipients != null ? `<div class="sub2">${fmtN(c.recipients)} recipients</div>` : ''}</td>
+        <td><button class="dots" data-cm="${c.id}" aria-label="Options for ${esc(c.name)}">${ICON('dots-vertical')}</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">No campaigns match.</td></tr>'}</tbody></table>
+      <div style="padding:14px 0;color:#3F3F46">${rows.length ? `1 - ${rows.length} of ${rows.length}` : ''}</div>`;
+    const find = (id) => r.campaigns.find((c) => String(c.id) === String(id));
+    $('cbody').querySelectorAll('[data-cm]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); rowMenu(find(b.dataset.cm), b); });
+    $('cbody').querySelectorAll('[data-ck]').forEach((x) => x.onchange = () => { if (x.checked) CCHK.add(x.dataset.ck); else CCHK.delete(x.dataset.ck); bulk(); });
+    $('call').checked = rows.length > 0 && rows.every((c) => CCHK.has(String(c.id)));
+    $('call').onchange = () => { rows.forEach((c) => ($('call').checked ? CCHK.add(String(c.id)) : CCHK.delete(String(c.id)))); draw(); };
+    bulk();
+  };
+  const bulk = () => { const picked = r.campaigns.filter((c) => CCHK.has(String(c.id)));
+    $('cbulk').innerHTML = picked.length ? `<div class="bulk"><b>${picked.length} selected</b><span style="flex:1"></span><button class="btn xs" id="cclr">Clear</button><button class="btn xs danger" id="cdel">${ICON('trash')} Delete</button></div>` : '';
+    if (picked.length) { $('cclr').onclick = () => { CCHK.clear(); draw(); }; $('cdel').onclick = () => del(picked); } };
   draw();
 }
+const ICON = (n) => `<i class="ti ti-${n}"></i>`;
 const when = (c) => c.sent_at ? fmtDT(c.sent_at) : c.start_at ? fmtDT(c.start_at) : (c.schedule && c.schedule.mode === 'local' && c.schedule.date ? `${fmtD(c.schedule.date + 'T12:00:00')} ${c.schedule.time} local` : '—');
-function table(host, list) {
-  host.innerHTML = `<div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Campaign</th><th>Store</th><th>Type</th><th>Status</th><th>When</th><th class="n">People</th><th class="n">Opened</th><th class="n">Clicked</th></tr></thead><tbody>
-  ${list.map((c) => `<tr class="click" data-id="${c.id}"><td><b>${esc(c.name)}</b>${c.subject ? `<div style="font-size:12px;color:var(--muted)">${esc(c.subject)}</div>` : ''}${c.note ? `<div style="font-size:12px;color:var(--honey-ink)">${esc(c.note)}</div>` : ''}</td><td>${c.store === 'lbo' ? 'Outlet' : 'LB'}</td><td>${c.channel === 'sms' ? '<i class="ti ti-message"></i> Text' : '<i class="ti ti-mail"></i> Email'}${c.ab && c.ab.enabled ? ' <span class="pill blue">A/B</span>' : ''}</td><td>${pill(CSTATUS, c.status)}</td><td>${when(c)}</td>
-    <td class="n">${c.recipients == null ? '' : fmtN(c.recipients)}</td><td class="n">${c.delivered ? `${Math.round(100 * c.opened / c.delivered)}%` : ''}</td><td class="n">${c.delivered ? `${Math.round(100 * c.clicked / c.delivered)}%` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No campaigns yet.</td></tr>'}
-  </tbody></table></div></div>`;
-  host.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => { location.hash = '#campaigns/' + tr.dataset.id; });
-}
 function calendar(host, list) {
   const now = new Date(); MONTH = MONTH || new Date(now.getFullYear(), now.getMonth(), 1);
   const y = MONTH.getFullYear(), m = MONTH.getMonth();

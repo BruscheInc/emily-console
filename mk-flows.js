@@ -115,7 +115,7 @@ async function onTestList(profile) {
 }
 async function enroll(flow, profileId, ctx = {}) {
   if (!["live", "test"].includes(flow.status)) return null;
-  const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [profileId])).rows[0]; if (!p || p.store !== flow.store) return null;
+  const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [profileId])).rows[0]; if (!p) return null;   // one Brusche audience: any profile can be in any store's flow
   const test = flow.status === "test" || !!ctx.preview;
   if (test && !(await onTestList(p))) return null;
   if ((await db(`SELECT 1 FROM mk_flow_runs WHERE flow_id=$1 AND profile_id=$2 AND status IN ('active','working','paused')`, [flow.id, p.id])).rows[0]) return null;
@@ -320,7 +320,7 @@ async function dateTriggers() {
     const col = ["created_at", "first_order_at", "last_order_at"].includes(key) ? `p.${key}` : `NULLIF(p.props->>'${key}','')::date`;
     const yearly = t.yearly ? `to_char((${col})::date + ($2 || ' days')::interval, 'MM-DD') = to_char(now() AT TIME ZONE 'America/Chicago', 'MM-DD')` : `((${col})::date + ($2 || ' days')::interval)::date = (now() AT TIME ZONE 'America/Chicago')::date`;
     let rows = [];
-    try { rows = (await db(`SELECT p.id FROM mk_profiles p WHERE p.store=$1 AND ${yearly} LIMIT 20000`, [f.store, Number(t.offset_days) || 0])).rows; } catch (e) { console.error(`date trigger ${f.id}:`, e.message); continue; }
+    try { rows = (await db(`SELECT p.id FROM mk_profiles p WHERE $1::text IS NOT NULL AND ${yearly} LIMIT 20000`, [f.store, Number(t.offset_days) || 0])).rows; } catch (e) { console.error(`date trigger ${f.id}:`, e.message); continue; }
     for (const r of rows) await enroll(f, r.id, { trigger: "date", reason: `date: ${t.field}${t.offset_days ? ` + ${t.offset_days} days` : ""}` });
   }
 }

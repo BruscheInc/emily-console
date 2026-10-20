@@ -11,6 +11,7 @@ module.exports = function mount(app, { guard, isAdmin, actorOf, VERSION }) {
   const fail = (res, e) => res.status(e.status || 400).json({ error: e.message });
   const admin = (req, res) => { if (!guard(req, res)) return false; if (!isAdmin(req)) { res.status(403).json({ error: "Only admins can change marketing settings." }); return false; } return true; };
   const store = (q) => (q && ["lb", "lbo"].includes(q) ? q : null);
+  const G = require("./mk-groups"); setTimeout(() => G.migrate().catch((e) => console.log("lists & segments migrate:", e.message)), 20000); G.routes(app, { guard, admin, actorOf, fail });
 
   /* contacts */
   app.get("/api/mk/overview", async (req, res) => { if (!guard(req, res)) return; try { res.json(await MK.overview(store(req.query.store))); } catch (e) { fail(res, e); } });

@@ -84,6 +84,7 @@ input:focus,select:focus,textarea:focus{border-color:#B9B5AC;box-shadow:0 0 0 3p
 <script src="/mk-ui/conditions.js?v=__VERSION__"></script>
 <script src="/mk-ui/flows.js?v=__VERSION__"></script>
 <script src="/mk-ui/segments.js?v=__VERSION__"></script>
+<script src="/mk-ui/lists.js?v=__VERSION__"></script>
 <script src="/mk-ui/campaigns.js?v=__VERSION__"></script>
 <script src="/mk-ui/sms.js?v=__VERSION__"></script>
 <script src="/mk-ui/analytics.js?v=__VERSION__"></script>
@@ -117,7 +118,7 @@ const SECTIONS = [
 window.MK_SECTIONS = SECTIONS;
 let current = (location.hash || '#overview').slice(1).split('/')[0];
 function drawNav() {
-  $('nav').innerHTML = SECTIONS.map((s) => s.h ? `<div class="h">${esc(s.h)}</div>` : `<a data-id="${s.id}" class="${s.id === current ? 'on' : ''}" href="#${s.id}"><i class="ti ti-${s.icon}"></i><span>${esc(s.label)}</span>${s.soon ? '<span class="soon">soon</span>' : ''}</a>`).join('');
+  $('nav').innerHTML = SECTIONS.filter((s) => !s.hidden).map((s) => s.h ? `<div class="h">${esc(s.h)}</div>` : `<a data-id="${s.id}" class="${s.id === current ? 'on' : ''}" href="#${s.id}"><i class="ti ti-${s.icon}"></i><span>${esc(s.label)}</span>${s.soon ? '<span class="soon">soon</span>' : ''}</a>`).join('');
 }
 function go() {
   current = (location.hash || '#overview').slice(1).split('/')[0];

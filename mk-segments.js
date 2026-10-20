@@ -119,13 +119,13 @@ async function matches(def, profileId, ctx = {}) {
 }
 async function count(def, store) {
   const args = []; const where = compile(def, args, {});
-  const s = store ? ` AND p.store=${A(args, store)}` : "";
+  const s = "";   // one Brusche audience
   const r = await db(`SELECT count(*)::int n, count(*) FILTER (WHERE p.email_consent='subscribed')::int email_ok, count(*) FILTER (WHERE p.sms_consent='subscribed')::int sms_ok FROM mk_profiles p WHERE (${where})${s}`, args);
   return r.rows[0];
 }
 async function sample(def, store, limit = 25) {
   const args = []; const where = compile(def, args, {});
-  const s = store ? ` AND p.store=${A(args, store)}` : "";
+  const s = "";   // one Brusche audience
   args.push(limit);
   return (await db(`SELECT p.id, p.email, p.phone, p.first_name, p.last_name, p.tier, p.orders_count, p.email_consent, p.sms_consent FROM mk_profiles p WHERE (${where})${s} ORDER BY p.last_engaged_at DESC NULLS LAST LIMIT $${args.length}`, args)).rows;
 }
@@ -163,9 +163,9 @@ async function save({ id, store, name, description, definition }, who) {
 async function refresh(id) {
   const s = await get(id); if (!s) return null;
   const args = [s.id, s.store]; const where = compile(s.definition, args, {});
-  const added = (await db(`INSERT INTO mk_segment_members (segment_id, profile_id) SELECT $1, p.id FROM mk_profiles p WHERE p.store=$2 AND (${where}) ON CONFLICT DO NOTHING RETURNING profile_id`, args)).rows;
+  const added = (await db(`INSERT INTO mk_segment_members (segment_id, profile_id) SELECT $1, p.id FROM mk_profiles p WHERE $2::text IS NOT NULL AND (${where}) ON CONFLICT DO NOTHING RETURNING profile_id`, args)).rows;
   const args2 = [s.id, s.store]; const where2 = compile(s.definition, args2, {});
-  await db(`DELETE FROM mk_segment_members m WHERE m.segment_id=$1 AND NOT EXISTS (SELECT 1 FROM mk_profiles p WHERE p.id=m.profile_id AND p.store=$2 AND (${where2}))`, args2);
+  await db(`DELETE FROM mk_segment_members m WHERE m.segment_id=$1 AND NOT EXISTS (SELECT 1 FROM mk_profiles p WHERE p.id=m.profile_id AND $2::text IS NOT NULL AND (${where2}))`, args2);
   const c = (await db(`SELECT count(*)::int n, count(*) FILTER (WHERE p.email_consent='subscribed')::int e, count(*) FILTER (WHERE p.sms_consent='subscribed')::int s FROM mk_segment_members m JOIN mk_profiles p ON p.id=m.profile_id WHERE m.segment_id=$1`, [s.id])).rows[0];
   await db(`UPDATE mk_segments SET member_count=$2, email_ok=$3, sms_ok=$4, refreshed_at=now() WHERE id=$1`, [s.id, c.n, c.e, c.s]);
   // Only announce entries after the first fill, so creating a segment doesn't flood flows.

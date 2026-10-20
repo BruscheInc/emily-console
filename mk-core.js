@@ -48,6 +48,8 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS mk_lists (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, name TEXT NOT NULL, description TEXT, source TEXT, ext_id TEXT,
     double_opt_in BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE UNIQUE INDEX IF NOT EXISTS mk_lists_ext ON mk_lists (store, source, ext_id) WHERE ext_id IS NOT NULL`);
+  await db(`ALTER TABLE mk_lists ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false`);
+  await db(`ALTER TABLE mk_lists ADD COLUMN IF NOT EXISTS starred BOOLEAN NOT NULL DEFAULT false`);
   await db(`CREATE TABLE IF NOT EXISTS mk_list_members (list_id BIGINT NOT NULL, profile_id BIGINT NOT NULL, added_at TIMESTAMPTZ DEFAULT now(), source TEXT, PRIMARY KEY (list_id, profile_id))`);
   await db(`CREATE INDEX IF NOT EXISTS mk_list_members_profile ON mk_list_members (profile_id)`);
 }
@@ -391,7 +393,7 @@ async function overview(store) {
 
 async function search({ store, q, consent, tier, list, limit = 50, offset = 0 }) {
   const args = [], where = [];
-  if (store) { args.push(store); where.push(`p.store=$${args.length}`); }
+  // one Brusche audience: profiles aren't split by store
   if (q) { args.push(`%${String(q).toLowerCase()}%`); where.push(`(p.email LIKE $${args.length} OR lower(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) LIKE $${args.length} OR p.phone LIKE $${args.length})`); }
   if (consent === "email") where.push(`p.email_consent='subscribed'`);
   if (consent === "sms") where.push(`p.sms_consent='subscribed'`);
@@ -420,7 +422,7 @@ async function lists(store) {
   const a = store ? [store] : [];
   return (await db(`SELECT l.*, (SELECT count(*)::int FROM mk_list_members m WHERE m.list_id=l.id) members,
       (SELECT count(*)::int FROM mk_list_members m JOIN mk_profiles p ON p.id=m.profile_id WHERE m.list_id=l.id AND p.email_consent='subscribed') email_ok
-    FROM mk_lists l ${store ? "WHERE l.store=$1" : ""} ORDER BY l.name`, a)).rows;
+    FROM mk_lists l WHERE NOT COALESCE(l.archived, false) ${store ? "AND l.store=$1" : ""} ORDER BY l.name`, a)).rows;
 }
 
 /** Record something a person did (from the store script, forms, Buzzin). Used by flows and segments. */

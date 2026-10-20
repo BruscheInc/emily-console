@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.89.0
+Lists & segments and Campaigns pages laid out like Klaviyo, with easy deleting.
+- **Lists & segments** is now one page: search, type filter, stars, member counts and created dates. Every row has a ⋮ menu (Update definition / View members, Edit name, Clone, Star, Delete), and tick boxes let you delete several at once. Before deleting, Buzzin tells you which forms, flows, campaigns or segments still use it. Deleted lists and segments are hidden, not erased. The Shopify Merged Newsletter list can't be deleted.
+- **Create** on that page makes a list, a blank segment, or a segment Emily builds from a description.
+- **Campaigns** page: Create campaign button top right, List / Calendar switch, search with Status and Channels filters, and the audience under each campaign name. Every row has a ⋮ menu (Edit or View report, Rename, Clone, Delete), and tick boxes let you delete several at once.
+- Fix: Outlet segments, campaigns and flows now reach the whole Brusche audience. Since the profile merge, they were still limited to Outlet-only profiles, which no longer exist.
+
 ## 4.88.0
 Sign-up forms: Targeting & display behavior laid out like Klaviyo.
 - **Targeting tab:** Audience (all visitors, not existing Buzzin profiles, existing profiles only, not subscribers, or lists & segments); URLs with on/off switches and * wild cards (full links or paths); Location with "show in" and "don't show in" country pickers; UTM parameters (save them on the profile when someone signs up, and show only when the link's UTM rules match).

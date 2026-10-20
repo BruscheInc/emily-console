@@ -41,7 +41,7 @@ function idsOf(arr, kind) { return (arr || []).filter((x) => x.kind === kind).ma
 /** SQL "FROM … WHERE …" for a campaign's audience. Profiles alias p. */
 function audienceWhere(c, args, { consent = true } = {}) {
   const a = c.audience || {};
-  const w = [`p.store=${A(args, c.store)}`];
+  const w = ["true"];   // one Brusche audience: the store only decides which brand sends it
   const inc = [];
   const segs = idsOf(a.include, "segment"), lists = idsOf(a.include, "list");
   if (segs.length) inc.push(`EXISTS (SELECT 1 FROM mk_segment_members m WHERE m.profile_id=p.id AND m.segment_id = ANY(${A(args, segs)}::bigint[]))`);
@@ -77,7 +77,7 @@ async function smartCount(c) {
 
 /* ---------------- CRUD ---------------- */
 async function list(store) {
-  return (await db(`SELECT c.id, c.store, c.name, c.channel, c.status, c.start_at, c.sent_at, c.recipients, c.note, c.schedule, c.ab, c.updated_at, c.created_by, c.content->>'subject' subject,
+  return (await db(`SELECT c.id, c.store, c.name, c.channel, c.status, c.start_at, c.sent_at, c.recipients, c.note, c.schedule, c.ab, c.updated_at, c.created_at, c.created_by, c.audience, c.content->>'subject' subject,
       (SELECT count(*)::int FROM mk_sends s WHERE s.campaign_id=c.id) sends,
       (SELECT count(*)::int FROM mk_sends s WHERE s.campaign_id=c.id AND s.status='sent') delivered,
       (SELECT count(DISTINCT s.profile_id)::int FROM mk_sends s JOIN mk_send_events e ON e.send_id=s.id AND e.type='opened' AND NOT e.machine WHERE s.campaign_id=c.id) opened,
@@ -96,6 +96,7 @@ async function create(store, { name, channel, copy_of } = {}, who) {
 }
 async function update(id, b, who) {
   const c = await get(id); if (!c) throw Object.assign(new Error("not found"), { status: 404 });
+  if (Object.keys(b).length === 1 && b.name) return (await db(`UPDATE mk_campaigns SET name=$2, updated_by=$3, updated_at=now() WHERE id=$1 RETURNING *`, [c.id, String(b.name).slice(0, 160), who || null])).rows[0];   // a rename works in any status
   if (!["draft"].includes(c.status)) throw new Error("Unschedule the campaign before editing it.");
   const pick = (k) => (b[k] === undefined ? c[k] : b[k]);
   return (await db(`UPDATE mk_campaigns SET name=$2, audience=$3, content=$4, ab=$5, schedule=$6, smart_sending=$7, resend=$8, note=NULL, updated_by=$9, updated_at=now() WHERE id=$1 RETURNING *`,
