@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.83.1
+- **Sign-up consent is to Brusche Inc.** New text and email consent wording names "Brusche Inc. and its brands, including Larkspur Baby", so one sign-up covers every Brusche brand. Forms still using the old store-name wording are switched automatically; custom wording is left alone. Each sign-up keeps the exact wording the person agreed to.
+- Unsubscribe pages say the unsubscribe covers every Brusche Inc. brand.
+
 ## 4.83.0
 - **Sign-up form builder rebuilt to mirror Klaviyo's.**
   - **Blocks** on every step: Text (rich text: headings, bold, italic, underline, lists, links, color), Image, Button, Email, Phone number, Text input, Checkboxes, Radio buttons, Dropdown, Date, Coupon, Countdown timer, Spacer, Divider, HTML. Each block has padding, alignment and background.

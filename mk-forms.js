@@ -18,11 +18,15 @@ const V2 = require("./mk-forms-v2");
 
 const RUNTIME = () => fs.readFileSync(path.join(__dirname, "public", "mk-forms-runtime.js"), "utf8");
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
+// Consent is to Brusche Inc. as the company (Larkspur Baby is a Brusche brand), so it covers every Brusche brand.
+const SENDER = "Brusche Inc. and its brands, including Larkspur Baby";
 const SMS_CONSENT_V1 = (brand) => `By signing up for texts, you agree to receive recurring automated marketing text messages (e.g. new arrivals, offers, cart reminders) from ${brand} at the number provided. Consent is not a condition of purchase. Msg & data rates may apply. Msg frequency varies. Reply STOP to cancel, HELP for help. See our Terms and Privacy Policy.`;
+const SMS_CONSENT_V2 = (brand) => `By checking this box, you agree to receive recurring automated marketing text messages (e.g. new arrivals, offers, cart reminders) from ${brand} at the number provided. Consent is not a condition of purchase. Msg & data rates may apply. Msg frequency varies. Reply STOP to cancel, HELP for help.`;
+const EMAIL_CONSENT_V1 = (brand) => `By signing up you agree to receive marketing emails from ${brand}. Unsubscribe anytime.`;
 // Shown next to an UNCHECKED checkbox on the phone step (carriers require a separate, unchecked box).
-const SMS_CONSENT = (brand) => `By checking this box, you agree to receive recurring automated marketing text messages (e.g. new arrivals, offers, cart reminders) from ${brand} at the number provided. Consent is not a condition of purchase. Msg & data rates may apply. Msg frequency varies. Reply STOP to cancel, HELP for help.`;
+const SMS_CONSENT = () => SMS_CONSENT_V2(SENDER + ",");
 const SHOP_URL = { lb: "https://larkspurbaby.com", lbo: "https://larkspurbabyoutlet.com" };
-const EMAIL_CONSENT = (brand) => `By signing up you agree to receive marketing emails from ${brand}. Unsubscribe anytime.`;
+const EMAIL_CONSENT = () => EMAIL_CONSENT_V1(SENDER);
 
 async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS mk_forms (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft',
@@ -202,6 +206,12 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
 async function init() {
   await migrate();
   // Forms still using the old "by signing up for texts" wording get the checkbox wording.
-  try { for (const [st, brand] of Object.entries(MK().STORES)) await db(`UPDATE mk_forms SET sms_consent_text=$3 WHERE store=$1 AND sms_consent_text=$2`, [st, SMS_CONSENT_V1(brand), SMS_CONSENT(brand)]); } catch (e) { console.error("form consent wording:", e.message); }
+  // Forms still using a store-name default wording move to the Brusche Inc. wording. Custom wording is left alone.
+  try {
+    for (const brand of [...Object.values(MK().STORES), "Larkspur Outlet"]) {
+      for (const old of [SMS_CONSENT_V1(brand), SMS_CONSENT_V2(brand)]) await db(`UPDATE mk_forms SET sms_consent_text=$2 WHERE sms_consent_text=$1`, [old, SMS_CONSENT()]);
+      await db(`UPDATE mk_forms SET email_consent_text=$2 WHERE email_consent_text=$1`, [EMAIL_CONSENT_V1(brand), EMAIL_CONSENT()]);
+    }
+  } catch (e) { console.error("form consent wording:", e.message); }
 }
 module.exports = { init, migrate, routes, list, get, create, save, submit, config, issueCoupon, SMS_CONSENT, EMAIL_CONSENT };
