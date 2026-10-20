@@ -194,10 +194,18 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
       res.json({ ok: true }); } catch (e) { res.json({ ok: false }); }
   });
 
+  /* staff: universal blocks (saved blocks reused in any form) */
+  app.get("/api/mk/forms-universal", async (req, res) => { if (!guard(req, res)) return; try { res.json({ items: (await core.setting("mk_form_universal", null)) || [] }); } catch (e) { fail(res, e); } });
+  app.put("/api/mk/forms-universal", async (req, res) => {
+    if (!guard(req, res)) return;
+    try { const items = (Array.isArray((req.body || {}).items) ? req.body.items : []).slice(0, 100).map((x) => ({ id: String(x.id || "").slice(0, 20), name: String(x.name || "Block").slice(0, 40), block: (V2.cleanSteps([{ blocks: [x.block] }])[0].blocks[0]) || null })).filter((x) => x.id && x.block);
+      await db(`INSERT INTO emily_settings (key, value, updated_by, updated_at) VALUES ('mk_form_universal',$1,$2,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_by=EXCLUDED.updated_by, updated_at=now()`, [JSON.stringify(items), actorOf(req)]);
+      res.json({ items }); } catch (e) { fail(res, e); }
+  });
   /* staff: Form Studio */
   app.get("/api/mk/forms", async (req, res) => { if (!guard(req, res)) return; try { res.json({ forms: await list(store(req.query.store)), klaviyo: (await db(`SELECT id, name, data FROM hd_klaviyo WHERE kind='form'`).catch(() => ({ rows: [] }))).rows.map((r) => ({ id: r.id, name: r.name, status: r.data && r.data.attributes && r.data.attributes.status })) }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/forms", async (req, res) => { if (!guard(req, res)) return; try { const s = store((req.body || {}).store); if (!s) return res.status(400).json({ error: "Pick a store first" }); res.json(await create(s, (req.body || {}).name, actorOf(req))); } catch (e) { fail(res, e); } });
-  app.get("/api/mk/forms/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" }); res.json({ ...f, stats: await stats(f.id), lists: await MK().lists(f.store) }); } catch (e) { fail(res, e); } });
+  app.get("/api/mk/forms/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" }); res.json({ ...f, stats: await stats(f.id), lists: await MK().lists(f.store), import_notes: await require("./mk-forms-klaviyo").notesFor(f.id) }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/forms/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await save(req.params.id, req.body || {}, actorOf(req), isAdmin(req)); CACHE.clear(); res.json(f); } catch (e) { fail(res, e); } });
   app.delete("/api/mk/forms/:id", async (req, res) => { if (!admin(req, res)) return; try { await db(`DELETE FROM mk_forms WHERE id=$1`, [Number(req.params.id)]); CACHE.clear(); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/tracking", async (req, res) => { if (!admin(req, res)) return; try { const b = req.body || {}; const cur = await MK().settings(); const t = { ...(cur.tracking || {}) }; for (const k of ["lb", "lbo"]) if (b[k] != null) t[k] = !!b[k]; const out = await MK().saveSettings({ tracking: t }, actorOf(req)); CACHE.clear(); res.json(out); } catch (e) { fail(res, e); } });
@@ -214,4 +222,4 @@ async function init() {
     }
   } catch (e) { console.error("form consent wording:", e.message); }
 }
-module.exports = { init, migrate, routes, list, get, create, save, submit, config, issueCoupon, SMS_CONSENT, EMAIL_CONSENT };
+module.exports = { clearCache: () => CACHE.clear(), init, migrate, routes, list, get, create, save, submit, config, issueCoupon, SMS_CONSENT, EMAIL_CONSENT };

@@ -24,103 +24,252 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 
 async function renderForms(el, id) {
   if (id) return editForm(el, id);
+  document.querySelectorAll('.ke').forEach((x) => x.remove());
   const r = await api('/api/mk/forms?' + qs({ store: STORE }));
+  let imp = null; try { imp = await api('/api/mk/forms/import-klaviyo'); } catch (e) { imp = null; }
   el.innerHTML = `<h1>Sign-up forms</h1><p class="sub">Popups, flyouts, full-page, banners and embedded forms for the store. A form only appears on the store when it's Live, or when you open the store with the preview link.</p>
-  <div class="bar"><button class="btn pri" id="fn"${STORE ? '' : ' disabled title="Pick a store first"'}><i class="ti ti-plus"></i> Create form</button>${STORE ? '' : '<span style="color:var(--muted)">Pick the store the form goes on (top) to create one.</span>'}</div>
-  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Form</th><th>Status</th><th>Type</th><th class="n">Views</th><th class="n">Emails</th><th class="n">Phones</th><th class="n">Sign-up rate</th></tr></thead><tbody>
-  ${r.forms.map((f) => `<tr class="click" data-id="${f.id}"><td><b>${esc(f.name)}</b></td><td>${pill(STATUS, f.status)}</td><td>${esc(TYPE_NAME[(f.style || {}).type || (f.style || {}).layout] || 'Popup')}</td><td class="n">${fmtN(f.views)}</td><td class="n">${fmtN(f.emails)}</td><td class="n">${fmtN(f.phones)}</td><td class="n">${f.views ? (Math.round(f.emails / f.views * 1000) / 10) + '%' : '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No forms yet.</td></tr>'}
-  </tbody></table></div></div>
-  ${r.klaviyo.length ? `<div class="card" style="margin-top:12px"><b>Your Klaviyo forms</b><p class="sub" style="margin:4px 0 8px">For reference while rebuilding them here.</p>${r.klaviyo.map((k) => `<span class="pill off" style="margin-right:6px">${esc(k.name)} · ${esc(k.status || '')}</span>`).join('')}</div>` : ''}`;
+  <div class="bar"><button class="btn pri" id="fn"${STORE ? '' : ' disabled title="Pick a store first"'}><i class="ti ti-plus"></i> Create form</button>${STORE ? '' : '<span style="color:var(--muted)">Pick the store the form goes on (top) to create one.</span>'}
+    ${imp ? `<span class="sp" style="flex:1"></span><button class="btn" id="fki"${imp.running ? ' disabled' : ''}><i class="ti ti-download"></i> ${imp.running ? 'Copying from Klaviyo…' : 'Copy forms from Klaviyo'}</button>` : ''}</div>
+  ${imp && (imp.running || imp.last) ? `<div class="card" style="margin-bottom:12px;font-size:13px"><b>Klaviyo forms</b> · ${imp.running ? 'copying now…' : esc((imp.last && imp.last.out) || '')}${imp.last && imp.last.at ? ` <span style="color:var(--muted)">(${fmtDT(imp.last.at)})</span>` : ''}<div style="color:var(--muted);margin-top:4px">Copies come in as Drafts named after the Klaviyo form. Running it again only adds forms that aren't here yet. Nothing in Klaviyo changes.</div></div>` : ''}
+  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Form</th><th>Status</th><th>Type</th><th>From</th><th class="n">Views</th><th class="n">Emails</th><th class="n">Phones</th><th class="n">Sign-up rate</th></tr></thead><tbody>
+  ${r.forms.map((f) => `<tr class="click" data-id="${f.id}"><td><b>${esc(f.name)}</b></td><td>${pill(STATUS, f.status)}</td><td>${esc(TYPE_NAME[(f.style || {}).type || (f.style || {}).layout] || 'Popup')}</td><td>${f.source === 'klaviyo' ? 'Klaviyo copy' : 'Buzzin'}</td><td class="n">${fmtN(f.views)}</td><td class="n">${fmtN(f.emails)}</td><td class="n">${fmtN(f.phones)}</td><td class="n">${f.views ? (Math.round(f.emails / f.views * 1000) / 10) + '%' : '—'}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No forms yet.</td></tr>'}
+  </tbody></table></div></div>`;
   el.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => { location.hash = '#forms/' + tr.dataset.id; });
   $('fn').onclick = async () => { try { const f = await api('/api/mk/forms', { method: 'POST', body: JSON.stringify({ store: STORE, name: 'Welcome popup' }) }); location.hash = '#forms/' + f.id; } catch (e) { toast(e.message, 1); } };
+  const ki = $('fki'); if (ki) ki.onclick = async () => { try { await api('/api/mk/forms/import-klaviyo', { method: 'POST', body: JSON.stringify({}) }); toast('Copying your Klaviyo forms'); setTimeout(go, 1500); } catch (e) { toast(e.message, 1); } };
+  if (imp && imp.running) setTimeout(() => { if ((location.hash || '') === '#forms') go(); }, 6000);
 }
+window.addEventListener('hashchange', () => { if (!/^#forms\/\d+/.test(location.hash || '')) document.querySelectorAll('.ke').forEach((x) => x.remove()); });
 
 /* ---------------- editor state ---------------- */
-let F = null, TAB = 'content', SI = 0, SEL = null, DEV = 'desk', MODE = 'edit', fdirty = false, frameReady = false;
+let F = null, RAIL = 'add', SI = 0, SEL = null, STEPSET = false, VIEW = 'both', ZOOM = 'fit', MODE = 'edit', ADDTAB = 'basic', fdirty = false, saving = false, UNIV = [];
+const ready = { d: false, m: false };
 const step = () => F.steps[SI] || F.steps[0];
-const sel = () => (SEL != null && SEL >= 0 ? (step().blocks || [])[SEL] : null);
+const sel = () => (SI >= 0 && SEL != null && SEL >= 0 ? (step().blocks || [])[SEL] : null);
+const HIST = { past: [], future: [], last: '' };
+const CSS = `<style>
+.ke{position:fixed;inset:0;z-index:60;background:#F4F4F5;display:flex;flex-direction:column;font:14px/1.4 inherit}
+.ke-top{height:60px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;background:#fff;border-bottom:1px solid var(--line)}
+.ke-top .nm{font-weight:700;font-size:17px;border:1px solid transparent;border-radius:8px;padding:6px 8px;min-width:120px;max-width:420px;background:transparent}
+.ke-top .nm:hover,.ke-top .nm:focus{border-color:var(--line);background:#fff}
+.ke-st{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:0 6px 0 10px;height:36px}.ke-st select{border:0;background:transparent;font-weight:600;padding:0 4px;height:34px}
+.ke-dot{width:8px;height:8px;border-radius:50%;background:#71717A}.ke-dot.live{background:#16A34A}.ke-dot.preview{background:#D97706}
+.ke-save{color:var(--muted);display:inline-flex;align-items:center;gap:4px;font-size:12.5px}
+.ke-body{flex:1;display:flex;min-height:0}
+.ke-rail{width:56px;flex:none;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px}
+.ke-rail button{all:unset;cursor:pointer;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#3F3F46;font-size:20px}
+.ke-rail button:hover{background:#F4F4F5}.ke-rail button.on{background:#EEF2FF;color:#3730A3;box-shadow:inset 0 0 0 1.5px #6366F1}
+.ke-side{width:370px;flex:none;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.ke-side.closed{display:none}
+.ke-sh{display:flex;align-items:center;gap:8px;padding:16px 18px 6px}.ke-sh b{font-size:17px;flex:1}
+.ke-tabs{display:flex;gap:18px;padding:0 18px;border-bottom:1px solid var(--line)}.ke-tabs button{all:unset;cursor:pointer;padding:10px 2px;color:var(--muted);font-weight:500}.ke-tabs button.on{color:#18181B;font-weight:700;box-shadow:inset 0 -2px 0 #18181B}
+.ke-pane{flex:1;overflow-y:auto;padding:4px 18px 40px}
+.ke-sec{font-weight:700;font-size:15px;margin:20px 0 10px}
+.ke-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ke-tile{border:1px solid var(--line);border-radius:12px;background:#fff;padding:8px 6px 12px;text-align:center;cursor:grab;user-select:none;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:96px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.ke-tile:hover{border-color:#A1A1AA;box-shadow:0 2px 8px rgba(0,0,0,.08)}.ke-tile .g{color:#A1A1AA;font-size:12px;letter-spacing:2px;line-height:1}.ke-tile i{font-size:24px;color:#27272A}.ke-tile span{font-size:13.5px}
+.ke-tile.off{opacity:.45;cursor:not-allowed}
+.ke-canvas{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+.ke-bar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:3;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 4px 14px rgba(0,0,0,.08);max-width:calc(100% - 24px);overflow-x:auto}
+.ke-bar .sep{width:1px;height:26px;background:var(--line);margin:0 2px;flex:none}
+.ke-ib{all:unset;cursor:pointer;width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:#3F3F46;font-size:18px;flex:none}.ke-ib:hover{background:#F4F4F5}.ke-ib:disabled,.ke-ib[disabled]{opacity:.35;cursor:default}.ke-ib.on{background:#F4F4F5;box-shadow:inset 0 0 0 1px var(--line)}
+.ke-pill{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:9px;height:36px;flex:none;background:#fff}
+.ke-pill.on{border-color:#6366F1;background:#EEF2FF}.ke-pill .lb{all:unset;cursor:pointer;padding:0 12px;font-weight:600;white-space:nowrap;height:34px;display:flex;align-items:center;gap:6px}
+.ke-pill .gr{color:#A1A1AA;cursor:grab;padding-left:8px}.ke-pill .mn{all:unset;cursor:pointer;border-left:1px solid var(--line);height:34px;width:30px;display:flex;align-items:center;justify-content:center}
+.ke-arrow{color:#A1A1AA;flex:none}
+.ke-menu{position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;min-width:190px}
+.ke-menu button{all:unset;display:flex;gap:8px;align-items:center;width:calc(100% - 20px);padding:8px 10px;border-radius:6px;cursor:pointer}.ke-menu button:hover{background:#F4F4F5}.ke-menu button.danger{color:#B42318}.ke-menu button:disabled{opacity:.4;cursor:default}
+.ke-stage{flex:1;overflow:auto;padding:84px 24px 24px}
+.ke-zoomwrap{transform-origin:top left;display:flex;gap:48px;align-items:flex-start;width:max-content;margin:0 auto}
+.ke-dev{display:flex;flex-direction:column;gap:10px}.ke-dev .cap{display:flex;align-items:center;gap:6px;font-weight:600}
+.ke-dev iframe{border:0;background:transparent;border-radius:6px}.ke-dev iframe.play{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.ke-zoom{position:absolute;right:18px;bottom:18px;z-index:3;display:flex;flex-direction:column;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.ke-zoom span{font:600 12px ui-monospace,Menlo,monospace;padding:4px 0}
+.ke-back{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-weight:600;margin:14px 0 4px}
+.ke-note{background:#EFF6FF;border:1px solid #BFDBFE;color:#1E3A8A;border-radius:10px;padding:10px 12px;margin-top:12px;font-size:13px}
+</style>`;
+const ICON = (n) => `<i class="ti ti-${n}"></i>`;
+const DEV_W = { d: 1100, m: 390 }, DEV_H = 760; const FH = { d: 600, m: 600 };
+const devW = () => (MODE === 'play' ? 1100 : Math.max(720, Math.min(1100, Number((F && F.style && F.style.width) || 600) + 160)));
 
 async function editForm(el, id) {
-  F = await api('/api/mk/forms/' + id); fdirty = false; SI = 0; SEL = null; TAB = 'content'; MODE = 'edit'; frameReady = false;
-  el.style.padding = '0';
-  el.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
-  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)">
-    <a href="#forms" class="btn xs" aria-label="Back"><i class="ti ti-arrow-left"></i></a><input id="fnm" type="text" value="${esc(F.name)}" aria-label="Form name" style="font-weight:700;min-width:220px">
+  F = await api('/api/mk/forms/' + id); fdirty = false; SI = 0; SEL = null; STEPSET = false; RAIL = 'add'; MODE = 'edit'; ready.d = ready.m = false;
+  HIST.past = []; HIST.future = []; HIST.last = JSON.stringify(snap());
+  try { UNIV = (await api('/api/mk/forms-universal')).items || []; } catch (e) { UNIV = []; }
+  document.querySelectorAll('.ke').forEach((x) => x.remove());
+  const k = document.createElement('div'); k.className = 'ke'; document.body.appendChild(k);
+  k.innerHTML = CSS + `
+  <div class="ke-top"><button class="ke-ib" id="kx" aria-label="Exit" title="Back to forms">${ICON('arrow-bar-left')}</button>
+    <input class="nm" id="knm" value="${esc(F.name)}" aria-label="Form name"><span class="ke-save" id="ksv" title="All changes saved">${ICON('circle-check')}</span>
+    <span class="ke-st"><span class="ke-dot" id="kdot"></span><select id="kst" aria-label="Status"><option value="draft">Draft</option><option value="preview">Preview only</option><option value="live">Live</option></select></span>
     <span class="pill off">${esc(STORE_NAME[F.store] || '')}</span>
-    <select id="fst" aria-label="Status"><option value="draft">Draft</option><option value="preview">Preview only</option><option value="live">Live</option></select>
-    <span class="sp"></span><span class="pill hon hidden" id="fdirty">Unsaved</span><span id="fstat" style="color:var(--muted);font-size:12px"></span>
-    <a class="btn" id="fopen" target="_blank" rel="noopener" href="${SHOP[F.store]}/?buzzin_form=preview"><i class="ti ti-external-link"></i> Preview on store</a>
-    <button class="btn danger" id="fdel" aria-label="Delete form"><i class="ti ti-trash"></i></button><button class="btn pri" id="fsave">Save</button></div>
-  <div style="flex:1;display:flex;min-height:0">
-    <div style="width:360px;flex:none;border-right:1px solid var(--line);background:#fff;display:flex;flex-direction:column;min-height:0">
-      <style>#ftabs{display:flex;margin:10px 12px}#ftabs button{flex:1;padding:6px 4px;font-size:12px;min-width:0}</style><div class="seg" id="ftabs"><button data-t="content">Content</button><button data-t="styles">Styles</button><button data-t="behaviors">Behaviors</button><button data-t="targeting">Targeting</button><button data-t="offer">Offer</button></div>
-      <div id="fpanel" style="padding:0 14px 40px;overflow-y:auto;flex:1"></div></div>
-    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#ECEAE5">
-      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:10px 14px">
-        <div id="fsteps" style="display:flex;gap:4px;flex-wrap:wrap"></div><span class="sp"></span>
-        <div class="seg" id="fmode"><button data-m="edit" class="on"><i class="ti ti-pencil"></i> Edit</button><button data-m="play"><i class="ti ti-player-play"></i> Try it</button></div>
-        <div class="seg" id="fdev"><button data-d="desk" class="on" aria-label="Desktop"><i class="ti ti-device-desktop"></i></button><button data-d="mob" aria-label="Mobile"><i class="ti ti-device-mobile"></i></button></div></div>
-      <div style="flex:1;overflow:auto;display:flex;justify-content:center;padding:0 14px 14px"><iframe id="fpv" title="Form canvas" style="border:0;background:#fff;border-radius:12px;width:1000px;max-width:100%;height:100%;min-height:640px"></iframe></div></div></div></div>`;
-  $('fst').value = F.status;
-  const st = F.stats && F.stats.live; $('fstat').textContent = st ? `${fmtN(st.viewed)} views · ${fmtN(st.emails)} emails · ${fmtN(st.phones)} phones · ${st.rate}% · ${fmt$(F.stats.revenue)}` : '';
-  $('fnm').oninput = () => { F.name = $('fnm').value; mark(false); };
-  $('fst').onchange = () => { F.status = $('fst').value; mark(false); };
-  $('ftabs').querySelectorAll('button').forEach((b) => b.onclick = () => { TAB = b.dataset.t; panel(); });
-  $('fdev').querySelectorAll('button').forEach((b) => b.onclick = () => { DEV = b.dataset.d; $('fdev').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); $('fpv').style.width = DEV === 'mob' ? '390px' : '1000px'; draw(); });
-  $('fmode').querySelectorAll('button').forEach((b) => b.onclick = () => { MODE = b.dataset.m; $('fmode').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); draw(); });
-  $('fsave').onclick = save;
-  $('fdel').onclick = async () => { if ($('fdel').dataset.c !== '1') { $('fdel').dataset.c = '1'; $('fdel').textContent = 'Click again to delete'; return; } try { await api('/api/mk/forms/' + F.id, { method: 'DELETE' }); location.hash = '#forms'; } catch (e) { toast(e.message, 1); } };
+    <span class="sp" style="flex:1"></span><span id="kstat" style="color:var(--muted);font-size:12px"></span>
+    <a class="btn" target="_blank" rel="noopener" href="${SHOP[F.store]}/?buzzin_form=preview">${ICON('device-desktop')} Preview on website</a>
+    <button class="btn pri" id="kpub">${F.status === 'live' ? 'Update live form' : 'Publish'}</button></div>
+  <div class="ke-body">
+    <div class="ke-rail"><button data-r="add" title="Add blocks" aria-label="Add blocks">${ICON('circle-plus')}</button><button data-r="styles" title="Styles" aria-label="Styles">${ICON('palette')}</button><button data-r="targeting" title="Targeting & behaviors" aria-label="Targeting and behaviors">${ICON('target-arrow')}</button></div>
+    <div class="ke-side" id="kside"><div id="fpanel" style="display:flex;flex-direction:column;min-height:0;height:100%"></div></div>
+    <div class="ke-canvas"><div class="ke-bar" id="kbar"></div>
+      <div class="ke-stage" id="kstage"><div class="ke-zoomwrap" id="kzw">
+        <div class="ke-dev" id="kdd"><div class="cap">${ICON('device-desktop')} Desktop</div><iframe id="fpd" title="Desktop canvas" style="width:${DEV_W.d}px;height:${DEV_H}px"></iframe></div>
+        <div class="ke-dev" id="kdm"><div class="cap">${ICON('device-mobile')} Mobile</div><iframe id="fpm" title="Mobile canvas" style="width:${DEV_W.m}px;height:${DEV_H}px"></iframe></div>
+      </div></div>
+      <div class="ke-zoom"><button class="ke-ib" id="kzi" aria-label="Zoom in">${ICON('plus')}</button><span id="kzv">100%</span><button class="ke-ib" id="kzo" aria-label="Zoom out">${ICON('minus')}</button><button class="ke-ib" id="kzf" aria-label="Fit to screen">${ICON('maximize')}</button></div>
+    </div></div>`;
+  el.innerHTML = '<div class="empty">Editing in full screen…</div>';
+  $('kst').value = F.status; dot();
+  const st = F.stats && F.stats.live; $('kstat').textContent = st && st.viewed ? `${fmtN(st.viewed)} views · ${fmtN(st.emails)} emails · ${fmtN(st.phones)} phones · ${st.rate}%` : '';
+  $('kx').onclick = async () => { if (fdirty) await save(true); k.remove(); window.onbeforeunload = null; location.hash = '#forms'; };
+  $('knm').oninput = () => { F.name = $('knm').value; mark(false); };
+  $('kst').onchange = () => { F.status = $('kst').value; dot(); mark(false); };
+  $('kpub').onclick = async () => { const b = $('kpub'); if (F.status !== 'live' && b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'Click again to go live'; return; } F.status = 'live'; $('kst').value = 'live'; dot(); await save(); b.dataset.c = ''; b.textContent = 'Update live form'; };
+  k.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { if (RAIL === b.dataset.r && !SEL && !STEPSET && SI >= 0) { $('kside').classList.toggle('closed'); } else { $('kside').classList.remove('closed'); RAIL = b.dataset.r; SEL = null; STEPSET = false; if (SI < 0) SI = 0; } rail(); bar(); panel(); draw(); });
+  $('kzi').onclick = () => setZoom(cz() + 0.1); $('kzo').onclick = () => setZoom(cz() - 0.1); $('kzf').onclick = () => { ZOOM = 'fit'; layout(); };
   window.onbeforeunload = () => fdirty ? 'Unsaved changes' : undefined;
   window.removeEventListener('message', onFrame); window.addEventListener('message', onFrame);
-  loadFrame(); stepTabs(); panel();
+  window.removeEventListener('resize', layout); window.addEventListener('resize', layout);
+  document.removeEventListener('keydown', onKey); document.addEventListener('keydown', onKey);
+  loadFrame('d'); loadFrame('m'); rail(); bar(); panel(); layout();
 }
-async function save() {
-  try { const out = await api('/api/mk/forms/' + F.id, { method: 'PUT', body: JSON.stringify(F) }); F = { ...F, ...out }; fdirty = false; $('fdirty').classList.add('hidden'); $('fst').value = F.status; toast('Saved'); draw(); }
-  catch (e) { toast(e.message, 1); }
+function onKey(e) {
+  if (!document.querySelector('.ke')) return;
+  const inField = /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '') || (e.target && e.target.isContentEditable);
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+  else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && sel()) { e.preventDefault(); step().blocks.splice(SEL, 1); SEL = null; panel(); mark(); }
+  else if (e.key === 'Escape' && !inField && (SEL != null || STEPSET)) { SEL = null; STEPSET = false; panel(); draw(); }
 }
-function mark(redraw = true) { fdirty = true; $('fdirty').classList.remove('hidden'); if (redraw) draw(); }
+const dot = () => { const d = $('kdot'); if (d) d.className = 'ke-dot ' + F.status; };
+function rail() { document.querySelectorAll('.ke-rail [data-r]').forEach((b) => b.classList.toggle('on', b.dataset.r === RAIL && !$('kside').classList.contains('closed'))); }
 
-/* ---------------- canvas ---------------- */
-function loadFrame() {
-  const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:15px Helvetica,Arial,sans-serif;background:#fff}.nav{height:56px;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 20px;font-weight:700;letter-spacing:.04em}.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;padding:20px}.g div{aspect-ratio:3/4;background:#EEF1F5;border-radius:8px}</style></head>
+/* ---------------- saving (autosave like Klaviyo), undo/redo ---------------- */
+const snap = () => ({ name: F.name, steps: F.steps, style: F.style, targeting: F.targeting, teaser: F.teaser, coupon: F.coupon, list_id: F.list_id, priority: F.priority, sms_consent_text: F.sms_consent_text, email_consent_text: F.email_consent_text });
+let saveT = null;
+async function save(quiet) {
+  clearTimeout(saveT); if (saving) { saveT = setTimeout(() => save(quiet), 400); return; }
+  saving = true; const sv = $('ksv'); if (sv) { sv.innerHTML = ICON('loader-2') + ' Saving'; }
+  try { const out = await api('/api/mk/forms/' + F.id, { method: 'PUT', body: JSON.stringify(F) }); F.status = out.status; F.updated_at = out.updated_at; fdirty = false; if (sv) { sv.innerHTML = ICON('circle-check'); sv.title = 'All changes saved'; } if ($('kst')) { $('kst').value = F.status; dot(); } if (!quiet) toast('Saved'); }
+  catch (e) { if (sv) sv.innerHTML = '<span style="color:#B42318">Not saved</span>'; toast(e.message, 1); }
+  finally { saving = false; }
+}
+let histT = null;
+function mark(redraw = true) {
+  fdirty = true; const sv = $('ksv'); if (sv) { sv.innerHTML = ICON('circle-dot') + ' Unsaved'; }
+  clearTimeout(histT); histT = setTimeout(() => { const cur = JSON.stringify(snap()); if (cur !== HIST.last) { HIST.past.push(HIST.last); if (HIST.past.length > 60) HIST.past.shift(); HIST.future = []; HIST.last = cur; bar(); } }, 350);
+  clearTimeout(saveT); saveT = setTimeout(() => save(true), 1500);
+  if (redraw) draw();
+}
+function restore(json) { const o = JSON.parse(json); Object.assign(F, o); HIST.last = json; SEL = null; STEPSET = false; if (SI >= F.steps.length) SI = F.steps.length - 1; $('knm').value = F.name; panel(); bar(); fdirty = true; clearTimeout(saveT); saveT = setTimeout(() => save(true), 800); draw(); }
+function undo() { if (!HIST.past.length) return; HIST.future.push(JSON.stringify(snap())); restore(HIST.past.pop()); }
+function redo() { if (!HIST.future.length) return; HIST.past.push(JSON.stringify(snap())); restore(HIST.future.pop()); }
+
+/* ---------------- canvas: desktop + mobile side by side, zoom ---------------- */
+function loadFrame(w) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:15px Helvetica,Arial,sans-serif;background:#fff;min-height:100vh}.nav{height:56px;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 20px;font-weight:700;letter-spacing:.04em}.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;padding:20px}.g div{aspect-ratio:3/4;background:#EEF1F5;border-radius:8px}</style></head>
   <body><div class="nav">${esc(STORE_NAME[F.store] || '')}</div><div id="bzf-embed" style="max-width:640px;margin:20px auto"></div><div class="g"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
-  <script>window.BZF_STUDIO=1;window.BZF_ORIGIN=${JSON.stringify(location.origin)};window.BZF_STORE=${JSON.stringify(F.store)};<\/script><script src="${location.origin}/mk-forms-runtime.js?v=${Date.now()}"><\/script>
-  <script>window.addEventListener('message',function(e){var d=e.data||{};if(!d.bzfRender)return;try{BuzzinFormsShow(d.form,d.opts)}catch(x){document.body.insertAdjacentHTML('beforeend','<pre>'+x.message+'</pre>')}});parent.postMessage({bzf:1,t:'ready'},'*');<\/script></body></html>`;
-  $('fpv').srcdoc = html;
+  <script>window.BZF_STUDIO=1;window.BZF_FRAME=${JSON.stringify(w)};window.BZF_ORIGIN=${JSON.stringify(location.origin)};window.BZF_STORE=${JSON.stringify(F.store)};<\/script><script src="${location.origin}/mk-forms-runtime.js?v=${Date.now()}"><\/script>
+  <style>html:has(body.edit),body.edit{background:transparent}body.edit .nav,body.edit .g,body.edit #bzf-embed{display:none}</style><script>window.addEventListener('message',function(e){var d=e.data||{};if(!d.bzfRender)return;document.body.classList.toggle('edit',!!(d.opts&&(d.opts.edit||d.opts.teaser)));try{BuzzinFormsShow(d.form,d.opts)}catch(x){document.body.insertAdjacentHTML('beforeend','<pre>'+x.message+'</pre>')}});parent.postMessage({bzf:1,t:'ready',frame:${JSON.stringify(w)}},'*');<\/script></body></html>`;
+  $(w === 'd' ? 'fpd' : 'fpm').srcdoc = html;
+}
+const cz = () => { const z = $('kzw') && Number(($('kzw').dataset.z) || 1); return z || 1; };
+function setZoom(z) { ZOOM = Math.max(0.3, Math.min(1.5, Math.round(z * 10) / 10)); layout(); }
+function layout() {
+  const st = $('kstage'), zw = $('kzw'); if (!st || !zw) return;
+  $('kdd').style.display = VIEW === 'mob' ? 'none' : ''; $('kdm').style.display = VIEW === 'desk' ? 'none' : '';
+  const dw = devW(), play = MODE === 'play';
+  const fd = $('fpd'), fm = $('fpm');
+  fd.style.width = dw + 'px'; fm.style.width = DEV_W.m + 'px';
+  fd.style.height = (play ? DEV_H : Math.max(320, FH.d)) + 'px'; fm.style.height = (play ? DEV_H : Math.max(320, FH.m)) + 'px';
+  fd.classList.toggle('play', play); fm.classList.toggle('play', play);
+  const natural = (VIEW !== 'mob' ? dw : 0) + (VIEW !== 'desk' ? DEV_W.m : 0) + (VIEW === 'both' ? 48 : 0);
+  const z = ZOOM === 'fit' ? Math.max(0.3, Math.min(1, (st.clientWidth - 48) / natural)) : ZOOM;
+  zw.dataset.z = z; zw.style.transform = `scale(${z})`; zw.style.marginLeft = Math.max(0, (st.clientWidth - 48 - natural * z) / 2) + 'px'; zw.style.marginRight = '0';
+  const h = Math.max(VIEW !== 'mob' ? parseFloat(fd.style.height) : 0, VIEW !== 'desk' ? parseFloat(fm.style.height) : 0);
+  zw.style.height = (h + 36) * z + 'px'; $('kzv').textContent = Math.round(z * 100) + '%';
 }
 let drawT = null;
 function draw() {
   clearTimeout(drawT);
   drawT = setTimeout(() => {
-    const w = $('fpv') && $('fpv').contentWindow; if (!w || !frameReady) return;
-    const pub = { id: F.id, shop_url: SHOP[F.store], steps: F.steps, style: F.style, targeting: F.targeting, teaser: F.teaser, sms_consent_text: F.sms_consent_text, email_consent_text: F.email_consent_text };
-    const opts = SI === -1 ? { teaser: true } : MODE === 'edit' ? { edit: { step: SI, sel: SEL } } : {};
-    w.postMessage({ bzfRender: 1, form: clone(pub), opts }, '*');
-  }, 60);
+    const pub = clone({ id: F.id, shop_url: SHOP[F.store], steps: F.steps, style: F.style, targeting: F.targeting, teaser: F.teaser, sms_consent_text: F.sms_consent_text, email_consent_text: F.email_consent_text });
+    const opts = SI === -1 ? { teaser: true } : MODE === 'edit' ? { edit: { step: SI, sel: STEPSET ? null : SEL, names: BNAME } } : {};
+    for (const w of ['d', 'm']) { const fr = $(w === 'd' ? 'fpd' : 'fpm'); if (fr && fr.contentWindow && ready[w]) fr.contentWindow.postMessage({ bzfRender: 1, form: pub, opts }, '*'); }
+  }, 50);
 }
 function onFrame(e) {
-  const d = e.data || {}; if (!d.bzf || e.source !== ($('fpv') && $('fpv').contentWindow)) return;
-  if (d.t === 'ready') { frameReady = true; draw(); return; }
-  if (d.t === 'sel') { SEL = d.i; TAB = 'content'; panel(); draw(); return; }
-  if (d.t === 'move') { const bl = step().blocks; const [m] = bl.splice(d.from, 1); bl.splice(d.to, 0, m); SEL = d.to; panel(); mark(); }
+  const d = e.data || {}; if (!d.bzf) return;
+  const src = [$('fpd'), $('fpm')].find((f) => f && e.source === f.contentWindow); if (!src) return;
+  if (d.t === 'ready') { ready[d.frame] = true; draw(); return; }
+  if (d.t === 'h') { const h = Math.min(1600, Math.max(200, Number(d.h) || 0) + 8); if (Math.abs((FH[d.frame] || 0) - h) > 2) { FH[d.frame] = h; layout(); } return; }
+  if (MODE !== 'edit' || SI < 0) return;
+  const bl = step().blocks;
+  if (d.t === 'sel') { SEL = d.i >= 0 ? d.i : null; STEPSET = false; if (d.i < 0) { RAIL = 'styles'; $('kside').classList.remove('closed'); rail(); } panel(); draw(); return; }
+  if (d.t === 'move') { const [m] = bl.splice(d.from, 1); bl.splice(d.to, 0, m); SEL = d.to; panel(); mark(); return; }
+  if (d.t === 'add') { addBlock(d.type, d.at); return; }
+  if (d.t === 'tool' && SEL != null) {
+    if (d.act === 'up' && SEL > 0) { [bl[SEL - 1], bl[SEL]] = [bl[SEL], bl[SEL - 1]]; SEL--; }
+    else if (d.act === 'down' && SEL < bl.length - 1) { [bl[SEL + 1], bl[SEL]] = [bl[SEL], bl[SEL + 1]]; SEL++; }
+    else if (d.act === 'dup') { const c = clone(bl[SEL]); c.id = rid(); bl.splice(SEL + 1, 0, c); SEL++; }
+    else if (d.act === 'del') { bl.splice(SEL, 1); SEL = null; }
+    panel(); mark();
+  }
 }
 
-/* ---------------- step tabs (Teaser · steps · Success) ---------------- */
-function stepTabs() {
-  const T = $('fsteps');
-  T.innerHTML = `<button class="btn xs${SI === -1 ? ' pri' : ''}" data-st="-1"><i class="ti ti-tag"></i> Teaser</button>` +
-    F.steps.map((s, i) => `<button class="btn xs${SI === i ? ' pri' : ''}" data-st="${i}">${s.kind === 'success' ? '<i class="ti ti-circle-check"></i> ' : ''}${esc(s.name || 'Step ' + (i + 1))}</button>`).join('') +
-    `<button class="btn xs" id="fadd" aria-label="Add step"><i class="ti ti-plus"></i> Step</button>`;
-  T.querySelectorAll('[data-st]').forEach((b) => b.onclick = () => { SI = Number(b.dataset.st); SEL = null; stepTabs(); panel(); draw(); });
-  $('fadd').onclick = () => {
-    const succ = F.steps.findIndex((s) => s.kind === 'success'); const at = succ >= 0 ? succ : F.steps.length;
-    F.steps.splice(at, 0, { id: 's' + Math.random().toString(36).slice(2, 7), name: 'Step ' + (at + 1), kind: 'step', image: { src: '', pos: 'none', width: 42 },
+/* ---------------- floating step bar: undo/redo · Teaser · steps › Success · views ---------------- */
+function bar() {
+  const B = $('kbar'); if (!B) return;
+  const pills = F.steps.map((s, i) => `${i ? `<i class="ti ti-chevron-right ke-arrow"></i>` : ''}<span class="ke-pill${SI === i ? ' on' : ''}" draggable="true" data-sp="${i}"><span class="gr" aria-hidden="true">⋮⋮</span><button class="lb" data-st="${i}">${s.kind === 'success' ? '' : ''}${esc(s.name || 'Step ' + (i + 1))}</button><button class="mn" data-sm="${i}" aria-label="Step options">${ICON('dots-vertical')}</button></span>`);
+  const succ = F.steps.findIndex((s) => s.kind === 'success');
+  const addAt = succ >= 0 ? succ : F.steps.length;
+  pills.splice(addAt, 0, `${addAt ? '<i class="ti ti-chevron-right ke-arrow"></i>' : ''}<button class="btn xs" id="kadd" style="height:36px;border-radius:9px">${ICON('circle-plus')} Step</button>`);
+  if (succ < 0) pills.push('<i class="ti ti-chevron-right ke-arrow"></i><button class="btn xs" id="kaddsucc" style="height:36px;border-radius:9px">Success</button>');
+  B.innerHTML = `<button class="ke-ib" id="kun" aria-label="Undo" title="Undo"${HIST.past.length ? '' : ' disabled'}>${ICON('arrow-back-up')}</button><button class="ke-ib" id="kre" aria-label="Redo" title="Redo"${HIST.future.length ? '' : ' disabled'}>${ICON('arrow-forward-up')}</button><span class="sep"></span>
+    <span class="ke-pill${SI === -1 ? ' on' : ''}"><button class="lb" data-st="-1">Teaser</button><button class="mn" id="ktm" aria-label="Teaser options">${ICON('dots-vertical')}</button></span><span class="sep"></span>
+    ${pills.join('')}<span class="sep"></span>
+    <button class="ke-ib${VIEW === 'both' ? ' on' : ''}" data-v="both" aria-label="Desktop and mobile" title="Desktop and mobile">${ICON('devices')}</button><button class="ke-ib${VIEW === 'desk' ? ' on' : ''}" data-v="desk" aria-label="Desktop" title="Desktop">${ICON('device-desktop')}</button><button class="ke-ib${VIEW === 'mob' ? ' on' : ''}" data-v="mob" aria-label="Mobile" title="Mobile">${ICON('device-mobile')}</button>
+    <span class="sep"></span><button class="ke-ib${MODE === 'play' ? ' on' : ''}" id="kplay" aria-label="Try it" title="${MODE === 'play' ? 'Back to editing' : 'Try the form'}">${ICON(MODE === 'play' ? 'pencil' : 'player-play')}</button>`;
+  $('kun').onclick = undo; $('kre').onclick = redo;
+  B.querySelectorAll('[data-st]').forEach((b) => b.onclick = () => { SI = Number(b.dataset.st); SEL = null; STEPSET = false; bar(); panel(); draw(); });
+  B.querySelectorAll('[data-sm]').forEach((b) => b.onclick = (e) => stepMenu(Number(b.dataset.sm), b));
+  $('ktm').onclick = (e) => menu($('ktm'), [['Teaser settings', 'settings', () => { SI = -1; SEL = null; STEPSET = false; bar(); panel(); draw(); }], [F.teaser && F.teaser.enabled !== false ? 'Turn teaser off' : 'Turn teaser on', 'toggle-left', () => { F.teaser = F.teaser || {}; F.teaser.enabled = !(F.teaser.enabled !== false); bar(); panel(); mark(); }]]);
+  B.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { VIEW = b.dataset.v; bar(); layout(); });
+  $('kplay').onclick = () => { MODE = MODE === 'play' ? 'edit' : 'play'; if (SI < 0) SI = 0; SEL = null; bar(); layout(); draw(); };
+  const ka = $('kadd'); if (ka) ka.onclick = () => {
+    F.steps.splice(addAt, 0, { id: 's' + Math.random().toString(36).slice(2, 7), name: 'Step ' + (addAt + 1), kind: 'step', image: { src: '', pos: 'none', width: 42 },
       blocks: [{ id: rid(), type: 'text', html: '<h1>New step</h1>', st: { pad: [0, 0, 10, 0], align: 'center' } }, { id: rid(), type: 'button', text: 'Continue', action: 'submit', st: { pad: [6, 0, 0, 0], align: 'center' } }] });
-    SI = at; SEL = null; stepTabs(); panel(); mark();
+    SI = addAt; SEL = null; STEPSET = false; bar(); panel(); mark();
   };
+  const ks = $('kaddsucc'); if (ks) ks.onclick = () => { F.steps.push({ id: 's' + Math.random().toString(36).slice(2, 7), name: 'Success', kind: 'success', image: { src: '', pos: 'none', width: 42 }, blocks: [{ id: rid(), type: 'text', html: "<h1>You're in!</h1>", st: { pad: [0, 0, 10, 0], align: 'center' } }, { id: rid(), type: 'coupon', st: { pad: [6, 0, 6, 0], align: 'center' } }] }); SI = F.steps.length - 1; bar(); panel(); mark(); };
+  // drag step pills to reorder
+  let dragFrom = null;
+  B.querySelectorAll('[data-sp]').forEach((p) => {
+    p.addEventListener('dragstart', (e) => { dragFrom = Number(p.dataset.sp); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'bzf-step'); } catch (x) {} });
+    p.addEventListener('dragover', (e) => { if (dragFrom != null) e.preventDefault(); });
+    p.addEventListener('drop', (e) => { e.preventDefault(); const to = Number(p.dataset.sp); if (dragFrom == null || to === dragFrom) return; const cur = F.steps[SI]; const [m] = F.steps.splice(dragFrom, 1); F.steps.splice(to, 0, m); SI = F.steps.indexOf(cur); dragFrom = null; bar(); mark(); });
+  });
+}
+function menu(anchor, items) {
+  document.querySelectorAll('.ke-menu').forEach((m) => m.remove());
+  const r = anchor.getBoundingClientRect(), m = document.createElement('div'); m.className = 'ke-menu';
+  m.innerHTML = items.map(([l, ic, , opt], i) => `<button data-mi="${i}"${opt && opt.disabled ? ' disabled' : ''} class="${opt && opt.danger ? 'danger' : ''}">${ICON(ic)} ${esc(l)}</button>`).join('');
+  m.style.left = Math.min(window.innerWidth - 210, r.left) + 'px'; m.style.top = r.bottom + 6 + 'px';
+  document.body.appendChild(m);
+  m.querySelectorAll('[data-mi]').forEach((b) => b.onclick = () => { m.remove(); items[Number(b.dataset.mi)][2](); });
+  setTimeout(() => document.addEventListener('click', function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('click', off); } }), 0);
+}
+function stepMenu(i, anchor) {
+  const s = F.steps[i];
+  menu(anchor, [
+    ['Step settings', 'settings', () => { SI = i; SEL = null; STEPSET = true; $('kside').classList.remove('closed'); bar(); panel(); draw(); }],
+    ['Rename', 'pencil', () => { const n = prompt('Step name', s.name); if (n) { s.name = n.slice(0, 40); bar(); mark(false); } }],
+    ['Duplicate', 'copy', () => { const c = clone(s); c.id = 's' + Math.random().toString(36).slice(2, 7); c.name = s.name + ' copy'; (c.blocks || []).forEach((b) => b.id = rid()); F.steps.splice(i + 1, 0, c); SI = i + 1; bar(); panel(); mark(); }],
+    ['Move left', 'arrow-left', () => { [F.steps[i - 1], F.steps[i]] = [F.steps[i], F.steps[i - 1]]; SI = i - 1; bar(); mark(); }, { disabled: i === 0 }],
+    ['Move right', 'arrow-right', () => { [F.steps[i + 1], F.steps[i]] = [F.steps[i], F.steps[i + 1]]; SI = i + 1; bar(); mark(); }, { disabled: i >= F.steps.length - 1 }],
+    [s.kind === 'success' ? 'Make it a form step' : 'Make it the success step', 'circle-check', () => { s.kind = s.kind === 'success' ? 'step' : 'success'; bar(); panel(); mark(); }],
+    ['Delete', 'trash', () => { if (!confirm(`Delete the step "${s.name}"?`)) return; F.steps.splice(i, 1); SI = Math.max(0, Math.min(SI, F.steps.length - 1)); SEL = null; STEPSET = false; bar(); panel(); mark(); }, { disabled: F.steps.length < 2, danger: true }],
+  ]);
 }
 
-/* ---------------- left panel ---------------- */
 const fl = (label, inner, hint) => `<label class="lab">${esc(label)}</label>${inner}${hint ? `<div style="font-size:11.5px;color:var(--muted);margin-top:3px">${esc(hint)}</div>` : ''}`;
 const H = (t) => `<div style="font-weight:700;margin:18px 0 2px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">${esc(t)}</div>`;
 const num = (path, v, o = {}) => `<input type="number" data-p="${path}" value="${v == null ? '' : esc(v)}"${o.min != null ? ` min="${o.min}"` : ''}${o.max != null ? ` max="${o.max}"` : ''} placeholder="${esc(o.ph || '')}" style="width:100%">`;
@@ -148,50 +297,105 @@ function bind(P, root, after) {
   });
 }
 
+/* ---------------- left panel ---------------- */
+function shell(title, opts = {}) {
+  const W = $('fpanel');
+  W.innerHTML = `${opts.back ? `<div style="padding:0 18px"><button class="ke-back" id="kbk">${ICON('arrow-left')} ${esc(opts.back)}</button></div>` : ''}<div class="ke-sh"><b>${esc(title)}</b>${opts.right || ''}<button class="ke-ib" id="kcol" aria-label="Collapse panel" title="Collapse">${ICON('layout-sidebar-left-collapse')}</button></div>${opts.tabs || ''}<div class="ke-pane" id="kpane"></div>`;
+  $('kcol').onclick = () => { $('kside').classList.add('closed'); rail(); };
+  if (opts.back) $('kbk').onclick = () => { if (opts.back === 'Add blocks') RAIL = 'add'; SEL = null; STEPSET = false; if (SI < 0) SI = 0; rail(); bar(); panel(); draw(); };
+  return $('kpane');
+}
 function panel() {
-  $('ftabs').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.t === TAB));
-  const P = $('fpanel');
-  if (TAB === 'content') return SI === -1 ? teaserPanel(P) : sel() ? blockPanel(P) : contentPanel(P);
-  if (TAB === 'styles') return stylesPanel(P);
-  if (TAB === 'behaviors') return behaviorsPanel(P);
-  if (TAB === 'targeting') return targetingPanel(P);
-  if (TAB === 'offer') return offerPanel(P);
+  if (!$('fpanel')) return;
+  if (SI === -1) return teaserPanel(shell('Teaser', { back: 'Back' }));
+  if (STEPSET) return stepPanel(shell('Step settings', { back: 'Back' }));
+  const b = sel();
+  if (b) return blockPanel(shell(BNAME[b.type] || b.type, { back: 'Add blocks' }));
+  if (RAIL === 'styles') return stylesPanel(shell('Styles'));
+  if (RAIL === 'targeting') return targetingPanel(shell('Targeting & behaviors'));
+  return addPanel(shell('Add blocks', { tabs: `<div class="ke-tabs"><button data-at="basic" class="${ADDTAB === 'basic' ? 'on' : ''}">Basic</button><button data-at="universal" class="${ADDTAB === 'universal' ? 'on' : ''}">Universal</button></div>` }));
 }
 
-/* Content: add blocks + step settings */
-function contentPanel(P) {
+/* Add blocks: drag a tile onto the canvas, or click it to add after the selected block */
+const SECTIONS = [
+  ['Integrations', [['coupon', 'Coupon', 'ticket']]],
+  ['Elements', [['text', 'Text', 'typography'], ['button', 'Button', 'click'], ['image', 'Image', 'photo'], ['countdown', 'Countdown timer', 'clock'], ['spacer', 'Spacer', 'arrows-vertical'], ['divider', 'Divider', 'separator-horizontal'], ['html', 'HTML', 'code']]],
+  ['Input fields', [['email', 'Email input', 'mail'], ['phone', 'Phone number', 'phone'], ['input', 'Text input', 'forms'], ['radio', 'Radio button', 'circle-dot'], ['checkboxes', 'Checkboxes', 'checkbox'], ['dropdown', 'Dropdown', 'selector'], ['date', 'Date', 'calendar']]],
+];
+function addPanel(P) {
+  document.querySelectorAll('[data-at]').forEach((b) => b.onclick = () => { ADDTAB = b.dataset.at; panel(); });
+  const has = (t) => (step().blocks || []).some((x) => x.type === t);
+  const tile = (k, l, ic, off, data) => `<div class="ke-tile${off ? ' off' : ''}" ${off ? '' : `draggable="true" data-drag="${esc(data || k)}"`} data-add="${esc(data || k)}" title="${off ? esc(l) + ' is already on this step' : 'Drag onto the form, or click to add'}"><span class="g">⋮⋮⋮</span>${ICON(ic)}<span>${esc(l)}</span></div>`;
+  if (ADDTAB === 'universal') {
+    P.innerHTML = `<div class="ke-note" style="margin-top:14px">Universal blocks are blocks you saved to reuse in any form. Select a block and choose "Save as universal block".</div>
+      <div class="ke-tiles" style="margin-top:14px">${UNIV.map((u) => tile(u.block.type, u.name, (SECTIONS.flatMap((x) => x[1]).find((x) => x[0] === u.block.type) || [, , 'box'])[2], false, 'u:' + u.id)).join('') || '<div style="grid-column:1/-1;color:var(--muted)">None saved yet.</div>'}</div>`;
+  } else {
+    P.innerHTML = SECTIONS.map(([h, items]) => `<div class="ke-sec">${esc(h)}</div><div class="ke-tiles">${items.map(([k, l, ic]) => tile(k, l, ic, SI >= 0 && (k === 'email' || k === 'phone' || k === 'coupon') && has(k))).join('')}</div>`).join('') +
+      `<div style="font-size:12px;color:var(--muted);margin-top:14px">Drag a block onto the form, or click it to add it after the selected block. Click any block on the form to edit it.</div>`;
+  }
+  P.querySelectorAll('[data-drag]').forEach((t) => t.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', 'bzf-add:' + t.dataset.drag); }));
+  P.querySelectorAll('.ke-tile:not(.off)').forEach((t) => t.onclick = () => addBlock(t.dataset.add));
+}
+function addBlock(type, at) {
+  if (SI < 0) SI = 0;
+  const s = step(); s.blocks = s.blocks || [];
+  let nb;
+  if (String(type).indexOf('u:') === 0) { const u = UNIV.find((x) => x.id === type.slice(2)); if (!u) return; nb = clone(u.block); nb.id = rid(); }
+  else {
+    const d = { text: { html: '<p>Your text here</p>' }, image: { src: '', alt: '', width: 100 }, button: { text: 'Continue', action: 'submit' }, email: { placeholder: 'Email', label: 'Email', required: true, show_consent: true },
+      phone: { placeholder: 'Phone Number', label: 'Phone', required: false }, input: { label: 'First name', placeholder: 'First name', key: 'first_name' }, checkboxes: { label: 'Interested in', key: 'interests', options: ['Newborn', 'Toddler', 'Matching family'] },
+      radio: { label: 'Are you…', key: 'baby_stage', options: ['Expecting', 'Parent of a little one', 'Shopping for a gift'], display: 'buttons' }, dropdown: { label: 'Size', key: 'child_size', options: ['NB', '0-3M', '3-6M', '6-12M', '12-18M', '18-24M', '2T', '3T', '4T', '5T'], placeholder: 'Choose a size' },
+      date: { label: "Baby's due date or birthday", key: 'baby_date' }, coupon: { copy: true, copy_text: 'Copy' }, countdown: { mode: 'minutes', minutes: 15, expired_text: 'Offer ended' }, spacer: { height: 16 }, divider: { thickness: 1, color: '#E5E5E5', width: 100 }, html: { html: '' } }[type];
+    if (!d) return;
+    nb = { id: rid(), type, ...d, st: { pad: [4, 0, type === 'text' ? 10 : 4, 0], align: 'center' } };
+  }
+  const pos = at != null ? Math.max(0, Math.min(at, s.blocks.length)) : SEL != null && SEL >= 0 ? SEL + 1 : s.blocks.length;
+  s.blocks.splice(pos, 0, nb);
+  if (nb.type === 'coupon' && F.coupon && !F.coupon.enabled) F.coupon.enabled = true;
+  SEL = pos; STEPSET = false; panel(); mark();
+}
+
+/* Step settings (from a step's ⋮ menu) */
+function stepPanel(P) {
   const s = step();
-  P.innerHTML = `${H('Add blocks')}<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px">${BLOCKS.map(([k, l, ic]) => `<button class="btn xs" data-add="${k}" style="flex-direction:column;height:62px;gap:4px;font-size:11.5px"><i class="ti ti-${ic}" style="font-size:18px"></i>${esc(l)}</button>`).join('')}</div>
-    <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Click to add to this step. Click a block on the canvas to edit it; drag blocks on the canvas to reorder.</div>
-    ${H('This step')}${grid(fl('Step name', txt('name', s.name)), fl('Step type', selp('kind', s.kind || 'step', [['step', 'Form step'], ['success', 'Success (end)']])))}
-    ${fl('Image', `<div id="simg"></div>${txt('image.src', (s.image || {}).src, 'Image address')}`)}
-    ${grid(fl('Image position', selp('image.pos', (s.image || {}).pos || 'none', [['none', 'No image'], ['left', 'Left'], ['right', 'Right'], ['top', 'Top']])), fl('Image width (%)', num('image.width', (s.image || {}).width || 42, { min: 20, max: 60 })))}
-    ${s.kind !== 'success' ? chk('skip_if_sms', s.skip_if_sms, 'Skip this step for people who already get texts') : ''}
-    ${s.kind !== 'success' ? fl('After this step, go to', `<select id="snext" style="width:100%"><option value="">The next step</option>${F.steps.filter((x) => x.id !== s.id).map((x) => `<option value="${x.id}"${s.next === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`) : ''}
-    ${s.kind !== 'success' ? `<div style="margin-top:10px;font-weight:600">Go to a different step based on an answer</div>${(s.branches || []).map((b, i) => `<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:4px;margin-top:4px"><input type="text" data-br="${i}" data-bk="field" value="${esc(b.field || '')}" placeholder="saved as"><input type="text" data-br="${i}" data-bk="equals" value="${esc(b.equals || '')}" placeholder="answer"><select data-br="${i}" data-bk="go">${F.steps.map((x) => `<option value="${x.id}"${b.go === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select><button class="btn xs" data-brm="${i}" aria-label="Remove rule">×</button></div>`).join('')}<button class="btn xs" id="badd" style="margin-top:6px"><i class="ti ti-plus"></i> Add rule</button>` : ''}
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:16px"><button class="btn xs" id="sl"${SI > 0 ? '' : ' disabled'}><i class="ti ti-arrow-left"></i> Move</button><button class="btn xs" id="sr"${SI < F.steps.length - 1 ? '' : ' disabled'}>Move <i class="ti ti-arrow-right"></i></button><button class="btn xs" id="sdup"><i class="ti ti-copy"></i> Duplicate step</button><button class="btn xs danger" id="sdel"${F.steps.length > 1 ? '' : ' disabled'}><i class="ti ti-trash"></i> Delete step</button></div>
-`;
-  P.querySelectorAll('[data-add]').forEach((b) => b.onclick = () => addBlock(b.dataset.add));
-  bind(P, s, (x) => { if (x.dataset.p === 'name' || x.dataset.p === 'kind') stepTabs(); if (x.dataset.p === 'kind') panel(); });
-  if (window.MK_imagePicker) window.MK_imagePicker($('simg'), (url) => { s.image = s.image || {}; s.image.src = location.origin + url; if (!s.image.pos || s.image.pos === 'none') s.image.pos = 'left'; panel(); mark(); });
+  P.innerHTML = `${grid(fl('Step name', txt('name', s.name)), fl('Step type', selp('kind', s.kind || 'step', [['step', 'Form step'], ['success', 'Success (end)']])))}
+    ${H('Side image')}${fl('Image', `<div id="simg"></div>${txt('image.src', (s.image || {}).src, 'Image address')}`)}
+    ${grid(fl('Position', selp('image.pos', (s.image || {}).pos || 'none', [['none', 'No image'], ['left', 'Left'], ['right', 'Right'], ['top', 'Top']])), fl('Width (%)', num('image.width', (s.image || {}).width || 42, { min: 20, max: 60 })))}
+    <div style="font-size:11.5px;color:var(--muted);margin-top:3px">Side images are hidden on phones unless placed on top.</div>
+    ${s.kind !== 'success' ? `${H('After this step')}${chk('skip_if_sms', s.skip_if_sms, 'Skip this step for people who already get texts')}
+    ${fl('Go to', `<select id="snext" style="width:100%"><option value="">The next step</option>${F.steps.filter((x) => x.id !== s.id).map((x) => `<option value="${x.id}"${s.next === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`)}
+    <div style="margin-top:12px;font-weight:600">Go to a different step based on an answer</div>${(s.branches || []).map((b, i) => `<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:4px;margin-top:4px"><input type="text" data-br="${i}" data-bk="field" value="${esc(b.field || '')}" placeholder="saved as"><input type="text" data-br="${i}" data-bk="equals" value="${esc(b.equals || '')}" placeholder="answer"><select data-br="${i}" data-bk="go">${F.steps.map((x) => `<option value="${x.id}"${b.go === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select><button class="btn xs" data-brm="${i}" aria-label="Remove rule">×</button></div>`).join('')}<button class="btn xs" id="badd" style="margin-top:6px">${ICON('plus')} Add rule</button>` : ''}`;
+  bind(P, s, (x) => { if (x.dataset.p === 'name' || x.dataset.p === 'kind') bar(); if (x.dataset.p === 'kind') panel(); });
+  if (window.MK_imagePicker) window.MK_imagePicker($('simg'), (url) => { s.image = s.image || {}; s.image.src = location.origin + url; if (!s.image.pos || s.image.pos === 'none') s.image.pos = 'right'; panel(); mark(); });
   const sn = $('snext'); if (sn) sn.onchange = () => { s.next = sn.value || undefined; mark(); };
   P.querySelectorAll('[data-br]').forEach((x) => x.addEventListener(x.tagName === 'SELECT' ? 'change' : 'input', () => { s.branches[Number(x.dataset.br)][x.dataset.bk] = x.value; mark(); }));
   P.querySelectorAll('[data-brm]').forEach((x) => x.onclick = () => { s.branches.splice(Number(x.dataset.brm), 1); panel(); mark(); });
   const ba = $('badd'); if (ba) ba.onclick = () => { s.branches = s.branches || []; const k = (s.blocks || []).find((b) => b.key); s.branches.push({ field: k ? k.key : '', equals: '', go: (F.steps[SI + 1] || F.steps[0]).id }); panel(); mark(); };
-  $('sl').onclick = () => { [F.steps[SI - 1], F.steps[SI]] = [F.steps[SI], F.steps[SI - 1]]; SI--; stepTabs(); panel(); mark(); };
-  $('sr').onclick = () => { [F.steps[SI + 1], F.steps[SI]] = [F.steps[SI], F.steps[SI + 1]]; SI++; stepTabs(); panel(); mark(); };
-  $('sdup').onclick = () => { const c = clone(s); c.id = 's' + Math.random().toString(36).slice(2, 7); c.name = s.name + ' copy'; c.blocks.forEach((b) => b.id = rid()); F.steps.splice(SI + 1, 0, c); SI++; stepTabs(); panel(); mark(); };
-  $('sdel').onclick = () => { if ($('sdel').dataset.c !== '1') { $('sdel').dataset.c = '1'; $('sdel').textContent = 'Click again'; return; } F.steps.splice(SI, 1); SI = Math.max(0, SI - 1); SEL = null; stepTabs(); panel(); mark(); };
 }
-function addBlock(type) {
-  const s = step(); s.blocks = s.blocks || [];
-  const d = { text: { html: '<p>Your text here</p>' }, image: { src: '', alt: '', width: 100 }, button: { text: 'Continue', action: 'submit' }, email: { placeholder: 'Email address', label: 'Email', required: true, show_consent: true },
-    phone: { placeholder: 'Phone number', label: 'Phone', required: true }, input: { label: 'First name', placeholder: 'First name', key: 'first_name' }, checkboxes: { label: 'Interested in', key: 'interests', options: ['Newborn', 'Toddler', 'Matching family'] },
-    radio: { label: 'Are you…', key: 'baby_stage', options: ['Expecting', 'Parent of a little one', 'Shopping for a gift'], display: 'buttons' }, dropdown: { label: 'Size', key: 'child_size', options: ['NB', '0-3M', '3-6M', '6-12M', '12-18M', '18-24M', '2T', '3T', '4T', '5T'], placeholder: 'Choose a size' },
-    date: { label: "Baby's due date or birthday", key: 'baby_date' }, coupon: { copy: true, copy_text: 'Copy' }, countdown: { mode: 'minutes', minutes: 15, expired_text: 'Offer ended' }, spacer: { height: 16 }, divider: { thickness: 1, color: '#E5E5E5', width: 100 }, html: { html: '' } }[type] || {};
-  const at = SEL != null && SEL >= 0 ? SEL + 1 : s.blocks.length;
-  s.blocks.splice(at, 0, { id: rid(), type, ...d, st: { pad: [4, 0, type === 'text' ? 10 : 4, 0], align: 'center' } });
-  SEL = at; panel(); mark();
+
+/* Targeting & behaviors (Klaviyo keeps these together) */
+function targetingPanel(P) {
+  const t = F.targeting;
+  P.innerHTML = `${H('Display timing')}<div style="font-size:12px;color:var(--muted)">Shows at the first of these that happens.</div>
+    ${chk('immediate', t.immediate, 'Show immediately on page load')}
+    ${fl('After a delay (seconds)', num('delay_s', t.delay_s, { min: 0, max: 300, ph: 'off' }))}
+    ${fl('After scrolling (% of page)', num('scroll_pct', t.scroll_pct, { min: 0, max: 100, ph: 'off' }))}
+    ${chk('exit_intent', t.exit_intent, 'On exit intent (desktop)')}
+    ${fl('After this many pages viewed', num('page_views', t.page_views, { min: 1, max: 20, ph: 'off' }))}
+    ${H('Frequency')}${fl('If closed, show again after (days)', num('hide_days_after_close', t.hide_days_after_close == null ? 14 : t.hide_days_after_close, { min: 0, max: 365 }))}
+    <div style="font-size:11.5px;color:var(--muted);margin-top:3px">Once someone submits, they don't see it again.</div>
+    ${H('Visitors')}${chk('hide_subscribed', t.hide_subscribed !== false, "Don't show to existing subscribers")}
+    ${fl('Device', selp('device', t.device || 'all', [['all', 'Desktop and mobile'], ['desktop', 'Desktop only'], ['mobile', 'Mobile only']]))}
+    ${fl('Show to', selp('visitors', t.visitors || 'all', [['all', 'All visitors'], ['new', 'New visitors only'], ['returning', 'Returning visitors only']]))}
+    ${fl('Only when the link has utm_source', txt('utm_source', t.utm_source, 'e.g. facebook'), 'For a form just for ad traffic, like your Meta URL-based forms.')}
+    ${H('Pages')}${fl('Only on these pages', area('only_paths', t.only_paths, 2), 'One per line, like /collections/*. Empty = every page except cart and checkout.')}${fl('Never on these pages', area('hide_paths', t.hide_paths, 2))}
+    ${H('Submissions')}${fl('Add people who sign up to this list', `<select id="ol" style="width:100%">${(F.lists || []).map((l) => `<option value="${l.id}"${Number(F.list_id) === Number(l.id) ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select>`, 'Joining the list starts any flow triggered by it, like the welcome series.')}
+    ${fl('Close the success step after (seconds)', num('success_close_s', t.success_close_s, { min: 1, max: 120, ph: 'stay open' }))}
+    ${H('Priority')}${fl('Priority', `<input type="number" id="tpr" value="${F.priority || 0}" style="width:100%">`, 'When two forms could show, the higher number wins. Only one popup shows at a time.')}
+    ${F.import_notes && F.import_notes.length ? `${H('Copied from Klaviyo')}<div class="ke-note">${F.import_notes.map((n) => '• ' + esc(n)).join('<br>')}</div>` : ''}`;
+  bind(P, t);
+  $('ol').onchange = (e) => { F.list_id = Number(e.target.value); mark(false); };
+  $('tpr').oninput = (e) => { F.priority = Number(e.target.value) || 0; mark(false); };
 }
 
 /* Content: a selected block */
@@ -222,25 +426,31 @@ function blockPanel(P) {
     case 'input': case 'date': body = `${fl('Label', txt('label', b.label))}${b.type === 'input' ? fl('Placeholder', txt('placeholder', b.placeholder)) : ''}${fl('Saved on the profile as', `<input type="text" data-p="key" data-k="key" value="${esc(b.key || '')}" style="width:100%">`, 'Use this name in segments and personalization.')}${chk('show_label', b.show_label, 'Show the label above the field')}${chk('required', b.required, 'Required')}`; break;
     case 'checkboxes': case 'radio': case 'dropdown': body = `${fl('Label', txt('label', b.label))}${fl('Options (one per line)', `<textarea data-p="options" data-k="lines" rows="5" style="width:100%">${esc((b.options || []).join('\n'))}</textarea>`)}${fl('Saved on the profile as', `<input type="text" data-p="key" data-k="key" value="${esc(b.key || '')}" style="width:100%">`)}
       ${b.type === 'radio' ? fl('Show as', selp('display', b.display || 'buttons', [['buttons', 'Buttons'], ['list', 'Radio list']])) : ''}${b.type === 'dropdown' ? fl('Placeholder', txt('placeholder', b.placeholder)) + chk('show_label', b.show_label, 'Show the label above the field') : ''}${chk('required', b.required, 'Required')}`; break;
-    case 'coupon': body = `<div class="note" style="margin-top:10px">Shows each person's own single-use code after they sign up. Set the discount on the Offer tab.</div>${chk('copy', b.copy !== false, 'Show a copy button')}${fl('Copy button text', txt('copy_text', b.copy_text || 'Copy'))}`; break;
+    case 'coupon': { const c = F.coupon || (F.coupon = {}); body = `<div class="ke-note">Each person gets their own single-use code after they sign up. Real codes are made in Shopify only when the form is Live.</div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="cpon"${c.enabled ? ' checked' : ''}> Give a code</label>
+      ${grid(fl('Percent off', `<input type="number" id="cpp" min="1" max="90" value="${c.percent || 10}" style="width:100%">`), fl('Expires after (days)', `<input type="number" id="cpe" min="1" max="365" value="${c.expires_days || 14}" style="width:100%">`))}
+      ${fl('Code starts with', `<input type="text" id="cpx" value="${esc(c.prefix || 'WELCOME')}" style="width:100%">`)}${chk('copy', b.copy !== false, 'Show a copy button')}${fl('Copy button text', txt('copy_text', b.copy_text || 'Copy'))}`; break; }
     case 'countdown': body = `${fl('Count down', selp('mode', b.mode || 'minutes', [['minutes', 'Minutes after they first see the form'], ['date', 'To a date and time']]))}${b.mode === 'date' ? fl('Ends', `<input type="datetime-local" data-p="date" value="${esc(b.date || '')}" style="width:100%">`) : fl('Minutes', num('minutes', b.minutes || 15, { min: 1, max: 10080 }))}${fl('When it ends, show', txt('expired_text', b.expired_text || 'Offer ended'))}`; break;
     case 'spacer': body = fl('Height (px)', num('height', b.height || 16, { min: 0, max: 200 })); break;
     case 'divider': body = `${grid(fl('Thickness', num('thickness', b.thickness || 1, { min: 1, max: 10 })), fl('Width (%)', num('width', b.width || 100, { min: 10, max: 100 })))}${fl('Color', color('color', b.color || '#E5E5E5'))}`; break;
     case 'html': body = `${fl('HTML', area('html', b.html, 10), 'Scripts are removed. For layout and styling only.')}`; break;
   }
-  P.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin:6px 0 2px"><button class="btn xs" id="bback"><i class="ti ti-arrow-left"></i> Blocks</button><b style="flex:1">${esc(BNAME[b.type] || b.type)}</b>
-      <button class="btn xs" id="bup" aria-label="Move up"${SEL > 0 ? '' : ' disabled'}><i class="ti ti-arrow-up"></i></button><button class="btn xs" id="bdn" aria-label="Move down"${SEL < s.blocks.length - 1 ? '' : ' disabled'}><i class="ti ti-arrow-down"></i></button>
-      <button class="btn xs" id="bdup" aria-label="Duplicate"><i class="ti ti-copy"></i></button><button class="btn xs danger" id="bdel" aria-label="Delete"><i class="ti ti-trash"></i></button></div>
+  P.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin:8px 0 2px"><span style="flex:1;color:var(--muted);font-size:12px">On step "${esc(s.name)}"</span>
+      <button class="btn xs" id="bup" aria-label="Move up"${SEL > 0 ? '' : ' disabled'}>${ICON('arrow-up')}</button><button class="btn xs" id="bdn" aria-label="Move down"${SEL < s.blocks.length - 1 ? '' : ' disabled'}>${ICON('arrow-down')}</button>
+      <button class="btn xs" id="bdup" aria-label="Duplicate">${ICON('copy')}</button><button class="btn xs danger" id="bdel" aria-label="Delete">${ICON('trash')}</button></div>
     ${body}
-    ${H('Block style')}${fl('Padding (px)', pad4('st.pad', (b.st || {}).pad))}${grid(fl('Alignment', selp('st.align', (b.st || {}).align || 'center', [['left', 'Left'], ['center', 'Center'], ['right', 'Right']])), fl('Background', color('st.bg', (b.st || {}).bg || '')))}`;
+    ${H('Block style')}${fl('Padding (px)', pad4('st.pad', (b.st || {}).pad))}${grid(fl('Alignment', selp('st.align', (b.st || {}).align || 'center', [['left', 'Left'], ['center', 'Center'], ['right', 'Right']])), fl('Background', color('st.bg', (b.st || {}).bg || '')))}
+    <button class="btn xs" id="buni" style="margin-top:16px">${ICON('star')} Save as universal block</button>`;
   bind(P, b, (x) => { if (['action', 'look', 'mode', 'display'].includes(x.dataset.p)) panel(); });
   const fullSel = P.querySelector('[data-k="full"]'); if (fullSel) fullSel.onchange = () => { b.full = fullSel.value === '' ? undefined : fullSel.value === '1'; mark(); };
-  $('bback').onclick = () => { SEL = null; panel(); draw(); };
   $('bup').onclick = () => { [s.blocks[SEL - 1], s.blocks[SEL]] = [s.blocks[SEL], s.blocks[SEL - 1]]; SEL--; panel(); mark(); };
   $('bdn').onclick = () => { [s.blocks[SEL + 1], s.blocks[SEL]] = [s.blocks[SEL], s.blocks[SEL + 1]]; SEL++; panel(); mark(); };
   $('bdup').onclick = () => { const c = clone(b); c.id = rid(); s.blocks.splice(SEL + 1, 0, c); SEL++; panel(); mark(); };
   $('bdel').onclick = () => { s.blocks.splice(SEL, 1); SEL = null; panel(); mark(); };
+  $('buni').onclick = async () => { const n = prompt('Name for this universal block', BNAME[b.type] || b.type); if (!n) return; const item = { id: Math.random().toString(36).slice(2, 9), name: n.slice(0, 40), block: clone(b) };
+    try { UNIV = (await api('/api/mk/forms-universal', { method: 'PUT', body: JSON.stringify({ items: [...UNIV, item] }) })).items || UNIV; toast('Saved to Universal'); } catch (e) { toast(e.message, 1); } };
   const emc = $('emc'); if (emc) emc.oninput = () => { F.email_consent_text = emc.value; mark(); };
+  if (b.type === 'coupon') { const c = F.coupon; $('cpon').onchange = (e) => { c.enabled = e.target.checked; mark(false); }; $('cpp').oninput = (e) => { c.percent = Number(e.target.value); mark(false); }; $('cpe').oninput = (e) => { c.expires_days = Number(e.target.value); mark(false); }; $('cpx').oninput = (e) => { c.prefix = e.target.value; mark(false); }; }
   const smsc = $('smsc'); if (smsc) smsc.oninput = () => { F.sms_consent_text = smsc.value; mark(); };
   if (b.type === 'image' && window.MK_imagePicker) window.MK_imagePicker($('bimg'), (url) => { b.src = location.origin + url; panel(); mark(); });
   if (b.type === 'text') {
@@ -287,49 +497,8 @@ function stylesPanel(P) {
       ${grid(fl('Corner radius', num('button.radius', y.button.radius, { min: 0, max: 999 })), fl('Height', num('button.height', y.button.height, { min: 32, max: 80 })))}${grid(fl('Border width', num('button.border_width', y.button.border_width || 0, { min: 0, max: 8 })), fl('Border color', color('button.border_color', y.button.border_color)))}${chk('button.full', y.button.full !== false, 'Full width')}
     ${H('Mobile')}${chk('mobile.sheet', y.mobile.sheet !== false, 'Slide up from the bottom on phones')}${grid(fl('Width (%)', num('mobile.width_pct', y.mobile.width_pct, { min: 50, max: 100 })), fl('Text scale (%)', num('mobile.scale', y.mobile.scale, { min: 70, max: 130 })))}${fl('Padding (px)', pad4('mobile.pad', y.mobile.pad))}
     <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Side images are hidden on phones unless placed on top.</div>`;
-  bind(P, y, (x) => { if (x.dataset.p === 'type') { const p = { flyout: 'bottom-right', banner: 'top' }[y.type] || 'center'; y.position = p; panel(); } });
+  bind(P, y, (x) => { if (x.dataset.p === 'width') layout(); if (x.dataset.p === 'type') { const p = { flyout: 'bottom-right', banner: 'top' }[y.type] || 'center'; y.position = p; panel(); } });
   if (window.MK_imagePicker) window.MK_imagePicker($('sbg'), (url) => { y.bg_image = location.origin + url; panel(); mark(); });
 }
 
-/* Behaviors: when it shows */
-function behaviorsPanel(P) {
-  const t = F.targeting;
-  P.innerHTML = `${H('Display timing')}<div style="font-size:12px;color:var(--muted)">Shows at the first of these that happens.</div>
-    ${chk('immediate', t.immediate, 'Show right away on page load')}
-    ${fl('After this many seconds', num('delay_s', t.delay_s, { min: 0, max: 300, ph: 'off' }))}
-    ${fl('After scrolling this far down the page (%)', num('scroll_pct', t.scroll_pct, { min: 0, max: 100, ph: 'off' }))}
-    ${chk('exit_intent', t.exit_intent, 'When they move to leave the page (desktop)')}
-    ${fl('Only after they have seen this many pages', num('page_views', t.page_views, { min: 1, max: 20, ph: 'off' }))}
-    ${H('Frequency')}${fl('After someone closes it, show again after (days)', num('hide_days_after_close', t.hide_days_after_close == null ? 14 : t.hide_days_after_close, { min: 0, max: 365 }))}
-    <div style="font-size:11.5px;color:var(--muted);margin-top:3px">After someone finishes the form, it never shows to them again.</div>
-    ${H('Success step')}${fl('Close the success step automatically after (seconds)', num('success_close_s', t.success_close_s, { min: 1, max: 120, ph: 'stay open' }))}
-    ${H('Teaser')}<button class="btn xs" id="gote" style="margin-top:6px"><i class="ti ti-tag"></i> Edit the teaser</button>`;
-  bind(P, t);
-  $('gote').onclick = () => { SI = -1; TAB = 'content'; stepTabs(); panel(); draw(); };
-}
-
-/* Targeting: who and where */
-function targetingPanel(P) {
-  const t = F.targeting;
-  P.innerHTML = `${H('Visitors')}${fl('Device', selp('device', t.device || 'all', [['all', 'Desktop and mobile'], ['desktop', 'Desktop only'], ['mobile', 'Mobile only']]))}
-    ${fl('Show to', selp('visitors', t.visitors || 'all', [['all', 'All visitors'], ['new', 'New visitors only'], ['returning', 'Returning visitors only']]))}
-    ${chk('hide_subscribed', t.hide_subscribed !== false, "Don't show to people who already signed up")}
-    ${fl('Only when the link has utm_source', txt('utm_source', t.utm_source, 'e.g. facebook'), 'For a form just for ad traffic.')}
-    ${H('Pages')}${fl('Only on these pages', area('only_paths', t.only_paths, 2), 'One per line, like /collections/*. Empty = every page except cart and checkout.')}${fl('Never on these pages', area('hide_paths', t.hide_paths, 2))}
-    ${H('Priority')}${fl('Priority', `<input type="number" id="tpr" value="${F.priority || 0}" style="width:100%">`, 'When two forms could show, the higher number wins. Only one popup shows at a time.')}`;
-  bind(P, t);
-  $('tpr').oninput = (e) => { F.priority = Number(e.target.value) || 0; mark(false); };
-}
-
-/* Offer: coupon + list */
-function offerPanel(P) {
-  const c = F.coupon || (F.coupon = {});
-  P.innerHTML = `${H('Coupon')}${chk('enabled', c.enabled, 'Give each person their own single-use code')}
-    ${grid(fl('Percent off', num('percent', c.percent || 10, { min: 1, max: 90 })), fl('Expires after (days)', num('expires_days', c.expires_days || 14, { min: 1, max: 365 })))}
-    ${fl('Code starts with', txt('prefix', c.prefix || 'WELCOME'))}
-    <div class="note" style="margin-top:10px">Real codes are created in Shopify only when this form is Live. In preview, people see a sample code and nothing is created. Show the code with a Coupon block on the success step.</div>
-    ${H('List')}${fl('Add sign-ups to this list', `<select id="ol" style="width:100%">${(F.lists || []).map((l) => `<option value="${l.id}"${Number(F.list_id) === Number(l.id) ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select>`, 'Joining the list starts any flow triggered by it, like the welcome series.')}`;
-  bind(P, c);
-  $('ol').onchange = (e) => { F.list_id = Number(e.target.value); mark(false); };
-}
 })();

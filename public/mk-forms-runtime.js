@@ -82,6 +82,7 @@
       'p{margin:0}a{color:inherit}.blk img{max-width:100%;display:inline-block}' +
       'label.lb{display:block;font-size:13px;margin:0 0 4px;color:' + (ip.label_color || fo.color || '#242F3F') + ';text-align:left}' +
       'input[type=email],input[type=tel],input[type=text],input[type=date],select{width:100%;font:inherit;font-size:' + (ip.font_size || 16) + 'px;padding:0 12px;border:1px solid ' + (ip.border || 'rgba(0,0,0,.2)') + ';border-radius:' + (ip.radius == null ? 10 : ip.radius) + 'px;background:' + (ip.bg || '#fff') + ';color:' + (ip.color || '#111') + ';height:' + (ip.height || 46) + 'px}' +
+      '.ph{display:flex;gap:0}.ph .cc{width:auto;flex:none;padding:0 6px;border-right:0;border-top-right-radius:0;border-bottom-right-radius:0;font-size:14px}.ph input{border-top-left-radius:0;border-bottom-left-radius:0}' +
       '.opts{display:flex;flex-direction:column;gap:6px;text-align:left}.opts label{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}.opts input{width:16px;height:16px;margin:0}' +
       '.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}.chips button{flex:1 1 40%;background:transparent;color:inherit;border:1px solid currentColor;border-radius:' + (bt.radius == null ? 999 : bt.radius) + 'px;padding:10px 12px;font:inherit;font-weight:600;cursor:pointer}.chips button.on{background:' + (bt.bg || '#242F3F') + ';color:' + (bt.color || '#fff') + ';border-color:' + (bt.bg || '#242F3F') + '}' +
       '.btn{display:inline-flex;align-items:center;justify-content:center;font:' + (bt.weight || 700) + ' ' + (bt.font_size || 16) + 'px ' + fam(bt.family || fo.family || 'Helvetica,Arial,sans-serif') + ';cursor:pointer;min-height:' + (bt.height || 48) + 'px;padding:0 20px;border-radius:' + (bt.radius == null ? 999 : bt.radius) + 'px;background:' + (bt.bg || '#242F3F') + ';color:' + (bt.color || '#fff') + ';border:' + (bt.border_width || 0) + 'px solid ' + (bt.border_color || bt.bg || '#242F3F') + ';text-decoration:none;' + (bt.full !== false ? 'width:100%;' : '') + '}' +
@@ -93,7 +94,7 @@
       '.cd{display:flex;gap:8px;justify-content:center}.cd div{min-width:58px;padding:8px 6px;border-radius:10px;background:rgba(0,0,0,.06);text-align:center}.cd b{display:block;font-size:24px;line-height:1.1}.cd span{font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.7}' +
       'hr{border:0;margin:0}' +
       '.teaser{position:fixed;' + ((f.teaser || {}).position === 'bottom-right' ? 'right:16px;bottom:16px' : (f.teaser || {}).position === 'left-middle' ? 'left:0;top:50%;transform:rotate(-90deg) translateX(-50%);transform-origin:left top' : 'left:16px;bottom:16px') + ';z-index:2147483599;background:' + ((f.teaser || {}).bg || '#242F3F') + ';color:' + ((f.teaser || {}).color || '#fff') + ';border:0;border-radius:' + ((f.teaser || {}).radius == null ? 999 : (f.teaser || {}).radius) + 'px;padding:12px 18px;font:700 14px ' + fam(fo.family || 'Helvetica,Arial,sans-serif') + ';box-shadow:0 8px 24px rgba(0,0,0,.2);cursor:pointer}' +
-      (edit ? '.blk{position:relative;cursor:pointer}.blk:hover{outline:1px dashed #7C5CFF;outline-offset:2px}.blk.sel{outline:2px solid #7C5CFF;outline-offset:2px}.blk *{pointer-events:none}.blk.drop-before{box-shadow:0 -3px 0 #7C5CFF}.blk.drop-after{box-shadow:0 3px 0 #7C5CFF}.empty{border:2px dashed rgba(0,0,0,.2);border-radius:10px;padding:26px;text-align:center;opacity:.6;font-size:14px}.card.form-sel{outline:2px solid #7C5CFF;outline-offset:3px}' : '') +
+      (edit ? '.cv{display:flex;justify-content:center;padding:36px 16px 24px}.cv .card{max-height:none}.cvb{padding:36px 0 24px}.cvb .card{width:100%;border-radius:0}.blk{position:relative;cursor:pointer}.blk:hover{outline:1px dashed #7C5CFF;outline-offset:2px}.blk.sel{outline:2px solid #7C5CFF;outline-offset:2px}.blk *{pointer-events:none}.blk.drop-before{box-shadow:0 -3px 0 #7C5CFF}.blk.drop-after{box-shadow:0 3px 0 #7C5CFF}.empty{border:2px dashed rgba(0,0,0,.2);border-radius:10px;padding:26px;text-align:center;opacity:.6;font-size:14px}.card.form-sel{outline:2px solid #7C5CFF;outline-offset:3px}.tools{position:absolute;top:-30px;right:0;display:flex;gap:2px;background:#7C5CFF;border-radius:6px;padding:2px;z-index:5;pointer-events:auto!important}.tools *{pointer-events:auto!important}.tools button{all:unset;cursor:pointer;color:#fff;font:600 12px/1 Helvetica,Arial,sans-serif;padding:5px 7px;border-radius:4px}.tools button:hover{background:rgba(255,255,255,.2)}.tag{position:absolute;top:-22px;left:0;background:#7C5CFF;color:#fff;font:600 11px/1 Helvetica,Arial,sans-serif;padding:4px 6px;border-radius:4px 4px 0 0;pointer-events:none}.dropline{height:3px;background:#7C5CFF;border-radius:2px;margin:2px 0}' : '') +
       '@media (max-width:640px){.card{font-size:' + Math.round((fo.size || 16) * scale) + 'px}.in{padding:' + px(mo.pad || [24, 20, 20, 20]) + '}h1{font-size:' + Math.round((h1.size || 30) * scale) + 'px}h2{font-size:' + Math.round((h2.size || 22) * scale) + 'px}.card:not(.img-top) .media{display:none}.card.img-top .media{height:150px}' +
         (mo.sheet !== false ? '.ov{padding:0;align-items:flex-end}.ov .card{border-radius:' + r + 'px ' + r + 'px 0 0;width:100%}.full .ov .card{border-radius:0}' : '.ov .card{width:' + (mo.width_pct || 100) + '%}') + '}';
   }
@@ -110,7 +111,7 @@
       case 'spacer': return wrap('<div style="height:' + (b.height || 16) + 'px"></div>');
       case 'divider': return wrap('<hr style="border-top:' + (b.thickness || 1) + 'px solid ' + esc(b.color || 'rgba(0,0,0,.15)') + ';width:' + (b.width || 100) + '%;display:inline-block">');
       case 'email': return wrap(showLabel() + '<input id="f_' + b.id + '" data-f="email" type="email" autocomplete="email" placeholder="' + esc(b.placeholder || 'Email address') + '" aria-label="' + esc(b.label || 'Email') + '">' + (b.show_consent !== false && f.email_consent_text ? '<div class="legal">' + esc(f.email_consent_text) + '</div>' : ''));
-      case 'phone': return wrap(showLabel() + '<input id="f_' + b.id + '" data-f="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="' + esc(b.placeholder || 'Phone number') + '" aria-label="' + esc(b.label || 'Phone') + '">' +
+      case 'phone': return wrap(showLabel() + '<div class="ph"><select class="cc" aria-label="Country"><option value="US">&#127482;&#127480; +1</option><option value="CA">&#127464;&#127462; +1</option></select><input id="f_' + b.id + '" data-f="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="' + esc(b.placeholder || 'Phone number') + '" aria-label="' + esc(b.label || 'Phone') + '"></div>' +
         '<label class="smsok"><input type="checkbox" data-smsok="1"> <span>' + esc(f.sms_consent_text || '') + (shop ? ' <a href="' + esc(shop) + '/policies/terms-of-service" target="_blank" rel="noopener">Terms</a> &amp; <a href="' + esc(shop) + '/policies/privacy-policy" target="_blank" rel="noopener">Privacy</a>' : '') + '</span></label>');
       case 'input': return wrap(showLabel() + '<input id="f_' + b.id + '" data-f="' + esc(b.key || 'answer') + '" type="text" placeholder="' + esc(b.placeholder || b.label || '') + '" aria-label="' + esc(b.label || '') + '">');
       case 'date': return wrap(showLabel() + '<input id="f_' + b.id + '" data-f="' + esc(b.key || 'date') + '" type="date" aria-label="' + esc(b.label || 'Date') + '">');
@@ -172,9 +173,11 @@
         '<form class="in" novalidate>' + (container || cl.show === false ? '' : '<button type="button" class="x" aria-label="Close">&times;</button>') + blocks + '<div class="err" role="alert"></div></form></div>';
       var anim = edit ? '' : ' anim-' + ((f.style || {}).anim || 'fade');
       wrap.className = anim;
-      wrap.innerHTML = type === 'popup' ? '<div class="ov">' + inner + '</div>' : type === 'full' ? '<div class="full"><div class="ov">' + inner + '</div></div>' : type === 'flyout' ? '<div class="fly">' + inner + '</div>' : type === 'banner' ? '<div class="banner">' + inner + '</div>' : '<div class="emb">' + inner + '</div>';
-      if (edit && edit.sel != null && edit.sel >= 0) { var se = wrap.querySelector('.blk[data-i="' + edit.sel + '"]'); if (se) se.classList.add('sel'); }
-      if (edit) return wireEdit();
+      if (edit) wrap.innerHTML = '<div class="cv' + (type === 'banner' ? ' cvb' : '') + '">' + inner + '</div>';   // Form Studio: the form alone on a clean canvas, like Klaviyo
+      else wrap.innerHTML = type === 'popup' ? '<div class="ov">' + inner + '</div>' : type === 'full' ? '<div class="full"><div class="ov">' + inner + '</div></div>' : type === 'flyout' ? '<div class="fly">' + inner + '</div>' : type === 'banner' ? '<div class="banner">' + inner + '</div>' : '<div class="emb">' + inner + '</div>';
+      if (edit && edit.sel != null && edit.sel >= 0) { var se = wrap.querySelector('.blk[data-i="' + edit.sel + '"]'); if (se) { se.classList.add('sel'); var bn = ((s.blocks || [])[edit.sel] || {}).type || '';
+        se.insertAdjacentHTML('beforeend', '<div class="tag">' + esc((edit.names || {})[bn] || bn) + '</div><div class="tools"><button type="button" data-tool="up" title="Move up">&#8593;</button><button type="button" data-tool="down" title="Move down">&#8595;</button><button type="button" data-tool="dup" title="Duplicate">&#10697;</button><button type="button" data-tool="del" title="Delete">&#128465;</button></div>'); } }
+      if (edit) { wireEdit(); setTimeout(function () { try { window.parent.postMessage({ bzf: 1, t: 'h', frame: window.BZF_FRAME || '', h: Math.ceil(wrap.getBoundingClientRect().height) }, '*'); } catch (e) {} }, 30); return; }
       var form = wrap.querySelector('form'), err = wrap.querySelector('.err');
       var x = wrap.querySelector('.x'); if (x) x.onclick = function () { close(); };
       var ov = wrap.querySelector('.ov'); if (ov && ((f.style || {}).overlay || {}).close_on_click !== false) ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
@@ -199,7 +202,7 @@
           var el = wrap.querySelector('#f_' + b.id);
           if (b.type === 'email') { var em = (el && el.value || '').trim(); if (!em && !b.required) return; if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { bad = 'Please enter a valid email.'; return; } vals.email = em; }
           else if (b.type === 'phone') { var ph = (el && el.value || '').replace(/\D/g, ''); if (!ph && !b.required) return; if (ph.length < 10) { bad = 'Please enter a 10-digit phone number.'; return; }
-            var ok = el && el.parentNode.querySelector('[data-smsok]'); if (!ok || !ok.checked) { bad = 'Check the box to agree to texts.'; return; } vals.phone = ph; vals.sms_consent_checked = true; }
+            var ok = el && el.closest('.blk') && el.closest('.blk').querySelector('[data-smsok]'); if (!ok || !ok.checked) { bad = 'Check the box to agree to texts.'; return; } vals.phone = ph; vals.sms_consent_checked = true; }
           else if (b.type === 'input' || b.type === 'date' || b.type === 'dropdown') { var v = (el && el.value || '').trim(); if (!v && b.required) { bad = 'Please fill in ' + (b.label || 'this field') + '.'; return; } if (v) vals[b.key || 'answer'] = v; }
           else if (b.type === 'radio') { var k = b.key || 'choice', rv = values[k] || (wrap.querySelector('input[name="r_' + b.id + '"]:checked') || {}).value; if (!rv && b.required) { bad = 'Please choose ' + (b.label || 'an option') + '.'; return; } if (rv) vals[k] = rv; }
           else if (b.type === 'checkboxes') { var mk = b.key || 'choices', on = [].slice.call(wrap.querySelectorAll('[data-multi="' + mk + '"]:checked')).map(function (c) { return c.value; }); if (!on.length && b.required) { bad = 'Please choose at least one.'; return; } if (on.length) vals[mk] = on.join(', '); }
@@ -234,15 +237,31 @@
     }
     /* Form Studio canvas: select and drag blocks; the editor listens for these messages */
     function wireEdit() {
-      var say = function (m) { try { window.parent.postMessage(Object.assign({ bzf: 1 }, m), '*'); } catch (e) {} };
+      var say = function (m) { try { window.parent.postMessage(Object.assign({ bzf: 1, frame: window.BZF_FRAME || '' }, m), '*'); } catch (e) {} };
       var card = wrap.querySelector('.card');
-      card.addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('.blk') : null; e.preventDefault(); say({ t: 'sel', i: b ? Number(b.dataset.i) : -1 }); });
-      var from = null;
-      wrap.querySelectorAll('.blk').forEach(function (el) {
-        el.addEventListener('dragstart', function (e) { from = Number(el.dataset.i); try { e.dataTransfer.setData('text/plain', String(from)); e.dataTransfer.effectAllowed = 'move'; } catch (x) {} });
-        el.addEventListener('dragover', function (e) { e.preventDefault(); var r = el.getBoundingClientRect(), after = e.clientY > r.top + r.height / 2; el.classList.toggle('drop-after', after); el.classList.toggle('drop-before', !after); });
-        el.addEventListener('dragleave', function () { el.classList.remove('drop-after', 'drop-before'); });
-        el.addEventListener('drop', function (e) { e.preventDefault(); var after = el.classList.contains('drop-after'); el.classList.remove('drop-after', 'drop-before'); var to = Number(el.dataset.i) + (after ? 1 : 0); if (from != null && to !== from && to !== from + 1) say({ t: 'move', from: from, to: to > from ? to - 1 : to }); from = null; });
+      card.addEventListener('click', function (e) {
+        var tool = e.target.closest ? e.target.closest('[data-tool]') : null;
+        if (tool) { e.preventDefault(); e.stopPropagation(); return say({ t: 'tool', act: tool.dataset.tool, i: edit.sel }); }
+        var b = e.target.closest ? e.target.closest('.blk') : null; e.preventDefault(); say({ t: 'sel', i: b ? Number(b.dataset.i) : -1 });
+      });
+      var from = null, line = null;
+      var clearLine = function () { if (line && line.parentNode) line.parentNode.removeChild(line); line = null; };
+      var spot = function (e) {   // where a drop would land: index among blocks + the element to draw the line next to
+        var bl = [].slice.call(wrap.querySelectorAll('.blk')), at = bl.length, ref = null;
+        for (var i = 0; i < bl.length; i++) { var r = bl[i].getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { at = Number(bl[i].dataset.i); ref = bl[i]; break; } }
+        return { at: at, ref: ref };
+      };
+      var form = wrap.querySelector('form');
+      wrap.querySelectorAll('.blk').forEach(function (el) { el.addEventListener('dragstart', function (e) { from = Number(el.dataset.i); try { e.dataTransfer.setData('text/plain', 'bzf-move:' + from); e.dataTransfer.effectAllowed = 'move'; } catch (x) {} }); });
+      card.addEventListener('dragover', function (e) {
+        e.preventDefault(); var sp = spot(e); clearLine(); line = document.createElement('div'); line.className = 'dropline';
+        if (sp.ref) sp.ref.parentNode.insertBefore(line, sp.ref); else { var er = form.querySelector('.err'); form.insertBefore(line, er); }
+      });
+      card.addEventListener('dragleave', function (e) { if (!card.contains(e.relatedTarget)) clearLine(); });
+      card.addEventListener('drop', function (e) {
+        e.preventDefault(); var sp = spot(e); clearLine(); var data = ''; try { data = e.dataTransfer.getData('text/plain') || ''; } catch (x) {}
+        if (data.indexOf('bzf-add:') === 0) return say({ t: 'add', type: data.slice(8), at: sp.at });
+        if (data.indexOf('bzf-move:') === 0 || from != null) { var f0 = from != null ? from : Number(data.slice(9)); from = null; var to = sp.at > f0 ? sp.at - 1 : sp.at; if (to !== f0) say({ t: 'move', from: f0, to: to }); }
       });
     }
     draw();

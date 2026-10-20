@@ -3,6 +3,18 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.84.0
+- **Sign-up form editor laid out 1:1 like Klaviyo's.**
+  - Full-screen editor: exit, form name, saved check, Draft / Preview only / Live, **Preview on website**, **Publish**. Changes save automatically (and with Cmd/Ctrl+S).
+  - Left icon rail: **Add blocks**, **Styles**, **Targeting & behaviors**. The panel collapses.
+  - **Add blocks** has Basic and Universal tabs, with Integrations (Coupon), Elements (Text, Button, Image, Countdown timer, Spacer, Divider, HTML) and Input fields (Email input, Phone number, Text input, Radio button, Checkboxes, Dropdown, Date). Drag a tile onto the form or click it. Email and phone grey out when the step already has one.
+  - Floating step bar: undo / redo, Teaser ⋮, each step with a drag handle and ⋮ menu (settings, rename, duplicate, move, make it the success step, delete), + Step, Success, view switch (desktop + mobile, desktop, mobile) and Try it.
+  - The canvas shows the form on its own like Klaviyo, Desktop and Mobile side by side, with zoom (+, −, fit). Click a block to edit it; the selected block has move, duplicate and delete buttons; drag blocks to reorder. Delete and Esc work on the keyboard.
+  - Universal blocks: save any block and reuse it in any form.
+  - Coupon settings live on the Coupon block; the sign-up list lives in Targeting & behaviors (Submissions).
+  - Phone field has a country picker (US / Canada).
+- **Copy forms from Klaviyo.** Buzzin copies every Klaviyo sign-up form (each A/B variant too) as a Draft: steps, blocks, side image, styles, fonts, buttons, teaser and display rules. Klaviyo isn't changed. Anything that couldn't come over is listed under "Copied from Klaviyo" in Targeting & behaviors. It runs once by itself after this update, and again any time from the "Copy forms from Klaviyo" button (it only adds forms not already here).
+
 ## 4.83.1
 - **Sign-up consent is to Brusche Inc.** New text and email consent wording names "Brusche Inc. and its brands, including Larkspur Baby", so one sign-up covers every Brusche brand. Forms still using the old store-name wording are switched automatically; custom wording is left alone. Each sign-up keeps the exact wording the person agreed to.
 - Unsubscribe pages say the unsubscribe covers every Brusche Inc. brand.
