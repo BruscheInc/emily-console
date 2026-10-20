@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.91.1
+- Ready-made codes no longer go to waste. They wait in the pool for up to 45 days, and when someone gets one, Buzzin sets its real end date in Shopify in the background, so a 7-day code is good for 7 days from when they get it.
+
 ## 4.91.0
 Coupon blocks create Shopify's 4 discount types, instantly.
 - **Choose what the coupon does** on the coupon block (Discount section), with the same choices as Shopify's "Create discount": **Amount off order**, **Amount off products** (pick collections or products), **Buy X get Y** (minimum quantity or amount, what they get, free / % off / $ off each, max uses per order) and **Free shipping** (countries, exclude rates over $X). Also minimum purchase, combinations, days valid and code prefix. Or switch to "Same code for everyone" and type an existing code.

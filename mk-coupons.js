@@ -79,11 +79,13 @@ async function forProfile(store, profile, { real = true, source = "message", off
 /* ---- Ready-made codes, so a person never waits on Shopify ----
    For every offer in use Buzzin keeps a small pool of single-use codes already created in Shopify.
    Sending (or a form's success step) takes one instantly; a background job tops the pool back up. */
-const POOL = 25, POOL_MAX_AGE_H = 20;
+const POOL = 25, POOL_MAX_AGE_H = 24 * 45, POOL_EXTRA_DAYS = 60;   // pool codes wait up to 45 days; their real end date is set when someone gets one
 let migrated = false;
 async function migrate() {
   if (migrated) return; migrated = true;
   await db(`CREATE TABLE IF NOT EXISTS mk_coupon_pool (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, offer_key TEXT NOT NULL, code TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`ALTER TABLE mk_coupon_pool ADD COLUMN IF NOT EXISTS node_id TEXT`);
+  await db(`ALTER TABLE mk_coupon_pool ADD COLUMN IF NOT EXISTS kind TEXT`);
   await db(`CREATE INDEX IF NOT EXISTS mk_coupon_pool_k ON mk_coupon_pool (store, offer_key, created_at)`);
   await db(`CREATE TABLE IF NOT EXISTS mk_coupon_offers (store TEXT NOT NULL, offer_key TEXT NOT NULL, offer JSONB NOT NULL, last_used TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (store, offer_key))`);
 }
@@ -93,15 +95,24 @@ async function createCode(store, off, source, extraDays = 0) {
   const R = require("./returns"), st = R.shopFor(store), di = discountInput(off, code, `Buzzin ${source} · ${code}`, expires);
   const r = await R.gql(st, `mutation($b:${di.type}!){${di.m}(${di.arg}:$b){codeDiscountNode{id} userErrors{field message}}}`, { b: di.input });
   const ue = r[di.m].userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
-  return { code, expires };
+  return { code, expires, node_id: r[di.m].codeDiscountNode && r[di.m].codeDiscountNode.id, kind: di.m.replace(/Create$/, "") };
+}
+/** A pool code was made with a far end date; give it the offer's real one now that someone has it (in the background). */
+async function setEndDate(store, node_id, kind, expires) {
+  if (!node_id || !kind) return;
+  const R = require("./returns"), st = R.shopFor(store);
+  const arg = { discountCodeBasic: ["DiscountCodeBasicInput", "basicCodeDiscount"], discountCodeBxgy: ["DiscountCodeBxgyInput", "bxgyCodeDiscount"], discountCodeFreeShipping: ["DiscountCodeFreeShippingInput", "freeShippingCodeDiscount"] }[kind];
+  if (!arg) return;
+  const r = await R.gql(st, `mutation($id:ID!,$b:${arg[0]}!){${kind}Update(id:$id, ${arg[1]}:$b){codeDiscountNode{id} userErrors{field message}}}`, { id: node_id, b: { endsAt: expires.toISOString() } });
+  const ue = r[`${kind}Update`] && r[`${kind}Update`].userErrors; if (ue && ue.length) console.log(`🎟️  end date for ${node_id}: ${ue.map((x) => x.message).join("; ")}`);
 }
 /** A code for this offer: from the ready pool when there is one, else made now. Also marks the offer as in use. */
 async function claim(store, off, source) {
   await migrate(); const key = offerKey(off) || "default";
   await db(`INSERT INTO mk_coupon_offers (store, offer_key, offer, last_used) VALUES ($1,$2,$3,now()) ON CONFLICT (store, offer_key) DO UPDATE SET last_used=now(), offer=EXCLUDED.offer`, [store, key, JSON.stringify(off)]).catch(() => {});
-  const got = (await db(`DELETE FROM mk_coupon_pool WHERE id = (SELECT id FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2 AND created_at > now() - ($3 || ' hours')::interval ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING code, expires_at`, [store, key, POOL_MAX_AGE_H]).catch(() => ({ rows: [] }))).rows[0];
+  const got = (await db(`DELETE FROM mk_coupon_pool WHERE id = (SELECT id FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2 AND created_at > now() - ($3 || ' hours')::interval ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING code, node_id, kind`, [store, key, POOL_MAX_AGE_H]).catch(() => ({ rows: [] }))).rows[0];
   setImmediate(() => refill(store, key).catch(() => {}));
-  if (got) return { code: got.code, expires: new Date(got.expires_at) };
+  if (got) { const expires = new Date(Date.now() + off.days * 864e5); setImmediate(() => setEndDate(store, got.node_id, got.kind, expires).catch((e) => console.log(`🎟️  end date: ${e.message}`))); return { code: got.code, expires }; }
   return createCode(store, off, source);
 }
 const filling = new Set();
@@ -113,8 +124,8 @@ async function refill(store, key) {
     await db(`DELETE FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2 AND created_at < now() - ($3 || ' hours')::interval`, [store, key, POOL_MAX_AGE_H]);   // old ones just expire unused in Shopify
     const have = (await db(`SELECT count(*)::int n FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2`, [store, key])).rows[0].n;
     for (let i = have; i < POOL; i++) {
-      const c = await createCode(store, o.offer, "ready", 1);   // one extra day, since it may wait in the pool
-      await db(`INSERT INTO mk_coupon_pool (store, offer_key, code, expires_at) VALUES ($1,$2,$3,$4)`, [store, key, c.code, c.expires]);
+      const c = await createCode(store, o.offer, "ready", POOL_EXTRA_DAYS);
+      await db(`INSERT INTO mk_coupon_pool (store, offer_key, code, expires_at, node_id, kind) VALUES ($1,$2,$3,$4,$5,$6)`, [store, key, c.code, c.expires, c.node_id || null, c.kind || null]);
     }
   } finally { filling.delete(id); }
 }
