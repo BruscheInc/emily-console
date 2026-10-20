@@ -283,11 +283,13 @@ async function testSend(id, to) {
     const x = versionOf(c, v);
     if (c.channel === "email") {
       const tpl = await E().getTemplate(x.template_id); if (!tpl) throw new Error("Choose an email first.");
-      const msg = await E().render(c.store, { ...tpl, subject: `${v ? `[${v}] ` : ""}${x.subject || tpl.subject}`, preview: x.preview || tpl.preview }, { id: 0, email: to, first_name: "Test" });
+      const tp = await require("./mk-coupons").forTest(c.store, to, "email", { ...tpl, subject: x.subject || tpl.subject });
+      const msg = await E().render(c.store, { ...tpl, subject: `${v ? `[${v}] ` : ""}${x.subject || tpl.subject}`, preview: x.preview || tpl.preview }, tp.profile, tp.coupon ? { coupon: tp.coupon } : {});
       const row = await SEND().send({ store: c.store, channel: "email", profile: { id: null, email: to, email_consent: "subscribed" }, msg, test: true, campaignId: null, messageId: `camp:${c.id}:${v || "main"}`, idem: `ctest:${c.id}:${v}:${to}:${Date.now()}` });
       out.push({ version: v, status: row.status, reason: row.reason });
     } else {
-      const body = await require("./mk-sms").compose(c.store, { body: x.body, add_opt_out: x.add_opt_out !== false }, { id: 0, phone: to, first_name: "Test" }, {});
+      const tp = await require("./mk-coupons").forTest(c.store, to, "sms", { body: x.body });
+      const body = await require("./mk-sms").compose(c.store, { body: x.body, add_opt_out: x.add_opt_out !== false }, tp.profile, tp.coupon ? { coupon: tp.coupon } : {});
       const row = await SEND().send({ store: c.store, channel: "sms", profile: { id: null, phone: MK().normPhone(to) || to, sms_consent: "subscribed" }, msg: { body }, test: true, messageId: `camp:${c.id}:${v || "main"}`, idem: `ctest:${c.id}:${v}:${to}:${Date.now()}` });
       out.push({ version: v, status: row.status, reason: row.reason });
     }

@@ -536,7 +536,9 @@ async function couponFor(flow, p, ctx, channel, msg, run) {
   const CP = require("./mk-coupons");
   if (!CP.usesCoupon(msg)) return (p.props || {}).coupon;
   const S = await MK().settings();
-  const live = !run.test && flow.status === "live" && !!(S.sending[flow.store] && S.sending[flow.store][channel]) && p[channel === "sms" ? "sms_consent" : "email_consent"] === "subscribed";
+  const tl = (S.test_list || []).map((x) => String(x).trim().toLowerCase());
+  const onList = tl.includes(String(channel === "sms" ? p.phone : p.email || "").toLowerCase()) || (channel === "sms" && p.phone && tl.some((x) => MK().normPhone(x) === p.phone));
+  const live = onList || (!run.test && flow.status === "live" && !!(S.sending[flow.store] && S.sending[flow.store][channel]) && p[channel === "sms" ? "sms_consent" : "email_consent"] === "subscribed");   // test-list people get a real code, like the live message
   return CP.forProfile(flow.store, p, { real: live, source: `flow ${flow.name}` });
 }
 

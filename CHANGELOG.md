@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.90.1
+Tests feel like the live message.
+- Test emails and texts to an address on the Internal test list use that person's real profile: their first name, real links, and their own working single-use code, created in Shopify like a live send. The same code comes back on each test until it's used or expires.
+- Addresses that aren't on the test list still get a sample code.
+
 ## 4.90.0
 Unique coupon codes in every email and text.
 - **One code per person.** When an email or text uses a coupon and the person has no usable code, Buzzin makes one just for them at send time: a single-use Shopify discount, one per customer. A code is reused while it's valid and unused; once it's used or expired, the next message gets a new one. This works in flows and campaigns, including welcome emails for people who joined without a sign-up form.

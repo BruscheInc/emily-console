@@ -551,7 +551,8 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     if (!guard(req, res)) return;
     try { const t = await getTemplate(req.params.id); if (!t) return res.status(404).json({ error: "not found" });
       const to = String((req.body && req.body.to) || "").trim().toLowerCase(); if (!to) return res.status(400).json({ error: "Enter an address from the internal test list" });
-      const r = await render(t.store, t, { id: 0, email: to, first_name: "Test" });
+      const tp = await require("./mk-coupons").forTest(t.store, to, "email", t);   // the real profile and a working code, like the live email
+      const r = await render(t.store, t, tp.profile, tp.coupon ? { coupon: tp.coupon } : {});
       const row = await SEND().send({ store: t.store, channel: "email", profile: { id: null, email: to, email_consent: "subscribed" }, msg: r, test: true, messageId: `tpl:${t.id}`, idem: `test:${t.id}:${to}:${Date.now()}` });
       res.json({ status: row.status, reason: row.reason }); } catch (e) { fail(res, e); }
   });

@@ -35,4 +35,18 @@ async function forProfile(store, profile, { real = true, source = "message" } = 
   return code;
 }
 
-module.exports = { DEFAULTS, defaults, forProfile, sample, usesCoupon, makeCode };
+/** Tests feel like the live message: the real profile behind a test-list address (first name, links, its own real code).
+    Codes are only made for addresses on the internal test list. */
+async function forTest(store, to, channel, msg) {
+  const s = await MK().settings(), tl = (s.test_list || []).map((x) => String(x).trim().toLowerCase());
+  const email = channel === "email" ? MK().normEmail(to) : null, phone = channel === "sms" ? MK().normPhone(to) : null;
+  const onList = tl.includes(String(to || "").trim().toLowerCase()) || (phone && tl.some((x) => MK().normPhone(x) === phone));
+  let prof = (email || phone) ? await MK().findProfile(null, { email, phone }).catch(() => null) : null;
+  if (!prof && onList) prof = await MK().upsertProfile("lb", { email, phone }, "test list").catch(() => null);
+  const view = prof ? { ...prof } : { id: 0, email, phone, first_name: "Test" };
+  let coupon = null;
+  if (msg && usesCoupon(msg)) coupon = prof && onList ? await forProfile(store, view, { real: true, source: "test" }) : sample();
+  return { profile: view, coupon };
+}
+
+module.exports = { forTest, DEFAULTS, defaults, forProfile, sample, usesCoupon, makeCode };
