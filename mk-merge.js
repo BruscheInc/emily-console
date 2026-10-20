@@ -324,6 +324,10 @@ function routes(app, { admin, actorOf, fail }) {
   });
 }
 
-async function init() { await migrate(); }
+async function init() {
+  await migrate();
+  // A last order with no recognizable size left last_sizes as JSON null, which broke the Size-up segment.
+  await db(`UPDATE mk_profiles SET props = props - 'last_sizes' WHERE jsonb_typeof(props->'last_sizes') IS DISTINCT FROM 'array' AND props ? 'last_sizes'`).catch((e) => console.error("last_sizes cleanup:", e.message));
+}
 
 module.exports = { init, migrate, routes, resolveId, backup, merge, mergePreview, sharedPhones, tagSmsCandidates, parseCsv, upload, importPreview, runImport };

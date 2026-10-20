@@ -98,7 +98,7 @@ function one(c, args, ctx) {
     case "consent": { const col = c.channel === "sms" ? "p.sms_consent" : "p.email_consent"; return c.state === "not_subscribed" ? `${col} <> 'subscribed'` : `${col} = 'subscribed'`; }
     case "list": return `${c.in === false ? "NOT " : ""}EXISTS (SELECT 1 FROM mk_list_members m WHERE m.profile_id=p.id AND m.list_id=${A(args, Number(c.list_id) || 0)})`;
     case "segment": return `${c.in === false ? "NOT " : ""}EXISTS (SELECT 1 FROM mk_segment_members m WHERE m.profile_id=p.id AND m.segment_id=${A(args, Number(c.segment_id) || 0)})`;
-    case "size": { const vals = (c.values || []).map(String); const x = `EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(p.props->'last_sizes','[]'::jsonb)) s WHERE s = ANY(${A(args, vals)}))`; return c.op === "none_of" ? `NOT ${x}` : x; }
+    case "size": { const vals = (c.values || []).map(String); const x = `EXISTS (SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.props->'last_sizes')='array' THEN p.props->'last_sizes' ELSE '[]'::jsonb END) s WHERE s = ANY(${A(args, vals)}))`; return c.op === "none_of" ? `NOT ${x}` : x; }
     case "buzzin": {
       const neg = c.in === false ? "NOT " : "";
       if (c.what === "open_ticket") return `${neg}EXISTS (SELECT 1 FROM hd_tickets t WHERE lower(t.customer_email)=p.email AND t.status <> 'closed' AND NOT t.spam)`;

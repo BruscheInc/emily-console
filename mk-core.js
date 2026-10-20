@@ -311,7 +311,7 @@ async function syncShopifyOrders(store, since) {
   await flush();
   // Roll the orders up onto each profile (cancelled orders don't count).
   await db(`UPDATE mk_profiles p SET orders_count=GREATEST(p.orders_count, x.n), total_spent=GREATEST(p.total_spent, x.spent), first_order_at=x.first, last_order_at=x.last,
-              props = p.props || jsonb_build_object('last_sizes', x.sizes), updated_at=now()
+              props = CASE WHEN x.sizes IS NULL THEN p.props ELSE p.props || jsonb_build_object('last_sizes', x.sizes) END, updated_at=now()
             FROM (SELECT e.profile_id, count(*)::int n, sum(e.value) spent, min(e.at) first, max(e.at) last,
                     (SELECT to_jsonb(array_agg(DISTINCT s)) FROM (SELECT jsonb_array_elements(e2.props->'items')->>'size' s FROM mk_events e2
                        WHERE e2.profile_id=e.profile_id AND e2.type='placed_order' AND e2.at = max(e.at)) z WHERE s IS NOT NULL) sizes

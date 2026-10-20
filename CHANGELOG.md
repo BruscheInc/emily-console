@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.82.1
+- Fix: the **Size-up due** segment hadn't counted since Oct 10. A last order with no recognizable size saved an empty size value that broke the count; those are cleaned up and can't happen again.
+
 ## 4.82.0
 - **Profiles are Brusche only.** No Larkspur Baby / Outlet field on profiles, lists or the import anymore: the Profiles, Lists and Overview pages always show the whole Brusche audience, and every profile is part of it (merge and import move everyone over).
 - Import no longer asks which store a file is from. Upload all the customer exports together; order totals from each file are added up per customer, and tags from every file are combined.
