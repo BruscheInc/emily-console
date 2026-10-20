@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.93.0
+Email templates page laid out like Klaviyo.
+- Cards with a live preview of each email, its name and the date it was last edited. Each card has a ⋮ menu: Edit, Rename, Clone, Preview (full-size) and Delete.
+- Search, a Type filter (From Klaviyo / Made in Buzzin), sorting (Edited most recently / Name) and a Grid / List switch.
+- The **Create** button (top right) starts a blank email or one from a starter.
+
 ## 4.92.0
 Coupon codes stay tidy in Shopify.
 - **One Shopify discount per offer.** Each discount holds all of that offer's codes, for example "Buzzin · 10% off entire order · valid 7 days". Shopify's Discounts page shows one line per offer, not one line per person. Shopify applies "one use" and "one per customer" to each code inside the discount.

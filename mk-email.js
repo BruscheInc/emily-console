@@ -545,6 +545,15 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   app.get("/api/mk/brand/:store", async (req, res) => { if (!guard(req, res)) return; try { res.json(await brand(store(req.params.store) || "lb")); } catch (e) { fail(res, e); } });
   app.put("/api/mk/brand/:store", async (req, res) => { if (!admin(req, res)) return; try { const s = store(req.params.store); if (!s) return res.status(400).json({ error: "unknown store" }); res.json(await saveBrand(s, req.body || {}, actorOf(req))); } catch (e) { fail(res, e); } });
   app.get("/api/mk/templates", async (req, res) => { if (!guard(req, res)) return; try { res.json({ templates: await listTemplates(store(req.query.store)), starters: Object.entries(STARTERS).map(([k, v]) => ({ key: k, name: v.name })) }); } catch (e) { fail(res, e); } });
+  // Thumbnail for the templates grid: the email rendered with a sample person (cached until the email changes).
+  const THUMBS = new Map();
+  app.get("/api/mk/templates/:id/thumb", async (req, res) => {
+    if (!guard(req, res)) return;
+    try { const t = await getTemplate(req.params.id); if (!t) return res.status(404).json({ error: "not found" });
+      const k = `${t.id}:${new Date(t.updated_at).getTime()}`; let html = THUMBS.get(k);
+      if (!html) { const r = await render(t.store, t, { id: 0, first_name: "Maria", email: "maria@example.com", props: {} }, { coupon: "WELCOME-8K2Q" }); html = r.html; THUMBS.set(k, html); if (THUMBS.size > 300) THUMBS.delete(THUMBS.keys().next().value); }
+      res.json({ html }); } catch (e) { fail(res, e); }
+  });
   app.get("/api/mk/templates/:id", async (req, res) => { if (!guard(req, res)) return; try { const t = await getTemplate(req.params.id); if (!t) return res.status(404).json({ error: "not found" }); res.json(t); } catch (e) { fail(res, e); } });
   app.post("/api/mk/templates", async (req, res) => {
     if (!guard(req, res)) return;
@@ -555,6 +564,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
       const doc = base.doc ? MKDoc.reId(base.doc) : MKDoc.fromBlocks(base.blocks || [], { ...br, logo_abs: absUrl(br.logo) });
       res.json(await saveTemplate({ store: s, name: b.name || base.name, subject: base.subject, preview: base.preview, blocks: base.blocks, doc }, actorOf(req))); } catch (e) { fail(res, e); }
   });
+  app.post("/api/mk/templates/:id/rename", async (req, res) => { if (!guard(req, res)) return; try { const n = String((req.body || {}).name || "").trim().slice(0, 120); if (!n) throw new Error("Give it a name"); await db(`UPDATE mk_templates SET name=$2, updated_at=now() WHERE id=$1`, [Number(req.params.id), n]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/templates/:id", async (req, res) => { if (!guard(req, res)) return; try { res.json(await saveTemplate({ ...(req.body || {}), id: req.params.id }, actorOf(req))); } catch (e) { fail(res, e); } });
   app.delete("/api/mk/templates/:id", async (req, res) => { if (!guard(req, res)) return; try { await db(`UPDATE mk_templates SET archived=true, updated_at=now() WHERE id=$1`, [Number(req.params.id)]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/templates/render", async (req, res) => {

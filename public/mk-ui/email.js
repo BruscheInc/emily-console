@@ -5,19 +5,62 @@
   S.splice(at, 0, { id: 'templates', icon: 'template', label: 'Email templates', render: renderTemplates }, { id: 'brand', icon: 'brush', label: 'Brand kits', render: renderBrand });
 });
 
+let TQ = '', TSRC = '', TSORT = 'edited', TVIEW = (() => { try { return localStorage.getItem('mk_tpl_view') || 'grid'; } catch (e) { return 'grid'; } })();
 async function renderTemplates(el, id) {
   if (id) return window.MK_editTemplate(el, id);
-  const r = await api('/api/mk/templates?' + qs({ store: STORE }));
-  el.innerHTML = `<h1>Email templates</h1><p class="sub">Every email flows and campaigns send is built here from blocks. Click any block in an email to edit it. Klaviyo emails import with their real blocks; any still marked HTML can be opened and rebuilt with blocks.</p>
-  <div class="bar"><select id="ts"${STORE ? '' : ' disabled'}><option value="">Start from…</option>${r.starters.map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join('')}</select>
-    <button class="btn pri" id="tn"${STORE ? '' : ' disabled title="Pick a store first"'}><i class="ti ti-plus"></i> New email</button>
-    <button class="btn" id="ti"><i class="ti ti-download"></i> Re-import from Klaviyo</button>${STORE ? '' : '<span style="color:var(--muted)">Pick a store at the top to create one.</span>'}</div>
-  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Name</th><th>Subject</th><th>Store</th><th>From</th><th>Updated</th></tr></thead><tbody>
-  ${r.templates.map((t) => `<tr class="click" data-id="${t.id}"><td><b>${esc(t.name)}</b></td><td>${esc(t.subject || '—')}</td><td>${t.store === 'lbo' ? 'Outlet' : 'LB'}</td><td>${t.source === 'klaviyo' ? '<span class="pill blue">Klaviyo</span>' : '<span class="pill off">Buzzin</span>'}${t.source === 'klaviyo' && !t.all_blocks ? ' <span class="pill hon" title="Still one HTML block. Open it and click Rebuild with blocks, or re-import from Klaviyo.">HTML</span>' : ''}</td><td>${fmtD(t.updated_at)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No templates yet.</td></tr>'}
-  </tbody></table></div></div>`;
-  el.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => { location.hash = '#templates/' + tr.dataset.id; });
-  $('tn').onclick = async () => { try { const t = await api('/api/mk/templates', { method: 'POST', body: JSON.stringify({ store: STORE, starter: $('ts').value || 'blank' }) }); location.hash = '#templates/' + t.id; } catch (e) { toast(e.message, 1); } };
-  $('ti').onclick = async () => { const b = $('ti'); b.disabled = true; b.innerHTML = '<i class="ti ti-download"></i> Importing… (about a minute)'; try { const x = await api('/api/mk/templates/import-klaviyo', { method: 'POST', body: '{}' }); toast(`${x.imported} templates imported · ${x.with_layout || 0} with Klaviyo's block layout${x.fetched && x.fetched.error ? ' · ' + x.fetched.error : ''}`, x.fetched && x.fetched.error); go(); } catch (e) { toast(e.message, 1); b.disabled = false; } };
+  const KL = window.MK_KL || {}, I = (n) => `<i class="ti ti-${n}"></i>`;
+  let r = await api('/api/mk/templates?' + qs({ store: STORE }));
+  el.innerHTML = (KL.LCSS || '') + `<style>
+    .tg{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px}
+    .tc{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column;cursor:pointer;transition:box-shadow .15s}.tc:hover{box-shadow:0 4px 16px rgba(0,0,0,.08)}
+    .tc .th{height:300px;background:#EDEDED;position:relative;overflow:hidden;display:flex;justify-content:center}
+    .tc .th iframe{width:640px;height:1000px;border:0;transform:scale(.3);transform-origin:top center;pointer-events:none;position:absolute;top:12px;left:50%;margin-left:-320px;background:#fff}
+    .tc .th .ld{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#A1A1AA;font-size:13px}
+    .tc .ft{display:flex;align-items:center;gap:8px;padding:12px 14px;border-top:1px solid var(--line)}.tc .ft .nm{flex:1;min-width:0}.tc .ft b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}.tc .ft span{color:#52525B;font-size:13px}
+    .tc .tag{position:absolute;top:8px;left:8px;z-index:1}.seg2{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}.seg2 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:40px;height:38px;color:#52525B}.seg2 button.on{background:#F4F4F5;color:#18181B}.seg2 button+button{border-left:1px solid var(--line)}
+    .tpv{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center}.tpv .bx{background:#fff;border-radius:14px;width:min(720px,94vw);height:90vh;display:flex;flex-direction:column;overflow:hidden}.tpv .hd{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}.tpv iframe{flex:1;border:0;width:100%}
+  </style><div class="kl"><div class="kl-h"><h1>Email templates</h1><button class="btn" id="ti">${I('download')} Re-import from Klaviyo</button><button class="btn pri" id="tcr">Create ${I('chevron-down')}</button></div>
+    <div class="kl-b"><div class="kl-f" style="align-items:center"><input type="search" id="tq" placeholder="Search" value="${esc(TQ)}" aria-label="Search templates">
+      <select id="tsrc" aria-label="Type"><option value="">Type</option><option value="klaviyo"${TSRC === 'klaviyo' ? ' selected' : ''}>From Klaviyo</option><option value="buzzin"${TSRC === 'buzzin' ? ' selected' : ''}>Made in Buzzin</option></select>
+      <span style="flex:1"></span><select id="tsort" aria-label="Sort" style="border-style:solid"><option value="edited"${TSORT === 'edited' ? ' selected' : ''}>Edited most recently</option><option value="name"${TSORT === 'name' ? ' selected' : ''}>Name A–Z</option></select>
+      <div class="seg2"><button data-tv="grid" class="${TVIEW === 'grid' ? 'on' : ''}" aria-label="Grid">${I('layout-grid')}</button><button data-tv="list" class="${TVIEW === 'list' ? 'on' : ''}" aria-label="List">${I('list')}</button></div></div>
+      <div id="tbody"></div></div></div>`;
+  const reload = async () => { r = await api('/api/mk/templates?' + qs({ store: STORE })); draw(); };
+  const open = (t) => { location.hash = '#templates/' + t.id; };
+  const thumb = async (t) => (await api(`/api/mk/templates/${t.id}/thumb`)).html;
+  const preview = async (t) => {
+    const d = document.createElement('div'); d.className = 'tpv'; d.innerHTML = `<div class="bx" role="dialog" aria-label="Preview"><div class="hd"><b style="flex:1">${esc(t.name)}</b><button class="btn xs" id="tpe">${I('pencil')} Edit</button><button class="btn xs" id="tpx" aria-label="Close">${I('x')}</button></div><iframe title="Email preview"></iframe></div>`;
+    document.body.appendChild(d); const close = () => d.remove(); d.onclick = (e) => { if (e.target === d) close(); }; d.querySelector('#tpx').onclick = close; d.querySelector('#tpe').onclick = () => { close(); open(t); };
+    try { d.querySelector('iframe').srcdoc = await thumb(t); } catch (e) { toast(e.message, 1); } };
+  const menu = (t, anchor) => KL.menu(anchor, [
+    ['Edit', 'pencil', () => open(t)],
+    ['Rename', 'pencil', async () => { const n = prompt('Template name', t.name); if (!n || n === t.name) return; try { await api('/api/mk/templates/' + t.id + '/rename', { method: 'POST', body: JSON.stringify({ name: n }) }); toast('Renamed'); reload(); } catch (e) { toast(e.message, 1); } }],
+    ['Clone', 'copy', async () => { try { const c = await api('/api/mk/templates', { method: 'POST', body: JSON.stringify({ store: t.store, copy_of: t.id }) }); toast('Copied'); open(c); } catch (e) { toast(e.message, 1); } }],
+    ['Preview', 'eye', () => preview(t)],
+    ['Delete', 'trash', async () => { if (!confirm(`Delete the template "${t.name}"?`)) return; try { await api('/api/mk/templates/' + t.id, { method: 'DELETE' }); toast('Deleted'); reload(); } catch (e) { toast(e.message, 1); } }, { danger: true }],
+  ], { alignRight: true });
+  let io = null;
+  const draw = () => {
+    const rows = r.templates.filter((t) => (!TQ || (t.name + ' ' + (t.subject || '')).toLowerCase().includes(TQ.toLowerCase())) && (!TSRC || (TSRC === 'klaviyo' ? t.source === 'klaviyo' : t.source !== 'klaviyo')))
+      .sort((a, b) => (TSORT === 'name' ? a.name.localeCompare(b.name) : new Date(b.updated_at) - new Date(a.updated_at)));
+    const B = $('tbody'); if (io) io.disconnect();
+    if (TVIEW === 'list') {
+      B.innerHTML = `<table><thead><tr><th>Name</th><th>Subject</th><th>Type</th><th>Edited</th><th style="width:44px"></th></tr></thead><tbody>${rows.map((t) => `<tr class="row"><td><a class="nm" href="#templates/${t.id}">${esc(t.name)}</a></td><td>${esc(t.subject || '—')}</td><td>${t.source === 'klaviyo' ? 'From Klaviyo' : 'Buzzin'}</td><td>${fmtD(t.updated_at)}</td><td><button class="dots" data-tm="${t.id}" aria-label="Options for ${esc(t.name)}">${I('dots-vertical')}</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">No templates match.</td></tr>'}</tbody></table>`;
+    } else {
+      B.innerHTML = `<div class="tg">${rows.map((t) => `<div class="tc" data-tid="${t.id}"><div class="th">${t.source === 'klaviyo' && !t.all_blocks ? '<span class="pill hon tag" title="Still one HTML block">HTML</span>' : ''}<div class="ld">Loading preview…</div></div>
+        <div class="ft"><div class="nm"><b title="${esc(t.name)}">${esc(t.name)}</b><span>${fmtD(t.updated_at)}</span></div><button class="dots" data-tm="${t.id}" aria-label="Options for ${esc(t.name)}">${I('dots-vertical')}</button></div></div>`).join('') || '<div class="empty">No templates match.</div>'}</div>`;
+      io = new IntersectionObserver((ents) => ents.forEach(async (en) => { if (!en.isIntersecting) return; io.unobserve(en.target); const t = rows.find((x) => String(x.id) === en.target.dataset.tid);
+        try { const html = await thumb(t); const th = en.target.querySelector('.th'); const f = document.createElement('iframe'); f.setAttribute('title', t.name); f.setAttribute('tabindex', '-1'); f.setAttribute('sandbox', ''); f.srcdoc = html; th.querySelector('.ld').remove(); th.appendChild(f); } catch (e) { const ld = en.target.querySelector('.ld'); if (ld) ld.textContent = 'No preview'; } }), { rootMargin: '300px' });
+      B.querySelectorAll('.tc').forEach((c) => { io.observe(c); c.onclick = () => open(rows.find((x) => String(x.id) === c.dataset.tid)); });
+    }
+    B.querySelectorAll('[data-tm]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); menu(r.templates.find((x) => String(x.id) === b.dataset.tm), b); });
+  };
+  $('tq').oninput = () => { TQ = $('tq').value; draw(); }; $('tsrc').onchange = () => { TSRC = $('tsrc').value; draw(); }; $('tsort').onchange = () => { TSORT = $('tsort').value; draw(); };
+  el.querySelectorAll('[data-tv]').forEach((b) => b.onclick = () => { TVIEW = b.dataset.tv; try { localStorage.setItem('mk_tpl_view', TVIEW); } catch (e) {} el.querySelectorAll('[data-tv]').forEach((x) => x.classList.toggle('on', x === b)); draw(); });
+  const st = () => STORE || 'lb';
+  $('tcr').onclick = () => KL.menu($('tcr'), r.starters.map((x) => [x.key === 'blank' ? 'Blank email' : `Start from: ${x.name}`, x.key === 'blank' ? 'file' : 'template', async () => { try { const t = await api('/api/mk/templates', { method: 'POST', body: JSON.stringify({ store: st(), starter: x.key }) }); open(t); } catch (e) { toast(e.message, 1); } }]), { alignRight: true });
+  $('ti').onclick = async () => { const b = $('ti'); b.disabled = true; b.innerHTML = `${I('download')} Importing… (about a minute)`; try { const x = await api('/api/mk/templates/import-klaviyo', { method: 'POST', body: '{}' }); toast(`${x.imported} templates imported`); reload(); } catch (e) { toast(e.message, 1); } b.disabled = false; b.innerHTML = `${I('download')} Re-import from Klaviyo`; };
+  draw();
 }
 
 
