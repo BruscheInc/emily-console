@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.97.4
+- Help desk side menu now matches Marketing: same font size, weight, colors, active style and icons.
+- Number boxes in the email editor show their numbers again (the spinner arrows and app styles were squashing them). Each social link's icon size now sits on its own "Icon size" row and shows the size in use.
+
 ## 4.97.3
 - Social links in emails: an **Icon size** slider (16–96px, or type a number) sets the size of every icon in the block, and each link can have its own size next to its icon. This works for your own icons and for Buzzin's.
 
