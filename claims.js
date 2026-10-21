@@ -640,6 +640,9 @@ async function afterSubmit(id) {
     const m = await claimMail(c.type === "other" ? "message_received" : "claim_received", c);
     const r = await core.sendNewEmail({ mailbox: def.support, to: c.email, subject: m.subject, text: m.text, html: m.html, who: "Returns portal", tags: ["claim", `claim-${c.type}`], name: c.customer_name });
     c = await patchClaim(id, { ticket_id: r.ticket_id }, "Confirmation emailed to the customer");
+    // A portal message is the customer asking us something: the ticket must sit in Pending for the team, even though the
+    // only email in it so far is our "we got your message" confirmation (which would otherwise file it under Sent).
+    if (c.type === "other" && r.ticket_id) await db(`UPDATE hd_tickets SET reopened_at = now() + interval '2 seconds', status='open' WHERE id=$1`, [r.ticket_id]).catch(() => {});
   } catch (e) { c = await patchClaim(id, {}, "Confirmation email failed: " + e.message); }
   if (c.type === "other") {
     core.slackPost(`✉️ ${c.order_name} (${def.name}) — customer message from the portal (${c.number}): "${String(c.description).slice(0, 200)}"${(c.photos || []).length ? ` · ${c.photos.length} photo(s)` : ""} · reply from the ticket in Buzzin`).catch(() => {});
@@ -856,7 +859,16 @@ async function askInfo(id, { message } = {}, who) {
 async function rerun(id) { const c = await getClaim(id); if (!c) throw httpError(404, "Claim not found"); return review(c); }
 async function close(id, who) { const c = await getClaim(id); if (!c) throw httpError(404, "Claim not found"); if (!["pending", "info_requested"].includes(c.status)) throw httpError(400, `This claim is already ${c.status}.`); return patchClaim(id, { status: "closed", decided_by: who }, `Closed by ${who} (no action)`); }
 
-async function init() { try { await migrate(); } catch (e) { console.error("claims migrate:", e.message); } }
+async function init() {
+  try { await migrate(); } catch (e) { console.error("claims migrate:", e.message); }
+  // one-time: portal messages that landed under Sent (no reply from us yet) go back to Pending
+  try { if (!(await core.syncGet("portal_msgs_pending_v1"))) {
+    const r = await db(`UPDATE hd_tickets t SET reopened_at = now(), status='open' FROM hd_claims c
+      WHERE c.type='other' AND c.ticket_id = t.id AND t.status <> 'closed' AND t.last_inbound_at IS NULL
+        AND (t.reopened_at IS NULL OR t.reopened_at <= t.last_outbound_at)
+        AND (SELECT count(*) FROM hd_messages m WHERE m.ticket_id = t.id AND m.from_agent AND NOT coalesce(m.internal,false)) <= 1`);
+    await core.syncSet("portal_msgs_pending_v1", String(r.rowCount || 0), { at: new Date().toISOString() }); console.log(`📨 portal messages moved to Pending: ${r.rowCount || 0}`); } } catch (e) { console.error("portal msgs pending:", e.message); }
+}
 
 module.exports = { poAnswer, deliveredAt, claimedQty, init, menu, editOptions, editSearch, editSubmit, editCancel, claimStart, savePhoto, getPhoto, claimSubmit, list, counts, getClaim, approve, deny, askInfo, rerun, close, review,
   _t: { gates, menuFor, loadOrder, orderState, TYPE_LABEL, SUBTYPE_LABEL, RES_LABEL } };

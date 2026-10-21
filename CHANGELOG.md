@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.99.2
+- Messages customers send from the return portal ("Something else") now land in Pending. Before, the only email in the ticket was our automatic "we got your message" reply, so Buzzin filed it under Sent as if we'd already answered. Existing portal messages nobody has replied to were moved back to Pending.
+
 ## 4.99.1
 - Returns: store-credit refunds work again. Shopify now requires the "original payment" list even when the whole refund goes to store credit; Buzzin sent nothing there, so Shopify rejected every store-credit refund (e.g. LBO10846-R1). Nothing was refunded by the failed tries — press Refund now to finish them.
 
