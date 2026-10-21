@@ -7,7 +7,7 @@
 const FSTATUS = { draft: ['off', 'Draft'], test: ['blue', 'Test'], live: ['ok', 'Live'], paused: ['hon', 'Paused'] };
 const MSTATUS = { draft: ['off', 'Draft'], test: ['blue', 'Test'], live: ['ok', 'Live'] };
 const STEP = {
-  send_email: ['Email', 'mail', 'var(--blue)'], send_sms: ['Text', 'message', 'var(--clay)'], delay: ['Wait', 'clock', 'var(--muted)'], wait_for: ['Wait for something', 'hourglass', 'var(--muted)'],
+  send_email: ['Email', 'mail', 'var(--blue)'], send_sms: ['Text', 'message', 'var(--clay)'], delay: ['Time delay', 'clock', 'var(--muted)'], wait_for: ['Wait for something', 'hourglass', 'var(--muted)'],
   split: ['Conditional split', 'arrows-split', 'var(--ink)'], ab: ['A/B split', 'flask', 'var(--ink)'], update_profile: ['Update profile', 'user-edit', 'var(--honey-ink)'], list: ['List', 'list-details', 'var(--honey-ink)'],
   coupon: ['Create coupon', 'discount', 'var(--honey-ink)'], alert: ['Alert the team', 'bell', 'var(--muted)'], ticket: ['Create ticket', 'ticket', 'var(--muted)'], webhook: ['Webhook', 'webhook', 'var(--muted)'], end: ['End', 'player-stop', 'var(--muted)'] };
 const ADDABLE = ['send_email', 'send_sms', 'delay', 'wait_for', 'split', 'ab', 'update_profile', 'list', 'coupon', 'alert', 'ticket', 'webhook'];
@@ -90,7 +90,19 @@ async function editFlow(el, id) {
     .fx-ib{all:unset;cursor:pointer;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-size:19px;color:#3F3F46}.fx-ib:hover,.fx-ib.on{background:#F4F4F5}.fx-ib.on{color:#2563EB}
     .fx-panel{position:absolute;left:14px;top:14px;bottom:14px;width:440px;max-width:calc(100% - 28px);background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.10);z-index:3;display:flex;flex-direction:column;overflow:hidden}
     .fx-panel .fx-ph{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}.fx-panel .fx-ph .ic{width:36px;height:36px;border-radius:10px;background:#EEF2FF;display:inline-flex;align-items:center;justify-content:center;font-size:19px}
-    .fx-panel .fx-pb{flex:1;overflow-y:auto;padding:14px 18px}.fx-panel .fx-pf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+    .fx-panel .fx-pb{flex:1;overflow-y:auto;padding:14px 18px}
+    .fx-panel.narrow{width:290px}.fx-sec{padding:14px 0;border-bottom:1px solid var(--line)}.fx-sec:last-child{border-bottom:0}.fx-st{font-weight:700;font-size:15px;margin-bottom:8px}
+    .fx-ck{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:#52525B;margin-top:10px}.fx-ck b{color:#18181B;font-weight:600;font-size:14px}.fx-ck input{margin-top:3px;width:16px;height:16px;accent-color:#2563EB}
+    .fx-wd{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.fx-wd label{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:32px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:13px}.fx-wd label.on{background:#EFF6FF;border-color:#2563EB;color:#1D4ED8;font-weight:600}.fx-wd input{display:none}
+    .fx-phone{margin-top:10px;background:#F4F4F5;border-radius:14px;padding:14px}.fx-bub{display:inline-block;max-width:85%;background:#E4E4E7;color:#18181B;border-radius:18px 18px 18px 4px;padding:10px 14px;white-space:pre-wrap;font-size:14px;line-height:1.4}
+    .fx-info{display:flex;gap:8px;background:#EFF6FF;color:#1E3A8A;border:1px solid #BFDBFE;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-top:12px}
+    .fx-dv{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.fx-dv button{all:unset;cursor:pointer;width:32px;height:28px;display:inline-flex;align-items:center;justify-content:center}.fx-dv button.on{background:#F4F4F5}
+    .fx-pv{margin-top:10px;height:420px;background:#EDEDED;border-radius:10px;overflow:hidden;position:relative}.fx-pv iframe{position:absolute;left:50%;top:0;width:640px;height:1300px;border:0;background:#fff;transform:translateX(-50%) scale(.6);transform-origin:top center}
+    .fx-pv.m iframe{width:390px;transform:translateX(-50%) scale(.85)}.fx-pv .ld{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#A1A1AA;font-size:13px}.fx-open{position:absolute;left:14px;top:14px;z-index:3;all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .fx-ag{font-size:14px;color:#52525B;margin:14px 0 6px}.fx-ag:first-child{margin-top:0}
+    .fx-at{display:flex;align-items:center;gap:12px;padding:9px 8px;border-radius:10px;cursor:grab;user-select:none}.fx-at:hover{background:#F4F4F5}.fx-at .ic{width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:17px;background:#EEF2FF;color:#4F46E5}
+    .fx-at.data .ic{background:#FFF4E5;color:#C2410C}.fx-at.logic .ic{background:#F4F4F5;color:#3F3F46}.fx-at b{flex:1;font-weight:500;font-size:15px}.fx-at .gr{color:#A1A1AA}
+    .fl-drop{outline:2px dashed #2563EB;outline-offset:3px;background:#DBEAFE!important}.fl-dragging [data-plus]{background:#EFF6FF;border-color:#2563EB;color:#2563EB}.fx-panel .fx-pf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
   </style><div style="display:flex;flex-direction:column;height:100%">
   <div class="fx-top"><div class="fx-crumb"><a href="#flows">Flows</a><span style="color:#A1A1AA">/</span><button class="fx-name" id="flnmb" title="Rename">${esc(FL.name)} <i class="ti ti-chevron-down" style="font-size:14px"></i></button></div>
     <span class="fx-pill ${FL.status}" id="flstp">${esc((FSTATUS[FL.status] || [, FL.status])[1])}</span><button class="fx-ib" id="flmore" aria-label="More">${'<i class="ti ti-dots-vertical"></i>'}</button>
@@ -101,8 +113,9 @@ async function editFlow(el, id) {
   <div id="flprob"></div>
   <div style="flex:1;display:flex;min-height:0;position:relative">
     <div style="flex:1;min-width:0;overflow:hidden;position:relative;background:#F6F5F2;background-image:radial-gradient(#DCD9D2 1px,transparent 1px);background-size:18px 18px;cursor:grab;touch-action:none" id="flcanvas"></div>
+    <button class="fx-open hidden" id="flpopen" aria-label="Show actions"><i class="ti ti-layout-sidebar-left-expand"></i> Actions</button>
     <div class="fx-panel hidden" id="flpanel"><div class="fx-ph"><span class="ic" id="flpic"><i class="ti ti-player-play"></i></span><b style="font-size:18px;flex:1" id="flpt">Trigger</b><button class="fx-ib" id="flpx" aria-label="Close panel"><i class="ti ti-x"></i></button></div>
-      <div class="fx-pb"><div id="flleft"></div><div id="flright"></div></div><div class="fx-pf"><button class="btn" id="flpdone">Done</button></div></div></div></div>
+      <div class="fx-pb"><div id="flacts"></div><div id="flleft"></div><div id="flright"></div></div><div class="fx-pf"><button class="btn" id="flpdone">Done</button></div></div></div></div>
   <select id="flst" class="hidden" aria-hidden="true"><option value="draft">Draft</option><option value="test">Test</option><option value="live">Live</option><option value="paused">Paused</option></select>`;
   $('flst').value = FL.status;
   const mark = () => { fldirty = true; $('fldirty').classList.remove('hidden'); };
@@ -116,7 +129,9 @@ async function editFlow(el, id) {
     const probs = FL.problems || []; const msg = `Turn on "${FL.name}"?\n\nIt starts for everyone who ${trigText(FL.trigger, ctx()).replace(/^Joins/, 'joins').toLowerCase()} from now on. Messages still marked Draft are skipped; Test messages go only to the internal test list.${probs.length ? `\n\nFix first:\n• ${probs.join('\n• ')}` : ''}`;
     if (!confirm(msg)) return; const was = FL.status; FL.status = 'live'; await saveFlow(); if (FL.status !== 'live') FL.status = was; goBtn(); };
   $('flan').onclick = () => { FL.showStats = FL.showStats === false; $('flan').classList.toggle('on', FL.showStats !== false); drawCanvas(); };
-  $('flpx').onclick = $('flpdone').onclick = () => { SEL = null; PANEL = null; drawCanvas(); showPanel(); };
+  $('flpx').onclick = $('flpdone').onclick = () => { if (!SEL && PANEL !== 'trigger') PANEL = 'hidden'; else PANEL = null; SEL = null; drawCanvas(); showPanel(); };
+  $('flpopen').onclick = () => { PANEL = null; showPanel(); };
+  drawActions();
   $('flmore').onclick = () => (window.MK_KL || {}).menu($('flmore'), [
     ['Edit details', 'pencil', () => $('flnmb').click()],
     ['Status: Draft', 'circle', () => { FL.status = 'draft'; mark(); goBtn(); }], ['Status: Test (internal list only)', 'flask', () => { FL.status = 'test'; mark(); goBtn(); }], ['Status: Paused', 'player-pause', () => { FL.status = 'paused'; mark(); goBtn(); }],
@@ -132,11 +147,28 @@ async function editFlow(el, id) {
   PANEL = null; drawProblems(); drawLeft(); drawCanvas(); drawRight();
 }
 let PANEL = null;
+/* Actions, like Klaviyo: drag one onto a + in the flow (or click it, then click a +). */
+const ACT_GROUPS = [['Messages', 'msg', ['send_email', 'send_sms']], ['Data', 'data', ['update_profile', 'list', 'coupon', 'alert', 'ticket', 'webhook']], ['Logic', 'logic', ['delay', 'split', 'ab', 'wait_for']]];
+const ACT_NAME = { send_email: 'Email', send_sms: 'Text message', update_profile: 'Property update', list: 'List update', coupon: 'Coupon code', alert: 'Internal alert', ticket: 'Create ticket', webhook: 'Webhook', delay: 'Time delay', split: 'Conditional split', ab: 'A/B split', wait_for: 'Wait until' };
+let ARMED = null;
+function drawActions() {
+  const A = $('flacts'); if (!A) return;
+  A.innerHTML = ACT_GROUPS.map(([g, cls, types]) => `<div class="fx-ag">${g}</div>${types.map((t) => `<div class="fx-at ${cls}" draggable="true" data-act="${t}" title="Drag onto a + in the flow"><span class="ic"><i class="ti ti-${STEP[t][1]}"></i></span><b>${esc(ACT_NAME[t])}</b><i class="ti ti-grip-vertical gr"></i></div>`).join('')}`).join('')
+    + `<div style="font-size:12px;color:var(--muted);margin-top:14px">Drag an action onto a <b>+</b> in the flow. Or click it, then click the <b>+</b> where it goes. Click the Trigger card to change what starts the flow.</div>`;
+  A.querySelectorAll('[data-act]').forEach((t) => {
+    t.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', 'flstep:' + t.dataset.act); e.dataTransfer.effectAllowed = 'copy'; $('flcanvas').classList.add('fl-dragging'); });
+    t.addEventListener('dragend', () => $('flcanvas').classList.remove('fl-dragging'));
+    t.onclick = () => { ARMED = t.dataset.act; $('flcanvas').classList.add('fl-dragging'); toast(`Now click a + in the flow to add ${ACT_NAME[ARMED].toLowerCase()}`); };
+  });
+}
 /** One floating panel on the left, like Klaviyo: the trigger's settings, or the clicked step's details. */
 function showPanel() {
   const P = $('flpanel'); if (!P) return;
-  const open = !!(SEL && FL.graph.nodes[SEL]) || PANEL === 'trigger';
-  P.classList.toggle('hidden', !open); $('flleft').classList.toggle('hidden', !!SEL); $('flright').classList.toggle('hidden', !SEL);
+  const step = !!(SEL && FL.graph.nodes[SEL]), trig = !step && PANEL === 'trigger', acts = !step && !trig && PANEL !== 'hidden';
+  P.classList.toggle('hidden', PANEL === 'hidden' && !step); $('flpopen').classList.toggle('hidden', !(PANEL === 'hidden' && !step));
+  $('flacts').classList.toggle('hidden', !acts); $('flleft').classList.toggle('hidden', !trig); $('flright').classList.toggle('hidden', !step);
+  $('flpdone').parentNode.classList.toggle('hidden', acts); P.classList.toggle('narrow', acts);
+  if (acts) { $('flpt').textContent = 'Actions'; $('flpic').innerHTML = '<i class="ti ti-plus"></i>'; return; }
   if (SEL && FL.graph.nodes[SEL]) { const [l, ic, col] = STEP[FL.graph.nodes[SEL].type] || ['Step', 'circle', '']; $('flpt').textContent = `${l} details`; $('flpic').innerHTML = `<i class="ti ti-${ic}" style="color:${col}"></i>`; }
   else { $('flpt').textContent = 'Trigger'; $('flpic').innerHTML = '<i class="ti ti-player-play"></i>'; }
 }
@@ -183,7 +215,7 @@ function title(n) {
   switch (n.type) {
     case 'send_email': { const t = (FL.templates || []).find((x) => String(x.id) === String(c.template_id)); return c.subject || (t && (t.subject || t.name)) || 'Choose an email'; }
     case 'send_sms': return (c.body || 'Write the text').slice(0, 60);
-    case 'delay': return `${c.amount || 0} ${(c.amount == 1 ? (c.unit || 'days').replace(/s$/, '') : (c.unit || 'days'))}${c.until_time ? `, until ${c.until_time}` : ''}${c.weekdays && c.weekdays.length ? ' on ' + c.weekdays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join('/') : ''}`;
+    case 'delay': return `Wait ${c.amount || 0} ${(c.amount == 1 ? (c.unit || 'days').replace(/s$/, '') : (c.unit || 'days'))}${c.until_time ? `, until ${(() => { const [h, m] = c.until_time.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; })()}` : ''}${c.weekdays && c.weekdays.length ? ' on ' + c.weekdays.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join('/') : ''}`;
     case 'wait_for': return `${(FL.events || {})[c.event] || c.event || 'something'} within ${c.within_amount || 1} ${c.within_unit || 'days'}`;
     case 'split': return C().summarize(c.condition, ctx());
     case 'ab': return (c.variants || []).map((v, i) => `${String.fromCharCode(65 + i)} ${v.weight}%`).join(' · ');
@@ -215,7 +247,7 @@ function drawCanvas() {
     const n = g.nodes[id]; const [label, icon, color] = STEP[n.type] || [n.type, 'circle', 'var(--muted)'];
     const st = statFor(id); const ms = n.config && n.config.status;
     return `<div class="fnode" data-id="${id}" style="width:280px;background:#fff;border:${SEL === id ? '2px solid #2563EB' : '1px solid var(--line2)'};border-radius:12px;padding:10px 12px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04)${n.type === 'split' || n.type === 'ab' || n.type === 'wait_for' ? ';border-radius:22px' : ''}">
-      <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:${color}"><i class="ti ti-${icon}"></i>${esc(label.toUpperCase())}${ms ? `<span class="sp"></span>${pill(MSTATUS, ms)}` : ''}</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:${color}"><i class="ti ti-${icon}"></i>${esc(((n.type === 'send_email' || n.type === 'send_sms') && n.config && n.config.name ? n.config.name : label).toUpperCase())}${ms ? `<span class="sp"></span>${pill(MSTATUS, ms)}` : ''}</div>
       <div style="font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(title(n))}</div>
       ${FL.showStats !== false && (n.type === 'send_email' || n.type === 'send_sms') && ((FL.perf || {})[id] || {}).delivered ? (() => { const p = FL.perf[id]; return `<div style="display:flex;gap:10px;font-size:11.5px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)">${n.type === 'send_email' ? `<span title="Open rate">${I2('mail-opened')} ${pct(p.opened, p.delivered)}</span>` : ''}<span title="Click rate">${I2('click')} ${pct(p.clicked, p.delivered)}</span><span title="Placed order (revenue)">${I2('shopping-bag')} ${usd(p.revenue)}</span></div>`; })() : ''}
       ${st.done || st.waiting || Object.keys(st.sent).length ? `<div style="font-size:11.5px;color:var(--muted);margin-top:4px">${st.done ? fmtN(st.done) + ' passed' : ''}${st.waiting ? ` · ${fmtN(st.waiting)} here now` : ''}${Object.entries(st.sent).map(([k, v]) => ` · ${fmtN(v)} ${k}`).join('')}</div>` : ''}</div>`;
@@ -244,7 +276,12 @@ function drawCanvas() {
   $('flcanvas').querySelectorAll('.fnode').forEach((d) => d.onclick = () => { SEL = d.dataset.id; PANEL = null; drawCanvas(); drawRight(); });
   const tg = $('flcanvas').querySelector('[data-trig]'); if (tg) tg.onclick = () => { SEL = null; PANEL = 'trigger'; drawCanvas(); showPanel(); };
   $('flcanvas').querySelectorAll('[data-jump]').forEach((b) => b.onclick = () => { SEL = b.dataset.jump; drawCanvas(); drawRight(); centerOn(SEL); });
-  $('flcanvas').querySelectorAll('[data-plus]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); addMenu(b, b.dataset.plus, b.dataset.edge); });
+  $('flcanvas').querySelectorAll('[data-plus]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); if (ARMED) { const t = ARMED; ARMED = null; $('flcanvas').classList.remove('fl-dragging'); return insert(b.dataset.plus, b.dataset.edge, t); } addMenu(b, b.dataset.plus, b.dataset.edge); };
+    b.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; b.classList.add('fl-drop'); });
+    b.addEventListener('dragleave', () => b.classList.remove('fl-drop'));
+    b.addEventListener('drop', (e) => { e.preventDefault(); b.classList.remove('fl-drop'); $('flcanvas').classList.remove('fl-dragging'); const d = e.dataTransfer.getData('text/plain') || ''; if (d.indexOf('flstep:') === 0) insert(b.dataset.plus, b.dataset.edge, d.slice(7)); });
+  });
 }
 /* Canvas: drag the background to move around, scroll to pan, pinch or ⌘/Ctrl + scroll to zoom, like Klaviyo. */
 let VIEW = null;
@@ -255,7 +292,7 @@ function fitView() { const C = $('flcanvas'), st = $('flstage'); if (!C || !st) 
 function centerOn(id) { const C = $('flcanvas'), t = C && C.querySelector(`.fnode[data-id="${id}"]`); if (!t || !VIEW) return; const cr = C.getBoundingClientRect(), r = t.getBoundingClientRect();
   VIEW.x += cr.left + cr.width / 2 - (r.left + r.width / 2); VIEW.y += cr.top + cr.height / 2 - (r.top + r.height / 2); applyView(); }
 function wireCanvas(C) {
-  if (!VIEW || VIEW.flow !== FL.id) { const st = $('flstage'); VIEW = { flow: FL.id, z: 1, x: Math.max(0, (C.clientWidth - st.offsetWidth) / 2), y: 0 }; }
+  if (!VIEW || VIEW.flow !== FL.id) { const st = $('flstage'), pw = 310; VIEW = { flow: FL.id, z: 1, x: Math.max(pw, pw + (C.clientWidth - pw - st.offsetWidth) / 2), y: 0 }; }
   applyView();
   C.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); const r = C.getBoundingClientRect(); if (b.dataset.z === 'fit') return fitView(); zoomAt(VIEW.z * (b.dataset.z === 'in' ? 1.2 : 1 / 1.2), r.width / 2, r.height / 2); });
   if (C.__wired) return; C.__wired = true;   // the listeners below survive redraws
@@ -331,14 +368,36 @@ function drawRight() {
   const perfHtml = (n.type === 'send_email' || n.type === 'send_sms') ? perfSection(SEL, n.type) : '';
   const ms = `${fl2('Message status', `<select data-c="status" style="width:100%"><option value="draft">Draft — skipped</option><option value="test">Test — only the internal test list</option><option value="live">Live</option></select>`)}`;
   switch (n.type) {
-    case 'send_email': body = fl2('Email', `<select data-c="template_id" style="width:100%"><option value="">Choose…</option>${(FL.templates || []).map((t) => `<option value="${t.id}"${String(c.template_id) === String(t.id) ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>`, 'Edit emails in Email templates.') + (c.template_id ? `<a class="btn xs" style="margin-top:6px" href="#templates/${c.template_id}"><i class="ti ti-pencil"></i> Open this email</a>` : '') +
-      fl2('Subject (optional override)', `<input data-c="subject" type="text" value="${esc(c.subject || '')}" style="width:100%">`) + fl2('Preview text', `<input data-c="preview" type="text" value="${esc(c.preview || '')}" style="width:100%">`) + ms +
-      `<label style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" data-cb="smart_sending"${c.smart_sending !== false ? ' checked' : ''}> Smart sending (skip if emailed recently)</label>`; break;
-    case 'send_sms': body = fl2('Text', `<textarea data-c="body" rows="5" style="width:100%">${esc(c.body || '')}</textarea>`, 'Starts with the store name and ends with "Reply STOP to opt out" automatically.') + `<div id="smsc" style="font-size:12px;color:var(--muted);margin-top:4px"></div>` + ms +
-      `<label style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" data-cb="add_opt_out"${c.add_opt_out !== false ? ' checked' : ''}> Add the opt-out line</label>`; break;
-    case 'delay': body = `<div style="display:flex;gap:6px;align-items:end">${fl2('Wait', `<input data-c="amount" type="number" min="0" value="${c.amount || 0}" style="width:80px">`)}${fl2('', `<select data-c="unit"><option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option><option value="weeks">weeks</option></select>`)}</div>` +
-      fl2('Then until this time (their time zone)', `<input data-c="until_time" type="time" value="${esc(c.until_time || '')}">`, 'Leave empty to continue right after the wait.') +
-      fl2('Only on these days', `<div>${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => `<label style="display:inline-flex;gap:3px;margin-right:6px"><input type="checkbox" data-wd="${i}"${(c.weekdays || []).includes(i) ? ' checked' : ''}>${d}</label>`).join('')}</div>`, 'None checked = any day.'); break;
+    case 'send_email': { const tp = (FL.templates || []).find((t) => String(t.id) === String(c.template_id));
+      body = `<div class="fx-sec">${fl2('Email name', `<input data-c="name" type="text" value="${esc(c.name || '')}" placeholder="${esc((tp && tp.name) || 'Email')}" style="width:100%">`)}${ms}</div>%%PERF%%
+      <div class="fx-sec"><div class="fx-st">Subject and preview</div>${fl2('Subject line', `<input data-c="subject" type="text" value="${esc(c.subject || '')}" placeholder="${esc((tp && tp.subject) || 'From the email')}" style="width:100%">`, 'Leave empty to use the email’s own subject.')}
+        ${fl2('Preview text', `<input data-c="preview" type="text" value="${esc(c.preview || '')}" placeholder="${esc((tp && tp.preview) || '')}" style="width:100%">`)}</div>
+      <div class="fx-sec"><div style="display:flex;align-items:center;gap:6px"><div class="fx-st" style="flex:1;margin:0">Template</div>
+          <div class="fx-dv"><button data-dv="d" class="${FL.pv !== 'm' ? 'on' : ''}" aria-label="Desktop preview"><i class="ti ti-device-desktop"></i></button><button data-dv="m" class="${FL.pv === 'm' ? 'on' : ''}" aria-label="Mobile preview"><i class="ti ti-device-mobile"></i></button></div>
+          ${c.template_id ? `<a class="btn xs" href="#templates/${c.template_id}" target="_blank" rel="noopener">Edit</a><button class="btn xs" id="tplbig" aria-label="Open larger preview"><i class="ti ti-maximize"></i></button>` : ''}</div>
+        <select data-c="template_id" style="width:100%;margin-top:8px" aria-label="Email template"><option value="">Choose an email…</option>${(FL.templates || []).map((t) => `<option value="${t.id}"${String(c.template_id) === String(t.id) ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
+        <div class="fx-pv${FL.pv === 'm' ? ' m' : ''}" id="tplpv">${c.template_id ? '<div class="ld">Loading preview…</div>' : '<div class="ld">Pick an email to see it here.</div>'}</div></div>
+      <div class="fx-sec"><div class="fx-st">Settings</div>
+        <label class="fx-ck"><input type="checkbox" data-cb="smart_sending"${c.smart_sending !== false ? ' checked' : ''}><span><b>Skip recently emailed profiles</b><br>Smart sending skips anyone who got a marketing email in the last ${(FL.smart_hours || 16)} hours.</span></label>
+        <label class="fx-ck"><input type="checkbox" data-cb="utm"${c.utm !== false ? ' checked' : ''}><span><b>Enable UTM tracking</b><br>Store links get utm_source=buzzin, utm_medium=email and utm_campaign=this email’s name, for Shopify and Google Analytics.</span></label></div>
+      <div class="fx-sec"><div class="fx-st">Additional filters</div><div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">Only people who match these get this email; everyone else moves on to the next step.</div><div id="emfilt"></div></div>`; break; }
+    case 'send_sms': body = `<div class="fx-sec">${fl2('Text message name', `<input data-c="name" type="text" value="${esc(c.name || '')}" placeholder="Text message" style="width:100%">`)}${ms}</div>%%PERF%%
+      <div class="fx-sec"><div style="display:flex;align-items:center"><div class="fx-st" style="flex:1;margin:0">Content</div><button class="btn xs" id="smsed">${FL.smsEdit ? 'Done' : 'Edit'}</button></div>
+        ${FL.smsEdit ? `<textarea data-c="body" rows="6" style="width:100%;margin-top:8px" aria-label="Text message">${esc(c.body || '')}</textarea><div style="font-size:12px;color:var(--muted);margin-top:4px">Use {{ first_name }}, {{ coupon }}, links… The store name goes first and "Reply STOP to opt out" goes last automatically.</div>
+          <label class="fx-ck"><input type="checkbox" data-cb="add_opt_out"${c.add_opt_out !== false ? ' checked' : ''}><span><b>Add the opt-out line</b></span></label>` : ''}
+        <div id="smsc" class="fx-phone"></div></div>
+      <div class="fx-sec"><div class="fx-st">Settings</div>
+        <label class="fx-ck"><input type="checkbox" data-cb="smart_sending"${c.smart_sending ? ' checked' : ''}><span><b>Turn on Smart Sending</b><br>Skip anyone who got a marketing text in the last ${(FL.smart_sms_hours || 24)} hours.</span></label>
+        <label class="fx-ck"><input type="checkbox" data-cb="utm"${c.utm !== false ? ' checked' : ''}><span><b>Enable UTM tracking</b><br>Store links get utm_source=buzzin, utm_medium=sms and utm_campaign=this text’s name.</span></label>
+        <div class="fx-info"><i class="ti ti-info-circle"></i> Quiet hours always apply to texts: nothing goes out overnight in the person’s time zone (Settings → Texts: quiet hours). Texts due then wait until morning.</div></div>
+      <div class="fx-sec"><div class="fx-st">Additional filters</div><div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">Only people who match these get this text; everyone else moves on to the next step.</div><div id="smfilt"></div></div>`; break;
+    case 'delay': { const t12 = (v) => { if (!v) return ''; const [h, m] = v.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+      body = `<div class="fx-sec"><div class="fx-st">Settings</div><label class="kp-lab" style="display:block;font-size:13px;margin-bottom:4px">Set time delay</label>
+        <div style="display:flex;gap:8px"><input data-c="amount" type="number" min="0" value="${c.amount == null ? 1 : c.amount}" style="flex:1" aria-label="Amount"><select data-c="unit" style="flex:1" aria-label="Unit"><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option><option value="weeks">Weeks</option></select></div>
+        <label class="fx-ck"><input type="checkbox" id="dlt"${c.until_time ? ' checked' : ''}><span><b>Delay until a specific time of day</b></span></label>
+        ${c.until_time ? `<div style="font-size:13px;margin:8px 0 4px">Select a time of day</div><div style="display:flex;gap:8px"><input data-c="until_time" type="time" value="${esc(c.until_time)}" style="flex:1" aria-label="Time of day"><select data-c="tz" style="flex:1" aria-label="Time zone"><option value="local">Recipient's local time zone</option><option value="store">Store time zone (Central)</option></select></div><div style="font-size:12px;color:var(--muted);margin-top:4px">They move on at ${t12(c.until_time)}.</div>` : ''}
+        <label class="fx-ck"><input type="checkbox" id="dlw"${(c.weekdays || []).length ? ' checked' : ''}><span><b>Delay until specific days of the week</b></span></label>
+        ${(c.weekdays || []).length ? `<div class="fx-wd">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => `<label class="${c.weekdays.includes(i) ? 'on' : ''}"><input type="checkbox" data-wd="${i}"${c.weekdays.includes(i) ? ' checked' : ''}>${d}</label>`).join('')}</div>` : ''}</div>`; break; }
     case 'wait_for': body = fl2('Wait until they', `<select data-c="event" style="width:100%">${Object.entries(FL.events || {}).map(([k, l]) => `<option value="${k}"${c.event === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`) + `<div style="display:flex;gap:6px;align-items:end">${fl2('For up to', `<input data-c="within_amount" type="number" min="1" value="${c.within_amount || 1}" style="width:80px">`)}${fl2('', `<select data-c="within_unit"><option value="hours">hours</option><option value="days">days</option></select>`)}</div>` +
       fl2('If it happens, go to', nextSelect('yes', n.yes, SEL)) + fl2('If time runs out, go to', nextSelect('no', n.no, SEL)); break;
     case 'split': body = `<div id="splitc" style="margin-top:8px"></div>` + fl2('Yes goes to', nextSelect('yes', n.yes, SEL)) + fl2('No goes to', nextSelect('no', n.no, SEL)); break;
@@ -351,12 +410,14 @@ function drawRight() {
     case 'webhook': body = fl2('Address (https)', `<input data-c="url" type="text" value="${esc(c.url || '')}" style="width:100%">`, 'Gets a POST with the flow name and the person.'); break;
   }
   const linear = !['split', 'wait_for', 'ab', 'end'].includes(n.type);
-  R.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><span class="sp"></span><button class="btn xs danger" id="ndel"><i class="ti ti-trash"></i> Remove step</button></div>${perfHtml}${body}${linear ? fl2('Then goes to', nextSelect('next', n.next, SEL), 'Pick an existing step to join that path.') : ''}`;
+  R.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><span class="sp"></span><button class="btn xs danger" id="ndel"><i class="ti ti-trash"></i> Remove step</button></div>${body.includes('%%PERF%%') ? body.replace('%%PERF%%', perfHtml) : perfHtml + body}${linear ? fl2('Then goes to', nextSelect('next', n.next, SEL), 'Pick an existing step to join that path.') : ''}`;
   showPanel();
   const pd = R.querySelector('#flpd'); if (pd) pd.onchange = async () => { FL.perfDays = Number(pd.value); try { FL.perf = (await api(`/api/mk/flows/${FL.id}/performance?days=${FL.perfDays}`)).steps; } catch (e) {} drawRight(); drawCanvas(); };
-  R.querySelectorAll('[data-c]').forEach((x) => { if (x.tagName === 'SELECT') x.value = c[x.dataset.c] == null ? '' : String(c[x.dataset.c]); x.oninput = x.onchange = () => { let v = x.value; if (x.type === 'number') v = Number(v); if (x.dataset.c === 'until_time' && !v) v = null; c[x.dataset.c] = v; mark(); if (x.dataset.c === 'body') smsCount(); if (['kind'].includes(x.dataset.c)) drawRight(); }; });
+  R.querySelectorAll('[data-c]').forEach((x) => { if (x.tagName === 'SELECT') { const v = c[x.dataset.c] == null ? '' : String(c[x.dataset.c]); if ([...x.options].some((o) => o.value === v)) x.value = v; } x.oninput = x.onchange = () => { let v = x.value; if (x.type === 'number') v = Number(v); if (x.dataset.c === 'until_time' && !v) v = null; c[x.dataset.c] = v; mark(); if (x.dataset.c === 'body') smsCount(); if (['kind'].includes(x.dataset.c) || (x.dataset.c === 'template_id')) drawRight(); }; });
   R.querySelectorAll('[data-cb]').forEach((x) => x.onchange = () => { c[x.dataset.cb] = x.checked; mark(); });
-  R.querySelectorAll('[data-wd]').forEach((x) => x.onchange = () => { c.weekdays = [...R.querySelectorAll('[data-wd]:checked')].map((y) => Number(y.dataset.wd)); mark(); });
+  R.querySelectorAll('[data-wd]').forEach((x) => x.onchange = () => { const w = [...R.querySelectorAll('[data-wd]:checked')].map((y) => Number(y.dataset.wd)); c.weekdays = w.length ? w : [x.dataset.wd].map(Number); mark(); drawRight(); });
+  const dlt = $('dlt'); if (dlt) dlt.onchange = () => { c.until_time = dlt.checked ? (c.until_time || '10:00') : null; mark(); drawRight(); };
+  const dlw = $('dlw'); if (dlw) dlw.onchange = () => { c.weekdays = dlw.checked ? [1, 2, 3, 4, 5] : []; mark(); drawRight(); };
   R.querySelectorAll('[data-next]').forEach((x) => x.onchange = () => { const k = x.dataset.next, v = x.value || null; if (k.startsWith('v')) c.variants[Number(k.slice(1))].next = v; else n[k] = v; window.__flMark(); });
   R.querySelectorAll('[data-vw]').forEach((x) => x.oninput = () => { c.variants[Number(x.dataset.vw)].weight = Number(x.value); mark(); });
   const aa = $('abadd'); if (aa) aa.onclick = () => { c.variants.push({ weight: 0, next: null }); window.__flMark(); drawRight(); };
@@ -365,9 +426,21 @@ function drawRight() {
   R.querySelectorAll('[data-orm]').forEach((x) => x.onclick = () => { c.ops.splice(Number(x.dataset.orm), 1); window.__flMark(); drawRight(); });
   const oa = $('opadd'); if (oa) oa.onclick = () => { c.ops = c.ops || []; c.ops.push({ key: '', value: '' }); drawRight(); };
   if (n.type === 'split') C().editor($('splitc'), c.condition || (c.condition = { match: 'all', conditions: [] }), ctx(), () => mark());
+  if (n.type === 'send_sms') { C().editor($('smfilt'), c.filter || (c.filter = { match: 'all', conditions: [] }), ctx(), () => mark()); const se = $('smsed'); if (se) se.onclick = () => { FL.smsEdit = !FL.smsEdit; drawRight(); }; }
+  if (n.type === 'send_email') {
+    C().editor($('emfilt'), c.filter || (c.filter = { match: 'all', conditions: [] }), ctx(), () => mark());
+    const tid = c.template_id, box = $('tplpv');
+    const load = async () => { if (!tid || !box) return; try { const r = await api(`/api/mk/templates/${tid}/thumb`); if (c.template_id !== tid || !$('tplpv')) return; const f = document.createElement('iframe'); f.title = 'Email preview'; f.setAttribute('sandbox', ''); f.srcdoc = r.html; box.innerHTML = ''; box.appendChild(f); } catch (e) { box.innerHTML = '<div class="ld">No preview</div>'; } };
+    load();
+    R.querySelectorAll('[data-dv]').forEach((b) => b.onclick = () => { FL.pv = b.dataset.dv; R.querySelectorAll('[data-dv]').forEach((x) => x.classList.toggle('on', x === b)); box.classList.toggle('m', FL.pv === 'm'); });
+    const big = $('tplbig'); if (big) big.onclick = async () => { const d = document.createElement('div'); d.className = 'tpv'; d.setAttribute('style', 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center');
+      d.innerHTML = `<div style="background:#fff;border-radius:14px;width:min(720px,94vw);height:90vh;display:flex;flex-direction:column;overflow:hidden"><div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)"><b style="flex:1">${esc(((FL.templates || []).find((t) => String(t.id) === String(tid)) || {}).name || 'Email')}</b><button class="btn xs" data-x aria-label="Close"><i class="ti ti-x"></i></button></div><iframe title="Email preview" sandbox="" style="flex:1;border:0;width:100%"></iframe></div>`;
+      document.body.appendChild(d); const close = () => d.remove(); d.onclick = (e) => { if (e.target === d) close(); }; d.querySelector('[data-x]').onclick = close;
+      try { d.querySelector('iframe').srcdoc = (await api(`/api/mk/templates/${tid}/thumb`)).html; } catch (e) {} };
+  }
   $('ndel').onclick = () => removeNode(SEL);
   if (n.type === 'send_sms') smsCount();
-  function smsCount() { const el = $('smsc'); if (!el) return; api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ store: FL.store, body: c.body, add_opt_out: c.add_opt_out }) }).then((r) => { el.innerHTML = `<div style="background:var(--panel2);border-radius:10px;padding:8px;color:var(--ink);white-space:pre-wrap">${esc(r.body)}</div>${r.chars} characters · ${r.segments} segment${r.segments === 1 ? '' : 's'} (${r.encoding})`; }).catch(() => {}); }
+  function smsCount() { const el = $('smsc'); if (!el) return; api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ store: FL.store, body: c.body, add_opt_out: c.add_opt_out }) }).then((r) => { if (!r || !r.body) throw 0; el.innerHTML = `<div class="fx-bub">${esc(r.body)}</div><div style="font-size:12px;color:var(--muted);margin-top:6px">${r.chars} characters · ${r.segments} segment${r.segments === 1 ? '' : 's'} (${r.encoding})</div>`; }).catch(() => { el.innerHTML = `<div class="fx-bub">${esc(c.body || 'Write the text')}</div>`; }); }
 }
 
 /* ---------- simulate / people ---------- */

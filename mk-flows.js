@@ -205,7 +205,7 @@ async function execNode(run, flow, node, p) {
   const msgAllowed = async (st) => st === "live" || (st === "test" && (run.test || (await onTestList(p))));
   switch (node.type) {
     case "end": return { next: null, note: "end" };
-    case "delay": { const until = delayUntil(c, p.timezone); return { next: node.next, wait: until, note: `wait until ${until.toISOString()}` }; }
+    case "delay": { const until = delayUntil(c, c.tz === "store" ? "America/Chicago" : p.timezone); return { next: node.next, wait: until, note: `wait until ${until.toISOString()}` }; }
     case "wait_for": {
       const w = ctx.waiting && ctx.waiting.node === run.node_id ? ctx.waiting : null;
       if (!w) { const until = delayUntil({ amount: c.within_amount || 1, unit: c.within_unit || "days" }, p.timezone); return { stay: true, wait: until, ctx: { waiting: { node: run.node_id, event: c.event, since: new Date().toISOString(), until: until.toISOString() } }, note: `waiting for ${c.event}` }; }
@@ -240,18 +240,21 @@ async function execNode(run, flow, node, p) {
       if (!(await msgAllowed(c.status || "draft"))) return { next: node.next, note: `skipped: message is ${c.status || "draft"}` };
       if (c.smart_sending !== false && await smartSkip(p.id, "email", S.smart_sending_hours.email)) return { next: node.next, note: "skipped: smart sending" };
       const tpl = await E().getTemplate(c.template_id); if (!tpl) return { next: node.next, note: "skipped: email template missing" };
+      if (c.filter && (c.filter.conditions || []).length && !(await SEG().matches(c.filter, p.id, { since: run.ctx && run.ctx.since }))) return { next: node.next, note: "skipped: didn't match this email's extra filters" };
       let cpn; try { cpn = await couponFor(flow, p, ctx, "email", { ...tpl, subject: c.subject || tpl.subject }, run); } catch (e) { return { next: node.next, note: `skipped: couldn't make a coupon code (${e.message})` }; }
       const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: cpn && cpn.coupon, coupons: cpn && cpn.coupons, items: (ctx.trigger_props && ctx.trigger_props.items) || [], checkout_url: ctx.trigger_props && ctx.trigger_props.checkout_url });
+      r.utm = c.utm !== false; r.campaign_name = r.campaign_name || c.name || flow.name;
       const row = await SEND().send({ store: flow.store, channel: "email", profile: p, msg: r, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `tpl:${tpl.id}`, test: run.test });
       return { next: node.next, note: `email ${row.status}${row.reason ? ": " + row.reason : ""}` };
     }
     case "send_sms": {
       if (!(await msgAllowed(c.status || "draft"))) return { next: node.next, note: `skipped: message is ${c.status || "draft"}` };
       if (c.smart_sending && await smartSkip(p.id, "sms", S.smart_sending_hours.sms)) return { next: node.next, note: "skipped: smart sending" };
+      if (c.filter && (c.filter.conditions || []).length && !(await SEG().matches(c.filter, p.id, { since: run.ctx && run.ctx.since }))) return { next: node.next, note: "skipped: didn't match this text's extra filters" };
       const SMS = require("./mk-sms");
       let cpn; try { cpn = await couponFor(flow, p, ctx, "sms", { body: c.body }, run); } catch (e) { return { next: node.next, note: `skipped: couldn't make a coupon code (${e.message})` }; }
       const body = await SMS.compose(flow.store, c, p, { coupon: cpn && cpn.coupon, checkout_url: ctx.trigger_props && ctx.trigger_props.checkout_url });
-      const row = await SEND().send({ store: flow.store, channel: "sms", profile: p, msg: { body, media: c.media || null }, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `sms:${flow.id}:${run.node_id}`, test: run.test });
+      const row = await SEND().send({ store: flow.store, channel: "sms", profile: p, msg: { body, media: c.media || null, utm: c.utm !== false, campaign_name: c.name || flow.name }, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `sms:${flow.id}:${run.node_id}`, test: run.test });
       if (row.status === "deferred") return { stay: true, wait: new Date(Date.now() + 30 * 60e3), note: "quiet hours — trying again in 30 minutes" };
       return { next: node.next, note: `text ${row.status}${row.reason ? ": " + row.reason : ""}` };
     }
@@ -481,7 +484,7 @@ async function simulate(flowId, profileId) {
     const n = f.graph.nodes[id]; if (!n) break;
     const c = n.config || {};
     let note = "", next = n.next;
-    if (n.type === "delay") { t = delayUntil(c, p.timezone, t); note = `waits until ${t.toLocaleString("en-US", { timeZone: p.timezone || "America/Chicago" })}`; }
+    if (n.type === "delay") { t = delayUntil(c, c.tz === "store" ? "America/Chicago" : p.timezone, t); note = `waits until ${t.toLocaleString("en-US", { timeZone: p.timezone || "America/Chicago" })}`; }
     else if (n.type === "split") { const ok = await SEG().matches(c.condition, p.id, { since }); next = ok ? n.yes : n.no; note = ok ? "yes (as of today)" : "no (as of today)"; }
     else if (n.type === "wait_for") { next = n.no; note = "assumes it doesn't happen"; }
     else if (n.type === "ab") { next = (c.variants || [])[0] && c.variants[0].next; note = "path A shown"; }

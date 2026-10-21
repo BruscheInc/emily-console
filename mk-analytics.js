@@ -43,7 +43,7 @@ function withUtm(url, { channel, name }) {
 }
 async function link(send, url) { const c = code(); await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,$2,$3)`, [c, send.id, url]); return `${brandBase(send.store)}/l/${c}`; }
 /** Email: wrap links (not unsubscribe/preferences/mailto) and add the open pixel. */
-async function instrumentEmail(html, send, name) {
+async function instrumentEmail(html, send, name, opts = {}) {
   const seen = new Map();
   const out = [];
   let last = 0;
@@ -51,7 +51,7 @@ async function instrumentEmail(html, send, name) {
   while ((m = re.exec(html))) {
     const url = m[1].replace(/&amp;/g, "&");
     if (/\/mk\/(u|p)\//.test(url)) continue;
-    if (!seen.has(url)) seen.set(url, await link(send, withUtm(url, { channel: "email", name })));
+    if (!seen.has(url)) seen.set(url, await link(send, opts.utm === false ? url : withUtm(url, { channel: "email", name })));
     out.push(html.slice(last, m.index), `href="${seen.get(url)}"`); last = m.index + m[0].length;
   }
   out.push(html.slice(last));
@@ -60,10 +60,10 @@ async function instrumentEmail(html, send, name) {
   return /<\/body>/i.test(body) ? body.replace(/<\/body>/i, `${px}</body>`) : body + px;
 }
 /** Text: swap each link for a short tracked one. */
-async function instrumentSms(text, send, name) {
+async function instrumentSms(text, send, name, opts = {}) {
   const urls = [...new Set(String(text).match(/https?:\/\/[^\s]+/g) || [])];
   let t = String(text);
-  for (const u of urls) t = t.split(u).join(await link(send, withUtm(u, { channel: "sms", name })));
+  for (const u of urls) t = t.split(u).join(await link(send, opts.utm === false ? u : withUtm(u, { channel: "sms", name })));
   return t;
 }
 

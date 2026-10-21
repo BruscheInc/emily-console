@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.96.0
+Flow builder: Actions panel and Klaviyo-style step details.
+- **Actions panel:** opens with the flow. Messages (Email, Text message), Data (Property update, List update, Coupon code, Internal alert, Create ticket, Webhook) and Logic (Time delay, Conditional split, A/B split, Wait until). Drag an action onto a + in the flow, or click it and then click a +. Close the panel to see the whole flow, and reopen it from the Actions button.
+- **Email details:** email name and status, performance, subject and preview text, the template with a live desktop or mobile preview (Edit opens it, ⤢ shows it full size), Settings (skip recently emailed profiles, UTM tracking on or off), and additional filters for who gets this email.
+- **Text message details:** name and status, performance, content shown as a text bubble with Edit, Smart Sending, UTM tracking, a note on quiet hours, and additional filters.
+- **Time delay details:** set the delay, optionally "until a specific time of day" (the person's time zone or store time), and optionally "on specific days of the week". Cards read "Wait 14 days, until 10:00 AM".
+- Message cards show the step's own name, like "Welcome Email".
+
 ## 4.95.1
 - Flow canvas: each split now has a connecting line. A line comes down from the split, runs across, and drops into each branch, with blue "Yes" and grey "No" labels like Klaviyo, so you can see where every path goes. A/B splits and "wait until" steps get the same lines.
 

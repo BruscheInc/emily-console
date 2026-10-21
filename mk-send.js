@@ -79,8 +79,8 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
   if (!row || status !== "sent") return row || dup;
   // Tracked links and the open pixel are added only to messages that really go out.
   const T = require("./mk-analytics");
-  if (channel === "email" && msg.html) msg = { ...msg, html: await T.instrumentEmail(msg.html, row, msg.campaign_name || null) };
-  if (channel === "sms" && msg.body) msg = { ...msg, body: await T.instrumentSms(msg.body, row, msg.campaign_name || null) };
+  if (channel === "email" && msg.html) msg = { ...msg, html: await T.instrumentEmail(msg.html, row, msg.campaign_name || null, { utm: msg.utm }) };
+  if (channel === "sms" && msg.body) msg = { ...msg, body: await T.instrumentSms(msg.body, row, msg.campaign_name || null, { utm: msg.utm }) };
   try {
     if (channel === "email") {
       const providerId = await require("./mk-ses").sendEmail({ store, to, msg, sendId: row.id });
