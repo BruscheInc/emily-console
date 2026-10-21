@@ -860,7 +860,7 @@ async function refund(rec, { force = false, who = "auto", reason = null } = {}) 
   if (net > 0) {
     if (credit) {
       if (!rec.customer_id) throw new Error("Order has no customer account — can't issue store credit");
-      input.financialTransfer = { issueRefund: { refundMethods: [{ storeCreditRefund: { amount: { amount: net.toFixed(2), currencyCode: currency } } }] } };
+      input.financialTransfer = { issueRefund: { orderTransactions: [], refundMethods: [{ storeCreditRefund: { amount: { amount: net.toFixed(2), currencyCode: currency } } }] } };
       bonus = round2((net * Number(s.store_credit_bonus_pct)) / 100);
     } else {
       let left = net; const txs = [];
