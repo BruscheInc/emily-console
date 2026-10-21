@@ -137,8 +137,23 @@ function decorate(quick) {
   tb.addEventListener('mousedown', (e) => { if (!e.target.closest('[data-a="move"]')) e.preventDefault(); });   // keep text selection, but let the move handle start a drag
   tb.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; e.preventDefault(); e.stopPropagation(); toolAction(b.dataset.a, sel); });
   const mv = tb.querySelector('[data-a="move"]');
-  mv.addEventListener('dragstart', (e) => { if (ST.editing) stopEdit(true); DRAG = { kind: sel.kind === 'section' ? 'move-section' : 'move', id: sel.id }; e.dataTransfer.setData('text/plain', 'bz'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setDragImage(el, 20, 20); } catch (_) {} });
-  mv.addEventListener('dragend', () => { DRAG = null; hideDrop(); });
+  // Move by press-and-drag on the handle (pointer events — works reliably inside the canvas frame, unlike native drag and drop)
+  mv.removeAttribute('draggable');
+  mv.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); if (ST.editing) stopEdit(true);
+    const g = { kind: sel.kind === 'section' ? 'move-section' : 'move', id: sel.id }; let moved = false; const x0 = e.clientX, y0 = e.clientY;
+    try { mv.setPointerCapture(e.pointerId); } catch (_) {}
+    const ghost = d.createElement('div'); ghost.className = 'bzo-ghost'; ghost.textContent = name; ghost.style.display = 'none'; o.appendChild(ghost);
+    const fake = (ev) => ({ clientX: ev.clientX, clientY: ev.clientY, preventDefault() {} });
+    const onMove = (ev) => { if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return; moved = true; DRAG = g; d.body.classList.add('bz-dragging');
+      const sy = d.scrollingElement.scrollTop; Object.assign(ghost.style, { display: 'block', left: (ev.clientX + 12) + 'px', top: (ev.clientY + sy + 12) + 'px' });
+      const vh = d.defaultView.innerHeight; if (ev.clientY < 40) d.scrollingElement.scrollTop -= 14; else if (ev.clientY > vh - 40) d.scrollingElement.scrollTop += 14;
+      onDragOver(fake(ev)); };
+    const end = (ev, ok) => { mv.removeEventListener('pointermove', onMove); mv.removeEventListener('pointerup', up); mv.removeEventListener('pointercancel', cancel); ghost.remove(); d.body.classList.remove('bz-dragging');
+      if (moved && ok) { DRAG = g; onDrop(fake(ev)); } else { DRAG = null; hideDrop(); } };
+    const up = (ev) => end(ev, true), cancel = (ev) => end(ev, false);
+    mv.addEventListener('pointermove', onMove); mv.addEventListener('pointerup', up); mv.addEventListener('pointercancel', cancel);
+  });
   if (info.node.note) { const n = d.createElement('div'); n.className = 'bzo-note'; n.textContent = '💬 ' + info.node.note; Object.assign(n.style, { left: (left + r.width + 8) + 'px', top: top + 'px' }); o.appendChild(n); }
   // image / video: drag the side handles to resize
   if (sel.kind === 'block' && ['image', 'video'].includes(info.node.type)) {
@@ -443,6 +458,9 @@ const FRAME_CSS = `html,body{margin:0;min-height:100%}body{position:relative}
 .bzo-box{position:absolute;border:2px solid #2F6FEB;pointer-events:none;box-sizing:border-box}
 .bzo-box.sec{border:2px dashed #2F6FEB}
 .bzo-tag{position:absolute;background:#2F6FEB;color:#fff;font:600 11.5px/18px Helvetica,Arial,sans-serif;padding:1px 8px;border-radius:5px 5px 0 0;pointer-events:none;white-space:nowrap}
+.bzo-ghost{position:absolute;z-index:60;pointer-events:none;background:#2F6FEB;color:#fff;font:600 12px Helvetica,Arial,sans-serif;padding:5px 10px;border-radius:7px;box-shadow:0 6px 18px rgba(20,30,60,.25)}
+.bz-dragging,.bz-dragging *{cursor:grabbing!important;user-select:none!important}
+.bzo-tools [data-a="move"]{cursor:grab;touch-action:none}
 .bzo-tools{position:absolute;display:flex;flex-direction:column;gap:2px;background:#fff;border:1px solid #D9DCE3;border-radius:10px;padding:4px;box-shadow:0 4px 14px rgba(20,30,60,.14)}
 .bzo-tools button{width:30px;height:30px;border:0;background:transparent;border-radius:7px;color:#2B2F38;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .bzo-tools button:hover{background:#EEF2FA}.bzo-tools button[data-a="del"]:hover{background:#FDECEC;color:#C62828}.bzo-tools button[data-a="move"],.bzo-tools [data-a="move"]{cursor:grab}
