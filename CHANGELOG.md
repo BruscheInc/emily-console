@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.95.0
+Flow builder laid out like Klaviyo.
+- **Top bar:** Flows / flow name (click to rename), status, a ⋮ menu (Edit details, status, Trigger settings, Clone, Copy ID, Archive, Delete), and buttons for analytics on steps, people in the flow, Preview, Save and **Review and turn on** (or **Turn off**).
+- **One floating panel** on the left of the canvas, like Klaviyo. Click the Trigger card for its settings, or any step for its details. Close it to see the whole flow.
+- **Step analytics:** email and text steps show a Performance box (last 7 / 30 / 90 / 365 days) with Recipients, Open rate, Click rate, Placed order (revenue and orders), Unsubscribe rate and Bounce rate. Their cards show open, click and revenue right on the canvas; the chart button hides or shows those numbers.
+- **Conditional splits** use Klaviyo's condition builder: pick a dimension (what someone has done or not done, properties about someone, location, list, segment, can or cannot receive marketing, sizes bought, customer service), then the details. Conditions are joined by AND, and each one can have OR options. The same builder is used for segments and for a flow's entry and exit rules.
+- Fix: send counts in reports were too high when one send had both an open and a click.
+
 ## 4.94.0
 Flows laid out like Klaviyo.
 - **Flows list:** search, a Status filter and a Metric period (7 / 30 / 90 / 365 days). Each row shows the flow name with its trigger underneath, Type (email / text icons), Status, Last updated, Revenue and Revenue per recipient. Every row has a ⋮ menu: Edit details, Clone, Copy ID, Archive, Delete. Tick boxes archive or delete several at once.

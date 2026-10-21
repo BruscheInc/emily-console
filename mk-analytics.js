@@ -148,7 +148,7 @@ async function sendsReport({ store, kind }) {
   // per campaign or per flow: sent, opened, clicked, unsubscribed (human only)
   const col = kind === "flow" ? "flow_id" : "campaign_id";
   const a = []; const sw = store ? ` AND s.store=$${a.push(store) && a.length}` : "";
-  return (await db(`SELECT s.${col} id, count(*) FILTER (WHERE s.status='sent')::int sent, count(*)::int total,
+  return (await db(`SELECT s.${col} id, count(DISTINCT s.id) FILTER (WHERE s.status='sent')::int sent, count(DISTINCT s.id)::int total,
       count(DISTINCT s.id) FILTER (WHERE e.type='opened')::int opened, count(DISTINCT s.id) FILTER (WHERE e.type='clicked')::int clicked, count(DISTINCT s.id) FILTER (WHERE e.type='unsubscribed')::int unsubscribed
     FROM mk_sends s LEFT JOIN mk_send_events e ON e.send_id=s.id AND NOT e.machine WHERE s.${col} IS NOT NULL AND NOT COALESCE((s.meta->>'test')::boolean,false)${sw} GROUP BY 1`, a)).rows;
 }
@@ -187,4 +187,21 @@ async function revenueBy(kind, days = 7) {
   for (const r of rec) (out[r.id] = out[r.id] || { revenue: 0, orders: 0, recipients: 0 }).recipients = r.n;
   return out;
 }
-module.exports = { revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };
+/** Each message step of one flow over N days: recipients, delivered, opens, clicks, unsubscribes, orders and revenue (click credit). */
+async function flowSteps(flowId, days = 30) {
+  days = Math.min(730, Math.max(1, Number(days) || 30)); const S = await MK().settings();
+  const sends = (await db(`SELECT s.flow_step step, s.channel, count(DISTINCT s.id) FILTER (WHERE s.status='sent')::int delivered, count(DISTINCT s.profile_id) FILTER (WHERE s.status='sent')::int recipients,
+      count(DISTINCT s.id) FILTER (WHERE e.type='opened')::int opened, count(DISTINCT s.id) FILTER (WHERE e.type='clicked')::int clicked, count(DISTINCT s.id) FILTER (WHERE e.type='unsubscribed')::int unsubscribed,
+      count(DISTINCT s.id) FILTER (WHERE e.type='bounced')::int bounced
+    FROM mk_sends s LEFT JOIN mk_send_events e ON e.send_id=s.id AND NOT e.machine
+    WHERE s.flow_id=$1 AND s.created_at > now() - ($2 || ' days')::interval AND NOT COALESCE((s.meta->>'test')::boolean,false) GROUP BY 1,2`, [Number(flowId), days])).rows;
+  const orders = (await db(`WITH o AS (SELECT e.profile_id, e.at, COALESCE(e.value,0) value FROM mk_events e WHERE e.type='placed_order' AND e.at > now() - ($1 || ' days')::interval AND NOT COALESCE((e.props->>'cancelled')::boolean,false)),
+      cr AS (SELECT o.*, k.props kp FROM o JOIN LATERAL (SELECT k.props FROM mk_events k WHERE k.profile_id=o.profile_id AND k.type IN ('clicked_email','clicked_sms') AND k.at <= o.at
+             AND k.at > o.at - ((CASE WHEN k.type='clicked_email' THEN $2::int ELSE $3::int END) || ' days')::interval ORDER BY k.at DESC LIMIT 1) k ON true)
+    SELECT kp->>'flow_step' step, count(*)::int orders, COALESCE(sum(value),0)::float revenue FROM cr WHERE kp->>'flow_id' = $4 GROUP BY 1`, [days, S.attribution.email_click_days, S.attribution.sms_click_days, String(flowId)])).rows;
+  const out = {};
+  for (const r of sends) out[r.step] = { ...r, orders: 0, revenue: 0 };
+  for (const r of orders) (out[r.step] = out[r.step] || { step: r.step, delivered: 0, recipients: 0, opened: 0, clicked: 0, unsubscribed: 0, bounced: 0 }), out[r.step].orders = r.orders, out[r.step].revenue = r.revenue;
+  return out;
+}
+module.exports = { flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };

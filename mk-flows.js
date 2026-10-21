@@ -516,6 +516,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
         versions: (await db(`SELECT version, by_user, created_at FROM mk_flow_versions WHERE flow_id=$1 ORDER BY version DESC LIMIT 20`, [f.id])).rows }); } catch (e) { fail(res, e); }
   });
   app.put("/api/mk/flows/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await save(req.params.id, req.body || {}, actorOf(req), isAdmin(req)); res.json({ ...f, problems: validate(f.graph) }); } catch (e) { fail(res, e); } });
+  app.get("/api/mk/flows/:id/performance", async (req, res) => { if (!guard(req, res)) return; try { res.json({ days: Number(req.query.days) || 30, steps: await require("./mk-analytics").flowSteps(req.params.id, req.query.days || 30) }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/flows/:id/clone", async (req, res) => { if (!guard(req, res)) return; try { const src = await get(req.params.id); if (!src) return res.status(404).json({ error: "not found" });
       const f = (await db(`INSERT INTO mk_flows (store, name, trigger, graph, source, updated_by, entry_filter, exit_filter, reentry, notes) VALUES ($1,$2,$3,$4,'buzzin',$5,$6,$7,$8,$9) RETURNING *`,
         [src.store, `${src.name} (copy)`.slice(0, 150), JSON.stringify(src.trigger), JSON.stringify(src.graph), actorOf(req), src.entry_filter ? JSON.stringify(src.entry_filter) : null, src.exit_filter ? JSON.stringify(src.exit_filter) : null, JSON.stringify(src.reentry || { mode: "once" }), src.notes])).rows[0];

@@ -8,7 +8,7 @@ const FSTATUS = { draft: ['off', 'Draft'], test: ['blue', 'Test'], live: ['ok', 
 const MSTATUS = { draft: ['off', 'Draft'], test: ['blue', 'Test'], live: ['ok', 'Live'] };
 const STEP = {
   send_email: ['Email', 'mail', 'var(--blue)'], send_sms: ['Text', 'message', 'var(--clay)'], delay: ['Wait', 'clock', 'var(--muted)'], wait_for: ['Wait for something', 'hourglass', 'var(--muted)'],
-  split: ['Yes/no split', 'arrows-split', 'var(--ink)'], ab: ['A/B split', 'flask', 'var(--ink)'], update_profile: ['Update profile', 'user-edit', 'var(--honey-ink)'], list: ['List', 'list-details', 'var(--honey-ink)'],
+  split: ['Conditional split', 'arrows-split', 'var(--ink)'], ab: ['A/B split', 'flask', 'var(--ink)'], update_profile: ['Update profile', 'user-edit', 'var(--honey-ink)'], list: ['List', 'list-details', 'var(--honey-ink)'],
   coupon: ['Create coupon', 'discount', 'var(--honey-ink)'], alert: ['Alert the team', 'bell', 'var(--muted)'], ticket: ['Create ticket', 'ticket', 'var(--muted)'], webhook: ['Webhook', 'webhook', 'var(--muted)'], end: ['End', 'player-stop', 'var(--muted)'] };
 const ADDABLE = ['send_email', 'send_sms', 'delay', 'wait_for', 'split', 'ab', 'update_profile', 'list', 'coupon', 'alert', 'ticket', 'webhook'];
 const nid = () => 'n' + Math.random().toString(16).slice(2, 10);
@@ -81,33 +81,68 @@ function trigText(t, ctx = {}) {
 let FL = null, SEL = null, fldirty = false;
 async function editFlow(el, id) {
   FL = await api('/api/mk/flows/' + id); SEL = null; fldirty = false;
+  FL.perfDays = 30; try { FL.perf = (await api(`/api/mk/flows/${id}/performance?days=30`)).steps; } catch (e) { FL.perf = {}; }
   el.style.padding = '0';
-  el.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
-  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid var(--line)">
-    <a href="#flows" class="btn xs" aria-label="Back"><i class="ti ti-arrow-left"></i></a><input id="flnm" type="text" value="${esc(FL.name)}" aria-label="Flow name" style="font-weight:700;min-width:220px">
-    <select id="flst" aria-label="Status"><option value="draft">Draft</option><option value="test">Test (internal list only)</option><option value="live">Live</option><option value="paused">Paused</option></select>
-    <span class="pill off">${FL.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'}</span><span class="sp"></span><span class="pill hon hidden" id="fldirty">Unsaved</span>
-    <button class="btn" id="flsim"><i class="ti ti-player-play"></i> Simulate</button><button class="btn" id="flruns"><i class="ti ti-users"></i> People</button><button class="btn danger" id="fldel"><i class="ti ti-trash"></i></button><button class="btn pri" id="flsave">Save</button></div>
+  el.innerHTML = `<style>
+    .fx-top{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}.fx-crumb{display:flex;align-items:center;gap:6px;font-size:17px;min-width:0}.fx-crumb a{color:#52525B;text-decoration:none}.fx-crumb a:hover{text-decoration:underline}
+    .fx-name{all:unset;cursor:pointer;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px}.fx-name:hover{color:#2563EB}
+    .fx-pill{display:inline-block;background:#F4F4F5;border-radius:8px;padding:4px 10px;font-weight:500;font-size:13px}.fx-pill.live{background:#DCFCE7;color:#166534}.fx-pill.paused{background:#FEE2E2;color:#991B1B}.fx-pill.test{background:#DBEAFE;color:#1E40AF}
+    .fx-ib{all:unset;cursor:pointer;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-size:19px;color:#3F3F46}.fx-ib:hover,.fx-ib.on{background:#F4F4F5}.fx-ib.on{color:#2563EB}
+    .fx-panel{position:absolute;left:14px;top:14px;bottom:14px;width:440px;max-width:calc(100% - 28px);background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.10);z-index:3;display:flex;flex-direction:column;overflow:hidden}
+    .fx-panel .fx-ph{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}.fx-panel .fx-ph .ic{width:36px;height:36px;border-radius:10px;background:#EEF2FF;display:inline-flex;align-items:center;justify-content:center;font-size:19px}
+    .fx-panel .fx-pb{flex:1;overflow-y:auto;padding:14px 18px}.fx-panel .fx-pf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+  </style><div style="display:flex;flex-direction:column;height:100%">
+  <div class="fx-top"><div class="fx-crumb"><a href="#flows">Flows</a><span style="color:#A1A1AA">/</span><button class="fx-name" id="flnmb" title="Rename">${esc(FL.name)} <i class="ti ti-chevron-down" style="font-size:14px"></i></button></div>
+    <span class="fx-pill ${FL.status}" id="flstp">${esc((FSTATUS[FL.status] || [, FL.status])[1])}</span><button class="fx-ib" id="flmore" aria-label="More">${'<i class="ti ti-dots-vertical"></i>'}</button>
+    <span class="sp"></span><span class="pill hon hidden" id="fldirty">Unsaved</span>
+    <button class="fx-ib${FL.showStats === false ? '' : ' on'}" id="flan" aria-label="Show analytics on steps" title="Show analytics on steps"><i class="ti ti-chart-bar"></i></button>
+    <button class="fx-ib" id="flruns" aria-label="People in this flow" title="People in this flow"><i class="ti ti-users"></i></button>
+    <button class="btn" id="flsim"><i class="ti ti-eye"></i> Preview</button><button class="btn" id="flsave">Save</button><button class="btn pri" id="flgo"></button></div>
   <div id="flprob"></div>
-  <div style="flex:1;display:flex;min-height:0">
-    <div style="width:330px;flex:none;border-right:1px solid var(--line);background:#fff;overflow-y:auto;padding:14px" id="flleft"></div>
+  <div style="flex:1;display:flex;min-height:0;position:relative">
     <div style="flex:1;min-width:0;overflow:hidden;position:relative;background:#F6F5F2;background-image:radial-gradient(#DCD9D2 1px,transparent 1px);background-size:18px 18px;cursor:grab;touch-action:none" id="flcanvas"></div>
-    <div style="width:360px;flex:none;border-left:1px solid var(--line);background:#fff;overflow-y:auto;padding:14px" id="flright"></div></div></div>`;
+    <div class="fx-panel hidden" id="flpanel"><div class="fx-ph"><span class="ic" id="flpic"><i class="ti ti-player-play"></i></span><b style="font-size:18px;flex:1" id="flpt">Trigger</b><button class="fx-ib" id="flpx" aria-label="Close panel"><i class="ti ti-x"></i></button></div>
+      <div class="fx-pb"><div id="flleft"></div><div id="flright"></div></div><div class="fx-pf"><button class="btn" id="flpdone">Done</button></div></div></div></div>
+  <select id="flst" class="hidden" aria-hidden="true"><option value="draft">Draft</option><option value="test">Test</option><option value="live">Live</option><option value="paused">Paused</option></select>`;
   $('flst').value = FL.status;
   const mark = () => { fldirty = true; $('fldirty').classList.remove('hidden'); };
   window.__flMark = () => { mark(); drawCanvas(); };
-  $('flnm').oninput = () => { FL.name = $('flnm').value; mark(); };
-  $('flst').onchange = () => { FL.status = $('flst').value; mark(); };
+  const goBtn = () => { $('flgo').textContent = FL.status === 'live' ? 'Turn off' : 'Review and turn on'; const p = $('flstp'); p.className = 'fx-pill ' + FL.status; p.textContent = (FSTATUS[FL.status] || [, FL.status])[1]; };
+  window.__flStatus = goBtn; goBtn();
+  $('flnmb').onclick = () => { const n = prompt('Flow name', FL.name); if (!n || n === FL.name) return; FL.name = n.slice(0, 150); $('flnmb').innerHTML = `${esc(FL.name)} <i class="ti ti-chevron-down" style="font-size:14px"></i>`; mark(); };
   $('flsave').onclick = saveFlow;
-  $('fldel').onclick = async () => { if (!confirm(`Delete the flow "${FL.name}"? Anyone in it leaves the flow. This can't be undone.`)) return; try { await api('/api/mk/flows/' + FL.id, { method: 'DELETE' }); fldirty = false; location.hash = '#flows'; } catch (e) { toast(e.message, 1); } };
+  $('flgo').onclick = async () => {
+    if (FL.status === 'live') { FL.status = 'paused'; await saveFlow(); goBtn(); return; }
+    const probs = FL.problems || []; const msg = `Turn on "${FL.name}"?\n\nIt starts for everyone who ${trigText(FL.trigger, ctx()).replace(/^Joins/, 'joins').toLowerCase()} from now on. Messages still marked Draft are skipped; Test messages go only to the internal test list.${probs.length ? `\n\nFix first:\n• ${probs.join('\n• ')}` : ''}`;
+    if (!confirm(msg)) return; const was = FL.status; FL.status = 'live'; await saveFlow(); if (FL.status !== 'live') FL.status = was; goBtn(); };
+  $('flan').onclick = () => { FL.showStats = FL.showStats === false; $('flan').classList.toggle('on', FL.showStats !== false); drawCanvas(); };
+  $('flpx').onclick = $('flpdone').onclick = () => { SEL = null; PANEL = null; drawCanvas(); showPanel(); };
+  $('flmore').onclick = () => (window.MK_KL || {}).menu($('flmore'), [
+    ['Edit details', 'pencil', () => $('flnmb').click()],
+    ['Status: Draft', 'circle', () => { FL.status = 'draft'; mark(); goBtn(); }], ['Status: Test (internal list only)', 'flask', () => { FL.status = 'test'; mark(); goBtn(); }], ['Status: Paused', 'player-pause', () => { FL.status = 'paused'; mark(); goBtn(); }],
+    ['Trigger settings', 'player-play', () => { SEL = null; PANEL = 'trigger'; drawCanvas(); showPanel(); }],
+    ['Clone', 'copy', async () => { try { const c = await api(`/api/mk/flows/${FL.id}/clone`, { method: 'POST', body: '{}' }); toast('Copied as a draft'); location.hash = '#flows/' + c.id; } catch (e) { toast(e.message, 1); } }],
+    ['Copy ID', 'hash', () => { try { navigator.clipboard.writeText(String(FL.id)); toast('Copied ID ' + FL.id); } catch (e) {} }],
+    ['Archive', 'archive', async () => { try { await api(`/api/mk/flows/${FL.id}/archive`, { method: 'POST', body: JSON.stringify({ archived: true }) }); fldirty = false; toast('Archived'); location.hash = '#flows'; } catch (e) { toast(e.message, 1); } }],
+    ['Delete', 'trash', async () => { if (!confirm(`Delete the flow "${FL.name}"? Anyone in it leaves the flow. This can't be undone.`)) return; try { await api('/api/mk/flows/' + FL.id, { method: 'DELETE' }); fldirty = false; location.hash = '#flows'; } catch (e) { toast(e.message, 1); } }, { danger: true }],
+  ], { alignRight: false });
   $('flsim').onclick = simulateUI;
   $('flruns').onclick = runsUI;
   window.onbeforeunload = () => fldirty ? 'Unsaved changes' : undefined;
-  drawProblems(); drawLeft(); drawCanvas(); drawRight();
+  PANEL = null; drawProblems(); drawLeft(); drawCanvas(); drawRight();
+}
+let PANEL = null;
+/** One floating panel on the left, like Klaviyo: the trigger's settings, or the clicked step's details. */
+function showPanel() {
+  const P = $('flpanel'); if (!P) return;
+  const open = !!(SEL && FL.graph.nodes[SEL]) || PANEL === 'trigger';
+  P.classList.toggle('hidden', !open); $('flleft').classList.toggle('hidden', !!SEL); $('flright').classList.toggle('hidden', !SEL);
+  if (SEL && FL.graph.nodes[SEL]) { const [l, ic, col] = STEP[FL.graph.nodes[SEL].type] || ['Step', 'circle', '']; $('flpt').textContent = `${l} details`; $('flpic').innerHTML = `<i class="ti ti-${ic}" style="color:${col}"></i>`; }
+  else { $('flpt').textContent = 'Trigger'; $('flpic').innerHTML = '<i class="ti ti-player-play"></i>'; }
 }
 async function saveFlow() {
   try { const r = await api('/api/mk/flows/' + FL.id, { method: 'PUT', body: JSON.stringify({ name: FL.name, status: FL.status, trigger: FL.trigger, entry_filter: FL.entry_filter, exit_filter: FL.exit_filter, reentry: FL.reentry, graph: FL.graph }) });
-    FL = { ...FL, ...r }; fldirty = false; $('fldirty').classList.add('hidden'); $('flst').value = FL.status; drawProblems(); toast('Saved'); } catch (e) { toast(e.message, 1); $('flst').value = FL.status; }
+    FL = { ...FL, ...r }; fldirty = false; $('fldirty').classList.add('hidden'); drawProblems(); if (window.__flStatus) window.__flStatus(); toast('Saved'); } catch (e) { toast(e.message, 1); }
 }
 function drawProblems() { $('flprob').innerHTML = (FL.problems || []).length ? `<div class="note" style="border-radius:0">${FL.problems.map(esc).join(' ')}</div>` : (FL.notes ? `<div class="note" style="border-radius:0;background:var(--panel2);color:var(--muted)">${esc(FL.notes)}</div>` : ''); }
 const ctx = () => ({ events: FL.events, lists: FL.lists, segments: FL.segments, since: true });
@@ -168,14 +203,16 @@ function statFor(id) {
   const sent = sends.filter((x) => x.flow_step === id).reduce((a, x) => ({ ...a, [x.status]: (a[x.status] || 0) + x.n }), {});
   return { done, waiting, sent };
 }
+const I2 = (n) => `<i class="ti ti-${n}"></i>`;
 function drawCanvas() {
   const g = FL.graph; const seen = new Set();
   const card = (id) => {
     const n = g.nodes[id]; const [label, icon, color] = STEP[n.type] || [n.type, 'circle', 'var(--muted)'];
     const st = statFor(id); const ms = n.config && n.config.status;
-    return `<div class="fnode" data-id="${id}" style="width:280px;background:#fff;border:${SEL === id ? '2px solid var(--ink)' : '1px solid var(--line2)'};border-radius:12px;padding:10px 12px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04)${n.type === 'split' || n.type === 'ab' || n.type === 'wait_for' ? ';border-radius:22px' : ''}">
+    return `<div class="fnode" data-id="${id}" style="width:280px;background:#fff;border:${SEL === id ? '2px solid #2563EB' : '1px solid var(--line2)'};border-radius:12px;padding:10px 12px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04)${n.type === 'split' || n.type === 'ab' || n.type === 'wait_for' ? ';border-radius:22px' : ''}">
       <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:${color}"><i class="ti ti-${icon}"></i>${esc(label.toUpperCase())}${ms ? `<span class="sp"></span>${pill(MSTATUS, ms)}` : ''}</div>
       <div style="font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(title(n))}</div>
+      ${FL.showStats !== false && (n.type === 'send_email' || n.type === 'send_sms') && ((FL.perf || {})[id] || {}).delivered ? (() => { const p = FL.perf[id]; return `<div style="display:flex;gap:10px;font-size:11.5px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)">${n.type === 'send_email' ? `<span title="Open rate">${I2('mail-opened')} ${pct(p.opened, p.delivered)}</span>` : ''}<span title="Click rate">${I2('click')} ${pct(p.clicked, p.delivered)}</span><span title="Placed order (revenue)">${I2('shopping-bag')} ${usd(p.revenue)}</span></div>`; })() : ''}
       ${st.done || st.waiting || Object.keys(st.sent).length ? `<div style="font-size:11.5px;color:var(--muted);margin-top:4px">${st.done ? fmtN(st.done) + ' passed' : ''}${st.waiting ? ` · ${fmtN(st.waiting)} here now` : ''}${Object.entries(st.sent).map(([k, v]) => ` · ${fmtN(v)} ${k}`).join('')}</div>` : ''}</div>`;
   };
   const vline = (h = 18) => `<div aria-hidden="true" style="width:2px;height:${h}px;background:var(--line2)"></div>`;
@@ -192,13 +229,14 @@ function drawCanvas() {
     if (n.type === 'end') return card(id);
     return `<div style="display:flex;flex-direction:column;align-items:center">${card(id)}${vline(10)}${plus(id, 'next')}${vline(10)}${walk(n.next)}</div>`;
   };
-  const start = `<div style="display:flex;flex-direction:column;align-items:center"><div style="padding:8px 14px;border-radius:999px;background:var(--ink);color:#fff;font-weight:700;font-size:12.5px"><i class="ti ti-player-play"></i> ${esc(trigText(FL.trigger, ctx()))}</div>${vline(10)}${plus('__start', 'start')}${vline(10)}${walk(g.start)}</div>`;
+  const start = `<div style="display:flex;flex-direction:column;align-items:center"><button data-trig style="all:unset;cursor:pointer;width:280px;box-sizing:border-box;background:#fff;border:${PANEL === 'trigger' ? '2px solid #2563EB' : '1px solid var(--line2)'};border-radius:12px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.04)"><div style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#18181B"><i class="ti ti-player-play"></i>TRIGGER</div><div style="font-weight:600;margin-top:2px">${esc(trigText(FL.trigger, ctx()))}</div></button>${vline(10)}${plus('__start', 'start')}${vline(10)}${walk(g.start)}</div>`;
   const C = $('flcanvas');
   C.innerHTML = `<div id="flstage" style="position:absolute;left:0;top:0;transform-origin:0 0;padding:28px;display:inline-flex;justify-content:center">${start}</div>
     <div class="flzoom" style="position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);z-index:2">
       <button class="btn xs" data-z="in" aria-label="Zoom in" style="border:0"><i class="ti ti-plus"></i></button><span id="flzp" style="font-size:12px;padding:2px 0;min-width:44px;text-align:center"></span><button class="btn xs" data-z="out" aria-label="Zoom out" style="border:0"><i class="ti ti-minus"></i></button><button class="btn xs" data-z="fit" aria-label="Fit to screen" title="Fit to screen" style="border:0;border-top:1px solid var(--line);border-radius:0 0 10px 10px"><i class="ti ti-maximize"></i></button></div>`;
   wireCanvas(C);
-  $('flcanvas').querySelectorAll('.fnode').forEach((d) => d.onclick = () => { SEL = d.dataset.id; drawCanvas(); drawRight(); });
+  $('flcanvas').querySelectorAll('.fnode').forEach((d) => d.onclick = () => { SEL = d.dataset.id; PANEL = null; drawCanvas(); drawRight(); });
+  const tg = $('flcanvas').querySelector('[data-trig]'); if (tg) tg.onclick = () => { SEL = null; PANEL = 'trigger'; drawCanvas(); showPanel(); };
   $('flcanvas').querySelectorAll('[data-jump]').forEach((b) => b.onclick = () => { SEL = b.dataset.jump; drawCanvas(); drawRight(); centerOn(SEL); });
   $('flcanvas').querySelectorAll('[data-plus]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); addMenu(b, b.dataset.plus, b.dataset.edge); });
 }
@@ -266,12 +304,25 @@ function nextSelect(key, cur, self) {
   const opts = Object.entries(FL.graph.nodes).filter(([k]) => k !== self).map(([k, n]) => [k, `${STEP[n.type][0]}: ${title(n).slice(0, 40)}`]);
   return `<select data-next="${key}" style="width:100%"><option value="">End here</option>${opts.map(([k, l]) => `<option value="${k}"${cur === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
 }
+/* Step performance, like Klaviyo's "Performance · Based on the last 30 days". */
+const pct = (a, b) => (b ? `${(100 * a / b).toFixed(1)}%` : '—');
+const usd = (v) => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function perfSection(id, type) {
+  const p = (FL.perf || {})[id] || {}, d = p.delivered || 0;
+  const row = (l, v, sub) => `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)"><span>${l}</span><span style="text-align:right"><b>${v}</b>${sub ? `<div style="font-size:11.5px;color:var(--muted)">${sub}</div>` : ''}</span></div>`;
+  return `<div style="margin:12px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px">
+    <div style="display:flex;align-items:center;gap:8px"><b style="flex:1">Performance</b><select id="flpd" aria-label="Period" style="height:30px;font-size:12.5px">${[[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [365, 'Last 365 days']].map(([v, l]) => `<option value="${v}"${FL.perfDays === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+    ${row('Recipients', fmtN(p.recipients || 0))}${type === 'send_email' ? row('Open rate', pct(p.opened || 0, d), d ? `${fmtN(p.opened || 0)} opened` : '') : ''}${row('Click rate', pct(p.clicked || 0, d), d ? `${fmtN(p.clicked || 0)} clicked` : '')}
+    ${row('Placed order', p.orders ? usd(p.revenue) : '—', p.orders ? `${fmtN(p.orders)} order${p.orders > 1 ? 's' : ''} · ${pct(p.orders, p.recipients || 0)} of recipients` : '')}${row('Unsubscribe rate', pct(p.unsubscribed || 0, d))}${type === 'send_email' ? row('Bounce rate', pct(p.bounced || 0, d)) : ''}
+    <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Orders count when they come within the click window in Settings → Revenue credit. Test sends aren't counted.</div></div>`;
+}
 function drawRight() {
   const R = $('flright');
-  if (!SEL || !FL.graph.nodes[SEL]) { R.innerHTML = `<div class="empty" style="text-align:left"><b>Click a step to edit it.</b><p>Use + between steps to add one. Any step's "goes to" can point at a step that already exists — that's how paths join.</p></div>`; return; }
+  if (!SEL || !FL.graph.nodes[SEL]) { R.innerHTML = ''; showPanel(); return; }
   const n = FL.graph.nodes[SEL], c = n.config || (n.config = {});
   const mark = () => { fldirty = true; $('fldirty').classList.remove('hidden'); drawCanvas(); };
   let body = '';
+  const perfHtml = (n.type === 'send_email' || n.type === 'send_sms') ? perfSection(SEL, n.type) : '';
   const ms = `${fl2('Message status', `<select data-c="status" style="width:100%"><option value="draft">Draft — skipped</option><option value="test">Test — only the internal test list</option><option value="live">Live</option></select>`)}`;
   switch (n.type) {
     case 'send_email': body = fl2('Email', `<select data-c="template_id" style="width:100%"><option value="">Choose…</option>${(FL.templates || []).map((t) => `<option value="${t.id}"${String(c.template_id) === String(t.id) ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>`, 'Edit emails in Email templates.') + (c.template_id ? `<a class="btn xs" style="margin-top:6px" href="#templates/${c.template_id}"><i class="ti ti-pencil"></i> Open this email</a>` : '') +
@@ -294,7 +345,9 @@ function drawRight() {
     case 'webhook': body = fl2('Address (https)', `<input data-c="url" type="text" value="${esc(c.url || '')}" style="width:100%">`, 'Gets a POST with the flow name and the person.'); break;
   }
   const linear = !['split', 'wait_for', 'ab', 'end'].includes(n.type);
-  R.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><i class="ti ti-${STEP[n.type][1]}" style="color:${STEP[n.type][2]}"></i><b style="font-size:15px">${esc(STEP[n.type][0])}</b><span class="sp"></span><button class="btn xs danger" id="ndel"><i class="ti ti-trash"></i> Remove</button></div>${body}${linear ? fl2('Then goes to', nextSelect('next', n.next, SEL), 'Pick an existing step to join that path.') : ''}`;
+  R.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><span class="sp"></span><button class="btn xs danger" id="ndel"><i class="ti ti-trash"></i> Remove step</button></div>${perfHtml}${body}${linear ? fl2('Then goes to', nextSelect('next', n.next, SEL), 'Pick an existing step to join that path.') : ''}`;
+  showPanel();
+  const pd = R.querySelector('#flpd'); if (pd) pd.onchange = async () => { FL.perfDays = Number(pd.value); try { FL.perf = (await api(`/api/mk/flows/${FL.id}/performance?days=${FL.perfDays}`)).steps; } catch (e) {} drawRight(); drawCanvas(); };
   R.querySelectorAll('[data-c]').forEach((x) => { if (x.tagName === 'SELECT') x.value = c[x.dataset.c] == null ? '' : String(c[x.dataset.c]); x.oninput = x.onchange = () => { let v = x.value; if (x.type === 'number') v = Number(v); if (x.dataset.c === 'until_time' && !v) v = null; c[x.dataset.c] = v; mark(); if (x.dataset.c === 'body') smsCount(); if (['kind'].includes(x.dataset.c)) drawRight(); }; });
   R.querySelectorAll('[data-cb]').forEach((x) => x.onchange = () => { c[x.dataset.cb] = x.checked; mark(); });
   R.querySelectorAll('[data-wd]').forEach((x) => x.onchange = () => { c.weekdays = [...R.querySelectorAll('[data-wd]:checked')].map((y) => Number(y.dataset.wd)); mark(); });
