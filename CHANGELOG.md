@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.97.5
+- Email editor: blocks set to "Mobile only" are hidden in desktop view, and "Desktop only" blocks are hidden in mobile view.
+- Sent emails: a text block's own color, size and font now win over the template's normal text style, so the footer looks the same in the inbox as in the editor.
+- Sent emails: plain street addresses, email addresses and phone numbers no longer get turned into underlined links by Gmail and Apple Mail.
+
 ## 4.97.4
 - Help desk side menu now matches Marketing: same font size, weight, colors, active style and icons.
 - Number boxes in the email editor show their numbers again (the spinner arrows and app styles were squashing them). Each social link's icon size now sits on its own "Icon size" row and shows the size in use.

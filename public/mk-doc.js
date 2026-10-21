@@ -96,11 +96,11 @@
     };
     return R._ts;
   }
-  function styleText(html, R) {
+  function styleText(html, R, over) {
     if (R.ed) return String(html || '');   // the editor keeps text as typed; template styles come from the <style> block
     const S = textStyles(R);
     return String(html || '').replace(/<(p|h[1-4]|a|li)\b([^>]*)>/gi, (m, tag, attrs) => {
-      const t = tag.toLowerCase(); const add = t === 'p' ? S.p : t === 'li' ? S.li : t === 'a' ? S.a : S.h[Number(t[1]) - 1];
+      const t = tag.toLowerCase(); const add = t === 'p' ? (over ? `${S.p};${over}` : S.p) : t === 'li' ? (over ? `${S.li};${over}` : S.li) : t === 'a' ? S.a : S.h[Number(t[1]) - 1];
       if (!add) return m;
       if (/\sstyle\s*=\s*"/i.test(attrs)) return `<${tag}${attrs.replace(/\sstyle\s*=\s*"([^"]*)"/i, (_, s) => ` style="${add};${s}"`)}>`;
       if (/\sstyle\s*=\s*'/i.test(attrs)) return `<${tag}${attrs.replace(/\sstyle\s*=\s*'([^']*)'/i, (_, s) => ` style="${add};${s.replace(/"/g, "'")}"`)}>`;
@@ -177,7 +177,27 @@ ${sections}${empty}
 </td></tr>${foot}</table>
 <!--[if mso]></td></tr></table><![endif]-->
 </td></tr></table>`;
-    return { body, head, width: W, background: bg };
+    return { body: R.ed ? body : noAutoLink(body), head, width: W, background: bg };
+  }
+
+  /* Gmail and Apple Mail turn plain street addresses, email addresses and phone numbers into underlined links.
+     An invisible joiner inside them stops that without changing how the text looks. Text already inside a link is left alone. */
+  function noAutoLink(html) {
+    const Z = '&#8204;'; let inA = 0, skip = 0;
+    return String(html).split(/(<[^>]+>|<!--[\s\S]*?-->)/).map((part) => {
+      if (!part) return part;
+      if (part[0] === '<') {
+        if (/^<a\b/i.test(part)) inA++; else if (/^<\/a>/i.test(part)) inA = Math.max(0, inA - 1);
+        else if (/^<(style|script|title)\b/i.test(part)) skip++; else if (/^<\/(style|script|title)>/i.test(part)) skip = Math.max(0, skip - 1);
+        return part;
+      }
+      if (inA || skip || !/[@\d]/.test(part)) return part;
+      return part
+        .replace(/([\w.+-]+)@([\w-]+)\.([\w.-]+)/g, (m, u, d, t) => `${u}@${Z}${d}${Z}.${t}`)
+        .replace(/\b(\d)(\d{1,5})(?=\s+(?:[NSEW]\.?\s+)?[A-Z0-9])/g, `$1${Z}$2`)
+        .replace(/\b([A-Z]{2})(\s+)(\d)(\d{4}(?:-\d{4})?)\b/g, `$1$2$3${Z}$4`)
+        .replace(/(\(?\d{3}\)?[\s.-])(\d{3})([\s.-]\d{4})\b/g, `$1$2${Z}$3`);
+    }).join('');
   }
 
   function section(s, R, scope) {
@@ -278,7 +298,8 @@ ${sections}${empty}
   const RENDER = {
     _unknown: () => '',
     text(blk, st, R, sc) {
-      const html = styleText(txt(R, (blk.data || {}).content || '', sc), R);
+      const over = [st.font_family ? `font-family:${q(st.font_family)}` : '', num(st.font_size, 0) ? `font-size:${num(st.font_size)}px` : '', col(st.color) ? `color:${col(st.color)}` : '', st.font_weight ? `font-weight:${q(st.font_weight)}` : '', st.font_style ? `font-style:${q(st.font_style)}` : '', num(st.line_height, 0) ? `line-height:${num(st.line_height)}` : '', st.letter_spacing != null && st.letter_spacing !== '' ? `letter-spacing:${num(st.letter_spacing, 0)}px` : ''].filter(Boolean).join(';');
+      const html = styleText(txt(R, (blk.data || {}).content || '', sc), R, over);
       const f = [st.font_family ? `font-family:${q(st.font_family)}` : '', num(st.font_size, 0) ? `font-size:${num(st.font_size)}px` : '', col(st.color) ? `color:${col(st.color)}` : '', st.font_weight ? `font-weight:${q(st.font_weight)}` : '', st.font_style ? `font-style:${q(st.font_style)}` : '', num(st.line_height, 0) ? `line-height:${num(st.line_height)}` : '', st.letter_spacing != null && st.letter_spacing !== '' ? `letter-spacing:${num(st.letter_spacing, 0)}px` : '', st.text_align ? `text-align:${st.text_align}` : '', st.text_decoration ? `text-decoration:${q(st.text_decoration)}` : ''].filter(Boolean).join(';');
       if (num(st.font_size, 0) || col(st.color) || st.font_family) R.css.push(`.${R.k} .bz-text p,.${R.k} .bz-text li{${[num(st.font_size, 0) ? `font-size:${num(st.font_size)}px` : '', col(st.color) ? `color:${col(st.color)}` : '', st.font_family ? `font-family:${q(st.font_family)}` : ''].filter(Boolean).join(';')}}`);
       const bgc = col(st.background_color);
@@ -490,6 +511,8 @@ ${sections}${empty}
 .bz-emptycol,.bz-emptydoc{border:1px dashed #9DB7EA;background:rgba(47,111,235,.04);color:#5B7FC7;font:13px/1.4 Helvetica,Arial,sans-serif;text-align:center;padding:26px 10px;margin:6px}
 .bz-emptydoc{margin:20px;padding:60px 20px}
 .bz-show-m-ed{outline:1px dashed #E0A800;outline-offset:-1px}
+.bz-dev-desk .bz-show-m-ed{display:none!important}
+.bz-dev-mob .bz-hide-m{display:none!important}
 [data-bid]{position:relative}`;
 
   /* ---------- helpers for the editor + server ---------- */

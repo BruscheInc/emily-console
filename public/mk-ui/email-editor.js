@@ -99,13 +99,16 @@ function draw(soon) {
   let out; try { out = D.render(ST.doc, env()); } catch (e) { console.error(e); toast('Could not draw the email: ' + e.message, 1); return; }
   d.getElementById('bzh').textContent = out.head;
   d.body.style.background = out.background;
+  d.body.classList.toggle('bz-dev-mob', ST.dev === 'mob'); d.body.classList.toggle('bz-dev-desk', ST.dev !== 'mob');
   d.getElementById('bzr').innerHTML = out.body;
   d.querySelectorAll('img').forEach((im) => { if (!im.complete) im.addEventListener('load', () => decorate(true), { once: true }); });
   decorate();
 }
 function setDev(dv) {
   ST.dev = dv; $('kxDesk').classList.toggle('on', dv === 'desk'); $('kxMob').classList.toggle('on', dv === 'mob');
-  $('kxF').classList.toggle('mob', dv === 'mob'); setTimeout(() => decorate(), 50);
+  $('kxF').classList.toggle('mob', dv === 'mob');
+  const fd = frameDoc(); if (fd && fd.body) { fd.body.classList.toggle('bz-dev-mob', dv === 'mob'); fd.body.classList.toggle('bz-dev-desk', dv !== 'mob'); }
+  setTimeout(() => decorate(), 50);
 }
 
 /* selection outline, name tag, side toolbar, image resize handles */
