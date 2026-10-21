@@ -351,8 +351,11 @@ ${sections}${empty}
       const gap = num(st.icon_spacing, 10), base = (R.env.assetBase || '');
       const cells = subs.map((x, i) => {
         if (x.type === 'social_link_spacer') return `<td class="bz-sc" style="width:${num(x.width, 10)}px;font-size:1px">&nbsp;</td>`;
-        const src = x.link_type === 'custom' ? x.custom_src : `${base}/social/${x.link_type || 'website'}-${color}.png`;
-        const sz = x.link_type === 'custom' ? num(x.custom_size, size) : size;
+        // Your own icon on this link, else your brand kit's icon for that network, else Buzzin's
+        const own = x.custom_src || (((R.env.brand || {}).social_icons || {})[x.link_type] || '');
+        const abs = (u) => (/^\//.test(u) ? base + u : u);
+        const src = own ? abs(own) : `${base}/social/${x.link_type || 'website'}-${color}.png`;
+        const sz = own && x.custom_size ? num(x.custom_size, size) : size;
         const lbl = p.show_labels && x.label ? `<span style="${fontCss(st, 'label_', 'label_color')};display:inline-block;vertical-align:middle;padding-left:6px">${esc(x.label)}</span>` : '';
         return `<td class="bz-sc" valign="middle" style="padding:0 ${i < subs.length - 1 ? gap : 0}px 0 0">${link(R, href(R, x.link_url, sc), `<img src="${esc(src || '')}" alt="${esc(x.label || x.link_type || '')}" width="${sz}" height="${sz}" style="display:inline-block;vertical-align:middle;width:${sz}px;height:${sz}px;border:0">${lbl}`)}</td>`;
       }).join('');

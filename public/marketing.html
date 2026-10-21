@@ -62,10 +62,12 @@ input:focus,select:focus,textarea:focus{border-color:#B9B5AC;box-shadow:0 0 0 3p
 .sw input:checked+span{background:var(--ok)}.sw input:checked+span:before{transform:translateX(17px)}.sw input:disabled+span{opacity:.5;cursor:not-allowed}
 @media (max-width:860px){.nav{display:none}.view{padding:16px}}
 </style>
+<link rel="stylesheet" href="/bz-ui.css?v=__VERSION__">
 </head>
-<body>
+<body class="bz-mk">
 <div class="top">
-  <a class="back" href="/">← Buzzin</a>
+  <button class="btn xs bz-burger" id="burger" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')"><i class="ti ti-menu-2"></i></button>
+  <a class="back" href="/"><i class="ti ti-arrow-left"></i> Buzzin</a>
   <span class="title"><img src="/logo.svg?v=bee2" alt="" width="22" height="22" style="vertical-align:-5px;border-radius:6px;margin-right:6px">Marketing</span>
   <div class="seg" id="stores"><button data-s="">Both stores</button><button data-s="lb">Larkspur Baby</button><button data-s="lbo">Outlet</button></div>
   <span class="sp"></span>
@@ -125,8 +127,9 @@ function go() {
   const s = SECTIONS.find((x) => x.id === current) || SECTIONS[1];
   drawNav();
   $('view').style.padding = ''; window.onbeforeunload = null;
-  $('view').innerHTML = '<div class="empty">Loading…</div>';
-  Promise.resolve(s.render($('view'), (location.hash.slice(1).split('/')[1] || ''))).catch((e) => { $('view').innerHTML = `<div class="card"><b>Couldn't load this page.</b><p>${esc(e.message)}</p></div>`; });
+  $('view').innerHTML = `<div class="bz-loading" aria-label="Loading"><div class="bz-skel" style="height:34px;width:240px"></div><div class="bz-skel" style="height:16px;width:420px;max-width:80%"></div><div class="bz-skel" style="height:220px;margin-top:12px"></div><div class="bz-skel" style="height:120px"></div></div>`;
+  document.body.classList.remove('nav-open'); document.title = `${s.label || 'Marketing'} · Buzzin Marketing`;
+  Promise.resolve(s.render($('view'), (location.hash.slice(1).split('/')[1] || ''))).catch((e) => { $('view').innerHTML = `<div class="bz-err" role="alert"><b>This page didn't load.</b><p style="margin:6px 0 12px;color:var(--muted)">${esc(e.message)}</p><button class="btn" onclick="go()"><i class="ti ti-refresh"></i> Try again</button></div>`; });
 }
 window.addEventListener('hashchange', go);
 document.querySelectorAll('#stores button').forEach((b) => { b.classList.toggle('on', b.dataset.s === STORE); b.onclick = () => { STORE = b.dataset.s; try { localStorage.setItem('mk_store', STORE); } catch (e) {} document.querySelectorAll('#stores button').forEach((x) => x.classList.toggle('on', x === b)); go(); }; });
@@ -167,7 +170,7 @@ async function renderProfiles(el, openId) {
     <select id="pc"><option value="">Any consent</option><option value="email">Can get email</option><option value="sms">Can get texts</option><option value="none">Neither</option></select>
     <select id="pt"><option value="">Any tier</option>${Object.entries(TIER).map(([k, [, l]]) => `<option value="${k}">${l}</option>`).join('')}</select>
     <select id="pl"><option value="">Any list</option>${lists.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
-  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Email</th><th>Texts</th><th>Tier</th><th class="n">Orders</th><th class="n">Spent</th><th>Last order</th></tr></thead><tbody id="pr"></tbody></table></div>
+  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Name</th><th>Email address</th><th>Email consent</th><th>Text consent</th><th>Tier</th><th class="n">Orders</th><th class="n">Spent</th><th>Last order</th></tr></thead><tbody id="pr"></tbody></table></div>
   <div class="pager"><span id="pn"></span><button class="btn xs" id="pp">Previous</button><button class="btn xs" id="px">Next</button></div></div>`;
   $('pc').value = PQ.consent; $('pt').value = PQ.tier; $('pl').value = PQ.list;
   const load = async () => {

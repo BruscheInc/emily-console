@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.97.0
+Polish, part 1: one design system across Buzzin, plus your own social icons.
+- **Shared look:** a single stylesheet (bz-ui.css) gives the help desk and Marketing the same buttons, inputs, dropdowns, tables, pills, menus, toasts, focus rings, scrollbars and motion. Reduced-motion settings are respected.
+- **Marketing:** every page now sits on the same white sheet as the Klaviyo-style pages, with a cleaner top bar and left menu. Pages show a loading skeleton while they open. If a page fails, you get a clear message with a Try again button. Each browser tab is named after its page.
+- **On phones**, Marketing has a menu button. Before, the left menu simply disappeared.
+- Profiles table headers now say Email address / Email consent / Text consent; before, "Email" appeared twice.
+- **Social links in emails:** every icon can use your own image (Use my own → upload or pick from the library). **Save to brand kit** makes those icons the default for every email; Buzzin's icons are used only where you haven't set one.
+
 ## 4.96.0
 Flow builder: Actions panel and Klaviyo-style step details.
 - **Actions panel:** opens with the flow. Messages (Email, Text message), Data (Property update, List update, Coupon code, Internal alert, Create ticket, Webhook) and Logic (Time delay, Conditional split, A/B split, Wait until). Drag an action onto a + in the flow, or click it and then click a +. Close the panel to see the whole flow, and reopen it from the Actions button.

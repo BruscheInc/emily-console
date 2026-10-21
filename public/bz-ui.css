@@ -1,0 +1,147 @@
+/* Buzzin · shared design system.
+   Loaded after each page's own styles, so every screen (help desk, Marketing, studios) uses the same
+   type, spacing, colors, controls and states. Keep page layouts in the page; keep the look here. */
+
+:root{
+  /* neutrals (warm, matches the bee brand) */
+  --bz-bg:#F7F6F3; --bz-panel:#FFFFFF; --bz-sunk:#F3F2EF; --bz-hover:#F5F4F1;
+  --bz-line:#E8E6E1; --bz-line-2:#D9D6CF; --bz-ink:#16151D; --bz-ink-2:#3B3944; --bz-muted:#6D6A75; --bz-faint:#9C99A3;
+  /* brand + states */
+  --bz-honey:#FFC21A; --bz-honey-soft:#FFF4D1; --bz-honey-ink:#7A5600;
+  --bz-blue:#2563EB; --bz-blue-soft:#EFF4FF; --bz-blue-ink:#1D4ED8;
+  --bz-ok:#15803D; --bz-ok-soft:#E8F6EE; --bz-warn:#B45309; --bz-warn-soft:#FEF3E2; --bz-bad:#C8372D; --bz-bad-soft:#FDECEA;
+  /* shape + depth */
+  --bz-r-sm:7px; --bz-r:9px; --bz-r-lg:12px; --bz-r-xl:16px;
+  --bz-sh-1:0 1px 2px rgba(22,21,29,.05); --bz-sh-2:0 2px 8px rgba(22,21,29,.07); --bz-sh-3:0 12px 32px rgba(22,21,29,.14);
+  --bz-ring:0 0 0 3px rgba(37,99,235,.22);
+  --bz-ease:cubic-bezier(.2,.7,.2,1);
+  /* the page's own tokens follow the system */
+  --bg:var(--bz-bg); --panel:var(--bz-panel); --panel2:var(--bz-sunk); --line:var(--bz-line); --line2:var(--bz-line-2); --ink:var(--bz-ink); --muted:var(--bz-muted);
+  --honey-soft:var(--bz-honey-soft); --honey-ink:var(--bz-honey-ink); --ok:var(--bz-ok); --ok-soft:var(--bz-ok-soft); --bad:var(--bz-bad); --bad-soft:var(--bz-bad-soft);
+  --blue:var(--bz-blue); --blue-soft:var(--bz-blue-soft);
+}
+
+/* ---- base ---- */
+html{-webkit-text-size-adjust:100%}
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-feature-settings:"cv11","ss01"}
+::selection{background:rgba(255,194,26,.35)}
+*{scrollbar-width:thin;scrollbar-color:#CFCBC3 transparent}
+*::-webkit-scrollbar{width:10px;height:10px}*::-webkit-scrollbar-thumb{background:#D3CFC7;border-radius:999px;border:3px solid transparent;background-clip:content-box}*::-webkit-scrollbar-thumb:hover{background-color:#B9B5AC}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--bz-blue);outline-offset:2px;border-radius:6px}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
+h1,h2,h3{letter-spacing:-.015em}
+.view h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.view .sub{color:var(--bz-muted);font-size:14px;line-height:1.55}
+a{text-underline-offset:2px}
+img{max-width:100%}
+
+/* ---- buttons ----
+   Shape, size and feel are shared. Colors differ by app: in the help desk a plain .btn is the dark primary
+   (with .sec / .ghost for others); in Marketing (body.bz-mk) a plain .btn is white and .pri is dark. */
+.btn{min-height:36px;border-radius:var(--bz-r);font-size:13.5px;gap:6px;transition:background .12s var(--bz-ease),border-color .12s var(--bz-ease),box-shadow .12s var(--bz-ease),transform .06s}
+.btn:active{transform:translateY(.5px)}
+.btn:focus-visible{outline:none;box-shadow:var(--bz-ring)!important}
+.btn.xs{min-height:28px;font-size:12.5px;border-radius:var(--bz-r-sm)}
+.btn:disabled,.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn i.ti{font-size:16px}.btn.xs i.ti{font-size:14px}
+.bz-mk .btn{padding:0 14px;border:1px solid var(--bz-line);background:var(--bz-panel);color:var(--bz-ink);font-weight:600;box-shadow:var(--bz-sh-1)}
+.bz-mk .btn:hover{background:var(--bz-hover);border-color:var(--bz-line-2)}
+.bz-mk .btn.pri{background:var(--bz-ink);border-color:var(--bz-ink);color:#fff;box-shadow:0 1px 2px rgba(22,21,29,.25)}
+.bz-mk .btn.pri:hover{background:#2A2833;filter:none}
+.bz-mk .btn.danger{color:var(--bz-bad)}.bz-mk .btn.danger:hover{background:var(--bz-bad-soft);border-color:#F3C4BF}
+.bz-mk .btn.xs{padding:0 10px}
+.bz-mk .btn:disabled{box-shadow:none}
+.bz-hd .btn:not(.sec):not(.ghost):hover{background:#2A2833}
+.bz-hd .btn.sec:hover,.bz-hd .btn.ghost:hover{background:var(--bz-hover)}
+
+/* ---- inputs ---- */
+input[type=text],input[type=search],input[type=number],input[type=email],input[type=time],input[type=date],input[type=url],input[type=password],input[type=tel],select,textarea{
+  border:1px solid var(--bz-line);border-radius:var(--bz-r);background:#fff;color:var(--bz-ink);transition:border-color .12s,box-shadow .12s}
+input[type=text],input[type=search],input[type=number],input[type=email],input[type=time],input[type=date],input[type=url],input[type=password],input[type=tel],select{min-height:36px}
+input::placeholder,textarea::placeholder{color:var(--bz-faint)}
+input:hover,select:hover,textarea:hover{border-color:var(--bz-line-2)}
+input:focus,select:focus,textarea:focus{border-color:var(--bz-blue)!important;box-shadow:var(--bz-ring)!important;outline:none}
+input:disabled,select:disabled,textarea:disabled{background:var(--bz-sunk);color:var(--bz-faint);cursor:not-allowed}
+select:not([multiple]):not([size]){appearance:none;-webkit-appearance:none;padding-right:32px!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236D6A75' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;background-size:16px}
+input[type=checkbox],input[type=radio]{accent-color:var(--bz-blue)}
+.lab{font-size:12.5px;font-weight:600;color:var(--bz-ink-2)}
+
+/* ---- cards, panels ---- */
+.card{border:1px solid var(--bz-line);border-radius:var(--bz-r-lg);box-shadow:var(--bz-sh-1)}
+.kpi .v{letter-spacing:-.02em}
+.note{border-radius:var(--bz-r);border:1px solid #F4E2A6}
+
+/* ---- tables ---- */
+table{border-collapse:separate;border-spacing:0}
+th{font-size:12.5px;font-weight:600;color:var(--bz-muted);background:transparent}
+td{border-bottom:1px solid var(--bz-line)}
+tbody tr:last-child td{border-bottom:0}
+tr.click:hover td,tr.row:hover td{background:var(--bz-hover)}
+td.n,th.n{font-variant-numeric:tabular-nums}
+
+/* ---- pills, badges ---- */
+.pill{font-weight:600;font-size:12px;padding:3px 9px;letter-spacing:.005em}
+.pill.blue{background:var(--bz-blue-soft);color:var(--bz-blue-ink)}
+
+/* ---- segmented control ---- */
+.seg{border-radius:10px}.seg button{transition:background .12s,color .12s}.seg button:hover:not(.on){color:var(--bz-ink)}
+
+/* ---- menus, drawers, toasts ---- */
+.ke-menu{border-radius:var(--bz-r-lg)!important;box-shadow:var(--bz-sh-3)!important;animation:bz-pop .12s var(--bz-ease)}
+.ke-menu button{font-size:14px!important;border-radius:var(--bz-r-sm)!important}
+.drawer{box-shadow:var(--bz-sh-3);animation:bz-slide .18s var(--bz-ease)}
+.toast{border-radius:var(--bz-r-lg);box-shadow:var(--bz-sh-3);padding:11px 18px;font-size:13.5px;animation:bz-toast .2s var(--bz-ease)}
+@keyframes bz-pop{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes bz-slide{from{transform:translateX(24px);opacity:.6}to{transform:none;opacity:1}}
+@keyframes bz-toast{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* ---- empty + loading states ---- */
+.empty{color:var(--bz-muted);font-size:14px;padding:36px 20px}
+.bz-loading{display:flex;flex-direction:column;gap:12px;padding:4px 0}
+.bz-skel{background:linear-gradient(90deg,#EFEDE8 0%,#F7F6F2 50%,#EFEDE8 100%);background-size:200% 100%;animation:bz-shim 1.2s linear infinite;border-radius:8px}
+@keyframes bz-shim{from{background-position:200% 0}to{background-position:-200% 0}}
+.bz-err{background:#fff;border:1px solid #F3C4BF;border-radius:var(--bz-r-lg);padding:16px 18px;color:var(--bz-ink)}.bz-err b{color:var(--bz-bad)}
+
+/* ---- switches ---- */
+.sw span{transition:background .15s var(--bz-ease)}.sw input:focus-visible+span{box-shadow:var(--bz-ring)}
+
+/* ---- respect reduced motion ---- */
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ==== Marketing shell ==== */
+.bz-mk .top{height:56px;gap:14px;padding:0 18px;box-shadow:0 1px 0 var(--bz-line)}
+.bz-mk .top .back{display:inline-flex;align-items:center;gap:4px;font-size:13.5px;color:var(--bz-muted);padding:6px 8px;border-radius:8px}.bz-mk .top .back:hover{background:var(--bz-hover);color:var(--bz-ink)}
+.bz-mk .top .title{display:inline-flex;align-items:center;font-size:15.5px;letter-spacing:-.01em;padding-right:6px;border-right:1px solid var(--bz-line);margin-right:2px}
+.bz-mk .nav{width:232px;padding:14px 12px;background:#FBFAF8}
+.bz-mk .nav .h{font-size:11px;letter-spacing:.07em;color:var(--bz-faint);margin:16px 10px 6px}
+.bz-mk .nav a{padding:8px 10px;border-radius:8px;font-size:14px;color:var(--bz-ink-2);transition:background .12s,color .12s}
+.bz-mk .nav a:hover{background:#F1EFEB;color:var(--bz-ink)}
+.bz-mk .nav a.on{background:#fff;color:var(--bz-ink);font-weight:600;box-shadow:var(--bz-sh-1),inset 0 0 0 1px var(--bz-line)}.bz-mk .nav a.on i{color:var(--bz-honey-ink)}
+.bz-mk .view{padding:20px 24px 64px}
+/* every page is one white sheet, like the Klaviyo-style pages */
+.bz-mk .view:has(> h1){background:#fff;border:1px solid var(--bz-line);border-radius:14px;margin:20px 24px 40px;padding:22px 26px 40px;flex:1;box-shadow:var(--bz-sh-1)}
+.bz-mk .view:has(> h1) > h1{font-size:22px;margin:0 0 4px}
+.bz-mk .view:has(> h1) > .sub{margin:0 0 20px;padding-bottom:18px;border-bottom:1px solid var(--bz-line);max-width:none}
+.bz-mk .view:has(> h1) .card{box-shadow:none}
+.bz-mk .kl{border-radius:14px;box-shadow:var(--bz-sh-1)}
+.bz-mk .kl-h{padding:18px 26px}.bz-mk .kl-h h1{font-size:22px;letter-spacing:-.02em}
+.bz-mk .kl-b{padding:22px 26px}
+.bz-mk .kl-f input[type=search]{min-width:260px}
+.bz-mk .kl-f select{border-style:dashed}
+.bz-mk .kl th{color:var(--bz-muted);font-size:12.5px;font-weight:600}
+.bz-mk .kl a.nm{color:var(--bz-blue);font-weight:600}
+.bz-mk .kl .empty{padding:48px 20px}
+.bz-burger{display:none}
+@media (max-width:860px){
+  .bz-burger{display:inline-flex}
+  .bz-mk .top{gap:8px;padding:0 10px}.bz-mk .top .back{display:none}.bz-mk .top .seg{overflow-x:auto;max-width:52vw}
+  .bz-mk .nav{display:block;position:fixed;top:56px;left:0;bottom:0;z-index:60;transform:translateX(-102%);transition:transform .2s var(--bz-ease);box-shadow:var(--bz-sh-3)}
+  body.nav-open .nav{transform:none}
+  body.nav-open::after{content:"";position:fixed;inset:56px 0 0 0;background:rgba(22,21,29,.25);z-index:55}
+  .bz-mk .view:has(> h1){margin:10px;padding:16px}
+  .bz-mk .kl-h,.bz-mk .kl-b{padding:14px 16px}.bz-mk .kl-h{flex-wrap:wrap}.bz-mk .kl-f input[type=search]{min-width:0;flex:1}
+  .bz-mk .kl table{display:block;overflow-x:auto;white-space:nowrap}
+}
