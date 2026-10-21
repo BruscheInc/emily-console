@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.97.1
+Polish, part 2.
+- **Help desk ticket list:** the subject comes first, followed by a small message-count badge and a faint ticket number. Before, the long ID came first. On phones, the order, order-status and tag columns are hidden so subjects and customers have room, and buttons don't wrap onto three lines.
+- **Ticket view:** shows "Larkspur Baby" / "Larkspur Baby Outlet" and the sending address instead of the codes lb / lbo.
+- **Marketing:** technical sync logs are tucked behind a "Technical log" toggle, and KPI cards sit two per row on phones.
+
 ## 4.97.0
 Polish, part 1: one design system across Buzzin, plus your own social icons.
 - **Shared look:** a single stylesheet (bz-ui.css) gives the help desk and Marketing the same buttons, inputs, dropdowns, tables, pills, menus, toasts, focus rings, scrollbars and motion. Reduced-motion settings are respected.

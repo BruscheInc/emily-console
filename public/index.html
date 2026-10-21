@@ -685,7 +685,7 @@ async function loadList(force,silent){
     if(!tickets.length){el.innerHTML='<tr><td colspan="7" class="empty">No '+TAB+' tickets here.</td></tr>';syncBulk();return;}
     el.innerHTML=tickets.map(t=>`<tr class="row ${CUR===t.id?"on":""} ${SEL.has(t.id)?"sel":""}" onclick="openTicket(${t.id})">
       <td class="c-ck" onclick="event.stopPropagation()"><input type="checkbox" ${SEL.has(t.id)?"checked":""} onclick="selOne(${t.id},this.checked)"></td>
-      <td class="c-t"><div class="subj ${t.unread?"unread":""}"><span class="tno">#${t.id}</span>${t.messages_count>1?`<span class="cnt">${t.messages_count}</span>`:""}${esc(t.subject||"(no subject)")}</div><div class="exc">${esc((t.excerpt||"").replace(/\s+/g," ")).slice(0,140)}</div></td>
+      <td class="c-t"><div class="subj ${t.unread?"unread":""}">${esc(t.subject||"(no subject)")}${t.messages_count>1?`<span class="cnt" title="${t.messages_count} messages">${t.messages_count}</span>`:""}<span class="tno">#${t.id}</span></div><div class="exc">${esc((t.excerpt||"").replace(/\s+/g," ")).slice(0,140)}</div></td>
       <td class="c-ord">${t.order_number?(t.order_info&&t.order_info.admin_url?`<a class="ordno" href="${esc(t.order_info.admin_url)}" target="_blank" rel="noopener" title="Open this order in Shopify" onclick="event.stopPropagation()">#${esc(t.order_number)} ↗</a>`:`<span class="ordno">#${esc(t.order_number)}</span>`):'<span class="exc">—</span>'}</td>
       <td class="c-ost">${orderStatusChips(t.order_info)}</td>
       <td class="c-tags"><div class="chips">${chipsFor(t)}</div></td>
@@ -1924,7 +1924,7 @@ function rail(d){
     <div class="railcard">
       ${kv("Name",esc(d.customer.name))}
       ${kv("Email",esc(d.customer.email||"—"))}
-      ${kv("Brand",esc(d.brand))}
+      ${kv("Brand",esc(({lb:"Larkspur Baby",lbo:"Larkspur Baby Outlet",bb:"Bumbunny Baby"})[d.brand]||d.brand))}
     </div>
     <div id="custpanel"><div class="railcard" style="padding:12px;color:var(--muted);font-size:12.5px">Loading Shopify profile…</div></div>
     <h4>Orders</h4>
@@ -1975,7 +1975,7 @@ async function openTicket(id){
             <textarea id="composer" placeholder="Write a reply to ${esc(d.customer.name)}…"></textarea>
             <div id="attlist" class="attlist">${attChips(id,d.pending_files)}</div>
             <div class="crow"><label class="btn sec xs" id="attbtn" title="Attach an image, label or PDF — it goes out with the next reply" style="cursor:pointer"><i class="ti ti-paperclip"></i> Attach<input type="file" multiple style="display:none" onchange="attachFiles(${id},this)"></label>
-            <div class="sub" style="color:var(--muted);font-size:12px;margin-left:8px" id="sendhint">Sends an email to ${esc(d.customer.email||"the customer")} from ${esc(d.brand)}.</div><div class="sp" style="flex:1"></div>
+            <div class="sub" style="color:var(--muted);font-size:12px;margin-left:8px" id="sendhint">Sends an email to ${esc(d.customer.email||"the customer")} from ${esc(d.brand_address||({lb:"Larkspur Baby",lbo:"Larkspur Baby Outlet"})[d.brand]||d.brand)}.</div><div class="sp" style="flex:1"></div>
             <button class="btn" id="sendBtn" onclick="send(${id})">Send reply</button></div>
             </div>
           </div>

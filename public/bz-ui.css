@@ -145,3 +145,16 @@ td.n,th.n{font-variant-numeric:tabular-nums}
   .bz-mk .kl-h,.bz-mk .kl-b{padding:14px 16px}.bz-mk .kl-h{flex-wrap:wrap}.bz-mk .kl-f input[type=search]{min-width:0;flex:1}
   .bz-mk .kl table{display:block;overflow-x:auto;white-space:nowrap}
 }
+
+.bz-det>summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--bz-muted);list-style:none;display:inline-flex;align-items:center;gap:6px}.bz-det>summary::before{content:"▸";transition:transform .12s}.bz-det[open]>summary::before{transform:rotate(90deg)}.bz-det>summary::-webkit-details-marker{display:none}
+@media (max-width:860px){.bz-mk .g4{grid-template-columns:repeat(2,minmax(0,1fr))}.bz-mk .kpi .v{font-size:22px}}
+
+/* ==== Help desk ==== */
+.bz-hd .subj .cnt{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:18px;padding:0 6px;margin:0 0 0 8px;border-radius:999px;background:var(--bz-sunk);color:var(--bz-ink-2);font-size:11px;font-weight:700;vertical-align:1px}
+.bz-hd .subj .tno{font-size:10.5px;color:var(--bz-faint);margin-left:8px;font-weight:500}
+.bz-hd .row{transition:background .1s}
+.bz-hd .listhead .btn,.bz-hd .btn{white-space:nowrap}
+@media (max-width:760px){
+  .bz-hd .c-ord,.bz-hd .c-ost,.bz-hd .c-tags{display:none}
+  .bz-hd .listhead{padding:12px 14px}.bz-hd .c-t{min-width:0;max-width:52vw}
+}

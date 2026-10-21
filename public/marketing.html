@@ -155,7 +155,7 @@ async function renderOverview(el) {
         <tr><td>Klaviyo copy (profiles, consent, lists)</td><td>${kc && kc.done ? `<span class="pill ok">${fmtN(kc.profiles)} saved</span>` : kc ? `<span class="pill hon">${fmtN(kc.profiles)} so far</span>` : '<span class="pill off">Not started</span>'}</td></tr>
         ${Object.entries(SYNC_LABEL).map(([k, l]) => `<tr><td>${esc(l)}</td><td>${o.sync[k] ? `<span class="pill ok" title="${esc(o.sync[k].out || '')}">${esc(o.sync[k].out || 'done')}</span>` : '<span class="pill off">Waiting</span>'}</td></tr>`).join('')}
       </tbody></table>
-      ${o.log && o.log.length ? `<div class="log" style="margin-top:10px">${esc(o.log.join('\n'))}</div>` : ''}</div>
+      ${o.log && o.log.length ? `<details class="bz-det" style="margin-top:10px"><summary>Technical log</summary><div class="log" style="margin-top:8px">${esc(o.log.join('\n'))}</div></details>` : ''}</div>
   </div>`;
   $('resync').onclick = async () => { try { await api('/api/mk/sync', { method: 'POST', body: JSON.stringify({}) }); toast('Sync started'); setTimeout(go, 1500); } catch (e) { toast(e.message, 1); } };
   if (o.syncing || !(kc && kc.done)) setTimeout(() => { if (current === 'overview') go(); }, 20000);
@@ -256,7 +256,7 @@ async function renderConsolidate(el) {
       <tr><td>Rows with no email or phone (skipped)</td><td class="n">${fmtN(st.skipped)}</td></tr></tbody></table>
       <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="ci"${busy || !merged ? ' disabled' : ''}>${merged ? 'Import' : 'Merge first'}</button><button class="btn xs" id="cc"${busy ? ' disabled' : ''}>Clear uploads</button></div>` : ''}
   </div>
-  ${s.log && s.log.length ? `<div class="card" style="margin-top:12px"><b>Log</b><div class="log" style="margin-top:8px">${esc(s.log.join('\n'))}</div></div>` : ''}`;
+  ${s.log && s.log.length ? `<details class="card bz-det" style="margin-top:12px"><summary>Technical log</summary><div class="log" style="margin-top:8px">${esc(s.log.join('\n'))}</div></details>` : ''}`;
   const post = async (u, okMsg) => { try { await api(u, { method: 'POST', body: JSON.stringify({}) }); toast(okMsg); setTimeout(go, 1200); } catch (e) { toast(e.message, 1); } };
   $('cb').onclick = () => post('/api/mk/consolidate/backup', 'Backup started');
   $('cm').onclick = () => { const btn = $('cm'); if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = 'Click again to merge'; return; } post('/api/mk/consolidate/merge', 'Merge started'); };
