@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.98.1
+- Email editor: dragging blocks and sections works again. The move handle (⠿) now starts a drag in every browser — before, the toolbar swallowed the mouse press, so nothing could be dragged.
+- Blocks now have Move up / Move down buttons too (before, only sections did), and a short note shows when a block is already at the top or bottom of its section.
+
 ## 4.98.0
 - New Preview mode for emails and texts (template editor, campaigns, flow steps, Texting page), laid out like Klaviyo's: Desktop / Mobile, preview as a real profile, every link in the message, email size vs. Gmail's clipping limit, and Send a test.
 - Test recipients are prefilled (last ones used, or the internal test list) and can be several, separated by commas. Send test in the editor opens Preview mode instead of a pop-up.

@@ -130,14 +130,14 @@ function decorate(quick) {
   const tag = d.createElement('div'); tag.className = 'bzo-tag' + (sel.kind === 'section' ? ' sec' : ''); tag.textContent = name + (info.node.universal_id ? ' · Universal' : ''); Object.assign(tag.style, { left: left + 'px', top: (top - 20) + 'px' }); o.appendChild(tag);
   const tb = d.createElement('div'); tb.className = 'bzo-tools';
   const canAI = sel.kind === 'block' && ['text', 'button', 'image'].includes(info.node.type);
-  tb.innerHTML = `<button data-a="move" draggable="true" title="Drag to move">${SVG.move}</button>${sel.kind === 'section' ? `<button data-a="up" title="Move up">${SVG.up}</button><button data-a="down" title="Move down">${SVG.down}</button>` : ''}<button data-a="dup" title="Duplicate">${SVG.copy}</button><button data-a="save" title="Save as universal content">${SVG.star}</button>${canAI ? `<button data-a="ai" title="Ask Emily">${SVG.spark}</button>` : ''}<button data-a="note" title="Comment">${SVG.note}</button><button data-a="del" title="Delete">${SVG.trash}</button>`;
+  tb.innerHTML = `<span class="bzo-btn" data-a="move" draggable="true" role="button" title="Drag to move">${SVG.move}</span><button data-a="up" title="Move up">${SVG.up}</button><button data-a="down" title="Move down">${SVG.down}</button><button data-a="dup" title="Duplicate">${SVG.copy}</button><button data-a="save" title="Save as universal content">${SVG.star}</button>${canAI ? `<button data-a="ai" title="Ask Emily">${SVG.spark}</button>` : ''}<button data-a="note" title="Comment">${SVG.note}</button><button data-a="del" title="Delete">${SVG.trash}</button>`;
   o.appendChild(tb);
   const tbx = left - tb.offsetWidth - 8 >= 0 ? left - tb.offsetWidth - 8 : left + r.width - tb.offsetWidth - 6;
   Object.assign(tb.style, { left: tbx + 'px', top: top + 'px' });
-  tb.addEventListener('mousedown', (e) => e.preventDefault());
+  tb.addEventListener('mousedown', (e) => { if (!e.target.closest('[data-a="move"]')) e.preventDefault(); });   // keep text selection, but let the move handle start a drag
   tb.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; e.preventDefault(); e.stopPropagation(); toolAction(b.dataset.a, sel); });
   const mv = tb.querySelector('[data-a="move"]');
-  mv.addEventListener('dragstart', (e) => { DRAG = { kind: sel.kind === 'section' ? 'move-section' : 'move', id: sel.id }; e.dataTransfer.setData('text/plain', 'bz'); e.dataTransfer.effectAllowed = 'move'; });
+  mv.addEventListener('dragstart', (e) => { if (ST.editing) stopEdit(true); DRAG = { kind: sel.kind === 'section' ? 'move-section' : 'move', id: sel.id }; e.dataTransfer.setData('text/plain', 'bz'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setDragImage(el, 20, 20); } catch (_) {} });
   mv.addEventListener('dragend', () => { DRAG = null; hideDrop(); });
   if (info.node.note) { const n = d.createElement('div'); n.className = 'bzo-note'; n.textContent = '💬 ' + info.node.note; Object.assign(n.style, { left: (left + r.width + 8) + 'px', top: top + 'px' }); o.appendChild(n); }
   // image / video: drag the side handles to resize
@@ -160,10 +160,32 @@ function toolAction(a, sel) {
   const info = D.find(ST.doc, sel.id); if (!info) return;
   if (a === 'del') return removeNode(sel);
   if (a === 'dup') { const c = D.reId(info.node); delete c.universal_id; if (info.node.universal_id) c.universal_id = info.node.universal_id; info.list.splice(info.index + 1, 0, c); ST.sel = { kind: sel.kind, id: c.id }; changed(); drawPanel(); return; }
-  if (a === 'up' || a === 'down') { const j = info.index + (a === 'up' ? -1 : 1); if (j < 0 || j >= info.list.length) return; const [x] = info.list.splice(info.index, 1); info.list.splice(j, 0, x); changed(); return; }
+  if (a === 'up' || a === 'down') return moveStep(info, sel, a === 'up' ? -1 : 1);
   if (a === 'save') return saveUniversal(info.node, sel.kind);
   if (a === 'note') { const n = prompt('Comment on this ' + (sel.kind === 'section' ? 'section' : 'block') + ' (only your team sees it):', info.node.note || ''); if (n == null) return; if (n.trim()) info.node.note = n.trim(); else delete info.node.note; changed(); return; }
   if (a === 'ai') return askEmily(info.node);
+}
+/** Move up / Move down. Inside a column it swaps with the neighbour; at the edge of its section a block hops into the
+ * next section (or, if it is the only thing in its section, the whole section moves). */
+function moveStep(info, sel, dir) {
+  const secs = ST.doc.body.sections;
+  const swap = (list, i, j) => { const [x] = list.splice(i, 1); list.splice(j, 0, x); };
+  if (info.kind === 'section') {
+    const j = info.index + dir; if (j < 0 || j >= secs.length) return toast(dir < 0 ? 'Already at the top' : 'Already at the bottom');
+    swap(secs, info.index, j); changed(); return;
+  }
+  const j = info.index + dir;
+  if (j >= 0 && j < info.list.length) { swap(info.list, info.index, j); ST.sel = { kind: 'block', id: info.node.id }; changed(); return; }
+  const si = secs.indexOf(info.section);
+  const count = (info.section.rows || []).reduce((n, r) => n + (r.columns || []).reduce((m, c) => m + (c.blocks || []).length, 0), 0);
+  const ti = si + dir;
+  if (ti < 0 || ti >= secs.length) return toast(dir < 0 ? 'Already at the top' : 'Already at the bottom');
+  if (count === 1) { swap(secs, si, ti); ST.sel = { kind: 'block', id: info.node.id }; changed(); return; }   // alone in its section → move the section
+  const target = secs[ti]; const cols = (target.rows || []).flatMap((r) => r.columns || []); const col = dir < 0 ? cols[0] : cols[0];
+  if (!col) return;
+  const [blk] = info.list.splice(info.index, 1);
+  if (dir < 0) { col.blocks = col.blocks || []; col.blocks.push(blk); } else { col.blocks = col.blocks || []; col.blocks.unshift(blk); }
+  ST.sel = { kind: 'block', id: blk.id }; changed();
 }
 function removeNode(sel) {
   const info = D.find(ST.doc, sel.id); if (!info || !info.list) return;
@@ -423,7 +445,8 @@ const FRAME_CSS = `html,body{margin:0;min-height:100%}body{position:relative}
 .bzo-tag{position:absolute;background:#2F6FEB;color:#fff;font:600 11.5px/18px Helvetica,Arial,sans-serif;padding:1px 8px;border-radius:5px 5px 0 0;pointer-events:none;white-space:nowrap}
 .bzo-tools{position:absolute;display:flex;flex-direction:column;gap:2px;background:#fff;border:1px solid #D9DCE3;border-radius:10px;padding:4px;box-shadow:0 4px 14px rgba(20,30,60,.14)}
 .bzo-tools button{width:30px;height:30px;border:0;background:transparent;border-radius:7px;color:#2B2F38;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.bzo-tools button:hover{background:#EEF2FA}.bzo-tools button[data-a="del"]:hover{background:#FDECEC;color:#C62828}.bzo-tools button[data-a="move"]{cursor:grab}
+.bzo-tools button:hover{background:#EEF2FA}.bzo-tools button[data-a="del"]:hover{background:#FDECEC;color:#C62828}.bzo-tools button[data-a="move"],.bzo-tools [data-a="move"]{cursor:grab}
+.bzo-tools .bzo-btn{width:30px;height:30px;border-radius:7px;color:#2B2F38;display:flex;align-items:center;justify-content:center;-webkit-user-drag:element;user-select:none}.bzo-tools .bzo-btn:hover{background:#EEF2FA}.bzo-tools .bzo-btn:active{cursor:grabbing}
 .bzo-handle{position:absolute;width:10px;height:24px;background:#fff;border:2px solid #2F6FEB;border-radius:5px;cursor:ew-resize;box-sizing:border-box}
 .bzo-note{position:absolute;max-width:200px;background:#FFF8D6;border:1px solid #F0D98C;color:#5A4A12;font:12px/1.35 Helvetica,Arial,sans-serif;padding:6px 8px;border-radius:8px}
 #bzo-drop{position:absolute;height:4px;background:#2F6FEB;border-radius:2px;pointer-events:none;box-shadow:0 0 0 2px rgba(47,111,235,.2)}
