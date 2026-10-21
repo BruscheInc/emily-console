@@ -182,6 +182,7 @@ function toolAction(a, sel) {
 }
 /** Move up / Move down. Inside a column it swaps with the neighbour; at the edge of its section a block hops into the
  * next section (or, if it is the only thing in its section, the whole section moves). */
+const sectionHasBlocks = (sec) => (sec.rows || []).some((r) => (r.columns || []).some((c) => (c.blocks || []).length));
 function moveStep(info, sel, dir) {
   const secs = ST.doc.body.sections;
   const swap = (list, i, j) => { const [x] = list.splice(i, 1); list.splice(j, 0, x); };
@@ -200,6 +201,7 @@ function moveStep(info, sel, dir) {
   if (!col) return;
   const [blk] = info.list.splice(info.index, 1);
   if (dir < 0) { col.blocks = col.blocks || []; col.blocks.push(blk); } else { col.blocks = col.blocks || []; col.blocks.unshift(blk); }
+  if (!sectionHasBlocks(info.section)) secs.splice(secs.indexOf(info.section), 1);
   ST.sel = { kind: 'block', id: blk.id }; changed();
 }
 function removeNode(sel) {
@@ -339,7 +341,10 @@ function onDrop(e) {
   if (g.kind === 'sections') { const list = g.make(); secs.splice(t.index, 0, ...list); ST.sel = { kind: 'section', id: list[0].id }; ST.tab = 'styles'; changed(); drawPanel(); return; }
   let blk;
   if (g.kind === 'move') { const info = D.find(ST.doc, g.id); if (!info) return; [blk] = info.list.splice(info.index, 1);
-    if (t.where === 'col' && t.col === info.column.id && t.index > info.index) t.index--; }
+    if (t.where === 'col' && t.col === info.column.id && t.index > info.index) t.index--;
+    // the block was the only thing in its section → take the empty section away too, so nothing is left behind
+    const src = info.section, si = src ? secs.indexOf(src) : -1;
+    if (si >= 0 && !sectionHasBlocks(src)) { secs.splice(si, 1); if (t.where === 'doc' && t.index > si) t.index--; } }
   else blk = g.make();
   if (t.where === 'doc') { const s = D.newSection(1); s.rows[0].columns[0].blocks.push(blk); secs.splice(t.index, 0, s); }
   else { const c = D.find(ST.doc, t.col); if (!c) return; c.node.blocks.splice(t.index, 0, blk); }

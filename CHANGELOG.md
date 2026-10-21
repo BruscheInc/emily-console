@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.98.3
+- Email editor: moving the only block out of a section no longer leaves an empty "Drag content here" section behind — the empty section is removed. Same for Move up / Move down.
+
 ## 4.98.2
 - Email editor: the move handle (⠿) now drags with plain mouse/touch tracking instead of the browser's drag-and-drop, which didn't work reliably inside the email canvas. A label follows the pointer, a blue line shows where it will land, and the canvas scrolls at the top or bottom edge.
 
