@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.95.1
+- Flow canvas: each split now has a connecting line. A line comes down from the split, runs across, and drops into each branch, with blue "Yes" and grey "No" labels like Klaviyo, so you can see where every path goes. A/B splits and "wait until" steps get the same lines.
+
 ## 4.95.0
 Flow builder laid out like Klaviyo.
 - **Top bar:** Flows / flow name (click to rename), status, a ⋮ menu (Edit details, status, Trigger settings, Clone, Copy ID, Archive, Delete), and buttons for analytics on steps, people in the flow, Preview, Save and **Review and turn on** (or **Turn off**).

@@ -205,6 +205,11 @@ function statFor(id) {
 }
 const I2 = (n) => `<i class="ti ti-${n}"></i>`;
 function drawCanvas() {
+  if (!document.getElementById('flbr-css')) { const st = document.createElement('style'); st.id = 'flbr-css';
+    st.textContent = '.fbr{display:flex;align-items:flex-start}.fbx{position:relative;display:flex;flex-direction:column;align-items:center;padding:0 16px}'
+      + '.fbx::before{content:"";position:absolute;top:0;left:0;right:0;border-top:2px solid var(--line2)}.fbx:first-child::before{left:50%}.fbx:last-child::before{right:50%}.fbx:only-child::before{display:none}'
+      + '.fbx-v{width:2px;height:12px;background:var(--line2)}.fbx-l{font-size:11.5px;font-weight:700;color:#fff;padding:2px 10px;border-radius:999px;background:#52525B}.fbx-l.yes{background:#2563EB}';
+    document.head.appendChild(st); }
   const g = FL.graph; const seen = new Set();
   const card = (id) => {
     const n = g.nodes[id]; const [label, icon, color] = STEP[n.type] || [n.type, 'circle', 'var(--muted)'];
@@ -217,15 +222,16 @@ function drawCanvas() {
   };
   const vline = (h = 18) => `<div aria-hidden="true" style="width:2px;height:${h}px;background:var(--line2)"></div>`;
   const plus = (from, edge) => `<button class="btn xs" data-plus="${from}" data-edge="${edge}" aria-label="Add a step here" style="border-radius:50%;width:26px;height:26px;padding:0;justify-content:center"><i class="ti ti-plus"></i></button>`;
-  const branch = (from, edge, to, label) => `<div style="display:flex;flex-direction:column;align-items:center">${label ? `<div style="font-size:11.5px;font-weight:700;color:var(--muted);padding:2px 8px;border-radius:999px;background:#fff;border:1px solid var(--line)">${label}</div>` : ''}${vline(10)}${plus(from, edge)}${vline(10)}${walk(to)}</div>`;
+  // Each branch hangs from one horizontal line under the split, like Klaviyo: Yes is blue, No is grey.
+  const branch = (from, edge, to, label) => `<div class="fbx"><div class="fbx-v"></div>${label ? `<div class="fbx-l${edge === 'yes' ? ' yes' : ''}">${label}</div>` : ''}${vline(10)}${plus(from, edge)}${vline(10)}${walk(to)}</div>`;
   const walk = (id) => {
     if (!id) return `<div style="font-size:12px;color:var(--muted);padding:4px 10px;border:1px dashed var(--line2);border-radius:999px;background:#fff">End</div>`;
     if (!g.nodes[id]) return `<div class="pill bad">Missing step</div>`;
     if (seen.has(id)) return `<button class="btn xs" data-jump="${id}" style="border-style:dashed"><i class="ti ti-arrow-right"></i> Joins: ${esc((STEP[g.nodes[id].type] || [''])[0])} · ${esc(title(g.nodes[id]).slice(0, 34))}</button>`;
     seen.add(id);
     const n = g.nodes[id];
-    if (n.type === 'split' || n.type === 'wait_for') return `<div style="display:flex;flex-direction:column;align-items:center">${card(id)}${vline(12)}<div style="display:flex;gap:28px;align-items:flex-start">${branch(id, 'yes', n.yes, n.type === 'wait_for' ? 'It happened' : 'Yes')}${branch(id, 'no', n.no, n.type === 'wait_for' ? 'Timed out' : 'No')}</div></div>`;
-    if (n.type === 'ab') return `<div style="display:flex;flex-direction:column;align-items:center">${card(id)}${vline(12)}<div style="display:flex;gap:28px;align-items:flex-start">${((n.config || {}).variants || []).map((v, i) => branch(id, 'v' + i, v.next, `Path ${String.fromCharCode(65 + i)} · ${v.weight}%`)).join('')}</div></div>`;
+    if (n.type === 'split' || n.type === 'wait_for') return `<div style="display:flex;flex-direction:column;align-items:center">${card(id)}${vline(12)}<div class="fbr">${branch(id, 'yes', n.yes, n.type === 'wait_for' ? 'It happened' : 'Yes')}${branch(id, 'no', n.no, n.type === 'wait_for' ? 'Timed out' : 'No')}</div></div>`;
+    if (n.type === 'ab') return `<div style="display:flex;flex-direction:column;align-items:center">${card(id)}${vline(12)}<div class="fbr">${((n.config || {}).variants || []).map((v, i) => branch(id, 'v' + i, v.next, `Path ${String.fromCharCode(65 + i)} · ${v.weight}%`)).join('')}</div></div>`;
     if (n.type === 'end') return card(id);
     return `<div style="display:flex;flex-direction:column;align-items:center">${card(id)}${vline(10)}${plus(id, 'next')}${vline(10)}${walk(n.next)}</div>`;
   };
