@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.99.0
+- New Shipments → Local pickup page: every open Shopify local-pickup order (both stores) that hasn't been picked up yet, oldest first, with how many days it has waited. Tabs for Not emailed yet, Waiting 7+ days and Hidden.
+- Each order has a one-click email: "Ready for pickup" or "Reminder", filled in with the customer's name, order number, pickup location and items. Edit it before sending; tick a box to make your wording the default. Sends from the brand mailbox and opens a ticket so replies land in the inbox. Buzzin tracks how many emails each order got.
+- Hide an order (with a note) if it was picked up but Shopify hasn't been updated yet. The side menu and Home show how many pickups are waiting.
+
 ## 4.98.3
 - Email editor: moving the only block out of a section no longer leaves an empty "Drag content here" section behind — the empty section is removed. Same for Move up / Move down.
 

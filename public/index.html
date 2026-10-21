@@ -407,6 +407,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
   <div class="gb">
     <button class="nav view sub" data-view="stuck" onclick="setView('stuck')"><i class="si ti ti-hourglass"></i><span>Never scanned</span><span class="n" id="v-stuck"></span></button>
     <button class="nav view sub" data-view="undelivered" onclick="setView('undelivered')"><i class="si ti ti-truck"></i><span>Not delivered 15+ days</span><span class="n" id="v-undelivered"></span></button>
+    <button class="nav view sub" data-view="pickup" onclick="setView('pickup')"><i class="si ti ti-building-store"></i><span>Local pickup</span><span class="n" id="v-pickup"></span></button>
   </div></div>
   <div class="grp" data-g="returns"><button class="nav gh" onclick="toggleGrp('returns')"><i class="i ti ti-arrow-back-up"></i><span>Returns & claims</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
@@ -559,13 +560,13 @@ async function loadCounts(){try{
   const c=await api("/api/counts?view="+encodeURIComponent(VIEW));
   for(const k of ["pending","sent","closed","collabs","all"]){const el=$("n-"+k);if(el)el.textContent=c[k]!=null?c[k]:"";}
   for(const v of ["lb","lbo","lb_tickets","lbo_tickets","oos","all"]){const el=$("v-"+v);if(el)el.textContent=(c.views&&c.views[v])?c.views[v]:"";}
-  const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||""; const riv=$("v-ritems"); if(riv) riv.textContent=(c.returns&&c.returns.unchecked)||""; const lv=$("v-loop"); if(lv){ const L=c.returns&&c.returns.loop; lv.textContent=L?(L.attention||L.open||""):""; }
+  const pkv=$("v-pickup"); if(pkv) pkv.textContent=c.pickup||""; const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||""; const riv=$("v-ritems"); if(riv) riv.textContent=(c.returns&&c.returns.unchecked)||""; const lv=$("v-loop"); if(lv){ const L=c.returns&&c.returns.loop; lv.textContent=L?(L.attention||L.open||""):""; }
   // tab title carries the pending count, like a real inbox
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Buzzin`:"Buzzin";
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -659,7 +660,7 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="7" class="empty">Loading…</td></tr>';_listSig="";SEL.clear();syncBulk();}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
-  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
+  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="pickup"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
@@ -670,6 +671,7 @@ async function loadList(force,silent){
   if(VIEW==="returns"||VIEW==="loop_returns") return loadReturns(silent);
   if(VIEW==="returns_items") return loadRetItems(silent);
   if(VIEW==="claims") return loadClaims(silent);
+  if(VIEW==="pickup") return loadPickup(silent);
   if(VIEW==="returns_analytics"){ if(!silent||!RA.d) loadAnalytics(silent); return; }
   if(isStuck) return loadStuck(silent);
   try{
@@ -1062,6 +1064,54 @@ async function loadCustomer(email,orderHint){
 
 async function reclassify(b){ b.disabled=true; const was=b.textContent; b.textContent="Checking…"; try{ const r=await api("/api/admin/classify",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(`Checked ${r.checked} — ${r.junk} hidden as machinery/marketing`); loadCounts(); loadList(true);}catch(e){toast("Couldn't run the check");} b.disabled=false; b.textContent=was; }
 async function dedupe(b){ b.disabled=true; const was=b.textContent; b.textContent="Checking…"; try{ const r=await api("/api/admin/dedupe",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); toast(r.merged?`Merged ${r.merged} duplicate ticket${r.merged===1?"":"s"}`:"No duplicates found"); loadCounts(); loadList(true);}catch(e){toast("Couldn't run the check");} b.disabled=false; b.textContent=was; }
+/* ---------- Local pickup: open Shopify pickup orders not collected yet, with ready / reminder emails ---------- */
+let PICK_SHOW="", _pickSig="";
+async function loadPickup(silent,refresh){
+  const w=$("stuckwrap"); if(!silent){ w.innerHTML='<div class="empty">Checking Shopify for pickup orders…</div>'; _pickSig=""; }
+  try{
+    const d=await api("/api/pickup?show="+encodeURIComponent(PICK_SHOW)+(refresh?"&refresh=1":""));
+    const sig=JSON.stringify([PICK_SHOW,d.counts,d.items.map(x=>[x.id,x.emails,x.hidden,x.note,x.days])]);
+    if(silent&&sig===_pickSig) return; _pickSig=sig; window._pick=d.items;
+    const c=d.counts||{}; const seg=(k,l,n)=>`<button class="tab ${PICK_SHOW===k?"on":""}" onclick="PICK_SHOW='${k}';loadPickup()">${l}<span class="n">${n||0}</span></button>`;
+    $("showing").textContent=d.items.length?`${d.items.length} order${d.items.length===1?"":"s"}`:"";
+    const head=`<div class="stuckhead"><span>Open Shopify orders with <b>local pickup</b> that haven't been picked up yet (orders from the last 120 days). Picked-up orders drop off this list once they're marked fulfilled in Shopify.</span>
+      <span>Checked ${fmt(d.checked_at)}${(d.errors||[]).length?` · <span style="color:#c0392b">${esc(d.errors.join(" | "))}</span>`:""}</span>
+      <button class="btn sec xs" onclick="loadPickup(false,true)">↻ Check now</button>
+      <div class="seg">${seg("","Waiting",c.waiting)}${seg("not_emailed","Not emailed yet",c.not_emailed)}${seg("overdue","Waiting 7+ days",c.overdue)}${seg("hidden","Hidden",c.hidden)}</div></div>`;
+    if(!d.items.length){ w.innerHTML=head+`<div class="empty">${PICK_SHOW==="hidden"?"Nothing hidden.":"No pickup orders waiting right now."}</div>`; return; }
+    w.innerHTML=head+`<table class="tickets stuck"><thead><tr><th class="c-t">Order</th><th>Customer</th><th>Items</th><th>Waiting</th><th>Emails</th><th>Actions</th></tr></thead><tbody>${d.items.map(x=>`<tr>
+      <td class="c-t" style="width:16%"><div class="subj"><a class="ordchip" href="${esc(x.admin_url)}" target="_blank" rel="noopener" title="Open in Shopify" style="text-decoration:none">${esc(x.order_name)} ↗</a></div><div class="exc">${esc(x.store_name)}${x.location?" · "+esc(x.location.name):""}</div>${x.note?`<div class="stk-note">${esc(x.note)}</div>`:""}</td>
+      <td style="width:18%">${esc(x.customer_name||"")}<div class="exc">${esc(x.email||"no email")}</div>${x.phone?`<div class="exc">${esc(x.phone)}</div>`:""}</td>
+      <td style="width:22%"><div class="exc" style="color:var(--ink)">${x.items.slice(0,4).map(i=>esc(i.name)+(i.qty>1?" × "+i.qty:"")).join("<br>")}${x.items.length>4?`<br>+${x.items.length-4} more`:""}</div><div class="exc">${esc(x.total)} · ${esc(String(x.paid||"").toLowerCase().replace(/_/g," "))}</div></td>
+      <td class="days ${x.days>=14?"hot":x.days>=7?"warm":""}" style="width:11%"><b>${x.days} day${x.days===1?"":"s"}</b><div class="exc">ordered ${fmtDay(x.created_at)}</div></td>
+      <td style="width:13%">${x.emails?`<span class="chip drafted">${x.emails} sent</span><div class="exc">last ${fmtShort(x.last_emailed_at)}${x.last_emailed_by?" by "+esc(x.last_emailed_by):""}</div>${x.ticket_id?`<a class="exc" href="javascript:void 0" onclick="openTicket(${x.ticket_id})" style="color:var(--accent)">Open ticket</a>`:""}`:`<span class="chip skip">not emailed</span>`}</td>
+      <td style="width:20%"><div class="stk-acts" style="flex-wrap:wrap;gap:6px">
+        <button class="btn xs" onclick="pickupEmail('${esc(x.id)}','${x.emails?"reminder":"ready"}')">✉️ ${x.emails?"Send reminder":"Ready for pickup"}</button>
+        <button class="btn sec xs" onclick="pickupHide('${esc(x.id)}',${x.hidden?"false":"true"})">${x.hidden?"Show again":"Hide"}</button>
+      </div></td></tr>`).join("")}</tbody></table>`;
+  }catch(e){ w.innerHTML=`<div class="empty">Couldn't load pickup orders: ${esc(e.message||"")}</div>`; }
+}
+async function pickupHide(id,hidden){ let note=null; if(hidden){ note=window.prompt("Why hide it? (optional — e.g. customer picked up, Shopify not updated yet)",""); if(note===null) return; }
+  try{ const r=await api("/api/pickup/hide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,hidden,note})}); if(r.error) throw new Error(r.error); loadPickup(); loadCounts(); }catch(e){ toast(e.message||"Failed",true); } }
+async function pickupEmail(id,kind){
+  const x=(window._pick||[]).find(i=>i.id===id); if(!x) return; closeModal();
+  if(!x.email){ toast("This order has no email address",true); return; }
+  const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
+  m.innerHTML=`<div class="box" style="max-width:640px"><h3>Email ${esc(x.customer_name||x.email)}</h3><div class="sub">${esc(x.order_name)} · from the ${esc(x.store_name)} mailbox · opens a ticket so their reply lands in your inbox</div>
+    <div class="seg" style="margin:10px 0"><button class="tab ${kind==="ready"?"on":""}" data-k="ready">Ready for pickup</button><button class="tab ${kind==="reminder"?"on":""}" data-k="reminder">Reminder</button></div>
+    <label class="lab" style="display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px">To</label><input id="pk-to" value="${esc(x.email)}" disabled style="width:100%;box-sizing:border-box;margin-bottom:8px">
+    <label class="lab" style="display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px">Subject</label><input id="pk-sub" style="width:100%;box-sizing:border-box;margin-bottom:8px">
+    <textarea id="pk-text" rows="15" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:10px;font:inherit;font-size:13.5px;line-height:1.45">Loading…</textarea>
+    <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:8px"><input type="checkbox" id="pk-save"> Use this wording for every ${kind==="reminder"?"reminder":"ready-for-pickup"} email</label>
+    <div class="foot"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" id="modal-go">Send email</button></div></div>`;
+  document.body.appendChild(m);
+  const load=async(k)=>{ kind=k; m.querySelectorAll("[data-k]").forEach(b=>b.classList.toggle("on",b.dataset.k===k)); m.querySelector("#pk-save").parentNode.lastChild.textContent=` Use this wording for every ${k==="reminder"?"reminder":"ready-for-pickup"} email`;
+    try{ const d=await api("/api/pickup/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,kind:k})}); if(d.error) throw new Error(d.error); $("pk-sub").value=d.subject; $("pk-text").value=d.body; }catch(e){ $("pk-text").value=""; toast(e.message||"Couldn't draft",true); } };
+  m.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>load(b.dataset.k)); load(kind);
+  $("modal-go").onclick=async()=>{ const text=$("pk-text").value.trim(); if(!text) return; const go=$("modal-go"); go.disabled=true; go.textContent="Sending…";
+    try{ const r=await api("/api/pickup/email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,kind,subject:$("pk-sub").value,body:text,saveDefault:$("pk-save").checked})}); if(r.error) throw new Error(r.error); toast("Sent ✓ — ticket opened"); closeModal(); loadPickup(); loadCounts(); }
+    catch(e){ toast(e.message||"Couldn't send",true); go.disabled=false; go.textContent="Send email"; } };
+}
 /* ---------- Stuck packages: Shopify "Tracking added" with no carrier movement for 4+ days ---------- */
 let _stuckSig="";
 async function loadStuck(silent){
@@ -1215,6 +1265,7 @@ function renderHome(){
     [v.oos,"package-off","Out-of-stock tickets","customers waiting on a sold-out item","oos"],
     [st.never_scanned,"hourglass","Never scanned","labels made but no carrier scan in 4+ days","stuck"],
     [st.undelivered,"truck","Not delivered 15+ days","shipments that may need a claim","undelivered"],
+    [c.pickup,"building-store","Local pickups waiting","orders customers haven't picked up yet","pickup"],
     [c.faq,"help-circle","FAQ changes waiting for approval","Emily's fixes for the website FAQ page","__faq"],
   ].filter(a=>Number(a[0])>0);
   const pct=(a,b)=>{ if(!b) return ""; const d=Math.round((a-b)/b*100); return `<span class="hm-d ${d>0?"up":d<0?"down":""}"><i class="ti ti-trending-${d>=0?"up":"down"}"></i>${Math.abs(d)}%</span>`; };

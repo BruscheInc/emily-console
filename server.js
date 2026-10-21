@@ -283,7 +283,8 @@ app.get("/api/counts", async (req, res) => {
     let returns = null; try { const rc = await require("./returns").counts(); returns = { open: rc.open, attention: rc.attention, loop: rc.loop || null, unchecked: rc.unchecked || 0 }; } catch (_) {}
     let claims = null; try { claims = (await require("./claims").counts()).open || 0; } catch (_) {}
     let faq = null; try { faq = (await require("./faqs").status()).pending || 0; } catch (_) {}
-    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns, claims, faq });
+    let pickup = null; try { pickup = await require("./pickup").count(); } catch (_) {}
+    res.json({ ...c, collabs: co.rows[0].n, all: all.rows[0].n, views, stuck, returns, claims, faq, pickup });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 /* ---- one conversation ---- */
@@ -882,6 +883,8 @@ app.post("/api/faqs/:store/suggest", async (req, res) => { if (!studioGuard(req,
 app.post("/api/faqs/:store/publish", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.publish(k, req.body || {}, actorOf(req))) }); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/check", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.autoRun(k, "run by " + actorOf(req), { force: true })); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/undo", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.undo(k, actorOf(req))) }); } catch (e) { retErr(res, e); } });
+// Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
+require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
 const EXC = require("./exceptions");
 app.get("/api/returns/exceptions", async (req, res) => {
@@ -985,7 +988,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
