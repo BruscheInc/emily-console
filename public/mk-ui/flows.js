@@ -382,7 +382,7 @@ function drawRight() {
         <label class="fx-ck"><input type="checkbox" data-cb="utm"${c.utm !== false ? ' checked' : ''}><span><b>Enable UTM tracking</b><br>Store links get utm_source=buzzin, utm_medium=email and utm_campaign=this email’s name, for Shopify and Google Analytics.</span></label></div>
       <div class="fx-sec"><div class="fx-st">Additional filters</div><div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">Only people who match these get this email; everyone else moves on to the next step.</div><div id="emfilt"></div></div>`; break; }
     case 'send_sms': body = `<div class="fx-sec">${fl2('Text message name', `<input data-c="name" type="text" value="${esc(c.name || '')}" placeholder="Text message" style="width:100%">`)}${ms}</div>%%PERF%%
-      <div class="fx-sec"><div style="display:flex;align-items:center"><div class="fx-st" style="flex:1;margin:0">Content</div><button class="btn xs" id="smsed">${FL.smsEdit ? 'Done' : 'Edit'}</button></div>
+      <div class="fx-sec"><div style="display:flex;align-items:center;gap:6px"><div class="fx-st" style="flex:1;margin:0">Content</div><button class="btn xs" id="smspv"><i class="ti ti-eye"></i> Preview</button><button class="btn xs" id="smsed">${FL.smsEdit ? 'Done' : 'Edit'}</button></div>
         ${FL.smsEdit ? `<textarea data-c="body" rows="6" style="width:100%;margin-top:8px" aria-label="Text message">${esc(c.body || '')}</textarea><div style="font-size:12px;color:var(--muted);margin-top:4px">Use {{ first_name }}, {{ coupon }}, links… The store name goes first and "Reply STOP to opt out" goes last automatically.</div>
           <label class="fx-ck"><input type="checkbox" data-cb="add_opt_out"${c.add_opt_out !== false ? ' checked' : ''}><span><b>Add the opt-out line</b></span></label>` : ''}
         <div id="smsc" class="fx-phone"></div></div>
@@ -433,13 +433,15 @@ function drawRight() {
     const load = async () => { if (!tid || !box) return; try { const r = await api(`/api/mk/templates/${tid}/thumb`); if (c.template_id !== tid || !$('tplpv')) return; const f = document.createElement('iframe'); f.title = 'Email preview'; f.setAttribute('sandbox', ''); f.srcdoc = r.html; box.innerHTML = ''; box.appendChild(f); } catch (e) { box.innerHTML = '<div class="ld">No preview</div>'; } };
     load();
     R.querySelectorAll('[data-dv]').forEach((b) => b.onclick = () => { FL.pv = b.dataset.dv; R.querySelectorAll('[data-dv]').forEach((x) => x.classList.toggle('on', x === b)); box.classList.toggle('m', FL.pv === 'm'); });
-    const big = $('tplbig'); if (big) big.onclick = async () => { const d = document.createElement('div'); d.className = 'tpv'; d.setAttribute('style', 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center');
-      d.innerHTML = `<div style="background:#fff;border-radius:14px;width:min(720px,94vw);height:90vh;display:flex;flex-direction:column;overflow:hidden"><div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)"><b style="flex:1">${esc(((FL.templates || []).find((t) => String(t.id) === String(tid)) || {}).name || 'Email')}</b><button class="btn xs" data-x aria-label="Close"><i class="ti ti-x"></i></button></div><iframe title="Email preview" sandbox="" style="flex:1;border:0;width:100%"></iframe></div>`;
-      document.body.appendChild(d); const close = () => d.remove(); d.onclick = (e) => { if (e.target === d) close(); }; d.querySelector('[data-x]').onclick = close;
-      try { d.querySelector('iframe').srcdoc = (await api(`/api/mk/templates/${tid}/thumb`)).html; } catch (e) {} };
+    const big = $('tplbig'); if (big) big.onclick = () => { let t = null;
+      window.BZ_preview({ kind: 'email', title: ((FL.templates || []).find((x) => String(x.id) === String(tid)) || {}).name || 'Email',
+        render: async ({ profile_id }) => { t = t || await api('/api/mk/templates/' + tid); return api('/api/mk/templates/render', { method: 'POST', body: JSON.stringify({ store: FL.store || t.store, subject: c.subject || t.subject, preview: c.preview || t.preview, blocks: t.blocks, doc: t.doc || null, profile_id }) }); },
+        send: (to) => api(`/api/mk/templates/${tid}/test`, { method: 'POST', body: JSON.stringify({ to }) }) }); };
   }
   $('ndel').onclick = () => removeNode(SEL);
-  if (n.type === 'send_sms') smsCount();
+  if (n.type === 'send_sms') { smsCount(); const pv = $('smspv'); if (pv) pv.onclick = () => window.BZ_preview({ kind: 'sms', title: c.name || 'Text message',
+    render: ({ profile_id }) => api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ store: FL.store, body: c.body, add_opt_out: c.add_opt_out, profile_id }) }),
+    send: (to) => api('/api/mk/sms/test', { method: 'POST', body: JSON.stringify({ store: FL.store, to, body: c.body, add_opt_out: c.add_opt_out }) }) }); }
   function smsCount() { const el = $('smsc'); if (!el) return; api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ store: FL.store, body: c.body, add_opt_out: c.add_opt_out }) }).then((r) => { if (!r || !r.body) throw 0; el.innerHTML = `<div class="fx-bub">${esc(r.body)}</div><div style="font-size:12px;color:var(--muted);margin-top:6px">${r.chars} characters · ${r.segments} segment${r.segments === 1 ? '' : 's'} (${r.encoding})</div>`; }).catch(() => { el.innerHTML = `<div class="fx-bub">${esc(c.body || 'Write the text')}</div>`; }); }
 }
 

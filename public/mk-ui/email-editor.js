@@ -226,7 +226,7 @@ function showFormatBar(target) {
   const fonts = fontList();
   bar.innerHTML = `<select data-c="block" title="Text style"><option value="p">Normal</option><option value="h1">Heading 1</option><option value="h2">Heading 2</option><option value="h3">Heading 3</option><option value="h4">Heading 4</option></select>
     <select data-c="font" title="Font"><option value="">Font</option>${fonts.map((f) => `<option value="${esc(f[1])}">${esc(f[0])}</option>`).join('')}</select>
-    <select data-c="size" title="Size"><option value="">Size</option>${[10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 36, 40, 48, 56, 64].map((n) => `<option>${n}</option>`).join('')}</select>
+    <input data-c="size" type="number" min="1" max="200" step="1" list="kxSizes" placeholder="Size" title="Text size (px) — pick one or type any size" style="width:70px"><datalist id="kxSizes">${[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 36, 40, 48, 56, 64, 72, 96].map((n) => `<option value="${n}"></option>`).join('')}</datalist>
     <span class="bzo-sep"></span>
     <button data-c="bold" title="Bold"><b>B</b></button><button data-c="italic" title="Italic"><i>I</i></button><button data-c="underline" title="Underline"><u>U</u></button><button data-c="strikeThrough" title="Strikethrough"><s>S</s></button>
     <label class="bzo-col" title="Text color"><span>A</span><input type="color" data-c="color"></label><label class="bzo-col hl" title="Highlight"><span>▇</span><input type="color" data-c="hilite" value="#FFF3B0"></label>
@@ -237,7 +237,7 @@ function showFormatBar(target) {
     <select data-c="tag" title="Insert personalization"><option value="">{ } Personalize</option>${PERSONALIZE.map(([l, v]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>
     <button data-c="removeFormat" title="Clear formatting">${SVG.clear}</button>`;
   d.getElementById('bzo').appendChild(bar);
-  let saved = null; const keep = () => { const s = d.getSelection(); if (s.rangeCount) saved = s.getRangeAt(0).cloneRange(); };
+  let saved = null; const keep = () => { const s = d.getSelection(); if (s.rangeCount && !bar.contains(s.getRangeAt(0).commonAncestorContainer) && d.activeElement && !bar.contains(d.activeElement)) saved = s.getRangeAt(0).cloneRange(); };
   const restore = () => { if (saved) { const s = d.getSelection(); s.removeAllRanges(); s.addRange(saved); } };
   d.addEventListener('selectionchange', keep);
   bar._off = () => d.removeEventListener('selectionchange', keep);
@@ -251,7 +251,8 @@ function showFormatBar(target) {
   });
   bar.querySelector('[data-c="block"]').onchange = (e) => { run('formatBlock', '<' + e.target.value + '>'); };
   bar.querySelector('[data-c="font"]').onchange = (e) => { if (e.target.value) wrapStyle('fontFamily', e.target.value); e.target.value = ''; };
-  bar.querySelector('[data-c="size"]').onchange = (e) => { if (e.target.value) wrapStyle('fontSize', e.target.value + 'px'); e.target.value = ''; };
+  { const sz = bar.querySelector('[data-c="size"]'); const go = () => { const v = Number(sz.value); if (v > 0) wrapStyle('fontSize', Math.min(200, v) + 'px'); };
+    sz.onchange = go; sz.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } }; }
   bar.querySelector('[data-c="color"]').oninput = (e) => run('foreColor', e.target.value);
   bar.querySelector('[data-c="hilite"]').oninput = (e) => run('hiliteColor', e.target.value);
   bar.querySelector('[data-c="tag"]').onchange = (e) => { if (e.target.value) { restore(); d.execCommand('insertText', false, e.target.value); onFrameInput(); } e.target.value = ''; };
@@ -349,10 +350,7 @@ async function save() {
     ST.t = { ...ST.t, ...r }; ST.dirty = false; $('kxDirty').classList.add('hidden'); toast('Saved');
   } catch (e) { toast(e.message, 1); }
 }
-async function sendTest() {
-  const to = prompt('Send a test to (must be on the internal test list in Settings):'); if (!to) return;
-  try { if (ST.dirty) await save(); const r = await api(`/api/mk/templates/${ST.t.id}/test`, { method: 'POST', body: JSON.stringify({ to }) }); toast(r.status === 'sent' ? 'Test sent' : `Not sent: ${r.reason}`, r.status !== 'sent'); } catch (e) { toast(e.message, 1); }
-}
+function sendTest() { return window.MKE_preview({ send: true }); }
 
 /* ---------- universal content (saved blocks and sections) ---------- */
 const stripForSave = (n) => { const c = D.clone(n); delete c.universal_id; delete c.note; return c; };
@@ -382,7 +380,7 @@ function askEmily(node) {
 }
 
 /* expose for the panel code */
-window.MKE = { get ST() { return ST; }, D, draw, decorate, changed, markDirty, select, drawPanel: () => drawPanel(), addByClick, removeNode, toolAction, setDrag: (g) => { DRAG = g; }, clearDrag: () => { DRAG = null; hideDrop(); }, stopEdit, saveUniversal };
+window.MKE = { get ST() { return ST; }, D, draw, decorate, changed, markDirty, select, drawPanel: () => drawPanel(), addByClick, removeNode, toolAction, setDrag: (g) => { DRAG = g; }, clearDrag: () => { DRAG = null; hideDrop(); }, stopEdit, saveUniversal, save: () => save() };
 function drawPanel() { if (window.MKE_drawPanel) window.MKE_drawPanel(); }
 function pickImage(cb) { return window.MKE_pickImage(cb); }
 function setImage(blk, u) { return window.MKE_setImage(blk, u); }
@@ -431,7 +429,7 @@ const FRAME_CSS = `html,body{margin:0;min-height:100%}body{position:relative}
 #bzo-drop{position:absolute;height:4px;background:#2F6FEB;border-radius:2px;pointer-events:none;box-shadow:0 0 0 2px rgba(47,111,235,.2)}
 .bzo-fmt{position:absolute;z-index:60;display:flex;align-items:center;gap:2px;flex-wrap:nowrap;background:#fff;border:1px solid #D9DCE3;border-radius:10px;padding:4px 6px;box-shadow:0 6px 18px rgba(20,30,60,.16);font:12.5px Helvetica,Arial,sans-serif;white-space:nowrap}
 .bzo-fmt button{min-width:26px;height:26px;border:0;background:transparent;border-radius:6px;cursor:pointer;color:#22252C;font:13px Helvetica,Arial,sans-serif;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
-.bzo-fmt button:hover{background:#EEF2FA}.bzo-fmt select{height:26px;border:1px solid #E1E3E8;border-radius:6px;font:12px Helvetica,Arial,sans-serif;max-width:110px;background:#fff}
+.bzo-fmt button:hover{background:#EEF2FA}.bzo-fmt input[type=number]{height:26px;border:1px solid #E1E3E8;border-radius:6px;font:12px Helvetica,Arial,sans-serif;padding:0 6px;box-sizing:border-box;background:#fff}.bzo-fmt select{height:26px;border:1px solid #E1E3E8;border-radius:6px;font:12px Helvetica,Arial,sans-serif;max-width:110px;background:#fff}
 .bzo-sep{width:1px;height:18px;background:#E1E3E8;margin:0 3px}
 .bzo-col{position:relative;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;font-weight:700}.bzo-col:hover{background:#EEF2FA}.bzo-col.hl span{color:#E6C200}
 .bzo-col input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}`;

@@ -92,7 +92,8 @@ async function inbound(store, { from, to, body, providerId }) {
 function routes(app, { guard, admin, actorOf, fail, store }) {
   app.post("/api/mk/sms/preview", async (req, res) => {
     if (!guard(req, res)) return;
-    try { const b = req.body || {}; const s = store(b.store) || "lb"; const prof = { id: 0, first_name: "Maria", last_name: "Lopez", phone: "+15555550123", props: { last_sizes: ["3-6M"] } };
+    try { const b = req.body || {}; const s = store(b.store) || "lb"; let prof = null; if (b.profile_id) prof = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [Number(b.profile_id)])).rows[0];
+      if (!prof) prof = { id: 0, first_name: "Maria", last_name: "Lopez", phone: "+15555550123", props: { last_sizes: ["3-6M"] } };
       const body = await compose(s, b, prof, { coupon: "WELCOME-8K2Q", checkout_url: "https://lrk.sp/c/x7Qa" }); res.json({ body, ...segments(body) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/mk/sms/test", async (req, res) => {

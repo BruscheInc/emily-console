@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.98.0
+- New Preview mode for emails and texts (template editor, campaigns, flow steps, Texting page), laid out like Klaviyo's: Desktop / Mobile, preview as a real profile, every link in the message, email size vs. Gmail's clipping limit, and Send a test.
+- Test recipients are prefilled (last ones used, or the internal test list) and can be several, separated by commas. Send test in the editor opens Preview mode instead of a pop-up.
+- Text size in the text toolbar takes any value (type it or pick one), down to 1px.
+
 ## 4.97.5
 - Email editor: blocks set to "Mobile only" are hidden in desktop view, and "Desktop only" blocks are hidden in mobile view.
 - Sent emails: a text block's own color, size and font now win over the template's normal text style, so the footer looks the same in the inbox as in the editor.

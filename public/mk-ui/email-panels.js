@@ -621,12 +621,12 @@ function htmlModal(html, cb) {
   const { m, close } = modal('Edit HTML', `<textarea class="kp-in mono" id="khT" rows="24" style="width:100%">${esc(html)}</textarea><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="btn" data-x2>Cancel</button><button class="btn pri" id="khGo">Apply</button></div>`, true);
   m.querySelector('[data-x2]').onclick = close; m.querySelector('#khGo').onclick = () => { cb(m.querySelector('#khT').value); close(); };
 }
-window.MKE_preview = async function preview() {
+window.MKE_preview = async function preview(opts) {
   const S = E().ST; E().stopEdit();
-  const { m } = modal('Preview', `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><div class="seg" id="kpvD"><button class="on" data-d="desk">${I('device-desktop')} Desktop</button><button data-d="mob">${I('device-mobile')} Mobile</button></div><span class="sp"></span><span style="color:var(--muted);font-size:12px">Filled in for a sample person (Maria). Subject: <b id="kpvS"></b></span></div><div style="display:flex;justify-content:center;background:#ECEAE5;border-radius:10px;padding:14px"><iframe id="kpvF" title="Preview" style="border:0;background:#fff;width:680px;max-width:100%;height:68vh;border-radius:8px"></iframe></div>`, true);
-  try { const r = await api('/api/mk/templates/render', { method: 'POST', body: JSON.stringify({ store: S.t.store, subject: document.getElementById('kxSubj').value, preview: document.getElementById('kxPre').value, doc: S.doc }) });
-    m.querySelector('#kpvF').srcdoc = r.html; m.querySelector('#kpvS').textContent = r.subject || '(no subject)';
-    m.querySelectorAll('#kpvD button').forEach((b) => b.onclick = () => { m.querySelectorAll('#kpvD button').forEach((x) => x.classList.toggle('on', x === b)); m.querySelector('#kpvF').style.width = b.dataset.d === 'mob' ? '390px' : '680px'; });
-  } catch (e) { toast(e.message, 1); }
+  const subj = () => document.getElementById('kxSubj').value, pre = () => document.getElementById('kxPre').value;
+  return window.BZ_preview({ kind: 'email', title: S.t.name || (document.getElementById('kxName') || {}).value || '', focusSend: !!(opts && opts.send),
+    render: ({ profile_id }) => api('/api/mk/templates/render', { method: 'POST', body: JSON.stringify({ store: S.t.store, subject: subj(), preview: pre(), doc: S.doc, profile_id }) }),
+    beforeSend: async () => { if (S.dirty && E().save) await E().save(); },
+    send: (to) => api(`/api/mk/templates/${S.t.id}/test`, { method: 'POST', body: JSON.stringify({ to }) }) });
 };
 })();

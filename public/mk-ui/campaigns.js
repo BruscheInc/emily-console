@@ -105,7 +105,7 @@ async function editCampaign(el, id) {
   const isE = CP.channel === 'email';
   el.innerHTML = `<div class="bar" style="align-items:center;flex-wrap:wrap"><a href="#campaigns" class="bz-crumb">Campaigns</a><span style="color:var(--bz-faint)">/</span><input id="cn" type="text" value="${esc(CP.name)}" class="bz-title-in" aria-label="Campaign name"${ro ? ' disabled' : ''}>${pill(CSTATUS, CP.status)}<span class="pill off">${CP.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'} · ${isE ? 'Email' : 'Text'}</span>
     <span class="sp"></span><span class="pill hon hidden" id="cd">Unsaved</span>
-    <button class="btn" id="ccopy"><i class="ti ti-copy"></i> Copy</button>${ro ? '' : '<button class="btn danger" id="cdel"><i class="ti ti-trash"></i></button>'}<button class="btn" id="ctest"><i class="ti ti-send"></i> Send a test</button>
+    <button class="btn" id="ccopy"><i class="ti ti-copy"></i> Copy</button>${ro ? '' : '<button class="btn danger" id="cdel"><i class="ti ti-trash"></i></button>'}<button class="btn" id="cpv"><i class="ti ti-eye"></i> Preview</button><button class="btn" id="ctest"><i class="ti ti-send"></i> Send a test</button>
     ${CP.status === 'draft' ? '<button class="btn" id="csave">Save</button><button class="btn pri" id="csched"><i class="ti ti-calendar-check"></i> Schedule</button>' : ''}
     ${CP.status === 'pending' ? '<button class="btn" id="cunsched">Back to draft</button><button class="btn pri" id="capprove"><i class="ti ti-check"></i> Approve</button>' : ''}
     ${CP.status === 'scheduled' ? '<button class="btn" id="cunsched">Unschedule</button>' : ''}${CP.status === 'sending' ? '<button class="btn danger" id="cstop">Stop sending</button>' : ''}</div>
@@ -123,7 +123,7 @@ async function editCampaign(el, id) {
   if ($('csave')) $('csave').onclick = () => save().then(() => toast('Saved')).catch((e) => toast(e.message, 1));
   $('ccopy').onclick = async () => { try { const c = await api('/api/mk/campaigns', { method: 'POST', body: JSON.stringify({ copy_of: CP.id }) }); cdirty = false; location.hash = '#campaigns/' + c.id; } catch (e) { toast(e.message, 1); } };
   if ($('cdel')) $('cdel').onclick = async () => { if ($('cdel').dataset.c !== '1') { $('cdel').dataset.c = '1'; $('cdel').textContent = 'Click again to delete'; return; } try { await api('/api/mk/campaigns/' + CP.id, { method: 'DELETE' }); cdirty = false; location.hash = '#campaigns'; } catch (e) { toast(e.message, 1); } };
-  $('ctest').onclick = testUI;
+  $('ctest').onclick = () => testUI(true); $('cpv').onclick = () => testUI(false);
 }
 async function save() {
   const r = await api('/api/mk/campaigns/' + CP.id, { method: 'PUT', body: JSON.stringify({ name: CP.name, audience: CP.audience, content: CP.content, ab: CP.ab, schedule: CP.schedule, smart_sending: CP.smart_sending, resend: CP.resend }) });
@@ -200,7 +200,7 @@ async function previewMsg() {
     }
     if (!c.template_id) { box.innerHTML = '<div class="empty">Choose an email to see it here.</div>'; return; }
     const t = await api('/api/mk/templates/' + c.template_id);
-    const r = await api('/api/mk/templates/render', { method: 'POST', body: JSON.stringify({ store: CP.store, subject: c.subject || t.subject, preview: c.preview || t.preview, blocks: t.blocks }) });
+    const r = await api('/api/mk/templates/render', { method: 'POST', body: JSON.stringify({ store: CP.store, subject: c.subject || t.subject, preview: c.preview || t.preview, blocks: t.blocks, doc: t.doc || null }) });
     box.innerHTML = `<div style="padding:10px 14px;border-bottom:1px solid var(--line)"><div style="font-weight:700">${esc(r.subject || '')}</div><div style="font-size:12.5px;color:var(--muted)">${esc(c.preview || t.preview || '')}</div></div><iframe title="Email preview" style="width:100%;height:560px;border:0;display:block" sandbox=""></iframe>`;
     box.querySelector('iframe').srcdoc = r.html;
   } catch (e) { box.innerHTML = `<div class="note">${esc(e.message)}</div>`; }
@@ -258,11 +258,16 @@ function drawReport() {
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">${[['People', all], ['Delivered', tot('sent')], ['Waiting', tot('queued')], ['Held', tot('held')], ['Skipped', tot('skipped')], ['Opened', r.events.opened || 0], ['Clicked', r.events.clicked || 0], ['Unsubscribed', r.events.unsubscribed || 0], ['Bounced', r.events.bounced || 0]].map(([l, n]) => `<div style="background:var(--panel2);border-radius:10px;padding:8px"><div style="font-size:12px;color:var(--muted)">${l}</div><div style="font-weight:800;font-size:18px">${fmtN(n)}</div></div>`).join('')}</div>
     ${r.not_sent.length ? `<div style="margin-top:10px;font-size:12.5px"><b>Why some didn't go:</b>${r.not_sent.map((x) => `<div>${esc(x.reason)} · ${fmtN(x.n)}</div>`).join('')}</div>` : ''}`;
 }
-function testUI() {
-  document.querySelectorAll('.drawer').forEach((d) => d.remove());
-  const d = document.createElement('aside'); d.className = 'drawer';
-  d.innerHTML = `<div class="hd"><b>Send a test</b><span class="sp"></span><button class="btn xs" data-x aria-label="Close"><i class="ti ti-x"></i></button></div><div class="bd"><p class="sub">Only goes to addresses or numbers on the internal test list (Settings), and only once a sender is connected. Until then it's recorded as held.</p><label class="lab" for="ctto">${CP.channel === 'sms' ? 'Phone number' : 'Email address'}</label><input id="ctto" type="text" style="width:100%"><button class="btn pri" id="ctgo" style="margin-top:8px">Send test</button><div id="ctout" style="margin-top:12px"></div></div>`;
-  document.body.appendChild(d); d.querySelector('[data-x]').onclick = () => d.remove();
-  d.querySelector('#ctgo').onclick = async () => { try { if (cdirty) await save(); const r = await api(`/api/mk/campaigns/${CP.id}/test`, { method: 'POST', body: JSON.stringify({ to: d.querySelector('#ctto').value }) }); d.querySelector('#ctout').innerHTML = r.results.map((x) => `<div class="card" style="margin-top:6px">${x.version ? `<b>Version ${esc(x.version)}</b> · ` : ''}${esc(x.status)}${x.reason ? ` — ${esc(x.reason)}` : ''}</div>`).join(''); } catch (e) { d.querySelector('#ctout').innerHTML = `<div class="note">${esc(e.message)}</div>`; } };
+function testUI(focusSend) {
+  const c = CP.content || {}; let tpl = null;
+  window.BZ_preview({ kind: CP.channel === 'sms' ? 'sms' : 'email', title: CP.name || '', focusSend,
+    render: async ({ profile_id }) => {
+      if (CP.channel === 'sms') return api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ store: CP.store, body: c.body || '', add_opt_out: c.add_opt_out !== false, profile_id }) });
+      if (!c.template_id) throw new Error('Choose an email first.');
+      tpl = tpl || await api('/api/mk/templates/' + c.template_id);
+      return api('/api/mk/templates/render', { method: 'POST', body: JSON.stringify({ store: CP.store, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview, blocks: tpl.blocks, doc: tpl.doc || null, profile_id }) });
+    },
+    beforeSend: async () => { if (cdirty) await save(); },
+    send: (to) => api(`/api/mk/campaigns/${CP.id}/test`, { method: 'POST', body: JSON.stringify({ to }) }) });
 }
 })();
