@@ -14,18 +14,60 @@ const ADDABLE = ['send_email', 'send_sms', 'delay', 'wait_for', 'split', 'ab', '
 const nid = () => 'n' + Math.random().toString(16).slice(2, 10);
 const C = () => window.MK_conditions;
 
+let FQ = '', FSF = '', FDAYS = 7, FARCH = false, FCHK = new Set();
 async function renderFlows(el, id) {
   if (id) return editFlow(el, id);
-  const r = await api('/api/mk/flows?' + qs({ store: STORE }));
-  el.innerHTML = `<h1>Flows</h1><p class="sub">Automatic series that run for each person on their own schedule. Any step can join an existing path, so a shared email is written once. Nothing sends until a sender is connected.</p>
-  <div class="bar"><select id="fs"${STORE ? '' : ' disabled'}><option value="">Blank flow</option>${Object.entries(r.starters).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('')}</select>
-    <button class="btn pri" id="fnew"${STORE ? '' : ' disabled title="Pick a store first"'}><i class="ti ti-plus"></i> New flow</button><button class="btn" id="fimp"><i class="ti ti-download"></i> Re-import from Klaviyo</button>${STORE ? '' : '<span style="color:var(--muted)">Pick a store at the top to create one.</span>'}</div>
-  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Flow</th><th>Store</th><th>Status</th><th>Starts when</th><th class="n">Steps</th><th class="n">In it now</th><th class="n">Entered (30 days)</th><th>From</th></tr></thead><tbody>
-  ${r.flows.map((f) => `<tr class="click" data-id="${f.id}"><td><b>${esc(f.name)}</b></td><td>${f.store === 'lbo' ? 'Outlet' : 'LB'}</td><td>${pill(FSTATUS, f.status)}</td><td>${esc(trigText(f.trigger, r))}</td><td class="n">${fmtN(f.steps)}</td><td class="n">${fmtN(f.in_flow)}</td><td class="n">${fmtN(f.entered_30d)}</td><td>${f.source === 'klaviyo' ? '<span class="pill blue">Klaviyo</span>' : '<span class="pill off">Buzzin</span>'}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No flows yet.</td></tr>'}
-  </tbody></table></div></div>`;
-  el.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => { location.hash = '#flows/' + tr.dataset.id; });
-  $('fnew').onclick = async () => { try { const f = await api('/api/mk/flows', { method: 'POST', body: JSON.stringify({ store: STORE, starter: $('fs').value || null }) }); location.hash = '#flows/' + f.id; } catch (e) { toast(e.message, 1); } };
-  $('fimp').onclick = async () => { try { const x = await api('/api/mk/flows/import-klaviyo', { method: 'POST', body: '{}' }); toast(`${x.flows.length} flows imported as drafts`); go(); } catch (e) { toast(e.message, 1); } };
+  const KL = window.MK_KL || {}, I = (n) => `<i class="ti ti-${n}"></i>`;
+  const load = () => api('/api/mk/flows?' + qs({ store: STORE, days: FDAYS, archived: FARCH ? '1' : '' }));
+  let r = await load();
+  el.innerHTML = (KL.LCSS || '') + `<style>.kl .cb{width:18px;height:18px;accent-color:#18181B}.kl .bulk{display:flex;align-items:center;gap:10px;background:#F4F4F5;border-radius:10px;padding:8px 12px;margin-bottom:12px}
+    .kl .st.paused{background:#FEE2E2;color:#991B1B}.kl .st.test{background:#DBEAFE;color:#1E40AF}.kl .tico{font-size:20px;display:inline-flex;gap:6px}.kl .flab{display:block;font-size:12.5px;color:#52525B;margin-bottom:4px}</style>
+    <div class="kl"><div class="kl-h"><h1>${FARCH ? 'Archived flows' : 'Flows'}</h1>${FARCH ? `<button class="btn" id="fback">${I('arrow-left')} Back to flows</button>` : ''}<button class="btn" id="fopt">Options ${I('chevron-down')}</button><button class="btn pri" id="fcr">Create flow</button></div>
+    <div class="kl-b"><div class="kl-f" style="align-items:flex-end"><input type="search" id="fq" placeholder="Search flows" value="${esc(FQ)}" aria-label="Search flows">
+      <select id="fsf" aria-label="Status"><option value="">Status</option>${Object.entries(FSTATUS).map(([k, [, l]]) => `<option value="${k}"${FSF === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <div><span class="flab">Metric period</span><select id="fdays" aria-label="Metric period" style="border-style:solid">${[[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [365, 'Last 365 days']].map(([v, l]) => `<option value="${v}"${FDAYS === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div></div>
+      <div id="fbulk"></div><div id="fbody"></div></div></div>`;
+  const reload = async () => { r = await load(); draw(); };
+  const st = () => STORE || 'lb';
+  const make = async (starter) => { try { const f = await api('/api/mk/flows', { method: 'POST', body: JSON.stringify({ store: st(), starter: starter || null }) }); location.hash = '#flows/' + f.id; } catch (e) { toast(e.message, 1); } };
+  $('fcr').onclick = () => KL.menu($('fcr'), [['Blank flow', 'file', () => make(null)], ...Object.entries(r.starters).map(([k, n]) => [`Start from: ${n}`, 'template', () => make(k)])], { alignRight: true });
+  $('fopt').onclick = () => KL.menu($('fopt'), [[FARCH ? 'Show active flows' : 'Show archived flows', 'archive', () => { FARCH = !FARCH; FCHK.clear(); renderFlows(el); }],
+    ['Re-import from Klaviyo', 'download', async () => { try { const x = await api('/api/mk/flows/import-klaviyo', { method: 'POST', body: '{}' }); toast(`${x.flows.length} flows imported as drafts`); reload(); } catch (e) { toast(e.message, 1); } }]], { alignRight: true });
+  if ($('fback')) $('fback').onclick = () => { FARCH = false; FCHK.clear(); renderFlows(el); };
+  $('fq').oninput = () => { FQ = $('fq').value; draw(); }; $('fsf').onchange = () => { FSF = $('fsf').value; draw(); };
+  $('fdays').onchange = async () => { FDAYS = Number($('fdays').value); await reload(); };
+  const archive = async (list, on) => { for (const f of list) { try { await api(`/api/mk/flows/${f.id}/archive`, { method: 'POST', body: JSON.stringify({ archived: on }) }); FCHK.delete(String(f.id)); } catch (e) { toast(e.message, 1); return; } } toast(on ? `Archived ${list.length}` : `Restored ${list.length}`); reload(); };
+  const del = async (list) => { if (!confirm(list.length === 1 ? `Delete the flow "${list[0].name}"? Anyone in it leaves the flow. This can't be undone.` : `Delete ${list.length} flows? Anyone in them leaves. This can't be undone.`)) return;
+    for (const f of list) { try { await api('/api/mk/flows/' + f.id, { method: 'DELETE' }); FCHK.delete(String(f.id)); } catch (e) { toast(e.message, 1); return; } } toast(`Deleted ${list.length}`); reload(); };
+  const rowMenu = (f, anchor) => KL.menu(anchor, [
+    ['Edit details', 'pencil', async () => { const n = prompt('Flow name', f.name); if (!n || n === f.name) return; try { await api(`/api/mk/flows/${f.id}/details`, { method: 'POST', body: JSON.stringify({ name: n }) }); toast('Saved'); reload(); } catch (e) { toast(e.message, 1); } }],
+    ['Clone', 'copy', async () => { try { const c = await api(`/api/mk/flows/${f.id}/clone`, { method: 'POST', body: '{}' }); toast('Copied as a draft'); location.hash = '#flows/' + c.id; } catch (e) { toast(e.message, 1); } }],
+    ['Copy ID', 'hash', () => { try { navigator.clipboard.writeText(String(f.id)); toast('Copied ID ' + f.id); } catch (e) { toast(String(f.id)); } }],
+    FARCH ? ['Restore', 'arrow-back-up', () => archive([f], false)] : ['Archive', 'archive', () => archive([f], true)],
+    ['Delete', 'trash', () => del([f]), { danger: true }],
+  ], { alignRight: true });
+  const money = (v) => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const draw = () => {
+    const rows = r.flows.filter((f) => (!FQ || f.name.toLowerCase().includes(FQ.toLowerCase())) && (!FSF || f.status === FSF)).sort((a, b) => a.name.localeCompare(b.name));
+    $('fbody').innerHTML = `<table><thead><tr><th style="width:34px"><input type="checkbox" class="cb" id="fall" aria-label="Select all"></th><th>Flow ↑</th><th>Type</th><th>Status</th><th>Last updated</th><th class="n">Revenue</th><th class="n">Revenue per recipient</th><th style="width:44px"></th></tr></thead><tbody>
+      ${rows.map((f) => `<tr class="row"><td><input type="checkbox" class="cb" data-ck="${f.id}"${FCHK.has(String(f.id)) ? ' checked' : ''} aria-label="Select ${esc(f.name)}"></td>
+        <td><a class="nm" href="#flows/${f.id}">${esc(f.name)}</a><div class="sub2">${esc(trigText(f.trigger, r))}</div></td>
+        <td><span class="tico">${(f.channels || []).includes('send_email') ? `<i class="ti ti-mail" title="Email"></i>` : ''}${(f.channels || []).includes('send_sms') ? `<i class="ti ti-message" title="Text"></i>` : ''}${(f.channels || []).length ? '' : '—'}</span></td>
+        <td><span class="st ${f.status === 'live' ? 'live' : f.status}">${esc((FSTATUS[f.status] || [, f.status])[1])}</span></td>
+        <td>${fmtDT(f.updated_at)}</td><td class="n">${money(f.revenue)}</td><td class="n">${money(f.rpr)}</td>
+        <td><button class="dots" data-fm="${f.id}" aria-label="Options for ${esc(f.name)}">${I('dots-vertical')}</button></td></tr>`).join('') || `<tr><td colspan="8" class="empty">${FARCH ? 'No archived flows.' : 'No flows match.'}</td></tr>`}</tbody></table>
+      <div style="padding:14px 0;color:#3F3F46">${rows.length ? `1 - ${rows.length} of ${rows.length}` : ''}</div>`;
+    const find = (id) => r.flows.find((f) => String(f.id) === String(id));
+    $('fbody').querySelectorAll('[data-fm]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); rowMenu(find(b.dataset.fm), b); });
+    $('fbody').querySelectorAll('[data-ck]').forEach((x) => x.onchange = () => { if (x.checked) FCHK.add(x.dataset.ck); else FCHK.delete(x.dataset.ck); bulk(); });
+    $('fall').checked = rows.length > 0 && rows.every((f) => FCHK.has(String(f.id)));
+    $('fall').onchange = () => { rows.forEach((f) => ($('fall').checked ? FCHK.add(String(f.id)) : FCHK.delete(String(f.id)))); draw(); };
+    bulk();
+  };
+  const bulk = () => { const picked = r.flows.filter((f) => FCHK.has(String(f.id)));
+    $('fbulk').innerHTML = picked.length ? `<div class="bulk"><b>${picked.length} selected</b><span style="flex:1"></span><button class="btn xs" id="fclr">Clear</button><button class="btn xs" id="farc">${I(FARCH ? 'arrow-back-up' : 'archive')} ${FARCH ? 'Restore' : 'Archive'}</button><button class="btn xs danger" id="fdel">${I('trash')} Delete</button></div>` : '';
+    if (picked.length) { $('fclr').onclick = () => { FCHK.clear(); draw(); }; $('farc').onclick = () => archive(picked, !FARCH); $('fdel').onclick = () => del(picked); } };
+  draw();
 }
 function trigText(t, ctx = {}) {
   t = t || {};
@@ -49,7 +91,7 @@ async function editFlow(el, id) {
   <div id="flprob"></div>
   <div style="flex:1;display:flex;min-height:0">
     <div style="width:330px;flex:none;border-right:1px solid var(--line);background:#fff;overflow-y:auto;padding:14px" id="flleft"></div>
-    <div style="flex:1;min-width:0;overflow:auto;background:#F6F5F2;background-image:radial-gradient(#DCD9D2 1px,transparent 1px);background-size:18px 18px" id="flcanvas"></div>
+    <div style="flex:1;min-width:0;overflow:hidden;position:relative;background:#F6F5F2;background-image:radial-gradient(#DCD9D2 1px,transparent 1px);background-size:18px 18px;cursor:grab;touch-action:none" id="flcanvas"></div>
     <div style="width:360px;flex:none;border-left:1px solid var(--line);background:#fff;overflow-y:auto;padding:14px" id="flright"></div></div></div>`;
   $('flst').value = FL.status;
   const mark = () => { fldirty = true; $('fldirty').classList.remove('hidden'); };
@@ -57,7 +99,7 @@ async function editFlow(el, id) {
   $('flnm').oninput = () => { FL.name = $('flnm').value; mark(); };
   $('flst').onchange = () => { FL.status = $('flst').value; mark(); };
   $('flsave').onclick = saveFlow;
-  $('fldel').onclick = async () => { if ($('fldel').dataset.c !== '1') { $('fldel').dataset.c = '1'; $('fldel').textContent = 'Click again to delete'; return; } try { await api('/api/mk/flows/' + FL.id, { method: 'DELETE' }); location.hash = '#flows'; } catch (e) { toast(e.message, 1); } };
+  $('fldel').onclick = async () => { if (!confirm(`Delete the flow "${FL.name}"? Anyone in it leaves the flow. This can't be undone.`)) return; try { await api('/api/mk/flows/' + FL.id, { method: 'DELETE' }); fldirty = false; location.hash = '#flows'; } catch (e) { toast(e.message, 1); } };
   $('flsim').onclick = simulateUI;
   $('flruns').onclick = runsUI;
   window.onbeforeunload = () => fldirty ? 'Unsaved changes' : undefined;
@@ -151,10 +193,35 @@ function drawCanvas() {
     return `<div style="display:flex;flex-direction:column;align-items:center">${card(id)}${vline(10)}${plus(id, 'next')}${vline(10)}${walk(n.next)}</div>`;
   };
   const start = `<div style="display:flex;flex-direction:column;align-items:center"><div style="padding:8px 14px;border-radius:999px;background:var(--ink);color:#fff;font-weight:700;font-size:12.5px"><i class="ti ti-player-play"></i> ${esc(trigText(FL.trigger, ctx()))}</div>${vline(10)}${plus('__start', 'start')}${vline(10)}${walk(g.start)}</div>`;
-  $('flcanvas').innerHTML = `<div style="padding:28px;display:inline-flex;min-width:100%;justify-content:center">${start}</div>`;
+  const C = $('flcanvas');
+  C.innerHTML = `<div id="flstage" style="position:absolute;left:0;top:0;transform-origin:0 0;padding:28px;display:inline-flex;justify-content:center">${start}</div>
+    <div class="flzoom" style="position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);z-index:2">
+      <button class="btn xs" data-z="in" aria-label="Zoom in" style="border:0"><i class="ti ti-plus"></i></button><span id="flzp" style="font-size:12px;padding:2px 0;min-width:44px;text-align:center"></span><button class="btn xs" data-z="out" aria-label="Zoom out" style="border:0"><i class="ti ti-minus"></i></button><button class="btn xs" data-z="fit" aria-label="Fit to screen" title="Fit to screen" style="border:0;border-top:1px solid var(--line);border-radius:0 0 10px 10px"><i class="ti ti-maximize"></i></button></div>`;
+  wireCanvas(C);
   $('flcanvas').querySelectorAll('.fnode').forEach((d) => d.onclick = () => { SEL = d.dataset.id; drawCanvas(); drawRight(); });
-  $('flcanvas').querySelectorAll('[data-jump]').forEach((b) => b.onclick = () => { SEL = b.dataset.jump; drawCanvas(); drawRight(); const t = $('flcanvas').querySelector(`.fnode[data-id="${SEL}"]`); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+  $('flcanvas').querySelectorAll('[data-jump]').forEach((b) => b.onclick = () => { SEL = b.dataset.jump; drawCanvas(); drawRight(); centerOn(SEL); });
   $('flcanvas').querySelectorAll('[data-plus]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); addMenu(b, b.dataset.plus, b.dataset.edge); });
+}
+/* Canvas: drag the background to move around, scroll to pan, pinch or ⌘/Ctrl + scroll to zoom, like Klaviyo. */
+let VIEW = null;
+function applyView() { const st = $('flstage'); if (!st || !VIEW) return; st.style.transform = `translate(${VIEW.x}px,${VIEW.y}px) scale(${VIEW.z})`; const zp = $('flzp'); if (zp) zp.textContent = Math.round(VIEW.z * 100) + '%'; }
+function zoomAt(z, cx, cy) { z = Math.max(0.2, Math.min(2, z)); VIEW.x = cx - (cx - VIEW.x) * (z / VIEW.z); VIEW.y = cy - (cy - VIEW.y) * (z / VIEW.z); VIEW.z = z; applyView(); }
+function fitView() { const C = $('flcanvas'), st = $('flstage'); if (!C || !st) return; const w = st.offsetWidth, h = st.offsetHeight, cw = C.clientWidth, ch = C.clientHeight;
+  const z = Math.max(0.2, Math.min(1, Math.min(cw / w, ch / h) * 0.95)); VIEW = { z, x: (cw - w * z) / 2, y: Math.max(10, (ch - h * z) / 2) }; applyView(); }
+function centerOn(id) { const C = $('flcanvas'), t = C && C.querySelector(`.fnode[data-id="${id}"]`); if (!t || !VIEW) return; const cr = C.getBoundingClientRect(), r = t.getBoundingClientRect();
+  VIEW.x += cr.left + cr.width / 2 - (r.left + r.width / 2); VIEW.y += cr.top + cr.height / 2 - (r.top + r.height / 2); applyView(); }
+function wireCanvas(C) {
+  if (!VIEW || VIEW.flow !== FL.id) { const st = $('flstage'); VIEW = { flow: FL.id, z: 1, x: Math.max(0, (C.clientWidth - st.offsetWidth) / 2), y: 0 }; }
+  applyView();
+  C.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); const r = C.getBoundingClientRect(); if (b.dataset.z === 'fit') return fitView(); zoomAt(VIEW.z * (b.dataset.z === 'in' ? 1.2 : 1 / 1.2), r.width / 2, r.height / 2); });
+  if (C.__wired) return; C.__wired = true;   // the listeners below survive redraws
+  C.addEventListener('wheel', (e) => { e.preventDefault(); const r = C.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) zoomAt(VIEW.z * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+    else { VIEW.x -= e.deltaX; VIEW.y -= e.deltaY; applyView(); } }, { passive: false });
+  let drag = null;
+  C.addEventListener('pointerdown', (e) => { if (e.button !== 0 || e.target.closest('.fnode,button,a,input,select,.flzoom')) return; drag = { x: e.clientX, y: e.clientY, vx: VIEW.x, vy: VIEW.y }; C.setPointerCapture(e.pointerId); C.style.cursor = 'grabbing'; });
+  C.addEventListener('pointermove', (e) => { if (!drag) return; VIEW.x = drag.vx + e.clientX - drag.x; VIEW.y = drag.vy + e.clientY - drag.y; applyView(); });
+  const end = () => { drag = null; C.style.cursor = 'grab'; }; C.addEventListener('pointerup', end); C.addEventListener('pointercancel', end);
 }
 function addMenu(btn, from, edge) {
   document.querySelectorAll('.addmenu').forEach((m) => m.remove());

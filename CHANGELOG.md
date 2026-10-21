@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.94.0
+Flows laid out like Klaviyo.
+- **Flows list:** search, a Status filter and a Metric period (7 / 30 / 90 / 365 days). Each row shows the flow name with its trigger underneath, Type (email / text icons), Status, Last updated, Revenue and Revenue per recipient. Every row has a ⋮ menu: Edit details, Clone, Copy ID, Archive, Delete. Tick boxes archive or delete several at once.
+- **Options:** show archived flows (and restore them), or re-import from Klaviyo. **Create flow** (top right) starts a blank flow or one from a starter.
+- **Archive vs Delete:** Archive turns a flow off and hides it, and you can restore it. Delete removes the flow for good, and anyone in it leaves.
+- **Flow canvas:** drag the background to move around, scroll to pan, pinch or ⌘/Ctrl + scroll to zoom. Zoom buttons (+ / − / fit to screen) sit in the corner. Clicking a "Joins" link centers that step.
+
 ## 4.93.0
 Email templates page laid out like Klaviyo.
 - Cards with a live preview of each email, its name and the date it was last edited. Each card has a ⋮ menu: Edit, Rename, Clone, Preview (full-size) and Delete.

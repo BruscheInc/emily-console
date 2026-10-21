@@ -26,6 +26,7 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS mk_flows (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft',
     trigger JSONB NOT NULL DEFAULT '{}', entry_filter JSONB, exit_filter JSONB, reentry JSONB NOT NULL DEFAULT '{"mode":"once"}', graph JSONB NOT NULL DEFAULT '{"start":null,"nodes":{}}',
     version INT NOT NULL DEFAULT 1, source TEXT, ext_id TEXT, notes TEXT, archived BOOLEAN NOT NULL DEFAULT false, updated_by TEXT, created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`ALTER TABLE mk_flows ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
   await db(`CREATE UNIQUE INDEX IF NOT EXISTS mk_flows_ext ON mk_flows (store, source, ext_id) WHERE ext_id IS NOT NULL`);
   await db(`CREATE TABLE IF NOT EXISTS mk_flow_versions (flow_id BIGINT NOT NULL, version INT NOT NULL, graph JSONB NOT NULL, by_user TEXT, created_at TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (flow_id, version))`);
   await db(`CREATE TABLE IF NOT EXISTS mk_flow_runs (id BIGSERIAL PRIMARY KEY, flow_id BIGINT NOT NULL, version INT NOT NULL, store TEXT NOT NULL, profile_id BIGINT NOT NULL, node_id TEXT,
@@ -68,13 +69,14 @@ function validate(graph) {
 const reachable = (graph) => { const seen = new Set(); const go = (id) => { if (!id || seen.has(id) || !graph.nodes[id]) return; seen.add(id); edges(graph.nodes[id]).forEach(go); }; go(graph.start); return seen; };
 
 /* ---------------- flows ---------------- */
-async function list(store) {
-  return (await db(`SELECT f.id, f.store, f.name, f.status, f.trigger, f.source, f.updated_at, f.version,
+async function list(store, { archived = false } = {}) {
+  return (await db(`SELECT f.id, f.store, f.name, f.status, f.trigger, f.source, f.updated_at, f.version, f.archived,
+      (SELECT array_agg(DISTINCT n.value->>'type') FROM jsonb_each(COALESCE(f.graph->'nodes','{}'::jsonb)) n WHERE n.value->>'type' IN ('send_email','send_sms')) channels,
       (SELECT count(*)::int FROM mk_flow_runs r WHERE r.flow_id=f.id AND r.status IN ('active','working','paused')) in_flow,
       (SELECT count(*)::int FROM mk_flow_runs r WHERE r.flow_id=f.id AND r.entered_at > now() - interval '30 days') entered_30d,
       (SELECT count(*)::int FROM mk_sends s WHERE s.flow_id=f.id AND s.created_at > now() - interval '30 days') sends_30d,
       (SELECT count(*)::int FROM jsonb_object_keys(COALESCE(f.graph->'nodes','{}'::jsonb))) steps
-    FROM mk_flows f WHERE NOT f.archived ${store ? "AND f.store=$1" : ""} ORDER BY f.status='live' DESC, f.updated_at DESC`, store ? [store] : [])).rows;
+    FROM mk_flows f WHERE f.archived = ${archived ? "true AND f.deleted_at IS NULL" : "false"} ${store ? "AND f.store=$1" : ""} ORDER BY f.status='live' DESC, f.updated_at DESC`, store ? [store] : [])).rows;
 }
 async function get(id) { return (await db(`SELECT * FROM mk_flows WHERE id=$1`, [Number(id)])).rows[0] || null; }
 async function create(store, name, who, starter) {
@@ -502,7 +504,10 @@ async function stats(flowId) {
 
 function routes(app, { guard, admin, actorOf, fail, store }) {
   const isAdmin = (req) => { const s = core.sessionOf((req.headers.authorization || "").replace(/^Bearer /i, "") || req.query.key || ""); return !!(s && s.role === "admin"); };
-  app.get("/api/mk/flows", async (req, res) => { if (!guard(req, res)) return; try { const st = store(req.query.store); res.json({ flows: await list(st), starters: STARTER_NAMES, events: SEG().EVENTS, lists: await MK().lists(st), segments: await SEG().list(st) }); } catch (e) { fail(res, e); } });
+  app.get("/api/mk/flows", async (req, res) => { if (!guard(req, res)) return; try { const st = store(req.query.store);
+    const flows = await list(st, { archived: req.query.archived === "1" }); let rev = {}; try { rev = await require("./mk-analytics").revenueBy("flow", req.query.days || 7); } catch (e) {}
+    for (const f of flows) { const r = rev[String(f.id)] || {}; f.revenue = r.revenue || 0; f.orders = r.orders || 0; f.recipients = r.recipients || 0; f.rpr = f.recipients ? f.revenue / f.recipients : 0; }
+    res.json({ flows, starters: STARTER_NAMES, events: SEG().EVENTS, lists: await MK().lists(st), segments: await SEG().list(st) }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/flows", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!store(b.store)) return res.status(400).json({ error: "Pick a store first" }); res.json(await create(b.store, b.name, actorOf(req), b.starter)); } catch (e) { fail(res, e); } });
   app.get("/api/mk/flows/:id", async (req, res) => {
     if (!guard(req, res)) return;
@@ -511,7 +516,15 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
         versions: (await db(`SELECT version, by_user, created_at FROM mk_flow_versions WHERE flow_id=$1 ORDER BY version DESC LIMIT 20`, [f.id])).rows }); } catch (e) { fail(res, e); }
   });
   app.put("/api/mk/flows/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await save(req.params.id, req.body || {}, actorOf(req), isAdmin(req)); res.json({ ...f, problems: validate(f.graph) }); } catch (e) { fail(res, e); } });
-  app.delete("/api/mk/flows/:id", async (req, res) => { if (!admin(req, res)) return; try { await db(`UPDATE mk_flows SET archived=true, status='draft' WHERE id=$1`, [Number(req.params.id)]); FLOW_CACHE.t = 0; res.json({ ok: true }); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/flows/:id/clone", async (req, res) => { if (!guard(req, res)) return; try { const src = await get(req.params.id); if (!src) return res.status(404).json({ error: "not found" });
+      const f = (await db(`INSERT INTO mk_flows (store, name, trigger, graph, source, updated_by, entry_filter, exit_filter, reentry, notes) VALUES ($1,$2,$3,$4,'buzzin',$5,$6,$7,$8,$9) RETURNING *`,
+        [src.store, `${src.name} (copy)`.slice(0, 150), JSON.stringify(src.trigger), JSON.stringify(src.graph), actorOf(req), src.entry_filter ? JSON.stringify(src.entry_filter) : null, src.exit_filter ? JSON.stringify(src.exit_filter) : null, JSON.stringify(src.reentry || { mode: "once" }), src.notes])).rows[0];
+      await db(`INSERT INTO mk_flow_versions (flow_id, version, graph, by_user) VALUES ($1,1,$2,$3)`, [f.id, JSON.stringify(f.graph), actorOf(req)]); res.json(f); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/flows/:id/details", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const n = String(b.name || "").trim().slice(0, 150); if (!n) throw new Error("Give it a name");
+      await db(`UPDATE mk_flows SET name=$2, notes=COALESCE($3, notes), updated_by=$4, updated_at=now() WHERE id=$1`, [Number(req.params.id), n, b.notes != null ? String(b.notes).slice(0, 2000) : null, actorOf(req)]); FLOW_CACHE.t = 0; res.json({ ok: true }); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/flows/:id/archive", async (req, res) => { if (!admin(req, res)) return; try { const on = (req.body || {}).archived !== false;
+      await db(`UPDATE mk_flows SET archived=$2, status=CASE WHEN $2 THEN 'draft' ELSE status END, updated_at=now() WHERE id=$1`, [Number(req.params.id), on]); FLOW_CACHE.t = 0; res.json({ ok: true }); } catch (e) { fail(res, e); } });
+  app.delete("/api/mk/flows/:id", async (req, res) => { if (!admin(req, res)) return; try { await db(`UPDATE mk_flows SET archived=true, deleted_at=now(), status='draft' WHERE id=$1`, [Number(req.params.id)]); await db(`UPDATE mk_flow_runs SET status='exited', end_reason='flow deleted' WHERE flow_id=$1 AND status IN ('active','working','paused')`, [Number(req.params.id)]).catch(() => {}); FLOW_CACHE.t = 0; res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/flows/:id/simulate", async (req, res) => { if (!guard(req, res)) return; try { let pid = (req.body || {}).profile_id; if (!pid && (req.body || {}).email) { const f = await get(req.params.id); const p = await MK().findProfile(f.store, { email: MK().normEmail(req.body.email) }); pid = p && p.id; } if (!pid) return res.status(404).json({ error: "No profile with that email in this store." }); res.json(await simulate(req.params.id, pid)); } catch (e) { fail(res, e); } });
   app.get("/api/mk/flows/:id/runs", async (req, res) => { if (!guard(req, res)) return; try { res.json({ runs: (await db(`SELECT r.id, r.status, r.node_id, r.due_at, r.entered_at, r.end_reason, r.test, p.email, p.first_name FROM mk_flow_runs r JOIN mk_profiles p ON p.id=r.profile_id WHERE r.flow_id=$1 ORDER BY r.id DESC LIMIT 100`, [Number(req.params.id)])).rows }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/flows/:id/enroll", async (req, res) => { if (!guard(req, res)) return; try { const f = await get(req.params.id); const p = await MK().findProfile(f.store, { email: MK().normEmail((req.body || {}).email) }); if (!p) return res.status(404).json({ error: "No profile with that email in this store." }); const r = await enroll(f, p.id, { trigger: "manual", reason: `added by ${actorOf(req)}` }); res.json(r ? { ok: true, run: r.id } : { ok: false, error: f.status === "draft" ? "The flow is a draft. Set it to Test (only the internal test list) or Live first." : "They weren't added: already in the flow, not on the test list, or don't meet the entry rule." }); } catch (e) { fail(res, e); } });
