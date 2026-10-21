@@ -158,3 +158,6 @@ td.n,th.n{font-variant-numeric:tabular-nums}
   .bz-hd .c-ord,.bz-hd .c-ost,.bz-hd .c-tags{display:none}
   .bz-hd .listhead{padding:12px 14px}.bz-hd .c-t{min-width:0;max-width:52vw}
 }
+
+.bz-crumb{color:var(--bz-muted);text-decoration:none;font-size:17px;padding:2px 4px;border-radius:6px}.bz-crumb:hover{color:var(--bz-ink);background:var(--bz-hover)}
+.bz-title-in{font-weight:700;font-size:17px;min-width:260px;border-color:transparent!important;background:transparent!important;box-shadow:none}.bz-title-in:hover{border-color:var(--bz-line)!important;background:#fff!important}.bz-title-in:focus{background:#fff!important}

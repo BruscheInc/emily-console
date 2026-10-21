@@ -103,7 +103,7 @@ async function editCampaign(el, id) {
   CP = await api('/api/mk/campaigns/' + id); cdirty = false;
   const ro = CP.status !== 'draft';
   const isE = CP.channel === 'email';
-  el.innerHTML = `<div class="bar" style="align-items:center;flex-wrap:wrap"><a href="#campaigns" class="btn xs" aria-label="Back"><i class="ti ti-arrow-left"></i></a><input id="cn" type="text" value="${esc(CP.name)}" style="font-weight:700;min-width:260px" aria-label="Campaign name"${ro ? ' disabled' : ''}>${pill(CSTATUS, CP.status)}<span class="pill off">${CP.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'} · ${isE ? 'Email' : 'Text'}</span>
+  el.innerHTML = `<div class="bar" style="align-items:center;flex-wrap:wrap"><a href="#campaigns" class="bz-crumb">Campaigns</a><span style="color:var(--bz-faint)">/</span><input id="cn" type="text" value="${esc(CP.name)}" class="bz-title-in" aria-label="Campaign name"${ro ? ' disabled' : ''}>${pill(CSTATUS, CP.status)}<span class="pill off">${CP.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'} · ${isE ? 'Email' : 'Text'}</span>
     <span class="sp"></span><span class="pill hon hidden" id="cd">Unsaved</span>
     <button class="btn" id="ccopy"><i class="ti ti-copy"></i> Copy</button>${ro ? '' : '<button class="btn danger" id="cdel"><i class="ti ti-trash"></i></button>'}<button class="btn" id="ctest"><i class="ti ti-send"></i> Send a test</button>
     ${CP.status === 'draft' ? '<button class="btn" id="csave">Save</button><button class="btn pri" id="csched"><i class="ti ti-calendar-check"></i> Schedule</button>' : ''}
