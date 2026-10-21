@@ -347,7 +347,7 @@ ${sections}${empty}
     social(blk, st, R, sc) {
       const subs = blk.subblocks || []; if (!subs.length) return '';
       const p = (blk.data || {}).properties || {};
-      const size = ICON_PX[st.icon_size] || 32, color = ['default', 'black', 'grey', 'white'].includes(st.icon_color) ? st.icon_color : 'default';
+      const size = Number(st.icon_px) >= 12 ? Math.min(120, Number(st.icon_px)) : ICON_PX[st.icon_size] || 32, color = ['default', 'black', 'grey', 'white'].includes(st.icon_color) ? st.icon_color : 'default';
       const gap = num(st.icon_spacing, 10), base = (R.env.assetBase || '');
       const cells = subs.map((x, i) => {
         if (x.type === 'social_link_spacer') return `<td class="bz-sc" style="width:${num(x.width, 10)}px;font-size:1px">&nbsp;</td>`;
@@ -355,7 +355,7 @@ ${sections}${empty}
         const own = x.custom_src || (((R.env.brand || {}).social_icons || {})[x.link_type] || '');
         const abs = (u) => (/^\//.test(u) ? base + u : u);
         const src = own ? abs(own) : `${base}/social/${x.link_type || 'website'}-${color}.png`;
-        const sz = own && x.custom_size ? num(x.custom_size, size) : size;
+        const sz = Number(x.custom_size) >= 12 ? Math.min(160, Number(x.custom_size)) : size;   // a link can have its own size
         const lbl = p.show_labels && x.label ? `<span style="${fontCss(st, 'label_', 'label_color')};display:inline-block;vertical-align:middle;padding-left:6px">${esc(x.label)}</span>` : '';
         return `<td class="bz-sc" valign="middle" style="padding:0 ${i < subs.length - 1 ? gap : 0}px 0 0">${link(R, href(R, x.link_url, sc), `<img src="${esc(src || '')}" alt="${esc(x.label || x.link_type || '')}" width="${sz}" height="${sz}" style="display:inline-block;vertical-align:middle;width:${sz}px;height:${sz}px;border:0">${lbl}`)}</td>`;
       }).join('');

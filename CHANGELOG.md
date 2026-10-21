@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.97.3
+- Social links in emails: an **Icon size** slider (16–96px, or type a number) sets the size of every icon in the block, and each link can have its own size next to its icon. This works for your own icons and for Buzzin's.
+
 ## 4.97.2
 - Campaign editor header now reads "Campaigns / campaign name", like flows. Click the name to rename it.
 
