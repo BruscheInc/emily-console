@@ -78,7 +78,7 @@ const SAMPLE = { id: 0, first_name: "Maria", last_name: "Lopez", email: "maria@e
 let SES_CACHE = { at: 0, v: null };
 async function sesLimits() {
   if (Date.now() - SES_CACHE.at < 5 * 60 * 1000) return SES_CACHE.v;
-  let v = null; try { const st = await require("./mk-ses").status(); v = { production: st.production, sending_enabled: st.sending_enabled, quota: st.quota }; } catch (e) { v = { error: e.message }; }
+  let v = null; try { const L = await require("./mk-ses").limits(); v = L ? { production: L.production, sending_enabled: L.sending_enabled, quota: { per_day: L.per_day, per_second: L.per_second, sent_24h: L.sent_24h } } : { error: "Amazon SES not reachable" }; } catch (e) { v = { error: e.message }; }
   SES_CACHE = { at: Date.now(), v }; return v;
 }
 async function costFor(c, n) {
@@ -290,17 +290,27 @@ async function tick() {
         WHERE r.campaign_id=$1 AND r.round='main' AND NOT EXISTS (SELECT 1 FROM mk_send_events e WHERE e.send_id=s.id AND e.type IN ('opened','clicked') AND NOT e.machine) ON CONFLICT DO NOTHING RETURNING 1`, [c.id, (c.ab && c.ab.winner) || "A"])).rowCount;
       await db(`UPDATE mk_campaigns SET resend = resend || '{"done":true}'::jsonb, status=$2 WHERE id=$1`, [c.id, n ? "sending" : "sent"]);
     }
-    // 3. deliver due messages, a batch at a time
-    const due = (await db(`SELECT r.* FROM mk_campaign_recipients r JOIN mk_campaigns c ON c.id=r.campaign_id AND c.status='sending' WHERE r.status='queued' AND r.due_at <= now() ORDER BY r.due_at LIMIT 400`)).rows;
-    const camps = {};
-    for (const r of due) {
+    // 3. deliver due messages at the speed Amazon SES allows (a little under its per-second rate), for up to ~50 s per tick
+    const L = await require("./mk-ses").limits().catch(() => null);
+    const rate = Math.max(1, Math.floor(((L && L.per_second) || 10) * 0.9));
+    const camps = {}, t0 = Date.now();
+    const one = async (r) => {
       const c = camps[r.campaign_id] || (camps[r.campaign_id] = await get(r.campaign_id));
-      if (!c || c.status !== "sending") continue;
+      if (!c || c.status !== "sending") return;
       try {
         const out = await deliver(c, r, S);
-        if (out.later) await db(`UPDATE mk_campaign_recipients SET due_at=now() + interval '30 minutes', note=$4 WHERE campaign_id=$1 AND profile_id=$2 AND round=$3`, [r.campaign_id, r.profile_id, r.round, out.note]);
+        if (out.later || out.status === "deferred") await db(`UPDATE mk_campaign_recipients SET due_at=now() + ($4 || ' minutes')::interval, note=$5 WHERE campaign_id=$1 AND profile_id=$2 AND round=$3`, [r.campaign_id, r.profile_id, r.round, /quiet/.test(out.note || "") ? "30" : "2", out.note]);
         else await db(`UPDATE mk_campaign_recipients SET status=$4, send_id=$5, note=$6 WHERE campaign_id=$1 AND profile_id=$2 AND round=$3`, [r.campaign_id, r.profile_id, r.round, out.status, out.send_id || null, out.note || null]);
-      } catch (e) { console.error(`campaign ${r.campaign_id} → ${r.profile_id}:`, e.message); await db(`UPDATE mk_campaign_recipients SET status='error', note=$4 WHERE campaign_id=$1 AND profile_id=$2 AND round=$3`, [r.campaign_id, r.profile_id, r.round, e.message.slice(0, 200)]); }
+      } catch (e) { console.error(`campaign ${r.campaign_id} → ${r.profile_id}:`, e.message); await db(`UPDATE mk_campaign_recipients SET status='error', note=$4 WHERE campaign_id=$1 AND profile_id=$2 AND round=$3`, [r.campaign_id, r.profile_id, r.round, e.message]).catch(() => {}); }
+    };
+    while (Date.now() - t0 < 50e3) {
+      const due = (await db(`SELECT r.* FROM mk_campaign_recipients r JOIN mk_campaigns c ON c.id=r.campaign_id AND c.status='sending' WHERE r.status='queued' AND r.due_at <= now() ORDER BY r.due_at LIMIT $1`, [rate * 10])).rows;
+      if (!due.length) break;
+      for (let k = 0; k < due.length && Date.now() - t0 < 50e3; k += rate) {
+        const s0 = Date.now();
+        await Promise.all(due.slice(k, k + rate).map(one));
+        const spent = Date.now() - s0; if (spent < 1000) await new Promise((ok) => setTimeout(ok, 1000 - spent));
+      }
     }
     // 4. finished?
     await db(`UPDATE mk_campaigns c SET status='sent', sent_at=COALESCE(c.sent_at, now()) WHERE c.status='sending' AND NOT EXISTS (SELECT 1 FROM mk_campaign_recipients r WHERE r.campaign_id=c.id AND r.status='queued')`);

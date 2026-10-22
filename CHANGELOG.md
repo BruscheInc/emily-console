@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.99.5
+- Campaigns now send as fast as Amazon SES allows: about 12 emails a second (90% of SES's 14/sec), so 46,000 emails take roughly an hour instead of ~2½+. Buzzin's daily limit follows SES's quota (50,000/day) instead of its own 20,000-an-hour cap.
+- Fix: a message that hit a sending limit (or texting quiet hours) was marked "held" for good and never sent. Now it waits and goes out a couple of minutes later. If Amazon asks Buzzin to slow down, the message is retried instead of marked failed.
+- Coupon codes: when a campaign is handing out unique codes quickly, Buzzin keeps up to 1,000 ready in Shopify instead of 25, so sending isn't slowed waiting for codes.
+
 ## 4.99.4
 - Campaigns: the audience box now shows an estimated cost. Email: Amazon SES sending fee (price per 1,000, editable — $0.10 pay-as-you-go) plus data ($0.12/GB, from the size of the actual email). Text: segments × recipients × your price per segment from Texting settings.
 - It also checks Amazon SES's daily limit and sandbox mode, and warns before a send that would stop partway (with how long the send takes at your SES speed).

@@ -47,10 +47,22 @@ function inQuietHours(tz, quiet) {
   } catch (_) { return false; }
 }
 
+/* Hourly / daily limits. For email they follow Amazon SES: as fast as SES allows (its per-second rate) up to its daily
+   quota — Buzzin's own caps only apply when they're higher, or SES can't be reached. Counts are cached a few seconds. */
+const CAPC = new Map();
 async function capsOk(store, channel, caps) {
-  const r = (await db(`SELECT count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int h, count(*)::int d FROM mk_sends
-                       WHERE store=$1 AND channel=$2 AND status='sent' AND created_at > now() - interval '1 day'`, [store, channel])).rows[0];
-  return r.h < caps.per_hour && r.d < caps.per_day;
+  let perHour = caps.per_hour, perDay = caps.per_day;
+  if (channel === "email") { const L = await require("./mk-ses").limits().catch(() => null);
+    if (L && L.per_second) perHour = Math.max(perHour, Math.floor(L.per_second * 3600));
+    if (L && L.per_day) perDay = L.per_day; }
+  const k = store + ":" + channel; let c = CAPC.get(k);
+  if (!c || Date.now() - c.at > 5000) {
+    const r = (await db(`SELECT count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int h, count(*)::int d FROM mk_sends
+                         WHERE channel=$1 AND status IN ('sent','sending') AND created_at > now() - interval '1 day'`, [channel])).rows[0];
+    c = { at: Date.now(), h: r.h, d: r.d }; CAPC.set(k, c);
+  }
+  if (c.h >= perHour || c.d >= perDay) return false;
+  c.h++; c.d++; return true;
 }
 
 /**
@@ -61,7 +73,8 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
   const s = await MK().settings();
   const key = idem || crypto.randomUUID();
   const dup = (await db(`SELECT * FROM mk_sends WHERE idem=$1`, [key])).rows[0];
-  if (dup) return dup;
+  if (dup && dup.status !== "deferred") return dup;
+  if (dup) await db(`DELETE FROM mk_sends WHERE id=$1`, [dup.id]);   // an older "wait and retry" row — try again now
   const to = channel === "email" ? profile.email : profile.phone;
   let status = "sent", reason = null;
   const onTestList = (s.test_list || []).map((x) => String(x).toLowerCase()).includes(String(to || "").toLowerCase());
@@ -71,7 +84,9 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
   else if (channel === "sms" && !transactional && inQuietHours(profile.timezone, s.quiet_hours)) { status = "deferred"; reason = "quiet hours"; }
   else if (!(s.sending[store] && s.sending[store][channel]) && !(test && onTestList)) { status = "held"; reason = test ? "not on the internal test list" : "sending is off"; }
   else if (!(await ready(store, channel, { test: test && onTestList && !(s.sending[store] && s.sending[store][channel]) }))) { status = "held"; reason = `no ${channel === "email" ? "approved email sender" : "texting number"} connected yet`; }
-  else if (!(await capsOk(store, channel, s.caps))) { status = "held"; reason = "hourly or daily cap reached"; }
+  else if (!(await capsOk(store, channel, s.caps))) { status = "deferred"; reason = "sending limit reached for now — tries again shortly"; }
+  // waiting (quiet hours, sending limit): nothing is recorded, so the same message can go out later
+  if (status === "deferred") return { id: null, status, reason };
   const row = (await db(`INSERT INTO mk_sends (store, channel, profile_id, to_addr, message_id, flow_id, flow_step, campaign_id, idem, subject, status, reason, meta)
                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (idem) DO NOTHING RETURNING *`,
     [store, channel, profile.id || null, to || null, messageId || null, flowId || null, flowStep || null, campaignId || null, key,
@@ -93,6 +108,8 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
     if (profile.id) await MK().track(store, "received_sms", { profileId: profile.id, props: { send_id: String(row.id), campaign_id: campaignId ? String(campaignId) : null, flow_id: flowId ? String(flowId) : null }, source: "buzzin", extId: `recv:${row.id}` }).catch(() => {});
     return r3;
   } catch (e) {
+    // Amazon asked us to slow down: not a failure — drop the row so the message is retried
+    if (/throttl|rate exceeded|too ?many ?requests|maximum sending rate/i.test(`${e.name} ${e.message}`)) { await db(`DELETE FROM mk_sends WHERE id=$1`, [row.id]); return { id: null, status: "deferred", reason: "sending too fast — tries again shortly" }; }
     await db(`UPDATE mk_sends SET status='failed', reason=$2 WHERE id=$1`, [row.id, String(e.message).slice(0, 300)]);
     return { ...row, status: "failed", reason: e.message };
   }

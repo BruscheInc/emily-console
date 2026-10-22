@@ -185,4 +185,14 @@ async function init() {
   setInterval(() => status().catch(() => {}), 6 * 3600e3);
 }
 
-module.exports = { seenSns, init, routes, status, setupEvents, sendEmail, onEvent, verifySns, configured, SES_POLICY };
+/** Sending limits from Amazon SES (cached 5 minutes): { per_day, per_second, sent_24h, production }. */
+let LIM = { at: 0, v: null };
+async function limits() {
+  if (Date.now() - LIM.at < 5 * 60 * 1000) return LIM.v;
+  let v = null;
+  try { need(); const { c, S } = ses(); const a = await c.send(new S.GetAccountCommand({}));
+    v = { production: !!a.ProductionAccessEnabled, sending_enabled: a.SendingEnabled !== false, per_day: a.SendQuota && a.SendQuota.Max24HourSend, per_second: a.SendQuota && a.SendQuota.MaxSendRate, sent_24h: a.SendQuota && a.SendQuota.SentLast24Hours };
+  } catch (e) { v = null; }
+  LIM = { at: Date.now(), v }; return v;
+}
+module.exports = { limits, seenSns, init, routes, status, setupEvents, sendEmail, onEvent, verifySns, configured, SES_POLICY };

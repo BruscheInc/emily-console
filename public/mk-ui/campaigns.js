@@ -165,10 +165,9 @@ function costHtml(c) {
     if (!s.production) warn.push('Amazon SES is still in sandbox mode, so it only sends to verified addresses. Request production access in AWS before a big send.');
     else if (s.left_today != null && c.sends > s.left_today) warn.push(`Amazon SES lets you send ${fmtN(s.per_day)} emails a day and has ${fmtN(s.left_today)} left today, so ${fmtN(c.sends - s.left_today)} would wait until the limit resets. Ask AWS to raise it, or send over more than one day.`);
     if (s.sending_enabled === false) warn.push('Sending is paused on the Amazon SES account.');
-    if (s.per_second) h += row('Speed', `${fmtN(s.per_second)} emails a second · about ${Math.max(1, Math.ceil(c.sends / s.per_second / 60))} min`);
+    if (s.per_second) { const r = Math.max(1, Math.floor(s.per_second * 0.9)); h += row('Speed', `${fmtN(r)} emails a second · about ${Math.max(1, Math.ceil(c.sends / r / 60))} min`); }
     if (s.per_day) h += row('Daily limit', `${fmtN(s.per_day)}${s.left_today != null ? ` (${fmtN(s.left_today)} left)` : ''}`);
   }
-  if (c.caps && c.caps.per_day && c.sends > c.caps.per_day) warn.push(`Buzzin's own cap is ${fmtN(c.caps.per_day)} a day; the rest would go the next day.`);
   return h + warn.map((w) => `<div class="note" style="margin-top:8px">${esc(w)}</div>`).join('') + `<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Estimate only — your AWS bill is the final number.</div></div>`;
 }
 let estT = null;

@@ -135,6 +135,7 @@ async function claim(store, off, source) {
   await migrate(); const key = offerKey(off) || "default";
   await db(`INSERT INTO mk_coupon_offers (store, offer_key, offer, last_used) VALUES ($1,$2,$3,now()) ON CONFLICT (store, offer_key) DO UPDATE SET last_used=now(), offer=EXCLUDED.offer`, [store, key, JSON.stringify(off)]).catch(() => {});
   const take = async () => (await db(`DELETE FROM mk_coupon_pool WHERE id = (SELECT id FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2 ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING code, redeem_id, discount_id`, [store, key]).catch(() => ({ rows: [] }))).rows[0];
+  { const k = store + ":" + key; const a = (USE.get(k) || []).filter((t) => Date.now() - t < 60e3); a.push(Date.now()); USE.set(k, a); }
   let got = await take();
   if (!got) { await addCodes(store, key, off, 5); got = await take(); }
   setImmediate(() => refill(store, key).catch((e) => console.log(`🎟️  coupon pool: ${e.message}`)));
@@ -142,13 +143,17 @@ async function claim(store, off, source) {
   return { code: got.code, expires: new Date(Date.now() + off.days * 864e5), discount_id: got.discount_id, redeem_id: got.redeem_id };
 }
 const filling = new Set();
+const USE = new Map();   // recent claims per offer, to size the pool
 async function refill(store, key) {
   const id = store + ":" + key; if (filling.has(id)) return; filling.add(id);
   try {
     await migrate();
     const o = (await db(`SELECT offer FROM mk_coupon_offers WHERE store=$1 AND offer_key=$2`, [store, key])).rows[0]; if (!o) return;
     const have = (await db(`SELECT count(*)::int n FROM mk_coupon_pool WHERE store=$1 AND offer_key=$2`, [store, key])).rows[0].n;
-    if (have < POOL) await addCodes(store, key, o.offer, POOL - have);
+    // A campaign or busy form drains the pool fast: then keep a bigger stock (Shopify adds up to 100 codes per call).
+    const busy = (USE.get(id) || []).filter((t) => Date.now() - t < 60e3).length;
+    const target = busy > 20 ? 1000 : busy > 5 ? 200 : POOL;
+    for (let need = target - have; need > 0; need -= 100) await addCodes(store, key, o.offer, Math.min(100, need));
   } finally { filling.delete(id); }
 }
 /** Remove codes whose days are up (used or not) so they stop working at checkout. */
