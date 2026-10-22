@@ -2316,6 +2316,8 @@ function wireSlack() {
   try {
     const r = await p.exec();
     await markAction(action.value, "applied", { by: who, result: (r && r.note) || "ok" });
+    // keep the files the action made (return-label PDFs) so they go out on the next reply — same as applying from Buzzin
+    if (r && r.files && r.files.length) { try { await db(`UPDATE emily_actions SET files=$2 WHERE id=$1`, [action.value, JSON.stringify(r.files.map((f) => ({ ...f, sent: false })))]); } catch (_) {} }
     await core.audit({ ticketId: p.ticketId, kind: "action-applied", detail: `${p.title} → ${(r && r.note) || "ok"} (from Slack)`, who: `slack:${who}`, target: action.value });
     await client.chat.update({ channel: ch, ts, text: "Applied", blocks: [{ type: "section", text: { type: "mrkdwn", text: `✅ *Applied* — ${p.title}\n${(r && r.note) || p.summary}` } }] });
     await client.chat.postMessage({ channel: ch, thread_ts: ts, text: `✅ Done: ${(r && r.note) || p.title}` });

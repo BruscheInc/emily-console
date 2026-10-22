@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.99.3
+- Return labels made from Emily's Slack approval cards now go out with the next reply. Before, approving in Slack bought the label but never queued the PDF, so the customer got a reply saying "labels attached" with nothing attached (e.g. ticket 9000000666). Labels that never went out in the last 30 days are queued on their tickets now — they attach to the next reply you send there.
+- Refunded returns are now closed in Shopify, so the order stops showing "Return in progress". Returns refunded in the last 60 days are closed once on startup. Closing doesn't change inventory.
+
 ## 4.99.2
 - Messages customers send from the return portal ("Something else") now land in Pending. Before, the only email in the ticket was our automatic "we got your message" reply, so Buzzin filed it under Sent as if we'd already answered. Existing portal messages nobody has replied to were moved back to Pending.
 

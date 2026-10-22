@@ -883,6 +883,18 @@ app.post("/api/faqs/:store/suggest", async (req, res) => { if (!studioGuard(req,
 app.post("/api/faqs/:store/publish", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.publish(k, req.body || {}, actorOf(req))) }); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/check", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json(await FAQ.autoRun(k, "run by " + actorOf(req), { force: true })); } catch (e) { retErr(res, e); } });
 app.post("/api/faqs/:store/undo", async (req, res) => { if (!studioGuard(req, res)) return; const k = studioStore(req, res); if (!k) return; try { res.json({ ok: true, ...(await FAQ.undo(k, actorOf(req))) }); } catch (e) { retErr(res, e); } });
+// One-time: return labels made from Slack-approved actions were never queued for the reply (the Slack path dropped them).
+// Queue each one that never went out, so it's attached to the next reply on its ticket.
+async function labelBackfill() {
+  if (await syncGet("slack_label_backfill_v1")) return;
+  const r = await db(`UPDATE hd_files f SET staged = true FROM emily_actions a
+    WHERE a.kind='return_propose' AND a.status='applied' AND a.files IS NULL AND a.result LIKE '%label PDF attached%'
+      AND a.decided_at > now() - interval '30 days' AND f.ticket_id::text = a.ticket_id::text AND f.sent_at IS NULL AND NOT coalesce(f.staged,false)
+      AND f.name = 'Return label ' || substring(a.result from 'Return ([A-Z0-9-]+) created') || '.pdf'
+    RETURNING f.ticket_id, f.name`);
+  await core.syncSet("slack_label_backfill_v1", String(r.rowCount || 0), { at: new Date().toISOString(), files: r.rows });
+  console.log(`🏷️  return labels queued for the next reply: ${r.rowCount || 0}${r.rows.length ? " — " + r.rows.map((x) => `${x.ticket_id}: ${x.name}`).join(", ") : ""}`);
+}
 // Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
 require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
@@ -988,7 +1000,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

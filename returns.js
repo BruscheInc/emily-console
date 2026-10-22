@@ -881,7 +881,8 @@ async function refund(rec, { force = false, who = "auto", reason = null } = {}) 
     const c = await gql(st, CREDIT, { id: rec.customer_id, key: key("bonus"), input: { creditAmount: { amount: bonus.toFixed(2), currencyCode: currency }, notify: true } });
     userErrors(c.storeCreditAccountCredit, "Bonus store credit failed");
   }
-  if (missing.length) { try { const c = await gql(st, `mutation Close($id: ID!) { returnClose(id: $id) { return { id status } userErrors { field message } } }`, { id: rec.shopify_return_id }); userErrors(c.returnClose, "close"); } catch (e) { await update(rec.id, {}, "Couldn't close the Shopify return for the items that never came back: " + e.message); } }
+  // Close the Shopify return once it's refunded, so the order stops showing "Return in progress". Closing doesn't touch inventory.
+  try { await closeShopifyReturn(st, rec.shopify_return_id); } catch (e) { await update(rec.id, {}, "Refunded, but couldn't mark the Shopify return closed: " + e.message); }
   const paid = round2(net + bonus);
   const how = credit ? `store credit ($${net.toFixed(2)} + $${bonus.toFixed(2)} bonus)` : "original payment";
   await core.audit({ ticketId: rec.ticket_id || null, kind: "return-refunded", detail: `${rec.rma} · $${paid.toFixed(2)} to ${how}`, who, target: rec.id });
@@ -966,6 +967,13 @@ async function poll() {
 // Once every item on the return is checked in, the return counts as accepted. If tracking hadn't caught up (or it's
 // a Loop label Buzzin can't track), that marks it delivered, and the normal auto refund runs for the items received.
 const whDone = (rec) => !!(rec.warehouse && rec.warehouse.accepted_at);
+const RETURN_CLOSE = `mutation Close($id: ID!) { returnClose(id: $id) { return { id status } userErrors { field message } } }`;
+async function closeShopifyReturn(st, returnId) {
+  if (!returnId) return;
+  const c = await gql(st, RETURN_CLOSE, { id: returnId });
+  const errs = ((c.returnClose || {}).userErrors || []).filter((e) => !/already closed|isn't open|not open|status/i.test(e.message || ""));
+  if (errs.length) throw new Error(errs.map((e) => e.message).join("; "));
+}
 async function acceptAtWarehouse(rec, { who, items, note, all } = {}) {
   if (rec.status === "cancelled") throw new Error("This return was cancelled");
   if (whDone(rec)) throw new Error("This return was already checked in");
@@ -1194,6 +1202,12 @@ async function portalRule() {
 async function init() {
   if (!pool) return;
   try { await migrate(); } catch (e) { console.error("returns migrate:", e.message); return; }
+  // one-time: returns already refunded before Buzzin closed them in Shopify (they still show "Return in progress")
+  setTimeout(async () => { try { if (await core.syncGet("close_refunded_returns_v1")) return; let n = 0, bad = [];
+    const rows = (await db(`SELECT * FROM hd_returns WHERE status='refunded'`)).rows.map(rowToRec).filter((r) => r.shopify_return_id && (!r.refunded_at || Date.now() - new Date(r.refunded_at).getTime() < 60 * 86400000));
+    for (const r of rows) { try { await closeShopifyReturn(shopFor(r.store), r.shopify_return_id); n++; } catch (e) { bad.push(`${r.rma}: ${e.message}`); } }
+    await core.syncSet("close_refunded_returns_v1", String(n), { at: new Date().toISOString(), errors: bad.slice(0, 20) }); console.log(`↩️  closed ${n} refunded Shopify return(s)${bad.length ? ` · ${bad.length} failed: ${bad.slice(0, 3).join(" | ")}` : ""}`);
+  } catch (e) { console.error("close refunded returns:", e.message); } }, 45e3);
   const mins = Number(process.env.RETURNS_POLL_MIN || 60);
   setTimeout(() => poll().catch(() => {}), 30e3); setInterval(() => poll().catch(() => {}), mins * 60e3);
   try { if (!(await core.syncGet("returns_windows_v4_29"))) { await saveSettings({ window_days: { lb: 7, lbo: 7 }, claim_window_days: 30, marked_delivered_window_days: 5 }, "system (v4.29 windows)"); await core.syncSet("returns_windows_v4_29", "done", {}); console.log("↩️  Returns: windows set — returns 7 days, defects 30 days, marked-delivered 5 days (from delivery)"); } } catch (e) { console.error("returns windows:", e.message); }
