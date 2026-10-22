@@ -66,8 +66,42 @@ async function estimate(c, { fresh = false } = {}) {
   const a2 = []; const all = audienceWhere(c, a2, { consent: false });
   const r2 = (await db(`SELECT count(*)::int n FROM mk_profiles p WHERE ${all}`, a2)).rows[0];
   const smart = c.smart_sending && c.channel === "email" ? await smartCount(c) : 0;
-  return { recipients: r.n, without_consent: Math.max(0, r2.n - r.n), smart_skipped_now: smart };
+  let cost = null; try { cost = await costFor(c, Math.max(0, r.n - smart)); } catch (e) { cost = { error: e.message }; }
+  return { recipients: r.n, without_consent: Math.max(0, r2.n - r.n), smart_skipped_now: smart, cost };
 }
+
+/* ---------------- cost estimate ----------------
+   Email (Amazon SES): price per 1,000 emails + $0.12 per GB of email sent (size of one rendered email × recipients).
+   Text: segments in the message × recipients × the store's price per segment (Texting settings).
+   Also checks SES's daily sending limit so a big send isn't stopped halfway. */
+const SAMPLE = { id: 0, first_name: "Maria", last_name: "Lopez", email: "maria@example.com", phone: "+15555550123", props: { last_sizes: ["3-6M"] }, orders_count: 1 };
+let SES_CACHE = { at: 0, v: null };
+async function sesLimits() {
+  if (Date.now() - SES_CACHE.at < 5 * 60 * 1000) return SES_CACHE.v;
+  let v = null; try { const st = await require("./mk-ses").status(); v = { production: st.production, sending_enabled: st.sending_enabled, quota: st.quota }; } catch (e) { v = { error: e.message }; }
+  SES_CACHE = { at: Date.now(), v }; return v;
+}
+async function costFor(c, n) {
+  const S = await MK().settings();
+  if (c.channel === "sms") {
+    const sms = await require("./mk-sms").smsSettings(c.store);
+    const body = await require("./mk-sms").compose(c.store, c.content || {}, SAMPLE, { coupon: "WELCOME-8K2Q", checkout_url: "https://lrk.sp/c/x7Qa" });
+    const seg = require("./mk-sms").segments(body);
+    const per = sms.cost_per_segment == null ? null : Number(sms.cost_per_segment);
+    return { channel: "sms", sends: n, segments: seg.segments, encoding: seg.encoding, per_segment: per, total: per == null ? null : round2(n * seg.segments * per) };
+  }
+  const per1000 = Number(S.email_cost_per_1000 == null ? 0.10 : S.email_cost_per_1000);
+  let bytes = 0;
+  const tid = (c.content || {}).template_id || (((c.ab || {}).variants || [])[0] || {}).template_id;
+  if (tid) { const t = await E().getTemplate(tid); if (t) { const out = await E().render(c.store, { ...t, subject: (c.content || {}).subject || t.subject, preview: (c.content || {}).preview || t.preview }, SAMPLE, { coupon: "WELCOME-8K2Q" }); bytes = Buffer.byteLength(String(out.html || "")) + Buffer.byteLength(String(out.text || "")) + 2000; } }
+  const sendFee = (n / 1000) * per1000, dataFee = (n * bytes / 1e9) * 0.12;
+  const ses = await sesLimits();
+  const left = ses && ses.quota ? Math.max(0, Math.floor(ses.quota.per_day - ses.quota.sent_24h)) : null;
+  return { channel: "email", sends: n, per_1000: per1000, email_kb: Math.round(bytes / 1024), send_fee: round2(sendFee), data_fee: round2(dataFee), total: round2(sendFee + dataFee),
+    ses: ses && !ses.error ? { production: ses.production, sending_enabled: ses.sending_enabled, per_day: ses.quota && ses.quota.per_day, per_second: ses.quota && ses.quota.per_second, left_today: left } : null,
+    caps: S.caps };
+}
+const round2 = (x) => Math.round(x * 100) / 100;
 async function smartCount(c) {
   const S = await MK().settings(); const h = S.smart_sending_hours[c.channel] || 0; if (!h) return 0;
   const args = []; const where = audienceWhere(c, args);
@@ -315,7 +349,7 @@ function routes(app, { guard, admin, isAdmin, actorOf, fail, store }) {
   });
   app.put("/api/mk/campaigns/:id", async (req, res) => { if (!guard(req, res)) return; try { const c = await update(req.params.id, req.body || {}, actorOf(req)); res.json({ ...c, problems: await problems(c) }); } catch (e) { fail(res, e); } });
   app.delete("/api/mk/campaigns/:id", async (req, res) => { if (!guard(req, res)) return; try { const c = await get(req.params.id); if (c && ["sending"].includes(c.status)) return res.status(400).json({ error: "Stop it first." }); await db(`UPDATE mk_campaigns SET archived=true WHERE id=$1`, [Number(req.params.id)]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
-  app.post("/api/mk/campaigns/estimate", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!store(b.store)) return res.status(400).json({ error: "store required" }); res.json(await estimate({ store: b.store, channel: b.channel === "sms" ? "sms" : "email", audience: b.audience || {}, smart_sending: !!b.smart_sending }, { fresh: !!b.fresh })); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/campaigns/estimate", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!store(b.store)) return res.status(400).json({ error: "store required" }); res.json(await estimate({ store: b.store, channel: b.channel === "sms" ? "sms" : "email", audience: b.audience || {}, smart_sending: !!b.smart_sending, content: b.content || {}, ab: b.ab || {} }, { fresh: !!b.fresh })); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/schedule", async (req, res) => { if (!guard(req, res)) return; try { res.json(await schedule(req.params.id, actorOf(req), !!(isAdmin && isAdmin(req)))); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/approve", async (req, res) => { if (!admin(req, res)) return; try { res.json(await schedule(req.params.id, actorOf(req), true)); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/unschedule", async (req, res) => { if (!guard(req, res)) return; try { res.json(await unschedule(req.params.id, actorOf(req))); } catch (e) { fail(res, e); } });

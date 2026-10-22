@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.99.4
+- Campaigns: the audience box now shows an estimated cost. Email: Amazon SES sending fee (price per 1,000, editable — $0.10 pay-as-you-go) plus data ($0.12/GB, from the size of the actual email). Text: segments × recipients × your price per segment from Texting settings.
+- It also checks Amazon SES's daily limit and sandbox mode, and warns before a send that would stop partway (with how long the send takes at your SES speed).
+
 ## 4.99.3
 - Return labels made from Emily's Slack approval cards now go out with the next reply. Before, approving in Slack bought the label but never queued the PDF, so the customer got a reply saying "labels attached" with nothing attached (e.g. ticket 9000000666). Labels that never went out in the last 30 days are queued on their tickets now — they attach to the next reply you send there.
 - Refunded returns are now closed in Shopify, so the order stops showing "Return in progress". Returns refunded in the last 60 days are closed once on startup. Closing doesn't change inventory.

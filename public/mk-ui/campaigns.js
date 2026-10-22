@@ -148,13 +148,39 @@ function drawAudience(ro, mark) {
   $('caud').querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { const [k, i] = b.dataset.rm.split(':'); a[k].splice(Number(i), 1); mark(); drawAudience(ro, mark); estimate(); });
   $('cskip').onchange = (e) => { a.skip_open_problems = e.target.checked; mark(); estimate(); };
 }
+const money = (x) => '$' + Number(x || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Estimated cost box under the audience count (email: SES send + data fee and daily-limit check; text: segments × price). */
+function costHtml(c) {
+  if (!c) return '';
+  if (c.error) return `<div class="note" style="margin-top:10px">Cost estimate unavailable: ${esc(c.error)}</div>`;
+  const row = (l, v) => `<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px"><span style="color:var(--muted)">${l}</span><span>${v}</span></div>`;
+  let h = `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px"><div style="color:var(--muted);font-size:12.5px;font-weight:700">ESTIMATED COST</div>`;
+  if (c.channel === 'sms') {
+    if (c.total == null) return h + `<div style="font-size:13px;margin-top:6px">${fmtN(c.sends)} texts × ${c.segments} segment${c.segments === 1 ? '' : 's'} each. Add your price per segment in <a href="#texting">Texting</a> to see the cost.</div></div>`;
+    return h + `<div style="font-size:26px;font-weight:800">${money(c.total)}</div>${row('Texts', fmtN(c.sends))}${row('Segments each', `${c.segments}${c.encoding ? ` (${esc(c.encoding)})` : ''}`)}${row('Price per segment', '$' + c.per_segment)}</div>`;
+  }
+  h += `<div style="font-size:26px;font-weight:800">${money(c.total)}</div>${row('Emails', fmtN(c.sends))}${row(`Sending ($${Number(c.per_1000).toFixed(2)} per 1,000) <a href="javascript:void 0" data-rate style="font-size:12px">change</a>`, money(c.send_fee))}${row(`Data (${c.email_kb} KB each, $0.12/GB)`, money(c.data_fee))}`;
+  const s = c.ses, warn = [];
+  if (s) {
+    if (!s.production) warn.push('Amazon SES is still in sandbox mode, so it only sends to verified addresses. Request production access in AWS before a big send.');
+    else if (s.left_today != null && c.sends > s.left_today) warn.push(`Amazon SES lets you send ${fmtN(s.per_day)} emails a day and has ${fmtN(s.left_today)} left today, so ${fmtN(c.sends - s.left_today)} would wait until the limit resets. Ask AWS to raise it, or send over more than one day.`);
+    if (s.sending_enabled === false) warn.push('Sending is paused on the Amazon SES account.');
+    if (s.per_second) h += row('Speed', `${fmtN(s.per_second)} emails a second · about ${Math.max(1, Math.ceil(c.sends / s.per_second / 60))} min`);
+    if (s.per_day) h += row('Daily limit', `${fmtN(s.per_day)}${s.left_today != null ? ` (${fmtN(s.left_today)} left)` : ''}`);
+  }
+  if (c.caps && c.caps.per_day && c.sends > c.caps.per_day) warn.push(`Buzzin's own cap is ${fmtN(c.caps.per_day)} a day; the rest would go the next day.`);
+  return h + warn.map((w) => `<div class="note" style="margin-top:8px">${esc(w)}</div>`).join('') + `<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Estimate only — your AWS bill is the final number.</div></div>`;
+}
 let estT = null;
 function estimate() {
   clearTimeout(estT); estT = setTimeout(async () => {
     const box = $('cest'); if (!box) return;
     if (['sending', 'sent', 'cancelled'].includes(CP.status)) { box.innerHTML = `<div style="color:var(--muted);font-size:12.5px;font-weight:700">AUDIENCE WHEN IT STARTED</div><div style="font-size:30px;font-weight:800">${fmtN(CP.recipients)}</div><div style="color:var(--muted)">people${CP.started_at ? ` · started ${fmtDT(CP.started_at)}` : ''}${CP.sent_at ? ` · finished ${fmtDT(CP.sent_at)}` : ''}</div>`; return; }
-    try { const r = await api('/api/mk/campaigns/estimate', { method: 'POST', body: JSON.stringify({ store: CP.store, channel: CP.channel, audience: CP.audience, smart_sending: CP.smart_sending }) });
-      box.innerHTML = `<div style="color:var(--muted);font-size:12.5px;font-weight:700">ABOUT</div><div style="font-size:30px;font-weight:800">${fmtN(r.recipients)}</div><div style="color:var(--muted)">people would get it right now${r.without_consent ? ` · ${fmtN(r.without_consent)} more in these groups haven't said yes to ${CP.channel === 'sms' ? 'texts' : 'email'}` : ''}${r.smart_skipped_now ? ` · ${fmtN(r.smart_skipped_now)} would be skipped by smart sending` : ''}</div>`;
+    try { const r = await api('/api/mk/campaigns/estimate', { method: 'POST', body: JSON.stringify({ store: CP.store, channel: CP.channel, audience: CP.audience, smart_sending: CP.smart_sending, content: CP.content, ab: CP.ab }) });
+      box.innerHTML = `<div style="color:var(--muted);font-size:12.5px;font-weight:700">ABOUT</div><div style="font-size:30px;font-weight:800">${fmtN(r.recipients)}</div><div style="color:var(--muted)">people would get it right now${r.without_consent ? ` · ${fmtN(r.without_consent)} more in these groups haven't said yes to ${CP.channel === 'sms' ? 'texts' : 'email'}` : ''}${r.smart_skipped_now ? ` · ${fmtN(r.smart_skipped_now)} would be skipped by smart sending` : ''}</div>${costHtml(r.cost)}`;
+      const ch = box.querySelector('[data-rate]'); if (ch) ch.onclick = async () => {
+        const v = prompt('Amazon SES price per 1,000 emails (USD). Pay-as-you-go is 0.10; the Essentials plan is 0.16.', String(r.cost.per_1000)); if (v == null || v === '') return;
+        try { await api('/api/mk/settings', { method: 'PUT', body: JSON.stringify({ email_cost_per_1000: Number(v) }) }); estimate(); } catch (e) { toast(e.message, 1); } };
     } catch (e) { box.innerHTML = `<div class="note">${esc(e.message)}</div>`; }
   }, 300);
 }
@@ -168,7 +194,7 @@ function drawContent(ro, mark) {
       <label class="lab" for="cpre">Preview text</label><input id="cpre" type="text" value="${esc(c.preview || '')}" style="width:100%"${dis(ro)}>
       <label style="display:flex;gap:6px;align-items:center;margin-top:12px"><input type="checkbox" id="csmart"${CP.smart_sending ? ' checked' : ''}${dis(ro)}> Smart sending: skip anyone emailed in the last few hours (set in Settings)</label>`;
     if (ro) return;
-    $('ctpl').onchange = (e) => { c.template_id = e.target.value ? Number(e.target.value) : null; mark(); drawContent(ro, mark); previewMsg(); };
+    $('ctpl').onchange = (e) => { c.template_id = e.target.value ? Number(e.target.value) : null; mark(); drawContent(ro, mark); previewMsg(); estimate(); };
     $('csub').oninput = (e) => { c.subject = e.target.value; mark(); };
     $('cpre').oninput = (e) => { c.preview = e.target.value; mark(); };
     $('csmart').onchange = (e) => { CP.smart_sending = e.target.checked; mark(); estimate(); };
@@ -183,7 +209,7 @@ function drawContent(ro, mark) {
       <div style="font-size:12px;color:var(--muted);margin-top:6px">Texts are never sent during quiet hours in the person's time zone; they wait until morning.</div>`;
     if (ro) return;
     let t = null;
-    $('cbody').oninput = (e) => { c.body = e.target.value; mark(); clearTimeout(t); t = setTimeout(previewMsg, 300); };
+    $('cbody').oninput = (e) => { c.body = e.target.value; mark(); clearTimeout(t); t = setTimeout(() => { previewMsg(); estimate(); }, 300); };
     $('copt').onchange = (e) => { c.add_opt_out = e.target.checked; mark(); previewMsg(); };
     $('csmart').onchange = (e) => { CP.smart_sending = e.target.checked; mark(); estimate(); };
     $('cai').onclick = () => window.MK_aiPick ? MK_aiPick('sms', `Campaign: ${CP.name}`, (o) => { c.body = o.body || o.text || c.body; mark(); drawContent(ro, mark); previewMsg(); }, c.body) : toast('Emily is not loaded', 1);
