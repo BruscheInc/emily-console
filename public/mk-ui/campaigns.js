@@ -99,13 +99,16 @@ function calendar(host, list) {
 
 /* ---------- editor ---------- */
 let CP = null, cdirty = false;
+const SHOW_EDIT = new Set();   // campaigns opened with "View campaign" from their report
 async function editCampaign(el, id) {
   CP = await api('/api/mk/campaigns/' + id); cdirty = false;
+  if (['sending', 'sent'].includes(CP.status) && !SHOW_EDIT.has(String(id)) && window.MK_campaignReport) return window.MK_campaignReport(el, CP, () => { SHOW_EDIT.add(String(id)); editCampaign(el, id); });
+  SHOW_EDIT.delete(String(id));
   const ro = CP.status !== 'draft';
   const isE = CP.channel === 'email';
   el.innerHTML = `<div class="bar" style="align-items:center;flex-wrap:wrap"><a href="#campaigns" class="bz-crumb">Campaigns</a><span style="color:var(--bz-faint)">/</span><input id="cn" type="text" value="${esc(CP.name)}" class="bz-title-in" aria-label="Campaign name"${ro ? ' disabled' : ''}>${pill(CSTATUS, CP.status)}<span class="pill off">${CP.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'} · ${isE ? 'Email' : 'Text'}</span>
     <span class="sp"></span><span class="pill hon hidden" id="cd">Unsaved</span>
-    <button class="btn" id="ccopy"><i class="ti ti-copy"></i> Copy</button>${ro ? '' : '<button class="btn danger" id="cdel"><i class="ti ti-trash"></i></button>'}<button class="btn" id="cpv"><i class="ti ti-eye"></i> Preview</button><button class="btn" id="ctest"><i class="ti ti-send"></i> Send a test</button>
+    ${['sending', 'sent'].includes(CP.status) ? '<button class="btn" id="crpt"><i class="ti ti-chart-bar"></i> View report</button>' : ''}<button class="btn" id="ccopy"><i class="ti ti-copy"></i> Copy</button>${ro ? '' : '<button class="btn danger" id="cdel"><i class="ti ti-trash"></i></button>'}<button class="btn" id="cpv"><i class="ti ti-eye"></i> Preview</button><button class="btn" id="ctest"><i class="ti ti-send"></i> Send a test</button>
     ${CP.status === 'draft' ? '<button class="btn" id="csave">Save</button><button class="btn pri" id="csched"><i class="ti ti-calendar-check"></i> Schedule</button>' : ''}
     ${CP.status === 'pending' ? '<button class="btn" id="cunsched">Back to draft</button><button class="btn pri" id="capprove"><i class="ti ti-check"></i> Approve</button>' : ''}
     ${CP.status === 'scheduled' ? '<button class="btn" id="cunsched">Unschedule</button>' : ''}${CP.status === 'sending' ? '<button class="btn danger" id="cstop">Stop sending</button>' : ''}</div>
@@ -123,6 +126,7 @@ async function editCampaign(el, id) {
   if ($('csave')) $('csave').onclick = () => save().then(() => toast('Saved')).catch((e) => toast(e.message, 1));
   $('ccopy').onclick = async () => { try { const c = await api('/api/mk/campaigns', { method: 'POST', body: JSON.stringify({ copy_of: CP.id }) }); cdirty = false; location.hash = '#campaigns/' + c.id; } catch (e) { toast(e.message, 1); } };
   if ($('cdel')) $('cdel').onclick = async () => { if ($('cdel').dataset.c !== '1') { $('cdel').dataset.c = '1'; $('cdel').textContent = 'Click again to delete'; return; } try { await api('/api/mk/campaigns/' + CP.id, { method: 'DELETE' }); cdirty = false; location.hash = '#campaigns'; } catch (e) { toast(e.message, 1); } };
+  if ($('crpt')) $('crpt').onclick = () => editCampaign(el, id);
   $('ctest').onclick = () => testUI(true); $('cpv').onclick = () => testUI(false);
 }
 async function save() {

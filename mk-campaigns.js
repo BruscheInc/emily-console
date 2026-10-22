@@ -369,6 +369,10 @@ function routes(app, { guard, admin, isAdmin, actorOf, fail, store }) {
 
 async function init() {
   await migrate();
+  // one-time: recipients marked "error" when two copies of Buzzin overlapped during a deploy — their email did go out once
+  try { if (!(await core.syncGet("camp_overlap_fix_v1"))) { const r = await db(`UPDATE mk_campaign_recipients r SET status=s.status, send_id=s.id, note=NULL FROM mk_sends s
+      WHERE r.status='error' AND r.note LIKE 'Cannot read properties of undefined%' AND s.idem = 'camp:' || r.campaign_id || ':' || r.round || ':' || r.profile_id`);
+    await core.syncSet("camp_overlap_fix_v1", String(r.rowCount || 0), { at: new Date().toISOString() }); console.log(`📣 campaign recipients fixed after deploy overlap: ${r.rowCount || 0}`); } } catch (e) { console.error("camp overlap fix:", e.message); }
   setInterval(() => tick().catch((e) => console.error("campaigns:", e.message)), 60 * 1000);
 }
 

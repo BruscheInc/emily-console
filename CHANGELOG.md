@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.100.0
+- New campaign report, laid out like Klaviyo's. Open any sending or sent campaign to see it (View campaign opens the editor; the editor has View report):
+  - Overview: open rate, click rate, placed order rate, revenue (AOV, per recipient); engagement over time (delivered / opened / clicked / placed order, each can be switched off); deliverability table; content with the email preview, subject, preview text, from, lists, and the attempted → skipped → sent → bounced → delivered funnel.
+  - Recipient activity: totals and a list of who was delivered, opened, clicked, converted, bounced, unsubscribed, marked as spam or was skipped — searchable, with Export CSV.
+  - Link activity: people clicked, total clicks, clicks per person, didn't click, UTM parameters, and every link with unique and total clicks (Export CSV).
+  - Conversions: the orders credited to the campaign. Deliverability: health of open / click / bounce / unsubscribe / spam rates, and where it went by inbox provider, email domain and country. Watch live: progress and activity every 5 seconds.
+- Fix: when two copies of Buzzin briefly overlap during a deploy, a recipient both picked up was marked "error" even though the email went out once. That no longer happens, and those recipients are corrected.
+
 ## 4.99.5
 - Campaigns now send as fast as Amazon SES allows: about 12 emails a second (90% of SES's 14/sec), so 46,000 emails take roughly an hour instead of ~2½+. Buzzin's daily limit follows SES's quota (50,000/day) instead of its own 20,000-an-hour cap.
 - Fix: a message that hit a sending limit (or texting quiet hours) was marked "held" for good and never sent. Now it waits and goes out a couple of minutes later. If Amazon asks Buzzin to slow down, the message is retried instead of marked failed.

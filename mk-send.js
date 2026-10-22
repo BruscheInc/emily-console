@@ -91,7 +91,9 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (idem) DO NOTHING RETURNING *`,
     [store, channel, profile.id || null, to || null, messageId || null, flowId || null, flowStep || null, campaignId || null, key,
      channel === "email" ? (msg.subject || null) : String(msg.body || "").slice(0, 160), status === "sent" ? "sending" : status, reason, JSON.stringify({ test: !!test })])).rows[0];
-  if (!row || status !== "sent") return row || dup;
+  // another worker inserted the same message a moment ago (e.g. two copies of Buzzin overlap during a deploy): report that one
+  if (!row) return (await db(`SELECT * FROM mk_sends WHERE idem=$1`, [key])).rows[0] || { id: null, status: "skipped", reason: "already being sent" };
+  if (status !== "sent") return row;
   // Tracked links and the open pixel are added only to messages that really go out.
   const T = require("./mk-analytics");
   if (channel === "email" && msg.html) msg = { ...msg, html: await T.instrumentEmail(msg.html, row, msg.campaign_name || null, { utm: msg.utm }) };
