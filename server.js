@@ -991,6 +991,26 @@ async function flowEmailNames() {
   await core.syncSet("flow_email_names_v1", String(n), {});
   console.log(`✉️  flow email names synced: ${n} flow update(s)`);
 }
+// One-time look at the Welcome Series + 10% flow (#12) and everything that states a sign-up percent — logs only.
+async function welcomeDiag() {
+  if (await syncGet("welcome_diag_v1")) return;
+  const CP = require("./mk-coupons"), out = (m) => console.log("🔎 WELCOME-DIAG " + m);
+  const pct = (x) => [...new Set((JSON.stringify(x || "").match(/[^"]{0,40}\d{1,2}\s?%[^"]{0,30}/g) || []).map((t) => t.replace(/\\n/g, " ")))].slice(0, 12);
+  const f = (await db(`SELECT * FROM mk_flows WHERE id=12`)).rows[0];
+  if (!f) out("flow 12 not found"); else {
+    out(`flow: ${JSON.stringify({ name: f.name, status: f.status, store: f.store, trigger: f.trigger, entry: f.entry_filter, exit: f.exit_filter, reentry: f.reentry, start: f.graph && f.graph.start })}`);
+    for (const [id, n] of Object.entries((f.graph && f.graph.nodes) || {})) out(`node ${id}: ${JSON.stringify({ type: n.type, next: n.next, yes: n.yes, no: n.no, branches: n.branches, config: n.config }).slice(0, 900)}`);
+    const tids = [...new Set(Object.values(f.graph.nodes || {}).filter((n) => n.type === "send_email" && n.config && n.config.template_id).map((n) => Number(n.config.template_id)))];
+    for (const t of (await db(`SELECT id, name, subject, preview, blocks, doc FROM mk_templates WHERE id = ANY($1)`, [tids])).rows)
+      out(`template ${t.id}: ${JSON.stringify({ name: t.name, subject: t.subject, preview: t.preview, offers: CP.offersIn(t), uses_coupon: CP.usesCoupon(t), percents: pct([t.blocks, t.doc]) }).slice(0, 1500)}`);
+    const runs = (await db(`SELECT status, count(*)::int n FROM mk_flow_runs WHERE flow_id=12 GROUP BY 1`)).rows; out(`runs: ${JSON.stringify(runs)}`);
+  }
+  for (const fm of (await db(`SELECT id, name, status, list_id, coupon FROM mk_forms WHERE ab_of IS NULL`)).rows) out(`form ${fm.id}: ${JSON.stringify({ name: fm.name, status: fm.status, list_id: fm.list_id, coupon: fm.coupon })}`);
+  const forms = (await db(`SELECT id, steps FROM mk_forms WHERE status='live'`)).rows; for (const fm of forms) out(`form ${fm.id} text: ${JSON.stringify(pct(fm.steps))}`);
+  out(`coupon defaults: ${JSON.stringify(await CP.defaults())}`);
+  const live = (await db(`SELECT id, name, status, trigger FROM mk_flows WHERE status='live' AND NOT archived`)).rows; out(`live flows: ${JSON.stringify(live)}`);
+  await core.syncSet("welcome_diag_v1", "1", {});
+}
 // Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
 require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
@@ -1096,7 +1116,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

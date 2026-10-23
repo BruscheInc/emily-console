@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.107.4
+- Emily: the sign-up discount is 10% again (she honors 15% codes people were already sent).
+- One-time check of the Welcome Series + 10% flow in the log: every step, the emails' offers and any percent they mention, the sign-up forms' code settings.
+
 ## 4.107.3
 - Flows and Sign-up forms stats (people in flow, sends, views, sign-ups, revenue) are also kept ready in the background, so the first load doesn't wait on them either. Flows still took about 6s on a cold load; Overview is down from 13s to about 15ms.
 
