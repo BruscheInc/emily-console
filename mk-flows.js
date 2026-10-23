@@ -448,6 +448,55 @@ function mergeDuplicates(graph, tpls) {
   return g;
 }
 
+/** Abandoned cart, the way it should run: wait 1 hour → email 1 (if they get email) → text (if they get texts)
+ *  → 1 day → email 2 → 2 days → email 3. Everyone leaves the moment they place an order; they can come back after 7 days.
+ *  Emails come from the imported Klaviyo cart flow (in its order); the flow is created as a draft. */
+async function buildAbandonedCart(store, who) {
+  const ex = (await db(`SELECT id FROM mk_flows WHERE store=$1 AND name='Abandoned Cart' AND NOT archived AND deleted_at IS NULL`, [store])).rows[0];
+  if (ex) return { skipped: "already there", id: ex.id };
+  const src = (await db(`SELECT id, graph FROM mk_flows WHERE store=$1 AND trigger->>'event'='started_checkout' AND NOT archived AND deleted_at IS NULL ORDER BY (source='klaviyo') DESC, id LIMIT 1`, [store])).rows[0];
+  const emails = [], texts = [];
+  if (src && src.graph && src.graph.nodes) {
+    const seen = new Set(); const walk = (id) => { const n = id && src.graph.nodes[id]; if (!n || seen.has(id)) return; seen.add(id);
+      if (n.type === "send_email" && n.config && n.config.template_id && !emails.some((e) => e.template_id === n.config.template_id)) emails.push(n.config);
+      if (n.type === "send_sms" && n.config && n.config.body) texts.push(n.config);
+      walk(n.next); walk(n.yes); walk(n.no); for (const v of (n.config && n.config.variants) || []) walk(v.next); };
+    walk(src.graph.start);
+  }
+  if (!emails.length) {
+    const t = (await db(`SELECT id, subject FROM mk_templates WHERE store=$1 AND NOT archived AND name ILIKE 'abandoned cart%' ORDER BY name, id`, [store]).catch(() => ({ rows: [] }))).rows;
+    for (const x of t.slice(0, 3)) emails.push({ template_id: x.id, subject: x.subject });
+  }
+  if (!emails.length) return { skipped: "no abandoned cart emails found" };
+  const em = (c, i) => ({ type: "send_email", config: { template_id: c.template_id, subject: c.subject || "", preview: c.preview || "", name: `Abandoned cart email ${i + 1}`, status: "live", smart_sending: false }, next: null });
+  const can = (ch) => ({ match: "all", conditions: [{ type: "consent", channel: ch, state: "subscribed" }] });
+  const body = (texts[0] && texts[0].body) || "Larkspur Baby: Still thinking it over? We saved your cart. Finish checking out here: {{ checkout_url }}";
+  const N = {
+    a: { type: "delay", config: { amount: 1, unit: "hours" }, next: "b" },
+    b: { type: "split", config: { name: "Can get email", condition: can("email") }, yes: "e1", no: "s" },
+    e1: { ...em(emails[0], 0), next: "d1" },
+    d1: { type: "delay", config: { amount: 3, unit: "hours" }, next: "s" },
+    s: { type: "split", config: { name: "Can get texts", condition: can("sms") }, yes: "t1", no: "d2" },
+    t1: { type: "send_sms", config: { body, name: "Abandoned cart text", status: "live", add_opt_out: true, quiet_hours: true, smart_sending: false }, next: "d2" },
+    d2: { type: "delay", config: { amount: 1, unit: "days" }, next: emails[1] ? "b2" : null },
+  };
+  if (emails[1]) {
+    N.b2 = { type: "split", config: { name: "Can get email", condition: can("email") }, yes: "e2", no: null };
+    N.e2 = { ...em(emails[1], 1), next: emails[2] ? "d3" : null };
+    if (emails[2]) { N.d3 = { type: "delay", config: { amount: 2, unit: "days", until_time: "10:00" }, next: "e3" }; N.e3 = { ...em(emails[2], 2), next: null }; }
+  }
+  for (const n of Object.values(N)) { if (n.next === null) delete n.next; if (n.no === null) n.no = undefined; }
+  // splits with nowhere to go on "no" end the flow there
+  for (const [k, n] of Object.entries(N)) if (n.type === "split" && !n.no) { N[`${k}_end`] = { type: "end", config: {} }; n.no = `${k}_end`; }
+  const errs = validate({ start: "a", nodes: N }); if (errs.length) throw new Error(errs.join(" "));
+  const f = await create(store, "Abandoned Cart", who, "abandoned_checkout");
+  await db(`UPDATE mk_flows SET graph=$2, notes=$3, updated_at=now() WHERE id=$1`, [f.id, JSON.stringify({ start: "a", nodes: N }),
+    `Built from the Klaviyo cart flow${src ? ` (#${src.id})` : ""}: 1 hour → email 1 → text (if they can get texts) → 1 day → email 2${emails[2] ? " → 2 days → email 3" : ""}. Leaves when they order; can return after 7 days. Turn it on when ready.`]);
+  await db(`UPDATE mk_flow_versions SET graph=$2 WHERE flow_id=$1`, [f.id, JSON.stringify({ start: "a", nodes: N })]);
+  FLOW_CACHE.t = 0;
+  return { id: f.id, emails: emails.length, from: src && src.id, text: !!texts[0] };
+}
+
 /* ---------------- starters ---------------- */
 const STARTER_NAMES = { welcome: "Welcome series", abandoned_checkout: "Abandoned checkout", browse: "Browse abandonment", post_purchase: "Post-purchase thank you", size_up: "Size-up reminder", winback: "Win-back" };
 const STARTERS = {
@@ -543,6 +592,10 @@ async function init() {
   setInterval(() => pollCheckouts().catch(() => {}), 15 * 60 * 1000);
   const daily = async () => { const today = new Date().toISOString().slice(0, 10); const s = await core.syncGet("mk_date_triggers").catch(() => null); if (s && s.cursor === today) return; await dateTriggers(); await core.syncSet("mk_date_triggers", today, {}); };
   setInterval(() => { const h = new Date().getUTCHours(); if (h >= 14) daily().catch((e) => console.error("date triggers:", e.message)); }, 30 * 60 * 1000);
+  // One-time (Jose asked): a clean abandoned cart flow built from the imported Klaviyo one, with email and text. Left as a draft to review and turn on.
+  if (!(await core.syncGet("mk_abandoned_cart_flow_v1").catch(() => null))) {
+    setTimeout(() => buildAbandonedCart("lb", "claude").then((r) => core.syncSet("mk_abandoned_cart_flow_v1", new Date().toISOString(), r).then(() => console.log(`🛒 Abandoned cart flow: ${JSON.stringify(r)}`))).catch((e) => console.error("abandoned cart flow:", e.message)), 75000);
+  }
   if (!(await core.syncGet("mk_klaviyo_flows_v1").catch(() => null))) {
     setTimeout(async () => { try { const t = await core.syncGet("mk_klaviyo_templates_v1").catch(() => null); if (!t) return; const r = await importKlaviyoFlows("lb", "import"); if (r.length) { await core.syncSet("mk_klaviyo_flows_v1", new Date().toISOString(), { n: r.length }); console.log(`🔀 Marketing: ${r.length} Klaviyo flows imported as drafts · ${r.map((x) => `${x.name} ${x.klaviyo_steps}→${x.steps}`).join(" · ")}`); } } catch (e) { console.error("Klaviyo flows import:", e.message); } }, 120 * 1000);
   }

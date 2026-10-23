@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.104.2
+- New flow "Abandoned Cart" (draft), built from the Klaviyo cart flow's emails: wait 1 hour → email 1 (if they get email) → 3 hours → text (if they get texts) → 1 day → email 2 (→ 2 days → email 3 if there is one). Leaves the moment they order; can come back after 7 days. Messages are set to Live; the flow goes out once it's turned on.
+
 ## 4.104.1
 - Email editor header like Klaviyo's: an exit icon at the top left (not a second back arrow) and an Exit button next to Save. The panel's own back arrow stays put while you scroll.
 
