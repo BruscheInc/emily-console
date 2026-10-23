@@ -133,6 +133,27 @@
   const href = (R, s, scope) => { const u = txt(R, s, scope).trim(); return u ? esc(u).replace(/&amp;/g, '&amp;') : ''; };
   const link = (R, u, inner, style = '') => (u ? `<a href="${u}" target="_blank" style="text-decoration:none;${style}">${inner}</a>` : inner);
 
+  /* ---------- dynamic tables (rows repeated per item, like Klaviyo's) ---------- */
+  const REP_KEYS = ['row_collection', 'dynamic_row_collection', 'repeat_for', 'collection', 'data_source', 'dynamic_collection', 'rows_collection', 'dynamic_data_source', 'source'];
+  const ALIAS_KEYS = ['row_alias', 'dynamic_row_alias', 'item_alias', 'alias', 'row_name', 'dynamic_alias'];
+  function tableRepeat(p, cells) {
+    p = p || {};
+    let path = REP_KEYS.map((k) => p[k]).find((v) => typeof v === 'string' && v.trim());
+    if (!path) for (const v of Object.values(p)) if (typeof v === 'string' && /^\s*(event|person)\.[\w.$\[\]'"]+\s*$/.test(v)) { path = v; break; }
+    const usesItem = JSON.stringify(cells || []).match(/\{\{[^}]*?\b(\w+)\.(?:product|title|quantity|line_price|price|ProductName|ImageURL|Quantity|RowTotal)\b/);
+    if (!p.dynamic && !path) return null;
+    if (!path && !usesItem) return null;
+    const alias = ALIAS_KEYS.map((k) => p[k]).find((v) => typeof v === 'string' && v.trim()) || (usesItem && usesItem[1] !== 'event' ? usesItem[1] : 'item');
+    return { path: String(path || 'event.extra.line_items').replace(/^\s*\{\{\s*|\s*\}\}\s*$/g, '').trim(), alias: String(alias).replace(/[^\w]/g, '') || 'item' };
+  }
+  /** A table image cell's picture: a fixed URL or a template like {{ item.product.images.0.src }}. */
+  function cellImage(c) {
+    for (const k of ['src', 'dynamic_src', 'dynamic_image', 'image_url', 'dynamic_image_url', 'image', 'url']) if (typeof c[k] === 'string' && c[k].trim()) return c[k].trim();
+    for (const [k, v] of Object.entries(c)) if (typeof v === 'string' && /\{\{/.test(v) && !/href|link|alt|content/.test(k)) return v.trim();
+    return '';
+  }
+  const dynSrc = (R, raw, scope) => txt(R, raw, scope).replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+
   /* ---------- the email ---------- */
   function render(doc, env) {
     env = env || {};
@@ -162,6 +183,8 @@
     }
     const allM = mcss.concat(R.mcss).join('\n');
     const head = `body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}table{border-collapse:collapse;mso-table-lspace:0;mso-table-rspace:0}img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;display:block}
+.bz-text,.bz-tc{word-break:break-word;overflow-wrap:anywhere}
+.bz-tc p{margin:0}
 .bz-text p{${S.p}}.bz-text a{${S.a}}.bz-text h1{${S.h[0]}}.bz-text h2{${S.h[1]}}.bz-text h3{${S.h[2]}}.bz-text h4{${S.h[3]}}.bz-text ul,.bz-text ol{margin:0;padding-left:24px}
 ${R.css.join('\n')}
 @media only screen and (max-width:${W + 20}px){.bz-wrap{width:100%!important}}
@@ -309,7 +332,10 @@ ${sections}${empty}
     image(blk, st, R, sc) {
       const p = (blk.data || {}).properties || {};
       if (!p.src) return '';
-      return imageLike(blk, st, R, sc, txt(R, p.src, sc), p.alt_text, href(R, p.href, sc));
+      const dyn = /\{[{%]/.test(p.src);
+      if (dyn && R.ed) return `<div class="bz-ph bz-dynimg" title="${esc(p.src)}">Image from {{ ${esc(String(p.src).replace(/^\s*\{\{\s*|\s*\}\}\s*$/g, ''))} }}</div>`;
+      const src = dyn ? dynSrc(R, p.src, sc) : p.src; if (!src) return '';
+      return imageLike(blk, st, R, sc, src, txt(R, p.alt_text || '', sc), href(R, p.href, sc));
     },
     video(blk, st, R, sc) {
       const p = (blk.data || {}).properties || {};
@@ -438,21 +464,33 @@ ${sections}${empty}
       const vb = (() => { const w = num(st.cell_vertical_border_width, 0), s = st.cell_vertical_border_style || 'none'; return w > 0 && s !== 'none' ? `${w}px ${s} ${col(st.cell_vertical_border_color) || '#E5E5E5'}` : ''; })();
       const va = st.cell_vertical_align || 'middle';
       const widths = cells.slice(0, nc).map((c) => c.table_column_width || '');
+      const rows = []; for (let r = 0; r < Math.ceil(cells.length / nc); r++) rows.push(cells.slice(r * nc, r * nc + nc));
+      const hasHead = p.show_headers !== false && cells[0].type === 'table_header';
+      const tx = tstyle(R, 'text-styles'); const baseFont = [!st.table_font_family && tx.font_family ? `font-family:${q(tx.font_family)}` : '', !num(st.table_font_size, 0) && num(tx.font_size, 0) ? `font-size:${num(tx.font_size)}px` : '', !col(st.table_font_color) && col(tx.color) ? `color:${col(tx.color)}` : ''].filter(Boolean).join(';');
+      const rowHtml = (rc, isHead, scope) => '<tr>' + rc.map((c, i) => {
+        const cellCss = [baseFont,isHead ? `${fontCss(st, 'header_', 'header_font_color')};${col(st.header_background_color) ? `background-color:${col(st.header_background_color)};` : ''}padding:${pad(st, 'header_padding', null) .includes('null') ? pad(st, 'cell_padding', 8) : pad(st, 'header_padding', 8)}` : `${fontCss(st, 'table_', 'table_font_color')};padding:${pad(st, 'cell_padding', 8)};${col(st.table_background_color) ? `background-color:${col(st.table_background_color)};` : ''}`,
+          hb ? `border-bottom:${hb}` : '', vb && i < nc - 1 ? `border-right:${vb}` : '', `text-align:${c.cell_text_align || st.table_text_align || 'left'}`, `vertical-align:${va}`,
+          [c.font_family ? `font-family:${q(c.font_family)}` : '', num(c.font_size, 0) ? `font-size:${num(c.font_size)}px` : '', col(c.color) ? `color:${col(c.color)}` : '', c.font_weight ? `font-weight:${q(c.font_weight)}` : '', c.font_style ? `font-style:${q(c.font_style)}` : ''].filter(Boolean).join(';')].filter(Boolean).join(';');
+        let inner = '';
+        if (c.type === 'table_image') {
+          const raw = cellImage(c); const dyn = /\{[{%]/.test(raw);
+          const src = dyn ? (R.ed ? '' : dynSrc(R, raw, scope)) : raw; const w = num(c.image_width || c.width, 80);
+          inner = src ? link(R, href(R, c.href || c.link || '', scope), `<img src="${esc(src)}" alt="${esc(txt(R, c.alt_text || '', scope))}" width="${w}" style="display:${c.image_align === 'center' ? 'block;margin:0 auto' : 'inline-block'};width:${w}px;max-width:100%;height:auto;border:0">`)
+            : R.ed && dyn ? `<div class="bz-ph bz-dynimg" style="width:${w}px;height:${w}px" title="${esc(raw)}">Product image</div>` : '';
+        } else inner = c.type === 'table_html' ? txt(R, c.content || '', scope) : styleText(txt(R, c.content || '', scope), R);
+        return `<${isHead ? 'th' : 'td'} ${widths[i] ? `width="${esc(widths[i])}" ` : ''}class="bz-tc" style="${cellCss}">${inner}</${isHead ? 'th' : 'td'}>`;
+      }).join('') + '</tr>';
+      const rep = tableRepeat(p, cells);
       let html = '';
-      for (let r = 0; r < Math.ceil(cells.length / nc); r++) {
-        const isHead = p.show_headers !== false && r === 0 && cells[0].type === 'table_header';
-        html += '<tr>' + cells.slice(r * nc, r * nc + nc).map((c, i) => {
-          const cellCss = [isHead ? `${fontCss(st, 'header_', 'header_font_color')};${col(st.header_background_color) ? `background-color:${col(st.header_background_color)};` : ''}padding:${pad(st, 'header_padding', null) .includes('null') ? pad(st, 'cell_padding', 8) : pad(st, 'header_padding', 8)}` : `${fontCss(st, 'table_', 'table_font_color')};padding:${pad(st, 'cell_padding', 8)};${col(st.table_background_color) ? `background-color:${col(st.table_background_color)};` : ''}`,
-            hb ? `border-bottom:${hb}` : '', vb && i < nc - 1 ? `border-right:${vb}` : '', `text-align:${c.cell_text_align || st.table_text_align || 'left'}`, `vertical-align:${va}`,
-            [c.font_family ? `font-family:${q(c.font_family)}` : '', num(c.font_size, 0) ? `font-size:${num(c.font_size)}px` : '', col(c.color) ? `color:${col(c.color)}` : '', c.font_weight ? `font-weight:${q(c.font_weight)}` : '', c.font_style ? `font-style:${q(c.font_style)}` : ''].filter(Boolean).join(';')].filter(Boolean).join(';');
-          let inner = '';
-          if (c.type === 'table_image') inner = c.src ? link(R, href(R, c.href, sc), `<img src="${esc(c.src)}" alt="${esc(c.alt_text || '')}" width="${num(c.image_width || c.width, 80)}" style="display:${c.image_align === 'center' ? 'block;margin:0 auto' : 'inline-block'};width:${num(c.image_width || c.width, 80)}px;max-width:100%;height:auto;border:0">`) : '';
-          else inner = c.type === 'table_html' ? txt(R, c.content || '', sc) : styleText(txt(R, c.content || '', sc), R);
-          return `<${isHead ? 'th' : 'td'} ${widths[i] ? `width="${esc(widths[i])}" ` : ''}style="${cellCss}">${inner}</${isHead ? 'th' : 'td'}>`;
-        }).join('') + '</tr>';
-      }
+      if (rep && !R.ed && R.env.repeat) {
+        // Dynamic table (Klaviyo-style): the header row once, then the other rows once per item in the list.
+        const head = hasHead ? rows.slice(0, 1) : [], body = hasHead ? rows.slice(1) : rows;
+        html += head.map((rc) => rowHtml(rc, true, sc)).join('');
+        const items = (R.env.repeat(rep.path, sc) || []).slice(0, 100);
+        items.forEach((it, k) => { const s2 = Object.assign({}, sc, { [rep.alias]: it, forloop: { counter: k + 1, counter0: k, index: k, first: k === 0, last: k === items.length - 1, length: items.length } }); html += body.map((rc) => rowHtml(rc, false, s2)).join(''); });
+      } else rows.forEach((rc, r) => { html += rowHtml(rc, hasHead && r === 0, sc); });
       const bw = bord(st, 'block_');
-      return `${T(`width="100%" style="${bw ? `border:${bw};` : ''}border-collapse:collapse"`)}${html}</table>`;
+      return `${R.ed && rep ? `<div class="bz-reptag">&#8635; Rows repeat for each <b>${esc(rep.alias)}</b> in ${esc(rep.path)}</div>` : ''}${T(`width="100%" class="bz-tbl" style="${bw ? `border:${bw};` : ''}border-collapse:collapse"`)}${html}</table>`;
     },
     review(blk, st, R, sc) {
       const p = (blk.data || {}).properties || {};
@@ -507,6 +545,8 @@ ${sections}${empty}
   };
 
   const EDITOR_CSS = `a{pointer-events:none}
+.bz-reptag{font:600 11px/1.3 -apple-system,system-ui,sans-serif;color:#4C5BD4;background:#EEF0FD;border-radius:6px;padding:4px 8px;margin:0 0 4px;display:inline-block}
+.bz-dynimg{display:flex;align-items:center;justify-content:center;background:#EEF0FD!important;color:#4C5BD4!important;font:600 11px/1.2 -apple-system,system-ui,sans-serif;border-radius:6px;text-align:center;padding:4px;box-sizing:border-box;min-height:60px}
 .bz-ph{border:1px dashed #C9C5BC;background:#FAF9F7;color:#8A8794;font:13px/1.4 Helvetica,Arial,sans-serif;text-align:center;padding:22px 12px;border-radius:4px}
 .bz-emptycol,.bz-emptydoc{border:1px dashed #9DB7EA;background:rgba(47,111,235,.04);color:#5B7FC7;font:13px/1.4 Helvetica,Arial,sans-serif;text-align:center;padding:26px 10px;margin:6px}
 .bz-emptydoc{margin:20px;padding:60px 20px}
@@ -629,5 +669,5 @@ ${sections}${empty}
     return doc;
   }
 
-  return { render, newDoc, newBlock, newSection, fromBlocks, fromKlaviyo, walk, find, reId, rid, clone, getStyle, ensureStyle, brandStyles, blockDefaults, SECTION_DEFAULTS, BLOCK_INFO, STYLE_TYPES, layoutPcts, hasUnsubscribe, youtubeThumb, esc };
+  return { render, tableRepeat, cellImage, newDoc, newBlock, newSection, fromBlocks, fromKlaviyo, walk, find, reId, rid, clone, getStyle, ensureStyle, brandStyles, blockDefaults, SECTION_DEFAULTS, BLOCK_INFO, STYLE_TYPES, layoutPcts, hasUnsubscribe, youtubeThumb, esc };
 });

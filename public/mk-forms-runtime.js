@@ -26,8 +26,16 @@
       var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
       if (meta && meta.product) track('viewed_product', { product_id: String(meta.product.id), title: meta.product.title || document.title, handle: location.pathname.split('/products/')[1] || '', price: meta.product.variants && meta.product.variants[0] ? meta.product.variants[0].price / 100 : null, url: location.href.split('?')[0] });
       else track('active_on_site', {});
-      var of = window.fetch; window.fetch = function (u, o) { var p = of.apply(this, arguments); try { if (String(u).indexOf('/cart/add') >= 0) p.then(function () { track('added_to_cart', { url: location.href.split('?')[0] }); }); } catch (e) {} return p; };
-      document.addEventListener('submit', function (e) { try { if (e.target && /\/cart\/add/.test(e.target.action || '')) track('added_to_cart', { url: location.href.split('?')[0] }); } catch (x) {} }, true);
+      // Added to cart: send the whole cart (like Klaviyo's Added to Cart event) so cart emails can show it.
+      var cartT = null; var page = location.href.split('?')[0];
+      var cartTrack = function (wait) { clearTimeout(cartT); cartT = setTimeout(function () {
+        try { of.call(window, '/cart.js', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (c) {
+          var items = (c.items || []).slice(0, 20).map(function (i) { return { title: i.product_title, variant: i.variant_title || '', qty: i.quantity, price: (i.final_price != null ? i.final_price : i.price) / 100, image: i.image || (i.featured_image && i.featured_image.url) || '', url: location.origin + (i.url || ('/products/' + i.handle)).split('?')[0], handle: i.handle, sku: i.sku || '', variant_id: String(i.variant_id || ''), product_id: String(i.product_id || '') }; });
+          track('added_to_cart', { url: page, value: (c.total_price || 0) / 100, item_count: c.item_count || items.length, items: items, checkout_url: items.length ? location.origin + '/cart/' + (c.items || []).slice(0, 20).map(function (i) { return i.variant_id + ':' + i.quantity; }).join(',') : '' });
+        }).catch(function () { track('added_to_cart', { url: page }); }); } catch (e) { track('added_to_cart', { url: page }); }
+      }, wait || 700); };
+      var of = window.fetch; window.fetch = function (u, o) { var p = of.apply(this, arguments); try { if (String(u).indexOf('/cart/add') >= 0) p.then(function () { cartTrack(); }); } catch (e) {} return p; };
+      document.addEventListener('submit', function (e) { try { if (e.target && /\/cart\/add/.test(e.target.action || '')) cartTrack(1500); } catch (x) {} }, true);
     } catch (e) {}
   }
 

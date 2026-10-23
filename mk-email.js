@@ -19,6 +19,7 @@ const { db } = core;
 const MK = () => require("./mk-core");
 const SEND = () => require("./mk-send");
 const MKDoc = require("./public/mk-doc");
+const TPL = require("./mk-tpl");
 
 const SECRET = process.env.RETURNS_SECRET || process.env.CONSOLE_KEY || "buzzin-marketing";
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
@@ -62,22 +63,8 @@ async function saveBrand(store, data, who) {
 const getPath = (obj, p) => String(p).split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
 /** {{ a.b | default: "x" }} / {{ a|default:'x' }} / {{ a | upcase }} → value. Unknown → empty (or the default). */
 function personalize(str, ctx, { html = true } = {}) {
-  return String(str || "").replace(/\{%\s*coupon_code[^%]*%\}/g, "{{ coupon }}").replace(/%7B%25\s*coupon_code.*?%25%7D/gi, "{{ coupon }}").replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, expr) => {
-    const parts = expr.split("|").map((x) => x.trim());
-    let path = parts.shift().replace(/^person\./, "").replace(/^organization\.name$/, "store_name");
-    let v = getPath(ctx, path);
-    for (const f of parts) {
-      const m = f.match(/^(\w+)\s*:?\s*(?:"([^"]*)"|'([^']*)'|(\S+))?/);
-      if (!m) continue;
-      const arg = m[2] ?? m[3] ?? m[4];
-      if (m[1] === "default" && (v == null || v === "")) v = arg ?? "";
-      else if (m[1] === "upcase" && v != null) v = String(v).toUpperCase();
-      else if (m[1] === "downcase" && v != null) v = String(v).toLowerCase();
-      else if (m[1] === "title" && v != null) v = String(v).replace(/\b\w/g, (c) => c.toUpperCase());
-    }
-    if (v == null) return "";
-    return html && !/_url$|_html$/.test(path) ? esc(v) : String(v);
-  });
+  const s = String(str || "").replace(/\{%\s*coupon_code[^%]*%\}/g, "{{ coupon }}").replace(/%7B%25\s*coupon_code.*?%25%7D/gi, "{{ coupon }}");
+  return TPL.render(s, ctx || {}, { html, missingImage: (ctx && ctx.missing_image) || "" });
 }
 /** Klaviyo template tags → Buzzin equivalents, done once at import. */
 function fromKlaviyo(html) {
@@ -87,8 +74,8 @@ function fromKlaviyo(html) {
     .replace(/\{%\s*web_view(?:\s+['"]([^'"]*)['"])?\s*%\}/g, (_, t) => `<a href="{{ web_url }}">${t || "View in browser"}</a>`)
     .replace(/\{\{\s*organization\.full_address\s*\}\}/g, "{{ store_address }}")
     .replace(/\{\{\s*organization\.name\s*\}\}/g, "{{ store_name }}")
-    .replace(/\{%\s*coupon_code[^%]*%\}/g, "{{ coupon }}")   // Klaviyo's unique coupon tag → the person's own Buzzin code
-    .replace(/\{%[\s\S]*?%\}/g, "");   // any other Klaviyo logic tag is dropped (noted on import)
+    .replace(/\{%\s*coupon_code[^%]*%\}/g, "{{ coupon }}");   // Klaviyo's unique coupon tag → the person's own Buzzin code
+  // if / for / with / currency_format and the rest are kept: mk-tpl renders them like Klaviyo does
 }
 
 /* ---------------- unsubscribe / preferences links ---------------- */
@@ -227,6 +214,50 @@ async function showIf(cond, ctx) {
 }
 
 /** The context a template is filled with for one person. */
+/* ---------------- cart data in Klaviyo's shapes ---------------- */
+const money2 = (v) => { const n = Number(String(v ?? "").replace(/[$,]/g, "")); return isFinite(n) && String(v ?? "") !== "" ? Math.round(n * 100) / 100 : null; };
+/** One cart line, readable by Shopify-style templates (item.product.title, item.line_price, item.product.images.0.src)
+ *  and by Klaviyo's own event fields (item.ProductName, item.ImageURL, item.RowTotal). Our own names stay too. */
+function cartItem(x) {
+  x = x || {};
+  if (x.product && typeof x.product === "object" && x.line_price != null && x.ProductName) return x;   // already shaped
+  const title = x.title || x.product_title || x.ProductName || x.name || (x.product && x.product.title) || "";
+  const variant = x.variant || x.variant_title || x.VariantName || (x.product && x.product.variant && x.product.variant.title) || "";
+  const qty = Number(x.qty ?? x.quantity ?? x.Quantity ?? 1) || 1;
+  const price = money2(x.price ?? x.ItemPrice ?? x.unit_price);
+  const line = money2(x.line_price ?? x.RowTotal) ?? (price != null ? Math.round(price * qty * 100) / 100 : null);
+  const image = x.image || x.image_url || x.ImageURL || (x.product && x.product.images && x.product.images[0] && x.product.images[0].src) || "";
+  const url = x.url || x.product_url || x.ProductURL || (x.product && x.product.url) || "";
+  const imgs = image ? [{ src: image, url: image }] : [];
+  return {
+    ...x, title, variant, variant_title: variant, size: x.size || variant, qty, quantity: qty, price, line_price: line, image, image_url: image, url, product_url: url, sku: x.sku || x.SKU || "",
+    product: { ...(typeof x.product === "object" ? x.product : {}), title, name: title, handle: x.handle || "", url, images: imgs, featured_image: image, variant: { title: variant, sku: x.sku || "", images: imgs, price } },
+    ProductName: title, ProductID: x.product_id || "", SKU: x.sku || "", Quantity: qty, ItemPrice: price, RowTotal: line, ImageURL: image, ProductURL: url, VariantName: variant,
+  };
+}
+/** The "event" a cart/checkout email sees. */
+function cartEvent(items, extra = {}) {
+  const li = (items || []).map(cartItem);
+  const total = money2(extra.value) ?? Math.round(li.reduce((a, x) => a + (x.line_price || 0), 0) * 100) / 100;
+  const url = extra.checkout_url || "";
+  return {
+    $value: total, value: total, checkout_url: url, CheckoutURL: url, item_count: li.reduce((a, x) => a + x.quantity, 0), ItemCount: li.reduce((a, x) => a + x.quantity, 0),
+    Items: li, items: li, ItemNames: li.map((x) => x.title),
+    extra: { line_items: li, checkout_url: url, responsive_checkout_url: url, total_price: total, subtotal_price: total, line_items_subtotal_price: total, currency: "USD" },
+  };
+}
+/** Previews and tests: the person's own last cart, else the newest cart in the store, else two catalog products. */
+async function sampleCart(store, profile) {
+  try {
+    const q = `SELECT props, value FROM mk_events WHERE store=$1 AND type IN ('started_checkout','added_to_cart') AND jsonb_array_length(COALESCE(props->'items','[]'::jsonb)) > 0`;
+    let r = profile && profile.id ? (await db(`${q} AND profile_id=$2 ORDER BY at DESC LIMIT 1`, [store, profile.id])).rows[0] : null;
+    if (!r) r = (await db(`${q} ORDER BY at DESC LIMIT 1`, [store])).rows[0];
+    if (r) return { items: r.props.items, checkout_url: r.props.checkout_url || "", value: r.value };
+    const prods = await catalogProducts(store, { limit: 2, bestsellers: true }).catch(() => []);
+    if ((prods || []).length) return { items: prods.slice(0, 2).map((p, i) => ({ title: p.title, url: p.url, image: p.image, price: p.price, qty: i ? 1 : 2, variant: "3-6M" })), checkout_url: "" };
+  } catch (_) {}
+  return { items: [{ title: "Bamboo Zip Sleeper", variant: "3-6M", qty: 2, price: 34, image: "", url: "" }, { title: "Knit Beanie", variant: "0-3M", qty: 1, price: 18, image: "", url: "" }], checkout_url: "" };
+}
 async function contextFor(store, profile, extra = {}) {
   const b = await brand(store);
   const tok = profile && profile.id ? tokenFor(profile.id, store) : "preview";
@@ -238,7 +269,14 @@ async function contextFor(store, profile, extra = {}) {
     unsubscribe_url: `${BASE(store)}/mk/u/${tok}`, preferences_url: `${BASE(store)}/mk/p/${tok}`, web_url: `${BASE(store)}/mk/u/${tok}`,
     coupon: extra.coupon || (profile && profile.props && profile.props.coupon) || require("./mk-coupons").sample(),   // previews and tests show a sample code
     ...extra,
+    ...cartFields(extra),
   };
+}
+/** Cart/checkout data: event.extra.line_items, event.Items, checkout_url… the way Klaviyo's cart emails read them. */
+function cartFields(extra) {
+  const ev = extra.event && typeof extra.event === "object" ? extra.event : cartEvent(extra.items || [], { checkout_url: extra.checkout_url, value: extra.value });
+  const items = (ev.extra && ev.extra.line_items) || (extra.items || []).map(cartItem);
+  return { event: ev, items, checkout_url: extra.checkout_url || ev.checkout_url || (ev.extra && ev.extra.checkout_url) || "" };
 }
 
 /* ---------------- Klaviyo-format documents (sections → rows → columns → blocks) ---------------- */
@@ -314,8 +352,14 @@ async function withUniversal(doc) {
   MKDoc.walk(d, (n) => { const u = n && n.universal_id && by[String(n.universal_id)]; if (!u || !u.data) return; n.data = MKDoc.clone(u.data); if (u.subblocks) n.subblocks = MKDoc.clone(u.subblocks); if (u.rows) n.rows = MKDoc.clone(u.rows); });
   return d;
 }
+/** Does this email show cart/checkout data? (Then previews and tests fill in a sample cart.) */
+function usesCart(tpl) {
+  const s = JSON.stringify((tpl && (tpl.doc || tpl.blocks)) || "");
+  return /line_items|event\.Items|event\.extra|checkout_url|CheckoutURL|\\?"feed\\?":\\?"cart|\\?"source\\?":\\?"cart/.test(s);
+}
 async function renderDocument(store, tpl, profile, extra = {}, opts = {}) {
   const b = await brand(store);
+  if (opts.sampleCart && !(extra.items && extra.items.length) && !extra.event && usesCart(tpl)) extra = { ...extra, ...(await sampleCart(store, profile)) };
   const ctx = await contextFor(store, profile, extra);
   const doc = await withUniversal(typeof tpl.doc === "string" ? JSON.parse(tpl.doc) : tpl.doc);
   // Each coupon block with its own offer shows its own code (in the box and in its link).
@@ -332,13 +376,14 @@ async function renderDocument(store, tpl, profile, extra = {}, opts = {}) {
   }
   const prods = await productsForDoc(store, doc, ctx);
   const person = { ...((profile && profile.props) || {}), first_name: ctx.first_name, last_name: ctx.last_name, email: ctx.email, phone_number: ctx.phone, orders_count: ctx.orders_count, total_spent: ctx.total_spent, last_sizes: ctx.last_sizes, props: (profile && profile.props) || {} };
-  const base = { ...ctx, person, event: extra.event || { extra: { line_items: ctx.items || [] }, items: ctx.items || [] } };
+  const base = { ...ctx, person };
+  const tctx = { ...ctx, person: { ...person, ...ctx.props, first_name: ctx.first_name, last_name: ctx.last_name, email: ctx.email, phone_number: ctx.phone } };
   const brandAbs = { ...b, logo_abs: absUrl(b.logo) };
   const out = MKDoc.render(doc2, {
     brand: brandAbs, editor: !!opts.editor, assetBase: PUBLIC_URL(),
-    text: (s, scope) => personalize(s, scope && Object.keys(scope).length ? { ...ctx, ...scope } : ctx),
+    text: (s, scope) => personalize(s, scope && Object.keys(scope).length ? { ...tctx, ...scope } : tctx),
     visible: (vis, scope) => visibleFor(vis, { ...base, ...(scope || {}) }),
-    repeat: (path, scope) => { const v = getPath({ ...base, ...(scope || {}) }, String(path).replace(/^person\./, "person.")); return Array.isArray(v) ? v : []; },
+    repeat: (path, scope) => { let v = TPL.evalExpr(String(path), { ...tctx, ...(scope || {}) }); if (v && !Array.isArray(v) && typeof v === "object") v = Object.values(v); return Array.isArray(v) ? v : []; },
     products: (blk) => prods[blk.id] || [],
     footer: ({ hasUnsubscribe }) => (hasUnsubscribe ? "" : footer(b, ctx)),
   });
@@ -572,14 +617,14 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     try { const b = req.body || {}; const s = store(b.store) || "lb";
       let prof = null; if (b.profile_id) prof = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [Number(b.profile_id)])).rows[0];
       if (!prof) prof = { id: 0, first_name: "Maria", last_name: "Lopez", email: "maria@example.com", props: { last_sizes: ["3-6M"] }, orders_count: 1 };
-      res.json(await render(s, { subject: b.subject, preview: b.preview, blocks: cleanBlocks(b.blocks || []), doc: b.doc ? cleanDoc(b.doc) : null }, prof, { coupon: "WELCOME-8K2Q", ...(b.extra || {}) }, { editor: !!b.editor })); } catch (e) { fail(res, e); }
+      res.json(await render(s, { subject: b.subject, preview: b.preview, blocks: cleanBlocks(b.blocks || []), doc: b.doc ? cleanDoc(b.doc) : null }, prof, { coupon: "WELCOME-8K2Q", ...(b.extra || {}) }, { editor: !!b.editor, sampleCart: !b.editor })); } catch (e) { fail(res, e); }
   });
   app.post("/api/mk/templates/:id/test", async (req, res) => {
     if (!guard(req, res)) return;
     try { const t = await getTemplate(req.params.id); if (!t) return res.status(404).json({ error: "not found" });
       const to = String((req.body && req.body.to) || "").trim().toLowerCase(); if (!to) return res.status(400).json({ error: "Enter an address from the internal test list" });
       const tp = await require("./mk-coupons").forTest(t.store, to, "email", t);   // the real profile and a working code, like the live email
-      const r = await render(t.store, t, tp.profile, tp.coupon ? { coupon: tp.coupon, coupons: tp.coupons } : {});
+      const r = await render(t.store, t, tp.profile, tp.coupon ? { coupon: tp.coupon, coupons: tp.coupons } : {}, { sampleCart: true });
       const row = await SEND().send({ store: t.store, channel: "email", profile: { id: null, email: to, email_consent: "subscribed" }, msg: r, test: true, messageId: `tpl:${t.id}`, idem: `test:${t.id}:${to}:${Date.now()}` });
       res.json({ status: row.status, reason: row.reason }); } catch (e) { fail(res, e); }
   });
@@ -708,6 +753,43 @@ async function init() {
       console.log(`🎟️  Marketing: coupon code put back in edited Klaviyo emails: ${fixed.join(", ") || "none needed"}`);
     } catch (e) { console.error("Klaviyo coupon fix (edited):", e.message); } }, 110000);
   }
+  // One-time: the first Klaviyo import dropped {% %} logic (for loops, if, currency_format). Put it back in each block
+  // whose text is still what the import left, so edits made in Buzzin are kept.
+  if (!(await core.syncGet("mk_klaviyo_logic_tags_v1").catch(() => null))) {
+    setTimeout(async () => { try {
+      const raws = (await db(`SELECT id, data FROM hd_klaviyo WHERE kind='template' AND data::text LIKE '%{\\%%'`).catch(() => ({ rows: [] }))).rows;
+      const fixed = [], tables = [];
+      const stripOld = (x) => String(x || "").replace(/\{%[\s\S]*?%\}/g, "");
+      for (const raw of raws) {
+        const def = raw.data && raw.data.attributes && raw.data.attributes.definition; if (!def || !def.body) continue;
+        // what Klaviyo's tables look like (property names), for the log
+        MKDoc.walk({ body: def.body }, (n, kind) => { if (kind === "block" && n.type === "table") tables.push({ t: raw.id, props: Object.keys((n.data && n.data.properties) || {}), dynamic: JSON.stringify((n.data && n.data.properties) || {}).slice(0, 300), cells: (n.subblocks || []).map((c) => `${c.type}:${Object.keys(c).join("/")}`).slice(0, 4) }); });
+        const t = (await db(`SELECT id, name, doc FROM mk_templates WHERE source='klaviyo' AND ext_id=$1`, [raw.id])).rows[0];
+        if (!t || !t.doc) continue;
+        const fresh = MKDoc.fromKlaviyo(def, fromKlaviyo); const byText = {};
+        const collect = (o) => { if (!o || typeof o !== "object") return; if (Array.isArray(o)) return o.forEach(collect);
+          if (typeof o.content === "string" && /\{%/.test(o.content)) byText[stripOld(o.content)] = o.content;
+          if (o.data && typeof o.data.content === "string" && /\{%/.test(o.data.content)) byText[stripOld(o.data.content)] = o.data.content;
+          Object.values(o).forEach(collect); };
+        collect(fresh);
+        const doc = typeof t.doc === "string" ? JSON.parse(t.doc) : t.doc; let n = 0;
+        const put = (o) => { if (!o || typeof o !== "object") return; if (Array.isArray(o)) return o.forEach(put);
+          if (typeof o.content === "string" && !/\{%/.test(o.content) && byText[o.content] != null) { o.content = byText[o.content]; n++; }
+          if (o.data && typeof o.data.content === "string" && !/\{%/.test(o.data.content) && byText[o.data.content] != null) { o.data.content = byText[o.data.content]; n++; }
+          Object.values(o).forEach(put);
+          if (o.type === "table" && o.data) {
+            // Inside a repeating cart table, "line_items.1" always points at the 2nd item; it should be the row's own item.
+            const rep = MKDoc.tableRepeat(o.data.properties || {}, o.subblocks || []);
+            if (rep) for (const c of o.subblocks || []) for (const key of ["content", "src", "href", "alt_text"]) if (typeof c[key] === "string" && /event\.extra\.line_items\.\d+\./.test(c[key])) { c[key] = c[key].replace(/event\.extra\.line_items\.\d+\./g, `${rep.alias}.`); n++; }
+          } };
+        put(doc);
+        if (n) { await db(`UPDATE mk_templates SET doc=$2, updated_at=now() WHERE id=$1`, [t.id, JSON.stringify(doc)]); fixed.push(`${t.name} (${n})`); }
+      }
+      await core.syncSet("mk_klaviyo_logic_tags_v1", new Date().toISOString(), { fixed, tables: tables.slice(0, 20) });
+      console.log(`🧩 Marketing: Klaviyo logic tags put back in: ${fixed.join(", ") || "none needed"}`);
+      for (const x of tables.slice(0, 12)) console.log(`🧩 Klaviyo table in template ${x.t}: ${x.dynamic} · cells ${x.cells.join(" | ")}`);
+    } catch (e) { console.error("Klaviyo logic tags fix:", e.message); } }, 60000);
+  }
   // One-time: re-read Klaviyo templates with their drag-and-drop layout so they open as real blocks.
   if (!(await core.syncGet("mk_klaviyo_layouts_v1").catch(() => null)) && process.env.KLAVIYO_API_KEY) {
     setTimeout(async () => { try { const f = await require("./klaviyo").refreshTemplateDefinitions(); const r = await importKlaviyoTemplates("lb", { detail: true });
@@ -715,4 +797,4 @@ async function init() {
   }
 }
 
-module.exports = { renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };
+module.exports = { usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };

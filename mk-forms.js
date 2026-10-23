@@ -15,6 +15,15 @@ const core = require("./core");
 const { db } = core;
 const MK = () => require("./mk-core");
 const V2 = require("./mk-forms-v2");
+/** What the store page sends with an event, trimmed to sane sizes. */
+function cleanSiteProps(p) {
+  const out = {}; if (!p || typeof p !== "object") return out;
+  const str = (v, n = 300) => (v == null ? "" : String(v).slice(0, n));
+  for (const k of ["product_id", "title", "handle", "url", "checkout_url"]) if (p[k] != null) out[k] = str(p[k], k.endsWith("url") ? 1200 : 300);
+  for (const k of ["price", "value", "item_count"]) if (p[k] != null && isFinite(Number(p[k]))) out[k] = Number(p[k]);
+  if (Array.isArray(p.items)) out.items = p.items.slice(0, 20).map((i) => ({ title: str(i && i.title), variant: str(i && i.variant, 120), qty: Number(i && i.qty) || 1, price: isFinite(Number(i && i.price)) ? Number(i.price) : null, image: str(i && i.image, 600), url: str(i && i.url, 600), handle: str(i && i.handle, 200), sku: str(i && i.sku, 80), variant_id: str(i && i.variant_id, 40), product_id: str(i && i.product_id, 40) }));
+  return out;
+}
 
 const RUNTIME = () => fs.readFileSync(path.join(__dirname, "public", "mk-forms-runtime.js"), "utf8");
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
@@ -274,7 +283,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     if (!s || !["viewed_product", "added_to_cart", "active_on_site"].includes(b.type)) return res.json({ ok: false });
     try { const cfg = await config(s, false); if (!cfg.tracking && !b.preview) return res.json({ ok: false });
       const v = b.vid ? (await db(`INSERT INTO mk_visitors (vid, store) VALUES ($1,$2) ON CONFLICT (vid) DO UPDATE SET last_seen=now() RETURNING profile_id`, [String(b.vid).slice(0, 40), s])).rows[0] : null;
-      if (b.type !== "active_on_site" || (v && v.profile_id)) await MK().track(s, b.type, { profileId: v && v.profile_id, props: { ...(b.props || {}), page: String(b.page || "").slice(0, 200), vid: b.vid }, source: "site" });
+      if (b.type !== "active_on_site" || (v && v.profile_id)) { const props = cleanSiteProps(b.props); await MK().track(s, b.type, { profileId: v && v.profile_id, value: b.type === "added_to_cart" && Number(props.value) > 0 ? Number(props.value) : undefined, props: { ...props, page: String(b.page || "").slice(0, 200), vid: b.vid }, source: "site" }); }
       res.json({ ok: true }); } catch (e) { res.json({ ok: false }); }
   });
 

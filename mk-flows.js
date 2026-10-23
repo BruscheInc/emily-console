@@ -242,7 +242,9 @@ async function execNode(run, flow, node, p) {
       const tpl = await E().getTemplate(c.template_id); if (!tpl) return { next: node.next, note: "skipped: email template missing" };
       if (c.filter && (c.filter.conditions || []).length && !(await SEG().matches(c.filter, p.id, { since: run.ctx && run.ctx.since }))) return { next: node.next, note: "skipped: didn't match this email's extra filters" };
       let cpn; try { cpn = await couponFor(flow, p, ctx, "email", { ...tpl, subject: c.subject || tpl.subject }, run); } catch (e) { return { next: node.next, note: `skipped: couldn't make a coupon code (${e.message})` }; }
-      const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: cpn && cpn.coupon, coupons: cpn && cpn.coupons, items: (ctx.trigger_props && ctx.trigger_props.items) || [], checkout_url: ctx.trigger_props && ctx.trigger_props.checkout_url });
+      const tp = ctx.trigger_props || {}; const cartItems = Array.isArray(tp.items) ? tp.items : [];
+      if (!cartItems.length && !run.test && E().usesCart(tpl) && /cart|checkout/.test((flow.trigger && flow.trigger.event) || "")) return { next: node.next, note: "skipped: no cart items to show" };
+      const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: cpn && cpn.coupon, coupons: cpn && cpn.coupons, items: cartItems, checkout_url: tp.checkout_url || tp.url, value: tp.value }, { sampleCart: !!run.test });
       r.utm = c.utm !== false; r.campaign_name = r.campaign_name || c.name || flow.name;
       const row = await SEND().send({ store: flow.store, channel: "email", profile: p, msg: r, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `tpl:${tpl.id}`, test: run.test });
       return { next: node.next, note: `email ${row.status}${row.reason ? ": " + row.reason : ""}` };

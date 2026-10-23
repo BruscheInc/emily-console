@@ -328,7 +328,7 @@ async function testSend(id, to) {
     if (c.channel === "email") {
       const tpl = await E().getTemplate(x.template_id); if (!tpl) throw new Error("Choose an email first.");
       const tp = await require("./mk-coupons").forTest(c.store, to, "email", { ...tpl, subject: x.subject || tpl.subject });
-      const msg = await E().render(c.store, { ...tpl, subject: `${v ? `[${v}] ` : ""}${x.subject || tpl.subject}`, preview: x.preview || tpl.preview }, tp.profile, tp.coupon ? { coupon: tp.coupon, coupons: tp.coupons } : {});
+      const msg = await E().render(c.store, { ...tpl, subject: `${v ? `[${v}] ` : ""}${x.subject || tpl.subject}`, preview: x.preview || tpl.preview }, tp.profile, tp.coupon ? { coupon: tp.coupon, coupons: tp.coupons } : {}, { sampleCart: true });
       const row = await SEND().send({ store: c.store, channel: "email", profile: { id: null, email: to, email_consent: "subscribed" }, msg, test: true, campaignId: null, messageId: `camp:${c.id}:${v || "main"}`, idem: `ctest:${c.id}:${v}:${to}:${Date.now()}` });
       out.push({ version: v, status: row.status, reason: row.reason });
     } else {

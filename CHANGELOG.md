@@ -3,6 +3,16 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.101.0
+- Cart and checkout emails work like Klaviyo's:
+  - Emails understand Klaviyo's template language: `{% for %}`, `{% if %}`/`{% elif %}`/`{% else %}`, `{% with %}`, `{% currency_format %}`, `forloop`, and filters like `floatformat`, `missing_product_image`, `lookup`, `length`, `join`, `striptags`, `truncatechars`.
+  - Cart data uses Klaviyo's field names: `event.extra.line_items` (item.product.title, item.product.variant.title, item.product.images.0.src, item.quantity, item.price, item.line_price, item.product.url), `event.Items` (ProductName, Quantity, ItemPrice, RowTotal, ImageURL, ProductURL), `event.extra.checkout_url`, `event|lookup:'$value'`.
+  - Dynamic tables, like Klaviyo's: Table type Static / Dynamic, Row collection, Row alias, column type Text / Image, a dynamic image address and link, Insert a field, and Use the cart layout. The rows under the header repeat once per cart item.
+  - Imported Klaviyo emails get back the logic the first import dropped (that's why "Total:" was empty); inside a cart table, "line_items.1" is pointed at the row's own item.
+  - Preview and test emails fill the cart with a real recent cart. A live cart flow email with an empty cart is skipped instead of sent.
+  - Added to Cart on the store now records the whole cart (items, total, a link that restores the cart).
+- Mobile view in the email editor: long text no longer pushes the email wider than the phone, and table text uses the email's font.
+
 ## 4.100.0
 - New campaign report, laid out like Klaviyo's. Open any sending or sent campaign to see it (View campaign opens the editor; the editor has View report):
   - Overview: open rate, click rate, placed order rate, revenue (AOV, per recipient); engagement over time (delivered / opened / clicked / placed order, each can be switched off); deliverability table; content with the email preview, subject, preview text, from, lists, and the attempted → skipped → sent → bounced → delivered funnel.
