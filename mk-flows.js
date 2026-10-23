@@ -70,13 +70,18 @@ const reachable = (graph) => { const seen = new Set(); const go = (id) => { if (
 
 /* ---------------- flows ---------------- */
 async function list(store, { archived = false } = {}) {
-  return (await db(`SELECT f.id, f.store, f.name, f.status, f.trigger, f.source, f.updated_at, f.version, f.archived,
+  const rows = (await db(`SELECT f.id, f.store, f.name, f.status, f.trigger, f.source, f.updated_at, f.version, f.archived,
       (SELECT array_agg(DISTINCT n.value->>'type') FROM jsonb_each(COALESCE(f.graph->'nodes','{}'::jsonb)) n WHERE n.value->>'type' IN ('send_email','send_sms')) channels,
-      (SELECT count(*)::int FROM mk_flow_runs r WHERE r.flow_id=f.id AND r.status IN ('active','working','paused')) in_flow,
-      (SELECT count(*)::int FROM mk_flow_runs r WHERE r.flow_id=f.id AND r.entered_at > now() - interval '30 days') entered_30d,
-      (SELECT count(*)::int FROM mk_sends s WHERE s.flow_id=f.id AND s.created_at > now() - interval '30 days') sends_30d,
       (SELECT count(*)::int FROM jsonb_object_keys(COALESCE(f.graph->'nodes','{}'::jsonb))) steps
     FROM mk_flows f WHERE f.archived = ${archived ? "true AND f.deleted_at IS NULL" : "false"} ${store ? "AND f.store=$1" : ""} ORDER BY f.status='live' DESC, f.updated_at DESC`, store ? [store] : [])).rows;
+  // run / send counts for every flow in two grouped queries (cached a minute) instead of three per flow
+  const c = await MK().memo("flow_counts", 60e3, async () => {
+    const out = {};
+    for (const r of (await db(`SELECT flow_id, count(*) FILTER (WHERE status IN ('active','working','paused'))::int in_flow, count(*) FILTER (WHERE entered_at > now() - interval '30 days')::int entered_30d FROM mk_flow_runs GROUP BY flow_id`)).rows) out[r.flow_id] = { ...r };
+    for (const r of (await db(`SELECT flow_id, count(*)::int sends_30d FROM mk_sends WHERE flow_id IS NOT NULL AND created_at > now() - interval '30 days' GROUP BY flow_id`)).rows) out[r.flow_id] = { ...(out[r.flow_id] || {}), sends_30d: r.sends_30d };
+    return out;
+  });
+  return rows.map((f) => { const x = c[f.id] || c[String(f.id)] || {}; return { ...f, in_flow: x.in_flow || 0, entered_30d: x.entered_30d || 0, sends_30d: x.sends_30d || 0 }; });
 }
 async function get(id) { return (await db(`SELECT * FROM mk_flows WHERE id=$1`, [Number(id)])).rows[0] || null; }
 async function create(store, name, who, starter) {

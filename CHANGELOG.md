@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.107.1
+- Marketing is faster. The slow pages were recounting the whole 173k-profile audience on every click: Overview took about 13s, Flows 7s, Lists and Profiles 6s, Sign-up forms 5s.
+  - Totals and list member counts are kept ready in the background (refreshed every 2 minutes), so pages don't wait on them.
+  - Flow and form stats come from one grouped query instead of several per flow or form.
+  - Revenue numbers are cached for 5 minutes.
+  - New database indexes for newest-first profiles, list members and order lookups.
+
 ## 4.107.0
 - **Orders are tracked live.** Before, Shopify orders were only copied once, at setup, so newer orders never reached profiles. Every 5 minutes Buzzin now pulls each new or changed order onto the profile:
   - Placed order, with every item.

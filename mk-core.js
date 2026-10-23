@@ -15,6 +15,16 @@ const readline = require("readline");
 const { Readable } = require("stream");
 const core = require("./core");
 const { db } = core;
+// Short-lived cache for heavy counts over the whole audience (173k+ profiles). Counts a minute or two old are fine on screen.
+const MEMO = new Map();
+async function memo(key, ttlMs, fn) {
+  const h = MEMO.get(key); if (h && h.t > Date.now()) return h.p;
+  const p = Promise.resolve().then(fn); MEMO.set(key, { t: Date.now() + ttlMs, p });
+  p.catch(() => MEMO.delete(key)); return p;
+}
+// Recompute in the background and swap in when ready, so nobody waits on these counts.
+async function warm(key, ttlMs, fn) { try { const v = await fn(); MEMO.set(key, { t: Date.now() + ttlMs, p: Promise.resolve(v) }); } catch (_) {} }
+const clearMemo = (prefix) => { for (const k of MEMO.keys()) if (!prefix || k.startsWith(prefix)) MEMO.delete(k); };
 const R = () => require("./returns");
 
 const STORES = { lb: "Larkspur Baby", lbo: "Larkspur Baby Outlet" };
@@ -45,6 +55,10 @@ async function migrate() {
   await db(`CREATE UNIQUE INDEX IF NOT EXISTS mk_events_ext ON mk_events (store, type, ext_id) WHERE ext_id IS NOT NULL`);
   await db(`CREATE INDEX IF NOT EXISTS mk_events_profile ON mk_events (profile_id, at DESC)`);
   await db(`CREATE INDEX IF NOT EXISTS mk_events_type_at ON mk_events (store, type, at DESC)`);
+  // speed: newest-first profiles, list pages, order lookups by person
+  db(`CREATE INDEX IF NOT EXISTS mk_profiles_created ON mk_profiles (created_at DESC, id DESC)`).catch(() => {});
+  db(`CREATE INDEX IF NOT EXISTS mk_list_members_list ON mk_list_members (list_id, added_at DESC)`).catch(() => {});
+  db(`CREATE INDEX IF NOT EXISTS mk_events_type_profile ON mk_events (type, profile_id, at)`).catch(() => {});
   await db(`CREATE TABLE IF NOT EXISTS mk_lists (id BIGSERIAL PRIMARY KEY, store TEXT NOT NULL, name TEXT NOT NULL, description TEXT, source TEXT, ext_id TEXT,
     double_opt_in BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE UNIQUE INDEX IF NOT EXISTS mk_lists_ext ON mk_lists (store, source, ext_id) WHERE ext_id IS NOT NULL`);
@@ -445,7 +459,8 @@ async function syncAll({ force = false, who = "system" } = {}) {
 }
 
 /* ---------------- reads for the Profiles screen ---------------- */
-async function overview(store) {
+async function overview(store) { return memo(`overview:${store || ''}`, 120e3, () => overview0(store)); }
+async function overview0(store) {
   const w = store ? "WHERE store=$1" : "", a = store ? [store] : [];
   const r = (await db(`SELECT count(*)::int total,
       count(*) FILTER (WHERE email_consent='subscribed')::int email_ok, count(*) FILTER (WHERE sms_consent='subscribed')::int sms_ok,
@@ -471,7 +486,7 @@ async function search({ store, q, consent, tier, list, sort = "newest", limit = 
   if (tier) { args.push(tier); where.push(`p.tier=$${args.length}`); }
   if (list) { args.push(Number(list)); where.push(`EXISTS (SELECT 1 FROM mk_list_members m WHERE m.profile_id=p.id AND m.list_id=$${args.length})`); }
   const W = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const total = (await db(`SELECT count(*)::int n FROM mk_profiles p ${W}`, args)).rows[0].n;
+  const total = await memo(`count:${W}:${JSON.stringify(args)}`, 120e3, async () => (await db(`SELECT count(*)::int n FROM mk_profiles p ${W}`, args)).rows[0].n);
   args.push(Math.min(Number(limit) || 50, 200), Math.max(Number(offset) || 0, 0));
   // Newest first by default (like Klaviyo), so new sign-ups are at the top. In a list: newest to join the list first.
   const added = list ? `(SELECT max(m.added_at) FROM mk_list_members m WHERE m.profile_id=p.id AND m.list_id=${Number(list) || 0})` : `p.created_at`;
@@ -483,6 +498,9 @@ async function search({ store, q, consent, tier, list, sort = "newest", limit = 
 }
 
 async function profileStats() {
+  return memo("stats", 120e3, profileStats0);
+}
+async function profileStats0() {
   const r = (await db(`SELECT count(*)::int total, count(*) FILTER (WHERE email_consent='subscribed')::int active,
       count(*) FILTER (WHERE email IS NOT NULL AND email_consent<>'subscribed')::int suppressed, count(*) FILTER (WHERE sms_consent='subscribed')::int sms FROM mk_profiles`)).rows[0];
   return r;
@@ -505,11 +523,16 @@ async function profile(id) {
   return { ...p, consent, events, lists, segments, tickets, coupons, sends, metrics };
 }
 
+async function listCounts0() {
+  const r = (await db(`SELECT m.list_id, count(*)::int members, count(*) FILTER (WHERE p.email_consent='subscribed')::int email_ok
+    FROM mk_list_members m JOIN mk_lists l ON l.id=m.list_id AND NOT COALESCE(l.archived,false) JOIN mk_profiles p ON p.id=m.profile_id GROUP BY m.list_id`)).rows;
+  return Object.fromEntries(r.map((x) => [String(x.list_id), x]));
+}
 async function lists(store) {
   const a = store ? [store] : [];
-  return (await db(`SELECT l.*, (SELECT count(*)::int FROM mk_list_members m WHERE m.list_id=l.id) members,
-      (SELECT count(*)::int FROM mk_list_members m JOIN mk_profiles p ON p.id=m.profile_id WHERE m.list_id=l.id AND p.email_consent='subscribed') email_ok
-    FROM mk_lists l WHERE NOT COALESCE(l.archived, false) ${store ? "AND l.store=$1" : ""} ORDER BY l.name`, a)).rows;
+  const rows = (await db(`SELECT l.* FROM mk_lists l WHERE NOT COALESCE(l.archived, false) ${store ? "AND l.store=$1" : ""} ORDER BY l.name`, a)).rows;
+  const counts = await memo("list_counts", 600e3, listCounts0);
+  return rows.map((l) => ({ ...l, members: (counts[String(l.id)] || {}).members || 0, email_ok: (counts[String(l.id)] || {}).email_ok || 0 }));
 }
 
 /** Record something a person did (from the store script, forms, Buzzin). Used by flows and segments. */
@@ -532,11 +555,13 @@ async function init() {
   // While the Klaviyo copy is still in progress, check again every 10 minutes so the merge runs when it finishes.
   setInterval(() => { syncAll({ who: "retry" }).catch(() => {}); }, 10 * 60 * 1000);   // finished steps are skipped
   setInterval(() => recomputeTiers().catch(() => {}), 6 * 3600 * 1000);
+  const warmAll = async () => { await warm("stats", 600e3, profileStats0); await warm("list_counts", 600e3, listCounts0); await warm("overview:", 600e3, () => overview0("")); await warm("count::[]", 600e3, async () => (await db(`SELECT count(*)::int n FROM mk_profiles p`)).rows[0].n); };
+  setTimeout(warmAll, 45 * 1000); setInterval(warmAll, 2 * 60 * 1000);
   setTimeout(() => pollOrders().catch(() => {}), 2 * 60 * 1000); setInterval(() => pollOrders().catch(() => {}), 5 * 60 * 1000);
   // Keep the all-contacts list complete (catches imports and merges that skip upsertProfile).
   const fill = () => fillAllContacts().then((n) => n && console.log(`📋 ${ALL_LIST}: added ${n} contacts`)).catch((e) => console.log(`📋 ${ALL_LIST} failed: ${e.message}`));
   setTimeout(fill, 30 * 1000); setInterval(fill, 30 * 60 * 1000);
 }
 
-module.exports = { pollOrders, profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
+module.exports = { memo, clearMemo, pollOrders, profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
   recomputeTiers, syncAll, syncFromKlaviyo, syncShopifyCustomers, syncShopifyOrders, overview, search, profile, lists, sizeOf };

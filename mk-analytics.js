@@ -187,7 +187,8 @@ function routes(app, { guard, fail, store }) {
 
 async function init() { await migrate(); }
 /** Revenue credited to each flow or campaign over the last N days (same click rule as the overview), plus how many people got it. */
-async function revenueBy(kind, days = 7) {
+async function revenueBy(kind, days = 7) { return MK().memo(`rev:${kind}:${days}`, 300e3, () => revenueBy0(kind, days)); }
+async function revenueBy0(kind, days = 7) {
   days = Math.min(730, Math.max(1, Number(days) || 7));
   const S = await MK().settings(), key = kind === "campaign" ? "campaign_id" : "flow_id", col = kind === "campaign" ? "campaign_id" : "flow_id";
   const c = [days, S.attribution.email_click_days, S.attribution.sms_click_days];

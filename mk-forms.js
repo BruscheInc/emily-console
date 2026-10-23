@@ -64,16 +64,19 @@ const DEFAULT_FORM = (brand) => ({
 });
 
 async function list(store) {
-  const rows = (await db(`SELECT f.*, (SELECT count(*)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type='viewed' AND NOT e.preview) views,
-      (SELECT count(*)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type='submitted_email' AND NOT e.preview) emails,
-      (SELECT count(*)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type='submitted_phone' AND NOT e.preview) phones,
-      (SELECT count(DISTINCT e.profile_id)::int FROM mk_form_events e WHERE e.form_id=f.id AND e.type LIKE 'submitted_%' AND NOT e.preview) submitted,
-      (SELECT COALESCE(sum(o.value),0) FROM mk_events o WHERE o.type='placed_order' AND o.profile_id IN (SELECT e.profile_id FROM mk_form_events e WHERE e.form_id=f.id AND e.type='submitted_email' AND NOT e.preview)
-         AND o.at > (SELECT min(e2.at) FROM mk_form_events e2 WHERE e2.form_id=f.id AND e2.profile_id=o.profile_id AND e2.type='submitted_email' AND NOT e2.preview)) revenue,
-      (SELECT l.name FROM mk_lists l WHERE l.id=f.list_id) list_name
-      , (SELECT count(*)::int FROM mk_forms v WHERE v.ab_of=f.id) variants
+  const rows = (await db(`SELECT f.*, (SELECT l.name FROM mk_lists l WHERE l.id=f.list_id) list_name, (SELECT count(*)::int FROM mk_forms v WHERE v.ab_of=f.id) variants
     FROM mk_forms f WHERE f.ab_of IS NULL ${store ? "AND f.store=$1" : ""} ORDER BY f.updated_at DESC`, store ? [store] : [])).rows;
-  return rows;
+  // views, sign-ups and revenue for every form in one pass (cached a minute)
+  const st = await MK().memo("form_stats", 60e3, async () => {
+    const out = {};
+    for (const r of (await db(`SELECT form_id, count(*) FILTER (WHERE type='viewed')::int views, count(*) FILTER (WHERE type='submitted_email')::int emails,
+        count(*) FILTER (WHERE type='submitted_phone')::int phones, count(DISTINCT profile_id) FILTER (WHERE type LIKE 'submitted_%')::int submitted
+        FROM mk_form_events WHERE NOT preview GROUP BY form_id`)).rows) out[r.form_id] = { ...r, revenue: 0 };
+    for (const r of (await db(`WITH s AS (SELECT form_id, profile_id, min(at) at FROM mk_form_events WHERE type='submitted_email' AND NOT preview AND profile_id IS NOT NULL GROUP BY 1,2)
+        SELECT s.form_id, COALESCE(sum(o.value),0)::float revenue FROM s JOIN mk_events o ON o.profile_id=s.profile_id AND o.type='placed_order' AND o.at > s.at GROUP BY s.form_id`)).rows) out[r.form_id] = { ...(out[r.form_id] || {}), revenue: r.revenue };
+    return out;
+  });
+  return rows.map((f) => { const x = st[f.id] || st[String(f.id)] || {}; return { ...f, views: x.views || 0, emails: x.emails || 0, phones: x.phones || 0, submitted: x.submitted || 0, revenue: x.revenue || 0 }; });
 }
 async function get(id) { return V2.toV2((await db(`SELECT * FROM mk_forms WHERE id=$1`, [Number(id)])).rows[0] || null); }
 async function create(store, name, who) {
