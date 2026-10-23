@@ -1793,12 +1793,23 @@ async function draftForTicket(t, force, guidance) {
     `Escalate=true for refunds/discounts/credits, order edits/cancellations, angry/sensitive cases, or low confidence — EXCEPT a portal_redirect reply (sending the customer to the self-serve portal), which is escalate=false.`;
   const content = [{ type: "text", text: instruction }];
   if (custImages.length) content.push(...await imageBlocks(custImages));
-  let text = await agentLoop([{ role: "user", content }], 8);
+  const convoMsgs = [{ role: "user", content }];
+  let text = await agentLoop(convoMsgs, 8);
   let parsed = parseJSON(text);
   if (!parsed) {
-    console.error(`ticket ${t.id}: draft pass 1 returned no parseable JSON — retrying JSON-only.`);
-    const text2 = await agentLoop([{ role: "user", content: instruction + `\n\nReturn ONLY the JSON object described above — finish any lookups quickly, no prose, no code fences.` }], 3);
-    parsed = parseJSON(text2);
+    // Ask for the JSON in the SAME conversation, with no new tool calls — starting over would redo every lookup
+    // and stage every action (codes, credits…) a second time.
+    console.error(`ticket ${t.id}: draft pass 1 returned no parseable JSON — asking for the JSON in the same conversation.`);
+    const ask = { type: "text", text: "Now return ONLY the JSON object described in the first message — the actions you already staged stay as they are; don't call any tools, no prose, no code fences." };
+    const last = convoMsgs[convoMsgs.length - 1];
+    if (last.role === "user") last.content = (Array.isArray(last.content) ? last.content : [{ type: "text", text: String(last.content) }]).concat(ask);
+    else convoMsgs.push({ role: "user", content: [ask] });
+    try {
+      const SYS = await systemPrompt();
+      const fin = await anthropic.messages.create({ model: CLAUDE_MODEL, max_tokens: 4000, system: SYS, tools: TOOLS, tool_choice: { type: "none" }, messages: convoMsgs });
+      parsed = parseJSON(fin.content.filter((b) => b.type === "text").map((b) => b.text).join("\n"));
+    } catch (e) { console.error(`ticket ${t.id}: JSON follow-up failed:`, e.message); }
+    if (!parsed) console.error(`ticket ${t.id}: draft failed — no JSON after the follow-up. Last text: ${String(text).slice(0, 300)}`);
   }
   if (parsed) { parsed._customer = lastMsg.slice(0, 1400); parsed._images = custImages; }
   return parsed;
@@ -1822,7 +1833,13 @@ async function handleTicket(ticketId, { force = false, guidance = "" } = {}) {
     }
     if (guidance) ownerOverride.add(String(t.id));
     let r; try { r = await draftForTicket(t, force, guidance); } finally { ownerOverride.delete(String(t.id)); }
-    if (!r || !r.category) return { skipped: "no result" };
+    if (!r || !r.category) {
+      // Don't fail silently: actions she staged on the way are orphaned (no draft to approve them with) — retire them,
+      // and leave a note so whoever asked sees it didn't work.
+      const n = await supersedeStale(id, "Emily", { all: true });
+      await core.addNote({ ticketId: id, text: `⚠️ Emily couldn't finish this draft${guidance ? ` (your notes: "${String(guidance).slice(0, 200)}")` : ""}. ${n ? `The ${n} action(s) she started were cancelled so nothing doubles up. ` : ""}Try Redraft again.`, who: "Emily" }).catch(() => {});
+      return { skipped: "no result" };
+    }
     if (r._skip) return { skipped: r.category };
     if (r.category !== "cs") {
       await core.addTags(id, [...(r.tags || []).slice(0, 2), "emily-skip"]);

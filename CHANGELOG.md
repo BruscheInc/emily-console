@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.8
+- Emily: when her answer comes back without the draft format, she's asked to finish it in the same conversation instead of starting over. Starting over re-did every step and staged actions twice (ticket 9000000753 got two free-shipping codes and no draft).
+- If a draft still fails, she leaves an internal note saying so and cancels the actions she started, so nothing goes out double. Before, a failed redraft just did nothing.
+
 ## 4.105.7
 - Emily: notes you give her on "Redraft with notes" now override the default policies for that ticket. If you ask for something the policy normally blocks (like a free-shipping code on an Outlet order), she stages it as a one-time exception and writes the reply around it, instead of refusing. It's still staged for your approval.
 
