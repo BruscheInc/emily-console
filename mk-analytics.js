@@ -41,6 +41,12 @@ function withUtm(url, { channel, name }) {
     return u.toString();
   } catch (_) { return url; }
 }
+/** A short link for previews (no send behind it, so no click is recorded); the same link is reused for the same address. */
+async function previewLink(store, url) {
+  const ex = (await db(`SELECT code FROM mk_links WHERE send_id IS NULL AND url=$1 LIMIT 1`, [url])).rows[0];
+  const c = ex ? ex.code : code(); if (!ex) await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,NULL,$2)`, [c, url]);
+  return `${brandBase(store)}/l/${c}`;
+}
 async function link(send, url) { const c = code(); await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,$2,$3)`, [c, send.id, url]); return `${brandBase(send.store)}/l/${c}`; }
 /** Email: wrap links (not unsubscribe/preferences/mailto) and add the open pixel. */
 async function instrumentEmail(html, send, name, opts = {}) {
@@ -204,4 +210,4 @@ async function flowSteps(flowId, days = 30) {
   for (const r of orders) (out[r.step] = out[r.step] || { step: r.step, delivered: 0, recipients: 0, opened: 0, clicked: 0, unsubscribed: 0, bounced: 0 }), out[r.step].orders = r.orders, out[r.step].revenue = r.revenue;
   return out;
 }
-module.exports = { brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };
+module.exports = { previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };

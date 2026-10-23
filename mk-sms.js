@@ -99,10 +99,11 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
       // Cart texts show a real recent checkout link, so the link in the preview opens.
       const cart = /checkout_url|CheckoutURL|line_items|event\./.test(String(b.body || "")) ? await E().sampleCart(s, prof.id ? prof : null) : {};
       if (cart.items && !cart.checkout_url) cart.checkout_url = `${String((await E().brand(s)).shop_url || "").replace(/\/$/, "")}/cart`;
-      const body = await compose(s, b, prof, { coupon: "WELCOME-8K2Q", ...cart });
-      // Sent texts carry a short tracked link instead of the long one, so count the length that way.
-      const shortBase = `${require("./mk-analytics").brandBase(s)}/l/abcd1234`;
-      res.json({ body, ...segments(body.replace(/https?:\/\/[^\s]+/g, shortBase)) }); } catch (e) { fail(res, e); }
+      let body = await compose(s, b, prof, { coupon: "WELCOME-8K2Q", ...cart });
+      // Sent texts carry a short link in place of the long one; the preview shows (and opens) the same kind of link.
+      const A = require("./mk-analytics"); const urls = [...new Set(body.match(/https?:\/\/[^\s]+/g) || [])];
+      for (const u of urls) body = body.split(u).join(await A.previewLink(s, u));
+      res.json({ body, ...segments(body) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/mk/sms/test", async (req, res) => {
     if (!guard(req, res)) return;
