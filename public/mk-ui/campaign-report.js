@@ -11,7 +11,7 @@ const TABS = [['overview', 'Overview'], ['recipients', 'Recipient activity'], ['
 const CSS = `<style id="kr-css">
 .kr{max-width:1320px;margin:0 auto;padding:4px 4px 60px;color:#18181B}
 .kr-h{display:flex;align-items:flex-start;gap:12px;padding:6px 0 0}.kr-h .bc{font-size:19px;font-weight:600}.kr-h .bc a{color:#52525B;text-decoration:none;font-weight:500}.kr-h .bc a:hover{color:#18181B}.kr-h .bc span{color:#A1A1AA;margin:0 8px}.kr-h .ch{color:#52525B;font-size:15px;margin-top:4px}
-.kr-tabs{display:flex;gap:6px;border-bottom:1px solid #E7E5E4;margin:16px 0 22px;overflow-x:auto}.kr-tabs button{all:unset;cursor:pointer;padding:10px 12px;font-size:15px;color:#3F3F46;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}.kr-tabs button:hover{color:#18181B}.kr-tabs button.on{color:#18181B;font-weight:600;border-bottom-color:#18181B}
+.kr-tabs{display:flex;gap:6px;border-bottom:1px solid #E5E7EB;margin:16px 0 22px;overflow-x:auto}.kr-tabs button{all:unset;cursor:pointer;padding:10px 12px;font-size:15px;color:#3F3F46;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}.kr-tabs button:hover{color:#18181B}.kr-tabs button.on{color:#18181B;font-weight:600;border-bottom-color:#18181B}
 .kr-w{max-width:1190px;margin:0 auto}
 .kr-card{background:#fff;border:1px solid #E4E4E7;border-radius:16px;padding:26px 28px;margin-bottom:24px}.kr-card h2{margin:0;font-size:22px;font-weight:600;letter-spacing:-.01em}.kr-card .sub{color:#52525B;font-size:15.5px;line-height:1.55;margin:6px 0 0}
 .kr-ch{display:flex;align-items:flex-start;gap:12px}.kr-ch>div{flex:1}

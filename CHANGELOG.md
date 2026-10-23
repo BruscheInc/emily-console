@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.103.0
+- Buzzin is white now (help desk and Marketing), with cool gray lines and hovers instead of cream, like Klaviyo. The email editor canvas is a neutral gray.
+- Email editor: the panel header (back arrow, block name, Styles / Display) stays put while you scroll the panel.
+
 ## 4.102.0
 - Settings → Products hidden from emails: any product whose name, handle or SKU contains one of these words never shows in an email — not in carts, orders, product blocks or the product picker. Starts with Package Protection and Shipping Protection.
 

@@ -3,9 +3,9 @@
    type, spacing, colors, controls and states. Keep page layouts in the page; keep the look here. */
 
 :root{
-  /* neutrals (warm, matches the bee brand) */
-  --bz-bg:#F7F6F3; --bz-panel:#FFFFFF; --bz-sunk:#F3F2EF; --bz-hover:#F5F4F1;
-  --bz-line:#E8E6E1; --bz-line-2:#D9D6CF; --bz-ink:#16151D; --bz-ink-2:#3B3944; --bz-muted:#6D6A75; --bz-faint:#9C99A3;
+  /* neutrals (white, clean — like Klaviyo) */
+  --bz-bg:#FFFFFF; --bz-panel:#FFFFFF; --bz-sunk:#F4F5F7; --bz-hover:#F3F4F6;
+  --bz-line:#E5E7EB; --bz-line-2:#D1D5DB; --bz-ink:#16151D; --bz-ink-2:#3B3944; --bz-muted:#6D6A75; --bz-faint:#9C99A3;
   /* brand + states */
   --bz-honey:#FFC21A; --bz-honey-soft:#FFF4D1; --bz-honey-ink:#7A5600;
   --bz-blue:#2563EB; --bz-blue-soft:#EFF4FF; --bz-blue-ink:#1D4ED8;
@@ -25,8 +25,8 @@
 html{-webkit-text-size-adjust:100%}
 body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-feature-settings:"cv11","ss01"}
 ::selection{background:rgba(255,194,26,.35)}
-*{scrollbar-width:thin;scrollbar-color:#CFCBC3 transparent}
-*::-webkit-scrollbar{width:10px;height:10px}*::-webkit-scrollbar-thumb{background:#D3CFC7;border-radius:999px;border:3px solid transparent;background-clip:content-box}*::-webkit-scrollbar-thumb:hover{background-color:#B9B5AC}
+*{scrollbar-width:thin;scrollbar-color:#CBD0D8 transparent}
+*::-webkit-scrollbar{width:10px;height:10px}*::-webkit-scrollbar-thumb{background:#CBD0D8;border-radius:999px;border:3px solid transparent;background-clip:content-box}*::-webkit-scrollbar-thumb:hover{background-color:#9CA3AF}
 :focus{outline:none}
 :focus-visible{outline:2px solid var(--bz-blue);outline-offset:2px;border-radius:6px}
 input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
@@ -101,7 +101,7 @@ td.n,th.n{font-variant-numeric:tabular-nums}
 /* ---- empty + loading states ---- */
 .empty{color:var(--bz-muted);font-size:14px;padding:36px 20px}
 .bz-loading{display:flex;flex-direction:column;gap:12px;padding:4px 0}
-.bz-skel{background:linear-gradient(90deg,#EFEDE8 0%,#F7F6F2 50%,#EFEDE8 100%);background-size:200% 100%;animation:bz-shim 1.2s linear infinite;border-radius:8px}
+.bz-skel{background:linear-gradient(90deg,#EEF0F3 0%,#FFFFFF 50%,#EEF0F3 100%);background-size:200% 100%;animation:bz-shim 1.2s linear infinite;border-radius:8px}
 @keyframes bz-shim{from{background-position:200% 0}to{background-position:-200% 0}}
 .bz-err{background:#fff;border:1px solid #F3C4BF;border-radius:var(--bz-r-lg);padding:16px 18px;color:var(--bz-ink)}.bz-err b{color:var(--bz-bad)}
 
@@ -115,10 +115,10 @@ td.n,th.n{font-variant-numeric:tabular-nums}
 .bz-mk .top{height:56px;gap:14px;padding:0 18px;box-shadow:0 1px 0 var(--bz-line)}
 .bz-mk .top .back{display:inline-flex;align-items:center;gap:4px;font-size:13.5px;color:var(--bz-muted);padding:6px 8px;border-radius:8px}.bz-mk .top .back:hover{background:var(--bz-hover);color:var(--bz-ink)}
 .bz-mk .top .title{display:inline-flex;align-items:center;font-size:15.5px;letter-spacing:-.01em;padding-right:6px;border-right:1px solid var(--bz-line);margin-right:2px}
-.bz-mk .nav{width:232px;padding:14px 12px;background:#FBFAF8}
+.bz-mk .nav{width:232px;padding:14px 12px;background:#FFFFFF}
 .bz-mk .nav .h{font-size:11px;letter-spacing:.07em;color:var(--bz-faint);margin:16px 10px 6px}
 .bz-mk .nav a{padding:8px 10px;border-radius:8px;font-size:14px;color:var(--bz-ink-2);transition:background .12s,color .12s}
-.bz-mk .nav a:hover{background:#F1EFEB;color:var(--bz-ink)}
+.bz-mk .nav a:hover{background:#F3F4F6;color:var(--bz-ink)}
 .bz-mk .nav a.on{background:#fff;color:var(--bz-ink);font-weight:600;box-shadow:var(--bz-sh-1),inset 0 0 0 1px var(--bz-line)}.bz-mk .nav a.on i{color:var(--bz-honey-ink)}
 .bz-mk .view{padding:20px 24px 64px}
 /* every page is one white sheet, like the Klaviyo-style pages */
@@ -163,11 +163,11 @@ td.n,th.n{font-variant-numeric:tabular-nums}
 .bz-title-in{font-weight:700;font-size:17px;min-width:260px;border-color:transparent!important;background:transparent!important;box-shadow:none}.bz-title-in:hover{border-color:var(--bz-line)!important;background:#fff!important}.bz-title-in:focus{background:#fff!important}
 
 /* ==== One side menu for the whole app: the help desk uses the Marketing menu's look ==== */
-.bz-mk .nav,.bz-hd .side{background:#FBFAF8}
+.bz-mk .nav,.bz-hd .side{background:#FFFFFF}
 .bz-hd .side .nav{font-size:14px;font-weight:500;color:var(--bz-ink-2);padding:8px 10px;border-radius:8px;gap:9px;transition:background .12s,color .12s}
 .bz-hd .side .nav.top,.bz-hd .side .nav.gh{font-weight:500}
 .bz-hd .side .nav.sub{font-size:14px;font-weight:500;color:var(--bz-ink-2);padding:7px 10px}
-.bz-hd .side .nav:hover{background:#F1EFEB;color:var(--bz-ink)}
+.bz-hd .side .nav:hover{background:#F3F4F6;color:var(--bz-ink)}
 .bz-hd .side .nav.on{background:#fff;color:var(--bz-ink);font-weight:600;box-shadow:var(--bz-sh-1),inset 0 0 0 1px var(--bz-line)}
 .bz-hd .side .nav.on .i.ti,.bz-hd .side .nav.on>.ti{color:var(--bz-honey-ink);opacity:1}
 .bz-hd .side .nav .i.ti,.bz-hd .side .nav>.ti:not(.chev):not(.ext){font-size:17px;color:var(--bz-muted);opacity:1;width:18px}

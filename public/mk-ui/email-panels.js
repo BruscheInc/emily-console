@@ -101,8 +101,8 @@ function prebuilt(S) {
     ['Two columns', 'Two images with a line and a button each', () => { const s = D.newSection(2); s.rows[0].columns.forEach((col, i) => { col.blocks = [nb('image', (x) => { x.data.styles.fill_column = true; x.data.styles.block_padding_left = 9; x.data.styles.block_padding_right = 9; }), txt(`<h3 style="text-align:center">Pick ${i + 1}</h3>`), nb('button', (x) => { x.data.content = 'Shop'; })]; }); return [s]; }],
     ['Product grid', 'Headline and three products', () => [sec([txt('<h2 style="text-align:center">Shop the collection</h2>'), nb('product', (x) => { x.data.properties.dynamic = true; x.data.properties.feed = 'bestsellers'; })])]],
     ['Discount', 'Headline, code box and button', () => [sec([txt('<h2 style="text-align:center">A little gift for you</h2><p style="text-align:center">15% off your order — this week only.</p>'), nb('coupon'), nb('button', (x) => { x.data.content = 'Use my code'; })])]],
-    ['Review', 'One customer quote with stars', () => [sec([nb('review')], { content_color_type: 'section', content_color: c.ground || '#F6F5F2' })]],
-    ['Footer', 'Social icons, address and unsubscribe', () => [sec([nb('social'), txt(`<p style="text-align:center;font-size:12px">{{ store_name }} · {{ store_address }}<br><a href="{{ unsubscribe_url }}">Unsubscribe</a> · <a href="{{ preferences_url }}">Email preferences</a></p>`, { color: c.muted || '#777777', font_size: 12 })], { content_color_type: 'section', content_color: c.ground || '#F6F5F2', inner_padding_top: 12, inner_padding_bottom: 12 })]],
+    ['Review', 'One customer quote with stars', () => [sec([nb('review')], { content_color_type: 'section', content_color: c.ground || '#FFFFFF' })]],
+    ['Footer', 'Social icons, address and unsubscribe', () => [sec([nb('social'), txt(`<p style="text-align:center;font-size:12px">{{ store_name }} · {{ store_address }}<br><a href="{{ unsubscribe_url }}">Unsubscribe</a> · <a href="{{ preferences_url }}">Email preferences</a></p>`, { color: c.muted || '#777777', font_size: 12 })], { content_color_type: 'section', content_color: c.ground || '#FFFFFF', inner_padding_top: 12, inner_padding_bottom: 12 })]],
   ];
 }
 function addPanel(S) {
@@ -118,7 +118,7 @@ function addPanel(S) {
     body = `<div class="kp-sec" id="kpUniv"><div class="empty">Loading…</div></div>`;
     document.getElementById('kxPanel')._after = (P) => loadUniversal(P, S);
   }
-  const html = `<div class="kp-hd"><b>Add content</b></div><div class="kp-tabs"><button data-atab="blocks" class="${tab === 'blocks' ? 'on' : ''}">Blocks</button><button data-atab="prebuilt" class="${tab === 'prebuilt' ? 'on' : ''}">Pre-built</button><button data-atab="universal" class="${tab === 'universal' ? 'on' : ''}">Universal</button></div>${body}`;
+  const html = `<div class="kp-stick"><div class="kp-hd"><b>Add content</b></div><div class="kp-tabs"><button data-atab="blocks" class="${tab === 'blocks' ? 'on' : ''}">Blocks</button><button data-atab="prebuilt" class="${tab === 'prebuilt' ? 'on' : ''}">Pre-built</button><button data-atab="universal" class="${tab === 'universal' ? 'on' : ''}">Universal</button></div></div>${body}`;
   const prev = document.getElementById('kxPanel')._after;
   document.getElementById('kxPanel')._after = (P) => {
     if (prev) prev(P);
@@ -207,7 +207,7 @@ function setLayout(sec, lay) {
 function sectionPanel(sec, S) {
   sec.data = sec.data || {}; const st = sec.data.styles = sec.data.styles || {}; const dop = sec.data.display_options = sec.data.display_options || {};
   const lay = ((sec.rows[0] || {}).data || {}).styles ? sec.rows[0].data.styles.column_layout : '1-column-full-width';
-  const hd = `<div class="kp-hd"><button class="kp-back" title="Back">${I('chevron-left')}</button><b>Section</b></div>${sec.universal_id ? univBanner(sec) : ''}<div class="kp-tabs"><button data-tab="styles" class="${S.tab !== 'display' ? 'on' : ''}">Styles</button><button data-tab="display" class="${S.tab === 'display' ? 'on' : ''}">Display</button></div>`;
+  const hd = `<div class="kp-stick"><div class="kp-hd"><button class="kp-back" title="Back">${I('chevron-left')}</button><b>Section</b></div>${sec.universal_id ? univBanner(sec) : ''}<div class="kp-tabs"><button data-tab="styles" class="${S.tab !== 'display' ? 'on' : ''}">Styles</button><button data-tab="display" class="${S.tab === 'display' ? 'on' : ''}">Display</button></div></div>`;
   if (S.tab === 'display') return hd + displayTab(dop, 'section');
   const ct = st.content_color_type || 'template';
   return hd + `<div class="kp-sec"><h4>Columns</h4><div class="kp-lay">${LAYOUTS.map(([k, ws]) => `<button type="button" class="${k === (lay || '1-column-full-width') ? 'on' : ''}" data-f="${bind({ t: 'act', fn: () => { setLayout(sec, k); onChange({}); E().drawPanel(); } })}" title="${k}">${ws.map((w) => `<span style="flex:${w}"></span>`).join('')}</button>`).join('')}</div>
@@ -256,13 +256,13 @@ function univBanner(n) { return `<div class="kp-banner">${I('star')} <b>Universa
 function blockPanel(blk, S, info) {
   blk.data = blk.data || {}; const st = blk.data.styles = blk.data.styles || {}; const dop = blk.data.display_options = blk.data.display_options || {};
   const name = (D.BLOCK_INFO[blk.type] || {}).name || blk.type;
-  const hd = `<div class="kp-hd"><button class="kp-back" title="Back">${I('chevron-left')}</button><b>${esc(name)}</b>
+  const hd = `<div class="kp-stick"><div class="kp-hd"><button class="kp-back" title="Back">${I('chevron-left')}</button><b>${esc(name)}</b>
     <button class="kp-plus" title="Duplicate" data-f="${bind({ t: 'act', fn: () => E().toolAction('dup', S.sel) })}">${I('copy')}</button>
     <button class="kp-plus" title="Save as universal" data-f="${bind({ t: 'act', fn: () => E().toolAction('save', S.sel) })}">${I('star')}</button>
     <button class="kp-plus" title="Delete" data-f="${bind({ t: 'act', fn: () => E().removeNode(S.sel) })}">${I('trash')}</button></div>
     ${info.section ? `<div style="padding:0 16px 6px"><button type="button" class="btn xs" data-f="${bind({ t: 'act', fn: () => E().select({ kind: 'section', id: info.section.id }) })}">${I('arrow-up')} Select its section</button></div>` : ''}
     ${blk.universal_id ? univBanner(blk) : info.section && info.section.universal_id ? univBanner(info.section) : ''}
-    <div class="kp-tabs"><button data-tab="styles" class="${S.tab !== 'display' ? 'on' : ''}">Styles</button><button data-tab="display" class="${S.tab === 'display' ? 'on' : ''}">Display</button></div>`;
+    <div class="kp-tabs"><button data-tab="styles" class="${S.tab !== 'display' ? 'on' : ''}">Styles</button><button data-tab="display" class="${S.tab === 'display' ? 'on' : ''}">Display</button></div></div>`;
   if (S.tab === 'display') return hd + displayTab(dop, 'block');
   const def = D.blockDefaults(blk.type, S.brand);
   const fn = PANELS[blk.type] || (() => '');
@@ -286,7 +286,7 @@ const PANELS = {
       <div style="margin-top:10px;display:flex;gap:8px">${F.btn(`${I('sparkles')} Ask Emily`, () => E().toolAction('ai', E().ST.sel))}${F.btn('Edit HTML', () => htmlModal(blk.data.content || '', (h) => { blk.data.content = h; onChange({}); }))}</div></div>
       <div class="kp-sec"><h4>Defaults for this block</h4>${F.lab('Font', F.font(st, 'font_family'))}<div class="kp-4" style="margin-top:8px">${F.num(st, 'font_size', { ph: 'Style', pre: 'Size' })}${F.num(st, 'line_height', { ph: 'Style', step: 0.05, unit: '×', pre: 'Line' })}</div>
       ${F.lab('Text color', F.color(st, 'color', { ph: 'From styles' }))}${F.lab('Alignment', F.align(st, 'text_align', ''))}</div>
-      ${F.opt('Text area background color', !!st.background_color, { add: () => { st.background_color = '#F6F5F2'; }, remove: () => { delete st.background_color; } }, () => F.color(st, 'background_color'))}
+      ${F.opt('Text area background color', !!st.background_color, { add: () => { st.background_color = '#FFFFFF'; }, remove: () => { delete st.background_color; } }, () => F.color(st, 'background_color'))}
       <div class="kp-sec"><h4>Text area padding</h4>${F.pad(st, 'inner_padding', { ph: { t: 0, l: 0 } })}</div>
       ${F.opt('Block border', bord(st, 'block_'), { add: () => { st.block_border_style = 'solid'; st.block_border_width = 1; st.block_border_color = '#DDDDDD'; }, remove: () => { st.block_border_width = 0; } }, () => F.border(st, 'block_'))}`;
   },

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#F2F1EE" />
+<meta name="theme-color" content="#F4F5F7" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" type="image/svg+xml" href="logo.svg?v=bee2" />
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=bee2" />
@@ -13,19 +13,19 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="tabler-icons.css">
 <style>
-  :root{--bg:#F6F5F2;--panel:#ffffff;--panel2:#F2F1EE;--line:#E7E5E0;--line2:#D8D5CE;--ink:#17161F;--muted:#6E6B76;--accent:#17161F;--honey:#FFC21A;--honey-soft:#FFF3CC;--honey-ink:#7A5600;--in:#1E8A55;--out:#4B4858;--warn:#B07A10;--bad:#D14343;--r:12px;--mono:ui-monospace,Menlo,Consolas,monospace;--font:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  :root{--bg:#FFFFFF;--panel:#ffffff;--panel2:#F4F5F7;--line:#E5E7EB;--line2:#D1D5DB;--ink:#17161F;--muted:#6E6B76;--accent:#17161F;--honey:#FFC21A;--honey-soft:#FFF3CC;--honey-ink:#7A5600;--in:#1E8A55;--out:#4B4858;--warn:#B07A10;--bad:#D14343;--r:12px;--mono:ui-monospace,Menlo,Consolas,monospace;--font:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
   *{box-sizing:border-box}html,body{margin:0;height:100%}
   body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;height:100vh;display:flex;flex-direction:column;overflow:hidden}
   button,input,textarea,select{font:inherit}
   /* ---- sidebar · main (table list, or the open conversation) ---- */
-  .side{width:236px;flex:none;display:flex;flex-direction:column;background:#F6F5F2;border-right:1px solid var(--line);padding:14px 10px;gap:1px;overflow-y:auto}
+  .side{width:236px;flex:none;display:flex;flex-direction:column;background:#FFFFFF;border-right:1px solid var(--line);padding:14px 10px;gap:1px;overflow-y:auto}
   .brand{display:flex;gap:10px;align-items:center;padding:4px 8px 14px}
   .brand .mark{width:34px;height:34px;border-radius:9px;flex:none;box-shadow:0 2px 6px rgba(23,22,31,.25)}.ver{font-size:10.5px;font-weight:700;color:var(--muted);background:rgba(20,30,50,.08);border-radius:5px;padding:1px 5px;vertical-align:middle;margin-left:2px}.brand .name{font-weight:800;font-size:16px;letter-spacing:-.01em}.brand .subname{font-size:11px;color:var(--muted)}
   .navsec{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:12px 10px 4px;font-weight:700}
   .side .ti{font-size:18px;line-height:1}
   .side .nav .n:empty{display:none}
   .nav-search{display:flex;align-items:center;gap:8px;margin:0 2px 10px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);cursor:pointer;font-size:13.5px;text-align:left}
-  .nav-search:hover{border-color:#D8D5CE}.nav-search .ti{font-size:16px}.nav-search kbd{margin-left:auto;font:600 11px system-ui;color:var(--muted)}
+  .nav-search:hover{border-color:#D1D5DB}.nav-search .ti{font-size:16px}.nav-search kbd{margin-left:auto;font:600 11px system-ui;color:var(--muted)}
   .nav .i.ti{width:20px;opacity:.75;font-size:18px}
   .nav.top,.nav.gh{font-weight:600}
   .nav .chev{margin-left:6px;font-size:15px!important;color:var(--muted);transition:transform .15s;flex:none}
@@ -206,7 +206,7 @@
   .msg .meta{font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600;white-space:normal}
   .msg.in{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
   .msg.out{align-self:flex-end;background:#dce7ff;border:1px solid #b9cdfb;border-bottom-right-radius:4px}
-  .msg.note{align-self:flex-start;max-width:86%;background:#F2F1EE;border:1px solid var(--line);color:var(--muted);font-size:13px}
+  .msg.note{align-self:flex-start;max-width:86%;background:#F4F5F7;border:1px solid var(--line);color:var(--muted);font-size:13px}
   .msg.draft{align-self:flex-end;max-width:80%;background:#fff6e6;border:1px dashed #e3b46a;border-bottom-right-radius:4px}
   .msg.draft .dhead{font-size:11px;font-weight:800;color:var(--warn);margin-bottom:6px;letter-spacing:.2px}
   .msg.draft .dbody{color:#5a4415}
@@ -250,7 +250,7 @@
   .hm-at{flex:1;min-width:0;display:flex;flex-direction:column}.hm-at span{color:var(--muted);font-size:12.5px}
   .hm-row{display:flex;align-items:center;margin:4px 2px 8px}.hm-lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
   .hm-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px}
-  .hm-tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:left;cursor:pointer}.hm-tile:hover{border-color:#D8D5CE}.hm-tile .ti{font-size:18px;color:var(--muted)}
+  .hm-tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:left;cursor:pointer}.hm-tile:hover{border-color:#D1D5DB}.hm-tile .ti{font-size:18px;color:var(--muted)}
   .hm-tn{font-size:24px;font-weight:700;margin-top:6px}.hm-tl{font-size:12.5px;color:var(--muted)}
   .hm-ch2{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;font-size:16px}.hm-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
   .hm-big{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:12px;margin-top:14px}.hm-big>div{padding:16px 20px}.hm-big>div+div{border-left:1px solid var(--line)}
@@ -300,11 +300,11 @@
   .side-foot{flex:none;border-top:1px solid var(--line);margin:0 -12px;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0px));background:var(--bg);display:flex;flex-direction:column;gap:1px}
   .brand .name{font-weight:800;letter-spacing:-.02em}.ver{background:var(--honey-soft);color:var(--honey-ink)}
   .nav{border-radius:10px;color:#2E2C36;font-weight:500;transition:background .12s}
-  .nav:hover{background:#ECEAE5}
+  .nav:hover{background:#E5E7EB}
   .nav.on{background:var(--honey-soft);color:var(--ink);font-weight:700}
   .nav.on .i.ti,.nav.on .si{color:var(--honey-ink);opacity:1}
   .nav.on .n{background:var(--ink);color:#fff}
-  .nav .n{background:#E9E7E2;color:#4B4858}
+  .nav .n{background:#E5E7EB;color:#4B4858}
   .nav-search{border-radius:10px;border-color:var(--line);box-shadow:0 1px 2px rgba(23,22,31,.04)}
   .grp .gb{border-left-color:var(--line2)}
   .acct-b .av{background:var(--honey);color:var(--ink)}
@@ -325,8 +325,8 @@
   .search,.rc-in{background:var(--panel);border:1px solid var(--line2);border-radius:10px}
   .search:focus,.rc-in:focus{border-color:var(--ink);outline:none;box-shadow:0 0 0 3px rgba(255,194,26,.35)}
   table.tickets th{background:var(--panel);color:var(--muted);font-weight:600;letter-spacing:.01em}
-  table.tickets td{border-bottom-color:#EFEDE9}
-  .chip{background:#EFEDE9;color:#4B4858;font-weight:600}
+  table.tickets td{border-bottom-color:#EEF0F3}
+  .chip{background:#EEF0F3;color:#4B4858;font-weight:600}
   .chip.brand{background:var(--ink);color:#fff}
   .modal{background:rgba(23,22,31,.45);backdrop-filter:blur(2px)}
   .modal .box{border-radius:18px;border-color:var(--line);box-shadow:0 24px 60px rgba(23,22,31,.22)}
@@ -347,7 +347,7 @@
   .fq-g{margin-top:16px}.fq-gt{font-weight:800;font-size:15px;margin-bottom:6px}
   .fq-item{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px}.fq-item.chg{border-color:var(--honey);box-shadow:0 0 0 1px var(--honey) inset}.fq-item.off{opacity:.55}
   .fq-q{display:flex;align-items:center;gap:8px}.fq-q b{flex:1;min-width:0}.fq-tag{background:var(--honey);color:var(--ink)}
-  .fq-title{width:100%;font-weight:700;margin:6px 0 4px}.fq-item textarea{width:100%;min-height:110px;font:12.5px/1.5 var(--mono)}.fq-prev{font-size:13px;color:#3F3D47;background:#FAFAF7;border:1px solid var(--line,#E7E5E0);border-radius:8px;padding:8px 10px;margin:4px 0 8px}.fq-prev p{margin:4px 0}.fq-a{font-size:13px;color:#3F3D47;margin-top:4px}.fq-a p{margin:4px 0}.fq-a.old{opacity:.75}
+  .fq-title{width:100%;font-weight:700;margin:6px 0 4px}.fq-item textarea{width:100%;min-height:110px;font:12.5px/1.5 var(--mono)}.fq-prev{font-size:13px;color:#3F3D47;background:#FFFFFF;border:1px solid var(--line,#E5E7EB);border-radius:8px;padding:8px 10px;margin:4px 0 8px}.fq-prev p{margin:4px 0}.fq-a{font-size:13px;color:#3F3D47;margin-top:4px}.fq-a p{margin:4px 0}.fq-a.old{opacity:.75}
   .fq-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}.fq-l{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   .fq-cols textarea{width:100%;min-height:120px;margin:4px 0 6px;font:12.5px/1.5 var(--mono)}.fq-why{font-size:12px;color:var(--honey-ink);margin-bottom:6px}
   @media(max-width:800px){.fq-cols{grid-template-columns:1fr}}
@@ -752,9 +752,9 @@ async function loadEmilyPolicies(){
       <div style="margin-bottom:18px">
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">${esc(POLICY_LABEL[k])}</div>
         <div style="font-size:12px;color:#8A8794;margin-bottom:6px">${p?`version ${p.versions} · saved by ${esc(p.updated_by||"?")} · ${fmt(p.created_at)}${p.note?` · "${esc(p.note)}"`:""}`:"not seeded yet — Emily writes the first version on her next start"} · <a href="#" onclick="polHistory('${k}');return false" style="color:var(--accent,#FFC21A)">history</a></div>
-        <textarea id="pol-${k}" style="width:100%;min-height:${k==="rules"?"320":"260"}px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:1.45;background:var(--panel2,#0f1722);color:var(--ink,#EEEDEA);border:1px solid var(--line,#1e2a3a);border-radius:10px;padding:10px;resize:vertical">${esc(p?p.body:"")}</textarea>
+        <textarea id="pol-${k}" style="width:100%;min-height:${k==="rules"?"320":"260"}px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:1.45;background:var(--panel2,#0f1722);color:var(--ink,#EEF0F3);border:1px solid var(--line,#1e2a3a);border-radius:10px;padding:10px;resize:vertical">${esc(p?p.body:"")}</textarea>
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
-          <input id="note-${k}" placeholder="What changed? (optional, shows in history)" style="flex:1;min-width:200px;background:var(--panel2,#0f1722);color:var(--ink,#EEEDEA);border:1px solid var(--line,#1e2a3a);border-radius:8px;padding:8px 10px;font-size:13px">
+          <input id="note-${k}" placeholder="What changed? (optional, shows in history)" style="flex:1;min-width:200px;background:var(--panel2,#0f1722);color:var(--ink,#EEF0F3);border:1px solid var(--line,#1e2a3a);border-radius:8px;padding:8px 10px;font-size:13px">
           <button class="btn" onclick="savePolicy('${k}')">Save new version</button>
         </div>
         <div id="hist-${k}" style="font-size:12px;color:#8A8794;margin-top:6px"></div>
@@ -1172,7 +1172,7 @@ const CL_TYPE={defective:"Defective item",pp:"Shipping claim",other:"Customer me
 const CL_SUB={not_arrived:"Hasn't arrived",delivered_missing:"Marked delivered, not received",damaged:"Arrived damaged",missing_items:"Items missing",something_else:"Something else"};
 const CL_RES={replacement:"Replacement",store_credit:"Store credit",refund:"Refund"};
 const CL_ST={processing:["Working…","drafted"],pending:["Needs decision","drafted"],info_requested:["Waiting on customer","drafted"],approved:["Approved","sent"],denied:["Denied","skip"],closed:["Closed",""],info:["Shown carrier steps",""],done:["Done","sent"]};
-const CL_AI={approve:["AI: approve","#157a42","#e3f4ea"],deny:["AI: deny","#b42318","#fde8e8"],needs_info:["AI: needs info","#9a6212","#fdf1dc"],needs_review:["AI: review","#475467","#F2F1EE"]};
+const CL_AI={approve:["AI: approve","#157a42","#e3f4ea"],deny:["AI: deny","#b42318","#fde8e8"],needs_info:["AI: needs info","#9a6212","#fdf1dc"],needs_review:["AI: review","#475467","#F4F5F7"]};
 async function loadClaims(silent){
   const w=$("stuckwrap");
   if(silent&&[...document.querySelectorAll("#stuckwrap .cl-msg, #stuckwrap input")].some(x=>x===document.activeElement||(x.classList.contains("cl-msg")&&x.value.trim()&&x.value!==x.defaultValue))) return;   // you're mid-decision

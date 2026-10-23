@@ -112,7 +112,7 @@ async function editFlow(el, id) {
     <button class="btn" id="flsim"><i class="ti ti-eye"></i> Preview</button><button class="btn" id="flsave">Save</button><button class="btn pri" id="flgo"></button></div>
   <div id="flprob"></div>
   <div style="flex:1;display:flex;min-height:0;position:relative">
-    <div style="flex:1;min-width:0;overflow:hidden;position:relative;background:#F6F5F2;background-image:radial-gradient(#DCD9D2 1px,transparent 1px);background-size:18px 18px;cursor:grab;touch-action:none" id="flcanvas"></div>
+    <div style="flex:1;min-width:0;overflow:hidden;position:relative;background:#FFFFFF;background-image:radial-gradient(#D1D5DB 1px,transparent 1px);background-size:18px 18px;cursor:grab;touch-action:none" id="flcanvas"></div>
     <button class="fx-open hidden" id="flpopen" aria-label="Show actions"><i class="ti ti-layout-sidebar-left-expand"></i> Actions</button>
     <div class="fx-panel hidden" id="flpanel"><div class="fx-ph"><span class="ic" id="flpic"><i class="ti ti-player-play"></i></span><b style="font-size:18px;flex:1" id="flpt">Trigger</b><button class="fx-ib" id="flpx" aria-label="Close panel"><i class="ti ti-x"></i></button></div>
       <div class="fx-pb"><div id="flacts"></div><div id="flleft"></div><div id="flright"></div></div><div class="fx-pf"><button class="btn" id="flpdone">Done</button></div></div></div></div>
