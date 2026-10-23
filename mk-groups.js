@@ -20,15 +20,15 @@ async function all() {
 }
 
 /** Where a list or segment is still used (forms, flows, campaigns, segments), so the delete prompt can say so. */
-async function usage(kind, id) {
+async function usage(kind, id, { liveOnly = false } = {}) {
   id = Number(id); const out = [];
   const hit = (o, k0) => { let f = false; const walk = (x, key) => { if (f || x == null) return; if (Array.isArray(x)) return x.forEach((y) => walk(y, key));
       if (typeof x === "object") return Object.entries(x).forEach(([k, v]) => walk(v, k));
       if (key && new RegExp(kind === "list" ? "list" : "segment", "i").test(key) && Number(x) === id) f = true; };
     walk(o, k0); return f; };
-  const forms = (await db(`SELECT id, name, list_id, steps, targeting FROM mk_forms WHERE ab_of IS NULL`).catch(() => ({ rows: [] }))).rows;
+  const forms = (await db(`SELECT id, name, list_id, steps, targeting FROM mk_forms WHERE ab_of IS NULL ${liveOnly ? "AND status='live'" : ""}`).catch(() => ({ rows: [] }))).rows;
   for (const f of forms) if ((kind === "list" && Number(f.list_id) === id) || hit(f.steps) || hit(f.targeting)) out.push(`Sign-up form "${f.name}"`);
-  const flows = (await db(`SELECT id, name, trigger, graph, entry_filter, exit_filter FROM mk_flows WHERE NOT archived`).catch(() => ({ rows: [] }))).rows;
+  const flows = (await db(`SELECT id, name, trigger, graph, entry_filter, exit_filter FROM mk_flows WHERE NOT archived ${liveOnly ? "AND status='live'" : ""}`).catch(() => ({ rows: [] }))).rows;
   for (const f of flows) if (hit(f.trigger) || hit(f.graph) || hit(f.entry_filter) || hit(f.exit_filter)) out.push(`Flow "${f.name}"`);
   const camps = (await db(`SELECT id, name, audience FROM mk_campaigns WHERE status NOT IN ('sent','cancelled')`).catch(() => ({ rows: [] }))).rows;
   for (const c of camps) if (hit(c.audience, kind === "list" ? "lists" : "segments")) out.push(`Campaign "${c.name}"`);
@@ -42,6 +42,9 @@ async function remove(kind, id, who) {
     const l = (await db(`SELECT ext_id, name FROM mk_lists WHERE id=$1`, [Number(id)])).rows[0];
     if (!l) return;
     if (l.ext_id === "all_contacts") throw Object.assign(new Error(`"${l.name}" holds every contact and can't be deleted.`), { status: 400 });
+    // A list a live sign-up form adds people to, or a live flow starts from, can't disappear — new sign-ups would land in a list nobody can see.
+    const live = (await usage("list", id, { liveOnly: true })).filter((x) => /^(Sign-up form|Flow) /.test(x));
+    if (live.length) throw Object.assign(new Error(`"${l.name}" is in use by ${live.join(", ")} — change those first, then delete it.`), { status: 400 });
     await db(`UPDATE mk_lists SET archived=true, deleted_by=$2 WHERE id=$1`, [Number(id), who || null]);
   } else await db(`UPDATE mk_segments SET archived=true, updated_by=$2, updated_at=now() WHERE id=$1`, [Number(id), who || null]);
 }

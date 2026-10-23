@@ -953,6 +953,36 @@ async function signupDiag() {
   console.log("🔎 SIGNUP-DIAG kenzie: " + JSON.stringify(ken) + " sends: " + JSON.stringify(kenSends));
   for (const r of subs) console.log("🔎 SIGNUP-DIAG sub: " + JSON.stringify(r));
 }
+// One-time: sign-ups were going into "Merged Shopify Newsletter", a list that was deleted (hidden) — so new sign-ups were
+// invisible. Give them their own visible list, "Website Sign-ups": everyone who ever submitted a form goes in (dated by their
+// sign-up), and the forms and the Welcome Series point to it. Adding people here doesn't start any flow.
+async function signupList() {
+  if (await syncGet("mk_signup_list_v1")) return;
+  const OLD = 5;
+  const old = (await db(`SELECT id, name, archived FROM mk_lists WHERE id=$1`, [OLD])).rows[0];
+  if (!old || !old.archived) { await core.syncSet("mk_signup_list_v1", "skipped", { why: old ? "old list is visible" : "no list 5" }); console.log("📋 sign-up list: skipped"); return; }
+  let L = (await db(`SELECT id FROM mk_lists WHERE store='lb' AND name='Website Sign-ups' AND NOT archived`)).rows[0];
+  if (!L) L = (await db(`INSERT INTO mk_lists (store, name, description, source) VALUES ('lb','Website Sign-ups','Everyone who signs up through a website sign-up form (email and/or text).','buzzin') RETURNING id`)).rows[0];
+  const id = Number(L.id);
+  const added = (await db(`INSERT INTO mk_list_members (list_id, profile_id, added_at, source)
+      SELECT $1, e.profile_id, min(e.at), 'form' FROM mk_form_events e WHERE e.type IN ('submitted_email','submitted_phone') AND NOT e.preview AND e.profile_id IS NOT NULL
+      GROUP BY e.profile_id ON CONFLICT DO NOTHING`, [id])).rowCount;
+  const swap = (o) => { let n = 0; const walk = (x) => { if (!x || typeof x !== "object") return; for (const [k, v] of Object.entries(x)) {
+      if (/^list_?id$/i.test(k) && Number(v) === OLD) { x[k] = typeof v === "string" ? String(id) : id; n++; } else walk(v); } }; walk(o); return n; };
+  let forms = 0, flows = 0;
+  for (const f of (await db(`SELECT id, list_id, steps FROM mk_forms`)).rows) {
+    const steps = f.steps || []; const n = swap(steps);
+    if (n || Number(f.list_id) === OLD) { await db(`UPDATE mk_forms SET list_id=CASE WHEN list_id=$2 THEN $3 ELSE list_id END, steps=$4 WHERE id=$1`, [f.id, OLD, id, JSON.stringify(steps)]); forms++; }
+  }
+  for (const f of (await db(`SELECT id, trigger, graph, entry_filter, exit_filter FROM mk_flows WHERE deleted_at IS NULL`)).rows) {
+    const t = f.trigger || {}, g = f.graph || {}, en = f.entry_filter, ex = f.exit_filter;
+    const n = swap(t) + swap(g) + swap(en) + swap(ex);
+    if (n) { await db(`UPDATE mk_flows SET trigger=$2, graph=$3, entry_filter=$4, exit_filter=$5, updated_at=now() WHERE id=$1`, [f.id, JSON.stringify(t), JSON.stringify(g), en ? JSON.stringify(en) : null, ex ? JSON.stringify(ex) : null]); flows++; }
+  }
+  try { require("./mk-forms").clearCache && require("./mk-forms").clearCache(); } catch (_) {}
+  await core.syncSet("mk_signup_list_v1", String(id), { at: new Date().toISOString(), added, forms, flows });
+  console.log(`📋 sign-up list: "Website Sign-ups" (#${id}) — ${added} people added from past form sign-ups · ${forms} form(s) and ${flows} flow(s) now use it instead of the deleted "${old.name}"`);
+}
 // Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
 require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
@@ -1058,7 +1088,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

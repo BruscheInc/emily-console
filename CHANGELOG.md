@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.12
+- New sign-ups have their own visible list, **Website Sign-ups**. They were going into "Merged Shopify Newsletter", which had been deleted along with the old Klaviyo lists, so they were invisible (still in Profiles and still getting the Welcome Series). Everyone who has ever signed up through a form is in the new list, dated by when they signed up. The live sign-up form and the Welcome Series now use it. Nobody gets the welcome emails again.
+- A list can't be deleted while a live sign-up form or live flow uses it; it tells you which ones.
+
 ## 4.105.11
 - Emily (email + website chat) now knows every factory measurement sheet: Women's Long and Short Sleeve Pajamas, Men's Long and Short Lounge Sets, Sleep Bag, Sleep Bag Walker, Zipper Romper, Convertible One Piece, Zipper Footie, and kids' Long and Short Sleeve Pajamas. She answers length, inseam, sleeve, rise and width questions in inches. Styles without a sheet (Biker Short Set, Shortall, Ruffle Shorty Romper, headbands, blankets…) still go to the team.
 - Sign-up forms fix obviously misspelled email domains (yhaoo.com → yahoo.com, gmial.com → gmail.com, …) so the welcome email and code actually arrive.
