@@ -97,17 +97,21 @@ function draw(soon) {
   const d = frameDoc(); if (!d || !d.getElementById('bzr')) return;
   if (ST.editing) return;                    // don't re-render under the cursor while typing
   let out; try { out = D.render(ST.doc, env()); } catch (e) { console.error(e); toast('Could not draw the email: ' + e.message, 1); return; }
-  d.getElementById('bzh').textContent = out.head;
+  d.getElementById('bzh').textContent = headFor(out.head);
+  ST.lastHead = out.head;
   d.body.style.background = out.background;
   d.body.classList.toggle('bz-dev-mob', ST.dev === 'mob'); d.body.classList.toggle('bz-dev-desk', ST.dev !== 'mob');
   d.getElementById('bzr').innerHTML = out.body;
   d.querySelectorAll('img').forEach((im) => { if (!im.complete) im.addEventListener('load', () => decorate(true), { once: true }); });
   decorate();
 }
+/** Mobile view: the email is drawn 375px wide in a full-width canvas (room for the block toolbar), with its phone styles always on. */
+const headFor = (h) => (ST.dev === 'mob' ? String(h).replace(/@media only screen and \(max-width:\d+px\)\s*\{/g, '@media all{') : h);
 function setDev(dv) {
   ST.dev = dv; $('kxDesk').classList.toggle('on', dv === 'desk'); $('kxMob').classList.toggle('on', dv === 'mob');
   $('kxF').classList.toggle('mob', dv === 'mob');
   const fd = frameDoc(); if (fd && fd.body) { fd.body.classList.toggle('bz-dev-mob', dv === 'mob'); fd.body.classList.toggle('bz-dev-desk', dv !== 'mob'); }
+  if (fd && ST.lastHead != null && fd.getElementById('bzh')) fd.getElementById('bzh').textContent = headFor(ST.lastHead);
   setTimeout(() => decorate(), 50);
 }
 
@@ -499,7 +503,7 @@ const EDITOR_CSS = `.kx{display:flex;flex-direction:column;height:100%;backgroun
 .kx-sep{width:1px;height:20px;background:var(--line);margin:0 4px}
 .kx-stage{flex:1;width:100%;min-height:0;display:flex;justify-content:center;padding:0 16px 16px;box-sizing:border-box}
 .kx-frame{width:100%;height:100%;border:0;background:#fff;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06);transition:width .2s}
-.kx-frame.mob{width:400px;border-radius:24px;border:10px solid #1D1E22;box-sizing:content-box;height:calc(100% - 20px)}
+.kx-frame.mob{background:transparent;box-shadow:none}
 /* panel */
 .kp-stick{position:sticky;top:0;z-index:5;background:#fff;padding-bottom:2px}
 .kp-hd{display:flex;align-items:center;gap:6px;padding:14px 16px 6px}.kp-hd b{font-size:16px;flex:1}

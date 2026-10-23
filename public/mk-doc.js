@@ -547,6 +547,7 @@ ${sections}${empty}
   };
 
   const EDITOR_CSS = `a{pointer-events:none}
+.bz-dev-mob{background:#F3F4F6!important}.bz-dev-mob #bzr{width:375px;margin:0 auto;box-shadow:0 1px 4px rgba(0,0,0,.08);min-height:100vh;background:#fff}
 .bz-reptag{font:600 11px/1.3 -apple-system,system-ui,sans-serif;color:#4C5BD4;background:#EEF0FD;border-radius:6px;padding:4px 8px;margin:0 0 4px;display:inline-block}
 .bz-dynimg{display:flex;align-items:center;justify-content:center;background:#EEF0FD!important;color:#4C5BD4!important;font:600 11px/1.2 -apple-system,system-ui,sans-serif;border-radius:6px;text-align:center;padding:4px;box-sizing:border-box;min-height:60px}
 .bz-ph{border:1px dashed #C9C5BC;background:#FAF9F7;color:#8A8794;font:13px/1.4 Helvetica,Arial,sans-serif;text-align:center;padding:22px 12px;border-radius:4px}
