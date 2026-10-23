@@ -926,6 +926,28 @@ async function labelRestage() {
   await core.syncSet("return_label_restage_v1", String(done.length), { at: new Date().toISOString(), done, stale });
   console.log(`🏷️  return labels re-queued: ${done.length}${done.length ? " — " + done.join(", ") : ""} · stale return proposals retired: ${stale.length}${stale.length ? " — " + stale.map((x) => `${x.ticket_id}: ${x.title}`).join(", ") : ""} · 9000000666 files: ${q666.map((f) => `${f.name} [${f.sent_at ? "sent" : f.staged ? "queued" : "not queued"}]`).join(", ") || "none"}`);
 }
+// One-time look at recent sign-ups (where they land, whether the welcome email/text went out) — logs only.
+async function signupDiag() {
+  if (await syncGet("signup_diag_v2")) return;
+  const q = async (sql, a = []) => (await db(sql, a).catch((e) => ({ rows: [{ error: e.message }] }))).rows;
+  const subs = await q(`SELECT e.at, f.name form, f.store fstore, e.type, e.preview, p.id pid, p.email, p.phone IS NOT NULL has_phone, p.created_at, p.email_consent, p.sms_consent, p.sources,
+      (SELECT string_agg(l.name, ', ') FROM mk_list_members m JOIN mk_lists l ON l.id=m.list_id WHERE m.profile_id=p.id) lists,
+      (SELECT string_agg(s.channel || ':' || s.status || coalesce('(' || s.reason || ')','') || ':' || coalesce(s.subject,''), ' | ' ORDER BY s.id DESC) FROM (SELECT * FROM mk_sends WHERE profile_id=p.id ORDER BY id DESC LIMIT 4) s) sends,
+      (SELECT string_agg(r.flow_id || ':' || r.status || coalesce('(' || r.end_reason || ')',''), ', ') FROM mk_flow_runs r WHERE r.profile_id=p.id AND NOT r.test) runs
+    FROM mk_form_events e JOIN mk_forms f ON f.id=e.form_id LEFT JOIN mk_profiles p ON p.id=e.profile_id
+    WHERE e.type LIKE 'submitted_%' ORDER BY e.id DESC LIMIT 25`);
+  const ken = await q(`SELECT id, email, phone, created_at, email_consent, sms_consent, sources, stores FROM mk_profiles WHERE email ILIKE '%kenzierose%' OR email ILIKE '%kenzie%rose%'`);
+  const kenSends = ken.length && ken[0].id ? await q(`SELECT channel, status, reason, subject, to_addr, created_at FROM mk_sends WHERE profile_id = ANY($1) ORDER BY id DESC LIMIT 10`, [ken.map((k) => k.id)]) : [];
+  const week = await q(`SELECT count(*) FILTER (WHERE e.type='submitted_email' AND NOT e.preview) emails, count(*) FILTER (WHERE e.type='submitted_phone' AND NOT e.preview) phones,
+      count(DISTINCT e.profile_id) FILTER (WHERE NOT e.preview AND p.created_at < e.at - interval '1 hour') already_existed
+    FROM mk_form_events e LEFT JOIN mk_profiles p ON p.id=e.profile_id WHERE e.at > now() - interval '7 days'`);
+  const forms = await q(`SELECT id, store, name, status, list_id FROM mk_forms WHERE ab_of IS NULL ORDER BY id`);
+  await core.syncSet("signup_diag_v2", "1", { at: new Date().toISOString() });
+  console.log("🔎 SIGNUP-DIAG forms: " + JSON.stringify(forms));
+  console.log("🔎 SIGNUP-DIAG week: " + JSON.stringify(week));
+  console.log("🔎 SIGNUP-DIAG kenzie: " + JSON.stringify(ken) + " sends: " + JSON.stringify(kenSends));
+  for (const r of subs) console.log("🔎 SIGNUP-DIAG sub: " + JSON.stringify(r));
+}
 // Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
 require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
@@ -1031,7 +1053,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

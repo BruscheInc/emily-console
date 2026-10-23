@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.10
+- One-time check of recent sign-ups in the Railway log (which form, which profile, lists, and whether the welcome email/text went out), to find where new sign-ups are landing. Nothing changes in the app.
+
 ## 4.105.9
 - Emily (email and website chat) now has the factory measurement sheet for the Men's Long Lounge Set (S–2XL): top length, sleeve, chest, shoulder, and pants inseam, rise, waist, hip, thigh, leg opening. She answers length/inseam questions in inches (cm in brackets), explains flat measurements, and is honest when a tall customer would find them short. Styles without a sheet still go to the team. Sheets live in garment-specs.js.
 
