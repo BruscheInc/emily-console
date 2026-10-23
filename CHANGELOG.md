@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.107.5
+- Welcome Series + 10%: leftover "15%" wording fixed (the "ends soon" text step's name and the "ends soon" email's preview text). One-time read of the welcome emails' text (offers, codes, dollar amounts) in the log.
+
 ## 4.107.4
 - Emily: the sign-up discount is 10% again (she honors 15% codes people were already sent).
 - One-time check of the Welcome Series + 10% flow in the log: every step, the emails' offers and any percent they mention, the sign-up forms' code settings.
