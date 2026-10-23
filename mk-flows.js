@@ -685,7 +685,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   app.get("/api/mk/flows/:id", async (req, res) => {
     if (!guard(req, res)) return;
     try { const f = await get(req.params.id); if (!f) return res.status(404).json({ error: "not found" });
-      res.json({ ...f, problems: validate(f.graph), stats: await stats(f.id), templates: await E().listTemplates(f.store), lists: await MK().lists(f.store), segments: await SEG().list(f.store), events: SEG().EVENTS,
+      res.json({ ...f, problems: validate(f.graph), stats: await stats(f.id), templates: await E().listTemplates(null), lists: await MK().lists(f.store), segments: await SEG().list(f.store), events: SEG().EVENTS,
         versions: (await db(`SELECT version, by_user, created_at FROM mk_flow_versions WHERE flow_id=$1 ORDER BY version DESC LIMIT 20`, [f.id])).rows }); } catch (e) { fail(res, e); }
   });
   app.put("/api/mk/flows/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await save(req.params.id, req.body || {}, actorOf(req), isAdmin(req)); res.json({ ...f, problems: validate(f.graph) }); } catch (e) { fail(res, e); } });
@@ -745,4 +745,4 @@ async function couponFor(flow, p, ctx, channel, msg, run) {
   return CP.codesFor(flow.store, p, msg, { real: live, source: `flow ${flow.name}` });
 }
 
-module.exports = { init, migrate, routes, onEvent, enroll, tick, validate, delayUntil, simulate, importKlaviyoFlows, mergeDuplicates, get, list, save, create, TYPES, STARTER_NAMES };
+module.exports = { resetCache: () => { FLOW_CACHE.t = 0; }, init, migrate, routes, onEvent, enroll, tick, validate, delayUntil, simulate, importKlaviyoFlows, mergeDuplicates, get, list, save, create, TYPES, STARTER_NAMES };

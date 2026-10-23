@@ -983,6 +983,14 @@ async function signupList() {
   await core.syncSet("mk_signup_list_v1", String(id), { at: new Date().toISOString(), added, forms, flows });
   console.log(`📋 sign-up list: "Website Sign-ups" (#${id}) — ${added} people added from past form sign-ups · ${forms} form(s) and ${flows} flow(s) now use it instead of the deleted "${old.name}"`);
 }
+// One-time: flow steps kept the email name they were built with; show each email's current name instead.
+async function flowEmailNames() {
+  if (await syncGet("flow_email_names_v1")) return;
+  const E = require("./mk-email"); let n = 0;
+  for (const t of (await db(`SELECT id, name FROM mk_templates WHERE NOT archived`)).rows) n += await E.syncFlowNames(t.id, t.name);
+  await core.syncSet("flow_email_names_v1", String(n), {});
+  console.log(`✉️  flow email names synced: ${n} flow update(s)`);
+}
 // Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
 require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
@@ -1088,7 +1096,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

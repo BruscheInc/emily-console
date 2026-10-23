@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.107.2
+- Flows: an email has one name everywhere.
+  - Renaming an email in Email templates renames it on every flow step that sends it. Renaming it on the flow step renames the email itself.
+  - Flow steps now show the email's current name. Existing flows were updated to match.
+- Flows: the email picker lists every email from both stores (newest first, Outlet ones marked) and refreshes when you open it, so emails made in another tab show up without reloading the flow.
+
 ## 4.107.1
 - Marketing is faster. The slow pages were recounting the whole 173k-profile audience on every click: Overview took about 13s, Flows 7s, Lists and Profiles 6s, Sign-up forms 5s.
   - Totals and list member counts are kept ready in the background (refreshed every 2 minutes), so pages don't wait on them.

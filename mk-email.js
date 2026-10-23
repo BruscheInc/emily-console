@@ -507,7 +507,20 @@ async function saveTemplate(args, who) {
   try { const CP = require("./mk-coupons"); if (row && CP.usesCoupon(row)) { const offers = CP.offersIn(row); CP.prepare(row.store, offers.length ? offers : ["default"]).catch(() => {}); } } catch (e) {}   // codes ready before the first send
   return row;
 }
+// An email's name is the same everywhere: renaming it renames it on every flow step that sends it (and the other way round).
+async function syncFlowNames(templateId, name) {
+  if (!templateId || !name) return 0;
+  let n = 0;
+  for (const f of (await db(`SELECT id, graph FROM mk_flows WHERE deleted_at IS NULL AND graph::text LIKE '%"template_id"%'`)).rows) {
+    const g = f.graph || {}; let hit = false;
+    for (const node of Object.values(g.nodes || {})) if (node && node.type === "send_email" && node.config && String(node.config.template_id) === String(templateId) && node.config.name !== name) { node.config.name = name; hit = true; }
+    if (hit) { await db(`UPDATE mk_flows SET graph=$2 WHERE id=$1`, [f.id, JSON.stringify(g)]); n++; }
+  }
+  if (n) try { require("./mk-flows").resetCache && require("./mk-flows").resetCache(); } catch (_) {}
+  return n;
+}
 async function saveTemplate0({ id, store, name, subject, preview, blocks, doc }, who) {
+  if (id && name) { const old = (await db(`SELECT name FROM mk_templates WHERE id=$1`, [Number(id)])).rows[0]; if (old && old.name !== name) syncFlowNames(id, name).catch((e) => console.error("flow names:", e.message)); }
   const b = cleanBlocks(blocks || []);
   const d = doc ? cleanDoc(doc) : null;
   if (id) return (await db(`UPDATE mk_templates SET name=COALESCE($2,name), subject=$3, preview=$4, blocks=CASE WHEN $7::boolean THEN blocks ELSE $5 END, doc=COALESCE($8::jsonb, doc), updated_by=$6, updated_at=now() WHERE id=$1 RETURNING *`, [Number(id), name || null, subject || "", preview || "", JSON.stringify(b), who || null, !!d && !(blocks || []).length, d ? JSON.stringify(d) : null])).rows[0];
@@ -653,7 +666,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
       const doc = base.doc ? MKDoc.reId(base.doc) : MKDoc.fromBlocks(base.blocks || [], { ...br, logo_abs: absUrl(br.logo) });
       res.json(await saveTemplate({ store: s, name: b.name || base.name, subject: base.subject, preview: base.preview, blocks: base.blocks, doc }, actorOf(req))); } catch (e) { fail(res, e); }
   });
-  app.post("/api/mk/templates/:id/rename", async (req, res) => { if (!guard(req, res)) return; try { const n = String((req.body || {}).name || "").trim().slice(0, 120); if (!n) throw new Error("Give it a name"); await db(`UPDATE mk_templates SET name=$2, updated_at=now() WHERE id=$1`, [Number(req.params.id), n]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/templates/:id/rename", async (req, res) => { if (!guard(req, res)) return; try { const n = String((req.body || {}).name || "").trim().slice(0, 120); if (!n) throw new Error("Give it a name"); await db(`UPDATE mk_templates SET name=$2, updated_at=now() WHERE id=$1`, [Number(req.params.id), n]); await syncFlowNames(req.params.id, n); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.put("/api/mk/templates/:id", async (req, res) => { if (!guard(req, res)) return; try { res.json(await saveTemplate({ ...(req.body || {}), id: req.params.id }, actorOf(req))); } catch (e) { fail(res, e); } });
   app.delete("/api/mk/templates/:id", async (req, res) => { if (!guard(req, res)) return; try { await db(`UPDATE mk_templates SET archived=true, updated_at=now() WHERE id=$1`, [Number(req.params.id)]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/templates/render", async (req, res) => {
@@ -841,4 +854,4 @@ async function init() {
   }
 }
 
-module.exports = { visibleItems, hiddenWords, usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };
+module.exports = { syncFlowNames, visibleItems, hiddenWords, usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };
