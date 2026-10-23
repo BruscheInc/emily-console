@@ -93,12 +93,37 @@ async function hiddenWords() {
 const isHidden = (p, words) => { if (!p || !words.length) return false; const hay = [p.title, p.product_title, p.ProductName, p.name, p.handle, p.sku, p.SKU, p.product && p.product.title, p.url].filter(Boolean).join(" ").toLowerCase(); return words.some((w) => hay.includes(w)); };
 async function visibleItems(list) { const w = await hiddenWords(); return (list || []).filter((x) => !isHidden(x, w)); }
 
+/* ---------------- best sellers (in stock) ---------------- */
+const NOT_A_BESTSELLER = /gift ?card|gift ?box|e-?gift|package protection|shipping protection|insurance|gift ?wrap/i;
+const BEST = new Map();
+/** Catalog products ranked by units sold in the last 60 days (from Shopify orders), in stock with a photo.
+ *  Gift cards, gift boxes and hidden products never count. Anything left over is ranked by reviews. */
+async function bestSellers(store) {
+  const hit = BEST.get(store); if (hit && Date.now() - hit.t < 30 * 60e3) return hit.list;
+  let cat = null; try { cat = await require("./catalog").get(store); } catch (_) {}
+  const hw = await hiddenWords();
+  const all = ((cat && cat.products) || []).filter((p) => p.available !== false && p.image && !NOT_A_BESTSELLER.test(`${p.title} ${p.type || ""}`) && !isHidden(p, hw));
+  const sold = {};
+  try {
+    const r = (await db(`SELECT lower(item->>'title') t, sum(COALESCE((item->>'qty')::int, 1))::int n
+      FROM mk_events e, jsonb_array_elements(COALESCE(e.props->'items','[]'::jsonb)) item
+      WHERE e.store=$1 AND e.type='placed_order' AND e.at > now() - interval '60 days' AND NOT COALESCE((e.props->>'cancelled')::boolean, false)
+      GROUP BY 1`, [store])).rows;
+    for (const x of r) sold[x.t] = x.n;
+  } catch (_) {}
+  const score = (p) => sold[String(p.title).toLowerCase()] || 0;
+  const reviews = (p) => (p.rating && p.rating.count) || 0;
+  const list = all.slice().sort((a, b) => score(b) - score(a) || reviews(b) - reviews(a));
+  BEST.set(store, { t: Date.now(), list });
+  return list;
+}
+
 /* ---------------- products for product blocks ---------------- */
 async function catalogProducts(store, { ids = [], handles = [], limit = 3, bestsellers = false } = {}) {
   let cat = null; try { cat = await require("./catalog").get(store); } catch (_) {}
   const hw = await hiddenWords(); const all = ((cat && cat.products) || []).filter((p) => !isHidden(p, hw));
   let pick = handles.length ? handles.map((h) => all.find((p) => p.handle === h)).filter(Boolean) : all.filter((p) => ids.length && ids.includes(p.id));
-  if (!pick.length && bestsellers) pick = all.filter((p) => p.available !== false && p.image).slice(0, limit);
+  if (!pick.length && bestsellers) pick = (await bestSellers(store)).slice(0, limit);
   return pick.slice(0, limit).map((p) => ({ title: p.title, url: p.url || "", image: p.image ? p.image + (p.image.includes("?") ? "&" : "?") + "width=400" : "", price: p.price, compare_at: p.compare_at || null, handle: p.handle }));
 }
 
@@ -355,7 +380,7 @@ async function productsForDoc(store, doc, ctx) {
     else {
       const src = p.feed || "bestsellers";
       if (["cart", "viewed", "bought", "recommended"].includes(src) && ctx.items && ctx.items.length) items = ctx.items.map((x) => ({ title: x.title || x.product_title || x.name, url: x.url || x.product_url || "", image: x.image || x.image_url || "", price: x.price != null ? String(x.price) : "" }));
-      if (!items.length) items = all.filter((x) => x.available !== false && x.image).slice(0, want).map(shape);
+      if (!items.length) items = (await bestSellers(store)).slice(0, want).map(shape);
     }
     out[blk.id] = items.slice(0, want);
   }
@@ -669,7 +694,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     try { let cat = null; try { cat = await require("./catalog").get(store(req.query.store) || "lb"); } catch (_) {}
       const q = String(req.query.q || "").trim().toLowerCase(), want = String(req.query.handles || "").split(",").filter(Boolean);
       const hw = await hiddenWords(); const all = ((cat && cat.products) || []).filter((p) => !isHidden(p, hw));
-      const list = want.length ? want.map((h) => all.find((p) => p.handle === h)).filter(Boolean) : req.query.feed ? all.filter((p) => p.available !== false && p.image) : all.filter((p) => !q || String(p.title || "").toLowerCase().includes(q) || String(p.handle || "").includes(q));
+      const list = want.length ? want.map((h) => all.find((p) => p.handle === h)).filter(Boolean) : req.query.feed ? await bestSellers(store(req.query.store) || "lb") : all.filter((p) => !q || String(p.title || "").toLowerCase().includes(q) || String(p.handle || "").includes(q));
       res.json({ products: list.slice(0, 30).map((p) => ({ handle: p.handle, title: p.title, url: p.url || "", image: p.image ? p.image + (p.image.includes("?") ? "&" : "?") + "width=600" : "", price: p.price, compare_at: p.compare_at || null, available: p.available !== false })), loaded: !!cat }); } catch (e) { fail(res, e); }
   });
   app.post("/api/mk/ai/copy", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; res.json(await aiCopy({ store: store(b.store) || "lb", kind: b.kind, brief: b.brief, current: b.current })); } catch (e) { fail(res, e); } });
