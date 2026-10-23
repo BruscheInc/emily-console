@@ -20,11 +20,15 @@
   var mobile = function () { return window.matchMedia('(max-width: 640px)').matches; };
 
   /* ---------- store activity (only when tracking is on) ---------- */
-  function track(type, props) { post('/api/mkf/' + STORE + '/track', { vid: vid, type: type, props: props || {}, page: location.pathname, preview: preview }); }
+  // Who this visitor is, when we can tell (like Klaviyo's _kx): a Buzzin email/text link adds _bz=…, and a logged-in Shopify customer has an id.
+  var idm = q.match(/[?&]_bz=([\w.-]+)/); if (idm) ls.set('bz_id', idm[1]);
+  var custId = function () { try { var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta; return (m && m.page && m.page.customerId) ? String(m.page.customerId) : ''; } catch (e) { return ''; } };
+  function track(type, props) { post('/api/mkf/' + STORE + '/track', { vid: vid, type: type, props: props || {}, page: location.pathname, preview: preview, ident: ls.get('bz_id') || '', cid: custId() }); }
   function startTracking() {
     try {
       var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
       if (meta && meta.product) track('viewed_product', { product_id: String(meta.product.id), title: meta.product.title || document.title, handle: location.pathname.split('/products/')[1] || '', price: meta.product.variants && meta.product.variants[0] ? meta.product.variants[0].price / 100 : null, url: location.href.split('?')[0] });
+      else if (meta && meta.page && meta.page.pageType === 'collection') track('viewed_collection', { title: (document.title || '').split(/[–|-]/)[0].trim(), url: location.href.split('?')[0], handle: location.pathname.split('/collections/')[1] || '' });
       else track('active_on_site', {});
       // Added to cart: send the whole cart (like Klaviyo's Added to Cart event) so cart emails can show it.
       var cartT = null; var page = location.href.split('?')[0];

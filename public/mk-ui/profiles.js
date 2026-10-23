@@ -35,7 +35,7 @@ const CSS = `<style>
 .kq-tabs{display:flex;gap:6px;padding:0 24px;border-bottom:1px solid var(--line);margin-top:12px;overflow-x:auto}
 .kq-tabs button{all:unset;cursor:pointer;padding:12px 10px 11px;font-size:15px;color:#3F3F46;border-bottom:2.5px solid transparent;white-space:nowrap}
 .kq-tabs button.on{color:#18181B;font-weight:600;border-bottom-color:#18181B}
-.kq-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;padding:28px 24px}
+.kq-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;padding:28px 24px}.kq-cols>div{min-width:0}
 @media (max-width:1100px){.kq-cols{grid-template-columns:1fr;gap:28px}}
 .kq-card{border:1px solid var(--line);border-radius:16px;padding:26px 28px;margin-bottom:28px}
 .kq-card h2{font-size:21px;font-weight:600;margin:0}.kq-card .ch{display:flex;align-items:center;gap:12px;margin-bottom:22px}.kq-card .ch .s2{color:#52525B;font-size:15px;margin-top:4px}
@@ -60,13 +60,14 @@ const CSS = `<style>
 /* timeline */
 .kq-tf{display:flex;flex-direction:column;gap:14px;margin-bottom:26px}.kq-tf select{height:46px;border-radius:8px;font-size:16px;width:100%}
 .kq-tf .dt{display:flex;gap:10px}.kq-tf .dt input{height:38px;border-radius:8px;width:230px;max-width:48%}
-.kq-ev{display:grid;grid-template-columns:28px 34px 1fr 40px;gap:0 8px;align-items:start;position:relative;padding-bottom:22px}
+.kq-ev{display:grid;grid-template-columns:28px 34px minmax(0,1fr) 40px;gap:0 8px;align-items:start;position:relative;padding-bottom:22px}
 .kq-ev:before{content:"";position:absolute;left:13px;top:30px;bottom:2px;border-left:1.5px solid #D4D4D8}.kq-ev:last-child:before{display:none}
 .kq-ev .tg{all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;height:28px;font-size:17px;color:#3F3F46}.kq-ev.open .tg i{transform:rotate(180deg)}
 .kq-ev .ic{height:28px;display:flex;align-items:center;font-size:20px}.kq-ev .ic .shop{color:#5E8E3E}
 .kq-ev .tt{font-size:17px;font-weight:600;line-height:28px}.kq-ev .tm{color:#3F3F46;font-size:15px;margin-top:6px}
 .kq-ev .pp{display:none;grid-column:3/5;margin-top:10px;background:#FAFAFA;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px}.kq-ev.open .pp{display:block}
-.kq-ev .pp div{display:grid;grid-template-columns:140px 1fr;gap:10px;padding:3px 0}.kq-ev .pp div span:first-child{color:#71717A}
+.kq-ev .pp div{display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;padding:3px 0}.kq-ev .pp span{min-width:0;overflow-wrap:anywhere;word-break:break-word}.kq-ev .pp a{color:#2563EB;overflow-wrap:anywhere}
+.kq-ev .it{display:flex!important;grid-template-columns:none!important;gap:10px;align-items:center;padding:6px 0!important}.kq-ev .it img{width:40px;height:40px;object-fit:cover;border-radius:6px;flex:none;background:#F4F4F5}.kq-ev .it b{font-weight:600}.kq-ev .pp div span:first-child{color:#71717A}
 .kq-empty{text-align:center;color:#52525B;padding:50px 20px}.kq-empty b{display:block;color:#18181B;font-size:20px;margin-bottom:6px}
 .kq-modal{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:80;display:flex;align-items:center;justify-content:center;padding:16px}
 .kq-modal .bx{background:#fff;border-radius:14px;width:min(460px,100%);padding:22px 24px}.kq-modal h3{margin:0 0 14px;font-size:18px}
@@ -81,7 +82,7 @@ const shortD = (d) => { if (!d) return '—'; const x = new Date(d); return `${x
 const phoneF = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.length === 11 && d[0] === '1' ? `+1 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}` : (p || ''); };
 const loc = (p, zip) => [p.city, p.region, [p.country, zip ? p.zip : ''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 const nameOf = (p) => [p.first_name, p.last_name].filter(Boolean).join(' ');
-const money = (v) => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const money = (v) => { const n = Number(v || 0); return '$' + n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); };
 
 /* ---------- list ---------- */
 async function renderList(el) {
@@ -128,11 +129,12 @@ async function renderList(el) {
 /* ---------- profile page ---------- */
 let TAB = 'details';
 const EV = {
-  placed_order: (e) => `Placed order for "${money(e.value)}"`, fulfilled_order: () => 'Fulfilled order', delivered_order: () => 'Delivered shipment', refunded_order: () => 'Refunded order', cancelled_order: () => 'Cancelled order',
-  viewed_product: (e) => `Viewed product${e.props && (e.props.name || e.props.title) ? ` "${e.props.name || e.props.title}"` : ''}`, viewed_collection: () => 'Viewed collection', viewed_page: () => 'Active on site',
-  added_to_cart: (e) => `Added to cart${e.props && (e.props.name || e.props.title) ? ` "${e.props.name || e.props.title}"` : ''}`, started_checkout: () => 'Checkout started',
-  submitted_form: (e) => `Submitted form${e.props && e.props.form ? ` "${e.props.form}"` : ''}`, joined_list: () => 'Subscribed to list', coupon_used: () => 'Coupon used',
+  placed_order: (e) => `Placed order for "${money(e.value)}"`, fulfilled_order: (e) => `Fulfilled order${e.props && e.props.name ? ` ${e.props.name}` : ''}`, delivered_order: () => 'Delivered shipment', 
+  viewed_product: (e) => `Viewed product${e.props && (e.props.name || e.props.title) ? ` "${e.props.name || e.props.title}"` : ''}`, viewed_page: () => 'Active on site',
+  added_to_cart: (e) => { const it = e.props && Array.isArray(e.props.items) ? e.props.items : []; return `Added to cart${it.length ? ` · ${it.length} item${it.length === 1 ? '' : 's'}` : e.props && (e.props.name || e.props.title) ? ` "${e.props.name || e.props.title}"` : ''}`; }, started_checkout: (e) => `Checkout started${e.props && Array.isArray(e.props.items) && e.props.items.length ? ` · ${e.props.items.length} item${e.props.items.length === 1 ? '' : 's'}` : ''}`,
+  submitted_form: (e) => `Submitted form${e.props && e.props.form ? ` "${e.props.form}"` : ''}`, joined_list: () => 'Subscribed to list', coupon_used: (e) => `Coupon used${e.props && e.props.code ? ` "${e.props.code}"` : ''}`, viewed_collection: (e) => `Viewed collection${e.props && e.props.title ? ` "${e.props.title}"` : ''}`,
   received_email: (e) => `Received email${e.props && e.props.subject ? ` "${e.props.subject}"` : ''}`, opened_email: (e) => `Opened email${e.props && e.props.subject ? ` "${e.props.subject}"` : ''}`, clicked_email: (e) => `Clicked email${e.props && e.props.subject ? ` "${e.props.subject}"` : ''}`,
+  entered_segment: (e) => `Entered segment${e.props && e.props.segment ? ` "${e.props.segment}"` : e.props && e.props.segment_name ? ` "${e.props.segment_name}"` : ''}`, cancelled_order: (e) => `Cancelled order${e.props && e.props.name ? ` ${e.props.name}` : ''}`, refunded_order: (e) => `Refunded ${money(e.value)}${e.props && e.props.name ? ` on ${e.props.name}` : ''}`,
   bounced_email: () => 'Bounced email', marked_spam: () => 'Marked email as spam', unsubscribed: () => 'Unsubscribed',
   received_sms: () => 'Received text', clicked_sms: () => 'Clicked text', sent_sms: () => 'Sent text', replied_sms: () => 'Replied to text',
 };
@@ -330,11 +332,13 @@ function rightTimeline(R, p) {
   const draw = () => {
     const t = $('tev').value, s = $('tds').value ? new Date($('tds').value + 'T00:00:00').getTime() : 0, e2 = $('tde').value ? new Date($('tde').value + 'T23:59:59').getTime() : Infinity;
     const r = all.filter((e) => (!t || (e._k || e.type) === t) && new Date(e.at).getTime() >= s && new Date(e.at).getTime() <= e2).slice(0, 200);
-    $('tl').innerHTML = r.map((e, i) => { const pr = e._props || Object.fromEntries(Object.entries(e.props || {}).filter(([k, v]) => v != null && v !== '' && k !== 'items').map(([k, v]) => [k.replace(/_/g, ' '), typeof v === 'object' ? JSON.stringify(v) : v]));
+    const HIDE = ['items', 'vid', 'page', 'send_id', 'flow_step', 'product_id', 'cancelled'];
+    $('tl').innerHTML = r.map((e, i) => { const pr = e._props || Object.fromEntries(Object.entries(e.props || {}).filter(([k, v]) => v != null && v !== '' && !HIDE.includes(k) && !(Array.isArray(v) && !v.length)).map(([k, v]) => [k.replace(/_/g, ' '), Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? JSON.stringify(v) : v]));
       const rows = Object.entries(pr).filter(([, v]) => v !== '' && v != null);
+      const its = !e._t && e.props && Array.isArray(e.props.items) ? e.props.items : [];
       return `<div class="kq-ev" data-i="${i}"><button class="tg" aria-label="Show details">${I('chevron-down')}</button><div class="ic">${e._t ? `<i class="ti ti-shopping-bag shop"></i>` : evIcon(e)}</div>
         <div><div class="tt">${esc(e._t || evLabel(e))}</div><div class="tm">${shortDT(e.at)}</div></div><span></span>
-        <div class="pp">${rows.length ? rows.map(([k, v]) => `<div><span>${esc(k)}</span><span>${esc(String(v)).slice(0, 300)}</span></div>`).join('') : '<div><span>Source</span><span>' + esc(e.source || 'Buzzin') + '</span></div>'}</div></div>`; }).join('')
+        <div class="pp">${its.map((it) => `<div class="it">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ''}<span><b>${esc(it.title || it.name || 'Item')}</b>${it.variant ? ' · ' + esc(it.variant) : ''}<br><span style="color:#71717A">${esc(it.qty || it.quantity || 1)} × ${it.price != null ? money(it.price) : ''}</span></span></div>`).join('')}${rows.map(([k, v]) => { const sv = String(v); return `<div><span>${esc(k)}</span><span>${/^https?:\/\//.test(sv) ? `<a href="${esc(sv)}" target="_blank" rel="noopener">${esc(sv.length > 80 ? sv.slice(0, 80) + '…' : sv)}</a>` : esc(sv.slice(0, 300))}</span></div>`; }).join('')}${!its.length && !rows.length ? '<div><span>Source</span><span>' + esc(e.source || 'Buzzin') + '</span></div>' : ''}</div></div>`; }).join('')
       || '<div class="kq-empty"><b>No activity</b>Nothing in this range.</div>';
     $('tl').querySelectorAll('.kq-ev .tg').forEach((b) => b.onclick = () => b.parentElement.classList.toggle('open'));
   };

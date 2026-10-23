@@ -42,6 +42,7 @@ async function migrate() {
     priority INT NOT NULL DEFAULT 0, steps JSONB NOT NULL DEFAULT '[]', style JSONB NOT NULL DEFAULT '{}', targeting JSONB NOT NULL DEFAULT '{}', teaser JSONB NOT NULL DEFAULT '{}',
     coupon JSONB NOT NULL DEFAULT '{}', list_id BIGINT, sms_consent_text TEXT, email_consent_text TEXT, ab_of BIGINT, ab_split INT NOT NULL DEFAULT 50,
     source TEXT, ext_id TEXT, updated_by TEXT, created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())`);
+  await db(`CREATE INDEX IF NOT EXISTS mk_events_anon_vid ON mk_events ((props->>'vid')) WHERE profile_id IS NULL`).catch(() => {});
   await db(`CREATE TABLE IF NOT EXISTS mk_form_events (id BIGSERIAL PRIMARY KEY, form_id BIGINT NOT NULL, type TEXT NOT NULL, vid TEXT, profile_id BIGINT, preview BOOLEAN NOT NULL DEFAULT false, at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE INDEX IF NOT EXISTS mk_form_events_form ON mk_form_events (form_id, type, at)`);
   await db(`CREATE TABLE IF NOT EXISTS mk_visitors (vid TEXT PRIMARY KEY, store TEXT, profile_id BIGINT, first_seen TIMESTAMPTZ DEFAULT now(), last_seen TIMESTAMPTZ DEFAULT now())`);
@@ -206,12 +207,27 @@ async function submit(store, b, ip) {
   }
   return { ok: true, code };
 }
+// Who a visitor is: a signed Buzzin link token (_bz on links in our emails/texts) or their Shopify customer id when logged in.
+async function identify(b) {
+  try {
+    if (b.ident) { const t = require("./mk-email").readToken(String(b.ident).slice(0, 200)); if (t && t.id) { const p = (await db(`SELECT id FROM mk_profiles WHERE id=$1`, [t.id])).rows[0]; if (p) return Number(p.id); } }
+    const cid = String(b.cid || "").replace(/\D/g, "");
+    if (cid) { const p = (await db(`SELECT id FROM mk_profiles WHERE shopify_id IN ($1, $2) LIMIT 1`, [cid, `gid://shopify/Customer/${cid}`])).rows[0]; if (p) return Number(p.id); }
+  } catch (_) {}
+  return null;
+}
+// Tie a visitor to a profile and move everything they did before we knew them (viewed products, carts…) onto it — like Klaviyo.
+async function linkVisitor(store, vid, pid) {
+  if (!vid || !pid) return;
+  await db(`INSERT INTO mk_visitors (vid, store, profile_id) VALUES ($1,$2,$3) ON CONFLICT (vid) DO UPDATE SET profile_id=EXCLUDED.profile_id, last_seen=now()`, [vid, store, pid]);
+  await db(`UPDATE mk_events SET profile_id=$1 WHERE profile_id IS NULL AND props->>'vid'=$2`, [pid, vid]).catch((e) => console.error("visitor backfill:", e.message));
+}
 async function findOrCreateFromVisitor(store, vid, vals) {
   let prof = null;
   if (vals.email) prof = await MK().upsertProfile(store, { email: vals.email }, "form");
   if (!prof && vid) { const v = (await db(`SELECT profile_id FROM mk_visitors WHERE vid=$1`, [vid])).rows[0]; if (v && v.profile_id) prof = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [v.profile_id])).rows[0]; }
   if (!prof && vals.phone) prof = await MK().upsertProfile(store, { phone: vals.phone }, "form");
-  if (prof && vid) await db(`INSERT INTO mk_visitors (vid, store, profile_id) VALUES ($1,$2,$3) ON CONFLICT (vid) DO UPDATE SET profile_id=EXCLUDED.profile_id, last_seen=now()`, [String(vid).slice(0, 40), store, prof.id]);
+  if (prof && vid) await linkVisitor(store, String(vid).slice(0, 40), prof.id);
   return prof;
 }
 
@@ -294,9 +310,10 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   });
   app.post("/api/mkf/:store/track", async (req, res) => {
     cors(res); const s = store(req.params.store); const b = req.body || {};
-    if (!s || !["viewed_product", "added_to_cart", "active_on_site"].includes(b.type)) return res.json({ ok: false });
+    if (!s || !["viewed_product", "viewed_collection", "added_to_cart", "active_on_site"].includes(b.type)) return res.json({ ok: false });
     try { const cfg = await config(s, false); if (!cfg.tracking && !b.preview) return res.json({ ok: false });
       const v = b.vid ? (await db(`INSERT INTO mk_visitors (vid, store) VALUES ($1,$2) ON CONFLICT (vid) DO UPDATE SET last_seen=now() RETURNING profile_id`, [String(b.vid).slice(0, 40), s])).rows[0] : null;
+      if (v && !v.profile_id && b.vid) { const pid = await identify(b); if (pid) { await linkVisitor(s, String(b.vid).slice(0, 40), pid); v.profile_id = pid; } }
       if (b.type !== "active_on_site" || (v && v.profile_id)) { const props = cleanSiteProps(b.props); await MK().track(s, b.type, { profileId: v && v.profile_id, value: b.type === "added_to_cart" && Number(props.value) > 0 ? Number(props.value) : undefined, props: { ...props, page: String(b.page || "").slice(0, 200), vid: b.vid }, source: "site" }); }
       res.json({ ok: true }); } catch (e) { res.json({ ok: false }); }
   });

@@ -3,6 +3,19 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.107.0
+- **Orders are tracked live.** Before, Shopify orders were only copied once, at setup, so newer orders never reached profiles. Every 5 minutes Buzzin now pulls each new or changed order onto the profile:
+  - Placed order, with every item.
+  - Fulfilled order, with tracking.
+  - Refunded order.
+  - Cancelled order.
+  - Coupon used.
+
+  It also keeps orders, total spent and last-order date up to date. New orders start flows (post-purchase, abandoned-cart exits, "ordered since joining" splits). The first run catches up on everything since the original copy without sending anything.
+- **Visitors are recognized like Klaviyo.** Store links in our emails and texts carry who clicked (_bz), and a logged-in Shopify customer is recognized by their customer id. Once someone is known, everything they did before is moved onto their profile: viewed products, added to cart, active on site. Signing up through a form does the same.
+- **Viewed collection is tracked.**
+- **Profile timeline:** long links wrap inside the box instead of pushing the page sideways. Checkout started and Added to cart show every item, with picture, size, quantity and price. Fulfilled, refunded, cancelled, coupon used and entered segment events get clear labels.
+
 ## 4.106.0
 - Profiles rebuilt to match Klaviyo:
   - **List:** totals at the top (all, active, suppressed, subscribed to texts; click one to filter), a "View suppressed profiles" button, one search box (name, email or exact phone), and the same columns as Klaviyo: Profile, Email, Phone, Profile created, Profile updated, Location.

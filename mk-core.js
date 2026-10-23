@@ -302,6 +302,74 @@ async function syncShopifyCustomers(store) {
   return n;
 }
 
+/* ---------------- live orders (every 5 minutes) ----------------
+   The bulk sync above runs once. This keeps every new order, cancellation, fulfillment, refund and discount code flowing onto
+   profiles, so timelines, flows (post-purchase, "ordered since…" splits, abandoned-cart exits) and segments stay current. */
+const ORDERS_LIVE = `query O($q: String, $after: String) { orders(first: 100, after: $after, query: $q, sortKey: UPDATED_AT) { pageInfo { hasNextPage endCursor } nodes {
+  id name createdAt updatedAt cancelledAt email customer { id } totalPriceSet { shopMoney { amount } } discountCodes sourceName displayFulfillmentStatus
+  fulfillments(first: 5) { id createdAt trackingInfo(first: 1) { number company url } }
+  refunds(first: 5) { id createdAt totalRefundedSet { shopMoney { amount } } }
+  lineItems(first: 50) { nodes { title variantTitle sku quantity product { id handle } image { url } originalUnitPriceSet { shopMoney { amount } } } } } } }`;
+let ordersBusy = false;
+async function pollOrders() {
+  if (ordersBusy) return; ordersBusy = true;
+  try {
+    for (const store of ["lb", "lbo"]) {
+      let st; try { st = R().shopFor(store); } catch (_) { continue; }
+      const key = `mk_orders_live_${store}`;
+      let cur = await core.syncGet(key).catch(() => null);
+      let from = cur && cur.cursor;
+      if (!from) { const last = (await db(`SELECT max(at) m FROM mk_events WHERE store=$1 AND type='placed_order'`, [store])).rows[0]; from = new Date(last && last.m ? new Date(last.m).getTime() - 864e5 : Date.now() - 7 * 864e5).toISOString(); }
+      let newest = from, after = null, touched = new Set(), n = 0;
+      for (let page = 0; page < 20; page++) {
+        const d = await R().gql(st, ORDERS_LIVE, { q: `updated_at:>'${from}'`, after });
+        const o = d.orders || { nodes: [] };
+        for (const x of o.nodes) { if (x.updatedAt > newest) newest = x.updatedAt; const pid = await liveOrder(store, x); if (pid) touched.add(pid); n++; }
+        if (!o.pageInfo || !o.pageInfo.hasNextPage) break; after = o.pageInfo.endCursor;
+      }
+      if (touched.size) await rollupOrders([...touched]);
+      await core.syncSet(key, newest, { orders: n });
+      if (n) console.log(`🛍️  ${store} orders: ${n} new or changed · ${touched.size} profiles updated`);
+    }
+  } catch (e) { if (!/access|scope/i.test(e.message)) console.error("live orders:", e.message); }
+  finally { ordersBusy = false; }
+}
+const RECENT = 6 * 3600e3;   // only fresh happenings start flows; catching up on older ones just records them
+async function liveOrder(store, o) {
+  const email = normEmail(o.email);
+  let prof = email ? await findProfile(store, { email }) : null;
+  if (!prof && o.customer && o.customer.id) prof = await findProfile(store, { shopifyId: o.customer.id });
+  if (!prof && email) prof = await upsertProfile(store, { email, shopify_id: o.customer && o.customer.id }, "shopify");
+  const pid = prof ? prof.id : null;
+  const items = ((o.lineItems && o.lineItems.nodes) || []).map((li) => ({ title: li.title, variant: li.variantTitle || null, size: sizeOf(li.variantTitle), sku: li.sku || null, qty: li.quantity,
+    price: Number((li.originalUnitPriceSet && li.originalUnitPriceSet.shopMoney.amount) || 0), product_id: li.product ? li.product.id : null, handle: li.product ? li.product.handle : null, image: li.image ? li.image.url : null }));
+  const value = Number((o.totalPriceSet && o.totalPriceSet.shopMoney.amount) || 0);
+  const props = { name: o.name, cancelled: !!o.cancelledAt, discount_codes: o.discountCodes || [], source: o.sourceName || null, items };
+  const fresh = (t) => Date.now() - new Date(t).getTime() < RECENT;
+  const exists = (await db(`SELECT id FROM mk_events WHERE store=$1 AND type='placed_order' AND ext_id=$2`, [store, o.id])).rows[0];
+  if (exists) await db(`UPDATE mk_events SET profile_id=COALESCE(profile_id,$2), value=$3, props=$4 WHERE id=$1`, [exists.id, pid, value, JSON.stringify(props)]);
+  else if (pid && fresh(o.createdAt) && !o.cancelledAt) await track(store, "placed_order", { profileId: pid, at: o.createdAt, value, props, source: "shopify", extId: o.id });
+  else await db(`INSERT INTO mk_events (profile_id, store, type, at, value, props, source, ext_id) VALUES ($1,$2,'placed_order',$3,$4,$5,'shopify',$6) ON CONFLICT (store, type, ext_id) WHERE ext_id IS NOT NULL DO NOTHING`,
+    [pid, store, o.createdAt, value, JSON.stringify(props), o.id]);
+  if (!pid) return null;
+  const once = async (type, extId, at, val, pr) => {
+    if ((await db(`SELECT 1 FROM mk_events WHERE store=$1 AND type=$2 AND ext_id=$3`, [store, type, extId])).rows[0]) return;
+    if (fresh(at)) await track(store, type, { profileId: pid, at, value: val, props: pr, source: "shopify", extId });
+    else await db(`INSERT INTO mk_events (profile_id, store, type, at, value, props, source, ext_id) VALUES ($1,$2,$3,$4,$5,$6,'shopify',$7) ON CONFLICT (store, type, ext_id) WHERE ext_id IS NOT NULL DO NOTHING`, [pid, store, type, at, val, JSON.stringify(pr), extId]);
+  };
+  for (const c of o.discountCodes || []) await once("coupon_used", `${o.id}:${c}`, o.createdAt, null, { code: c, order: o.name });
+  for (const f of o.fulfillments || []) { const t = (f.trackingInfo || [])[0] || {}; await once("fulfilled_order", f.id, f.createdAt, value, { name: o.name, items, tracking_number: t.number || null, carrier: t.company || null, tracking_url: t.url || null }); }
+  for (const r of o.refunds || []) await once("refunded_order", r.id, r.createdAt, Number((r.totalRefundedSet && r.totalRefundedSet.shopMoney.amount) || 0), { name: o.name });
+  if (o.cancelledAt) await once("cancelled_order", `x:${o.id}`, o.cancelledAt, value, { name: o.name });
+  return pid;
+}
+async function rollupOrders(ids) {
+  await db(`UPDATE mk_profiles p SET orders_count=x.n, total_spent=x.spent, first_order_at=x.first, last_order_at=x.last, updated_at=now()
+    FROM (SELECT e.profile_id, count(*)::int n, COALESCE(sum(e.value),0) spent, min(e.at) first, max(e.at) last FROM mk_events e
+          WHERE e.profile_id = ANY($1) AND e.type='placed_order' AND NOT COALESCE((e.props->>'cancelled')::boolean,false) GROUP BY e.profile_id) x
+    WHERE p.id = x.profile_id`, [ids]);
+}
+
 /** Sizes like "3-6M", "0-3 Months", "12-18M", "2T" pulled from a variant title, for size-up flows and segments. */
 function sizeOf(variantTitle) {
   const t = String(variantTitle || "");
@@ -464,10 +532,11 @@ async function init() {
   // While the Klaviyo copy is still in progress, check again every 10 minutes so the merge runs when it finishes.
   setInterval(() => { syncAll({ who: "retry" }).catch(() => {}); }, 10 * 60 * 1000);   // finished steps are skipped
   setInterval(() => recomputeTiers().catch(() => {}), 6 * 3600 * 1000);
+  setTimeout(() => pollOrders().catch(() => {}), 2 * 60 * 1000); setInterval(() => pollOrders().catch(() => {}), 5 * 60 * 1000);
   // Keep the all-contacts list complete (catches imports and merges that skip upsertProfile).
   const fill = () => fillAllContacts().then((n) => n && console.log(`📋 ${ALL_LIST}: added ${n} contacts`)).catch((e) => console.log(`📋 ${ALL_LIST} failed: ${e.message}`));
   setTimeout(fill, 30 * 1000); setInterval(fill, 30 * 60 * 1000);
 }
 
-module.exports = { profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
+module.exports = { pollOrders, profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
   recomputeTiers, syncAll, syncFromKlaviyo, syncShopifyCustomers, syncShopifyOrders, overview, search, profile, lists, sizeOf };

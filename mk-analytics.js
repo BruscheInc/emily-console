@@ -172,8 +172,12 @@ function routes(app, { guard, fail, store }) {
     try {
       const l = (await db(`SELECT * FROM mk_links WHERE code=$1`, [String(req.params.code).slice(0, 20)])).rows[0];
       if (!l) return res.status(404).type("text").send("This link has expired.");
-      res.redirect(302, l.url);
-      if (l.send_id) { const send = await sendRow(l.send_id); if (send) await record(send, "clicked", req, l.url); }
+      const send = l.send_id ? await sendRow(l.send_id) : null;
+      // Links to our stores carry who clicked (_bz), so their visit, views and cart land on their profile.
+      let url = l.url;
+      try { if (send && send.profile_id && /^https?:\/\/([\w-]+\.)?larkspurbaby(outlet)?\.com(\/|$|\?)/i.test(url)) { const u = new URL(url); u.searchParams.set("_bz", require("./mk-email").tokenFor(send.profile_id, send.store)); url = u.toString(); } } catch (_) {}
+      res.redirect(302, url);
+      if (send) await record(send, "clicked", req, l.url);
     } catch (e) { console.error("link:", e.message); if (!res.headersSent) res.status(500).end(); }
   });
   app.get("/api/mk/analytics", async (req, res) => { if (!guard(req, res)) return; try { res.json(await overview({ store: store(req.query.store), days: req.query.days })); } catch (e) { fail(res, e); } });
