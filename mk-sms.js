@@ -102,7 +102,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
       let body = await compose(s, b, prof, { coupon: "WELCOME-8K2Q", ...cart });
       // Sent texts carry a short link in place of the long one; the preview shows (and opens) the same kind of link.
       const A = require("./mk-analytics"); const urls = [...new Set(body.match(/https?:\/\/[^\s]+/g) || [])];
-      for (const u of urls) body = body.split(u).join(await A.previewLink(s, u));
+      for (const u of urls) body = body.split(u).join(await A.previewLink(s, u, !!b.flow));
       res.json({ body, ...segments(body) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/mk/sms/test", async (req, res) => {

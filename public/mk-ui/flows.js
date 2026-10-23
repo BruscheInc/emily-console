@@ -440,9 +440,9 @@ function drawRight() {
   }
   $('ndel').onclick = () => removeNode(SEL);
   if (n.type === 'send_sms') { smsCount(); const pv = $('smspv'); if (pv) pv.onclick = () => window.BZ_preview({ kind: 'sms', title: c.name || 'Text message',
-    render: ({ profile_id }) => api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ store: FL.store, body: c.body, add_opt_out: c.add_opt_out, profile_id }) }),
+    render: ({ profile_id }) => api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ flow: true, store: FL.store, body: c.body, add_opt_out: c.add_opt_out, profile_id }) }),
     send: (to) => api('/api/mk/sms/test', { method: 'POST', body: JSON.stringify({ store: FL.store, to, body: c.body, add_opt_out: c.add_opt_out }) }) }); }
-  function smsCount() { const el = $('smsc'); if (!el) return; api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ store: FL.store, body: c.body, add_opt_out: c.add_opt_out }) }).then((r) => { if (!r || !r.body) throw 0; el.innerHTML = `<div class="fx-bub">${esc(r.body)}</div><div style="font-size:12px;color:var(--muted);margin-top:6px">${r.chars} characters · ${r.segments} segment${r.segments === 1 ? '' : 's'} (${r.encoding})</div>`; }).catch(() => { el.innerHTML = `<div class="fx-bub">${esc(c.body || 'Write the text')}</div>`; }); }
+  function smsCount() { const el = $('smsc'); if (!el) return; api('/api/mk/sms/preview', { method: 'POST', body: JSON.stringify({ flow: true, store: FL.store, body: c.body, add_opt_out: c.add_opt_out }) }).then((r) => { if (!r || !r.body) throw 0; el.innerHTML = `<div class="fx-bub">${esc(r.body)}</div><div style="font-size:12px;color:var(--muted);margin-top:6px">${r.chars} characters · ${r.segments} segment${r.segments === 1 ? '' : 's'} (${r.encoding})</div>`; }).catch(() => { el.innerHTML = `<div class="fx-bub">${esc(c.body || 'Write the text')}</div>`; }); }
 }
 
 /* ---------- simulate / people ---------- */

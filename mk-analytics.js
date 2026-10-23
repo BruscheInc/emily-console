@@ -42,12 +42,15 @@ function withUtm(url, { channel, name }) {
   } catch (_) { return url; }
 }
 /** A short link for previews (no send behind it, so no click is recorded); the same link is reused for the same address. */
-async function previewLink(store, url) {
+async function previewLink(store, url, flow) {
   const ex = (await db(`SELECT code FROM mk_links WHERE send_id IS NULL AND url=$1 LIMIT 1`, [url])).rows[0];
   const c = ex ? ex.code : code(); if (!ex) await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,NULL,$2)`, [c, url]);
-  return `${brandBase(store)}/l/${c}`;
+  return `${(flow && linkHost(store)) || brandBase(store)}/l/${c}`;
 }
-async function link(send, url) { const c = code(); await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,$2,$3)`, [c, send.id, url]); return `${brandBase(send.store)}/l/${c}`; }
+/** Flow messages use the store's own short-link domain once it is set up (LINK_HOST_LB=go.larkspurbaby.com); everything else uses the store address. */
+const linkHost = (store) => { const h = String(process.env[`LINK_HOST_${String(store || "").toUpperCase()}`] || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, ""); return h ? `https://${h}` : null; };
+const linkBase = (send) => (send && send.flow_id && linkHost(send.store)) || brandBase(send.store);
+async function link(send, url) { const c = code(); await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,$2,$3)`, [c, send.id, url]); return `${linkBase(send)}/l/${c}`; }
 /** Email: wrap links (not unsubscribe/preferences/mailto) and add the open pixel. */
 async function instrumentEmail(html, send, name, opts = {}) {
   const seen = new Map();

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.2
+- Flow emails and texts can use their own short-link domain (go.larkspurbaby.com) instead of returns.larkspurbaby.com; it switches on once the domain is live (LINK_HOST_LB). Campaigns keep the usual address.
+
 ## 4.105.1
 - Text previews show the short link a real text carries (like larkspurbaby.com/l/…) instead of the long checkout address, and it opens the real page.
 
