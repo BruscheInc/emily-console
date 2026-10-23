@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.101.1
+- Cart tables imported from Klaviyo read Klaviyo's own repeat setting (row_content_repeat: repeat for / item alias) and its dynamic image field directly.
+
 ## 4.101.0
 - Cart and checkout emails work like Klaviyo's:
   - Emails understand Klaviyo's template language: `{% for %}`, `{% if %}`/`{% elif %}`/`{% else %}`, `{% with %}`, `{% currency_format %}`, `forloop`, and filters like `floatformat`, `missing_product_image`, `lookup`, `length`, `join`, `striptags`, `truncatechars`.

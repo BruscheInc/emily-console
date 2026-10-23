@@ -436,7 +436,7 @@ const PANELS = {
     const setCols = (n) => { const old = cells.map((x) => x); const out = []; for (let r = 0; r < rows; r++) for (let c = 0; c < n; c++) out.push(c < nc ? old[r * nc + c] : { id: D.rid(), type: r === 0 && p.show_headers !== false ? 'table_header' : 'table_text', content: '' }); blk.subblocks = out; p.num_columns = n; onChange({}); E().drawPanel(); };
     // table type
     const tt = { v: dyn ? 'dynamic' : 'static' };
-    const setType = (v) => { if (v === 'dynamic') { p.dynamic = true; p.row_collection = p.row_collection || 'event.extra.line_items'; p.row_alias = p.row_alias || 'item'; } else { p.dynamic = false; ['row_collection', 'dynamic_row_collection', 'repeat_for', 'collection', 'data_source', 'dynamic_collection', 'rows_collection', 'dynamic_data_source'].forEach((k) => delete p[k]); } };
+    const setType = (v) => { if (v === 'dynamic') { p.dynamic = true; p.row_collection = p.row_collection || 'event.extra.line_items'; p.row_alias = p.row_alias || 'item'; } else { p.dynamic = false; delete p.row_content_repeat; ['row_collection', 'dynamic_row_collection', 'repeat_for', 'collection', 'data_source', 'dynamic_collection', 'rows_collection', 'dynamic_data_source'].forEach((k) => delete p[k]); } };
     const SRC = [['event.extra.line_items', 'Checkout / order items (event.extra.line_items)'], ['event.Items', 'Added to Cart items (event.Items)'], ['person.last_viewed', 'Custom list…']];
     const src = { v: SRC.some(([v]) => v === p.row_collection) && p.row_collection !== 'person.last_viewed' ? p.row_collection : 'custom' };
     // column types

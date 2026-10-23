@@ -138,16 +138,18 @@
   const ALIAS_KEYS = ['row_alias', 'dynamic_row_alias', 'item_alias', 'alias', 'row_name', 'dynamic_alias'];
   function tableRepeat(p, cells) {
     p = p || {};
-    let path = REP_KEYS.map((k) => p[k]).find((v) => typeof v === 'string' && v.trim());
+    const rcr = p.row_content_repeat && typeof p.row_content_repeat === 'object' ? p.row_content_repeat : null;   // Klaviyo's own shape
+    let path = REP_KEYS.map((k) => p[k]).find((v) => typeof v === 'string' && v.trim()) || (rcr && typeof rcr.repeat_for === 'string' && rcr.repeat_for.trim()) || '';
     if (!path) for (const v of Object.values(p)) if (typeof v === 'string' && /^\s*(event|person)\.[\w.$\[\]'"]+\s*$/.test(v)) { path = v; break; }
     const usesItem = JSON.stringify(cells || []).match(/\{\{[^}]*?\b(\w+)\.(?:product|title|quantity|line_price|price|ProductName|ImageURL|Quantity|RowTotal)\b/);
     if (!p.dynamic && !path) return null;
     if (!path && !usesItem) return null;
-    const alias = ALIAS_KEYS.map((k) => p[k]).find((v) => typeof v === 'string' && v.trim()) || (usesItem && usesItem[1] !== 'event' ? usesItem[1] : 'item');
+    const alias = ALIAS_KEYS.map((k) => p[k]).find((v) => typeof v === 'string' && v.trim()) || (rcr && rcr.item_alias) || (usesItem && usesItem[1] !== 'event' ? usesItem[1] : 'item');
     return { path: String(path || 'event.extra.line_items').replace(/^\s*\{\{\s*|\s*\}\}\s*$/g, '').trim(), alias: String(alias).replace(/[^\w]/g, '') || 'item' };
   }
   /** A table image cell's picture: a fixed URL or a template like {{ item.product.images.0.src }}. */
   function cellImage(c) {
+    if (typeof c.dynamic === 'string' && /\{\{/.test(c.dynamic)) return c.dynamic.trim();
     for (const k of ['src', 'dynamic_src', 'dynamic_image', 'image_url', 'dynamic_image_url', 'image', 'url']) if (typeof c[k] === 'string' && c[k].trim()) return c[k].trim();
     for (const [k, v] of Object.entries(c)) if (typeof v === 'string' && /\{\{/.test(v) && !/href|link|alt|content/.test(k)) return v.trim();
     return '';
