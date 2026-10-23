@@ -363,7 +363,44 @@ async function buzzinSignup(email, phone, brandHint) {
       recent_messages: sends.map((x) => ({ channel: x.channel, subject: x.subject, flow: x.flow, at: x.at, status: x.status, delivered: !!x.delivered, events: x.events || "", reason: x.reason || undefined, sent_to: x.channel === "email" ? x.to_addr : undefined })),
       usable_codes: codes.map((c) => ({ code: c.code, off: c.percent ? `${Number(c.percent)}%` : c.amount ? `$${Number(c.amount)}` : "", expires: c.expires_at })) });
   }
-  return { found: true, profiles: out, ...(typo ? { email_typo: `No sign-up under ${em}, but there is one under ${profs.map((p) => p.email).join(" / ")} — very likely a typo when they signed up, so the welcome email went to the wrong address. Tell them kindly what was typed, give them their code from usable_codes if there is one, and say they'll get our emails at the right address once they sign up with it (or flag for Jose to fix the email on their profile).` } : {}) };
+  return { found: true, profiles: out, ...(typo ? { email_typo: `No sign-up under ${em}, but there is one under ${profs.map((p) => p.email).join(" / ")} — very likely a typo when they signed up, so the welcome email went to the wrong address. Tell them kindly what was typed, give them their code from usable_codes if there is one, and say they'll get our emails at the right address once they sign up with it (and fix it with buzzin_propose_profile_email_fix (current_email = the mistyped one, email = theirs) — that also re-sends the welcome email with their code.` } : {}) };
+}
+
+// Fix the email on a Buzzin marketing profile (a typo at sign-up, e.g. @yhaoo.com) and re-send the welcome email to the right address.
+async function buzzinProposeProfileEmailFix(input) {
+  const wrong = String(input.current_email || "").trim().toLowerCase(), right = String(input.email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(right)) return { error: "Provide the correct email address (email)." };
+  if (!wrong) return { error: "Provide the email currently on the sign-up (current_email) — shopify_check_subscription shows it." };
+  const p = (await db(`SELECT * FROM mk_profiles WHERE lower(email)=$1 LIMIT 1`, [wrong])).rows[0];
+  if (!p) return { error: `No Buzzin sign-up under ${wrong}.` };
+  if (wrong === right) return { note: "That's already the email on the profile — nothing to change." };
+  const other = (await db(`SELECT id, email_consent FROM mk_profiles WHERE lower(email)=$1 LIMIT 1`, [right])).rows[0];
+  if (other) return { note: `${right} already has its own Buzzin profile (email ${other.email_consent}), so the sign-up can't be moved onto it automatically. Give the customer the code from usable_codes on the mistyped sign-up, and leave a to-do for Jose to merge the two profiles.` };
+  const last = (await db(`SELECT id, flow_id, message_id, subject FROM mk_sends WHERE profile_id=$1 AND channel='email' AND lower(to_addr)=$2 AND flow_id IS NOT NULL AND message_id LIKE 'tpl:%' ORDER BY id ASC LIMIT 1`, [p.id, wrong])).rows[0];
+  const resend = input.resend_welcome !== false && last;
+  await stageAction({ kind: "buzzin_propose_profile_email_fix", input, title: `Fix sign-up email — ${right}`, ticketId: input.ticket_id,
+    summary: `✉️ Correct the email on the Buzzin sign-up (profile #${p.id})\nFrom: ${wrong}\nTo: ${right}${resend ? `\nThen re-send "${last.subject || "the welcome email"}" to ${right}` : ""}`,
+    exec: async () => {
+      await db(`UPDATE mk_profiles SET email=$2, updated_at=now() WHERE id=$1`, [p.id, right]);
+      await db(`INSERT INTO mk_consent_log (profile_id, channel, state, previous, source, detail) VALUES ($1,'email',$2,$2,'buzzin',$3)`, [p.id, p.email_consent, `Email corrected from ${wrong} to ${right} (ticket ${input.ticket_id || "?"})`]).catch(() => {});
+      const parts = [`Sign-up email changed ${wrong} → ${right} ✅`];
+      if (resend) {
+        try {
+          const E = require("./mk-email"), CP = require("./mk-coupons"), SEND = require("./mk-send");
+          const prof = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [p.id])).rows[0];
+          const tpl = await E.getTemplate(Number(String(last.message_id).slice(4)));
+          if (!tpl) throw new Error("welcome email template not found");
+          const t2 = { ...tpl, subject: last.subject || tpl.subject };
+          const codes = await CP.codesFor("lb", prof, t2, { real: true, source: "welcome re-send" });
+          const r = await E.render("lb", t2, prof, { coupon: codes.coupon, coupons: codes.coupons });
+          r.utm = true; r.campaign_name = r.campaign_name || "Welcome Series";
+          const row = await SEND.send({ store: "lb", channel: "email", profile: prof, msg: r, idem: `resend:${last.id}:${right}`, flowId: last.flow_id, messageId: last.message_id });
+          parts.push(`welcome email re-sent to ${right}: ${row.status}${row.reason ? ` (${row.reason})` : ""}`);
+        } catch (e) { parts.push(`couldn't re-send the welcome email: ${e.message}`); }
+      }
+      return { note: parts.join(" · ") };
+    } });
+  return { ok: true, staged: true, note: `Staged the email fix${resend ? " and a re-send of the welcome email (with their code)" : ""} for Jose's approval. Tell the customer we've corrected their email${resend ? " and their welcome email with the code is on its way" : ""} — if usable_codes has their code you can also include it in the reply.` };
 }
 
 /* ---------------- ShipStation (V1 API — live fulfillment/tracking + approval-gated changes) ----------------
@@ -1599,6 +1636,8 @@ const TOOLS = [
     input_schema: { type: "object", properties: { query: { type: "string" }, brand: { type: "string", description: "Larkspur Baby or Larkspur Baby Outlet" }, product_url: { type: "string" } }, required: ["query"] } },
   { name: "shopify_check_stock", description: "Check LIVE stock for a PRODUCT and each of its sizes/variants. Use this WHENEVER a customer asks whether an item/print/size is available, asks what sizes you have, or BEFORE you offer or refuse a replacement in a specific print/size. Pass a product name or print (e.g. 'Puppy Love') or a SKU; optionally a brand hint ('Larkspur Baby' / 'Outlet' / 'Bumbunny'). Returns each size with in_stock (true/false) and quantity. NEVER decide replacement availability from an order's line items — always confirm here first.",
     input_schema: { type: "object", properties: { query: { type: "string" }, brand: { type: "string" } }, required: ["query"] } },
+  { name: "buzzin_propose_profile_email_fix", description: "STAGE a fix to the email on a customer's Buzzin sign-up (marketing profile) for Jose's approval — use when shopify_check_subscription shows they signed up with a mistyped email (email_typo), or they ask to change the email they signed up with. Re-sends the welcome email (with their code) to the corrected address. Pass current_email (the one on the sign-up), email (the correct one), ticket_id. Handle it yourself — never leave it as a to-do.",
+    input_schema: { type: "object", properties: { current_email: { type: "string" }, email: { type: "string" }, resend_welcome: { type: "boolean" }, ticket_id: { type: "string" } }, required: ["current_email", "email"] } },
   { name: "shopify_check_subscription", description: "Check whether a customer is ALREADY subscribed to email / newsletter marketing. Use this WHENEVER a customer asks to sign up for emails, to be added to the newsletter/mailing list, or whether they're on the list. Also use it when someone says they didn't get the welcome email or their discount code. Pass the customer's email and/or phone (optionally a brand hint). Returns Buzzin's sign-up record (email/text consent, when they signed up, the last marketing emails/texts sent with delivered/bounced, and their own still-usable discount codes) plus Shopify's marketing state. If subscribed, CONFIRM they're already on the list instead of telling them to sign up.",
     input_schema: { type: "object", properties: { email: { type: "string" }, phone: { type: "string" }, brand: { type: "string" } } } },
   { name: "shipstation_lookup", description: "LIVE shipping status from ShipStation (the fulfillment system) by order number or customer email: order status, on-hold, the ship-to address on file, carrier, service, tracking number, ship date, and whether the address can still be changed (only before it ships). Use for any 'where is my order / tracking / did it ship / can I change my address' question — it's the source of truth for fulfillment.",
@@ -1637,6 +1676,7 @@ async function runTool(name, input) {
     if (name === "shopify_lookup_order") return await shopifyLookupOrder(input.query);
     if (name === "shopify_check_stock") return await shopifyCheckStock(input.query, input.brand);
     if (name === "product_info") { const key = /outlet|lbo/i.test(String(input.brand || "")) ? "lbo" : "lb"; const r = await require("./catalog").search(key, String(input.query || ""), { path: String(input.product_url || "") }); return r || { note: "Product knowledge isn't loaded yet — use shopify_check_stock." }; }
+    if (name === "buzzin_propose_profile_email_fix") return await buzzinProposeProfileEmailFix(input);
     if (name === "shopify_check_subscription") return await shopifyCheckSubscription(input.email, input.brand, input.phone);
     if (name === "shipstation_lookup") return await shipstationLookup(input.query);
     if (name === "shipstation_propose_change") return await shipstationProposeChange(input);
@@ -2268,7 +2308,7 @@ async function maybeRedraftCommand(text) {
   const r = await handleTicket(id, { force: true, guidance });
   return r && r.category === "cs" ? `🔁 Redrafted ticket ${id}${guidance ? ` with your notes` : ""} — new card in <#${APPROVALS_CH}>.` : `Looked at ticket ${id} — ${r && (r.skipped || r.category) || "nothing to draft"}.`;
 }
-const RESTAGE = { shopify_propose_email_change: (i) => shopifyProposeEmailChange(i), faq_publish: (i) => require("./faqs").stageFaq(i), shipstation_propose_change: (i) => shipstationProposeChange(i), shopify_propose_replacement: (i) => shopifyProposeReplacement(i),
+const RESTAGE = { buzzin_propose_profile_email_fix: (i) => buzzinProposeProfileEmailFix(i), shopify_propose_email_change: (i) => shopifyProposeEmailChange(i), faq_publish: (i) => require("./faqs").stageFaq(i), shipstation_propose_change: (i) => shipstationProposeChange(i), shopify_propose_replacement: (i) => shopifyProposeReplacement(i),
                   shopify_propose_discount: (i) => shopifyProposeDiscount(i), shopify_propose_store_credit: (i) => shopifyProposeStoreCredit(i),
                   shopify_propose_cancel: (i) => shopifyProposeCancel(i), shopify_propose_refund: (i) => shopifyProposeRefund(i), shopify_propose_order_edit: (i) => shopifyProposeOrderEdit(i), return_propose: (i) => returnPropose(i) };
 function wireSlack() {

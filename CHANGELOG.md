@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.13
+- Emily can fix the email on someone's sign-up (e.g. signed up as @yhaoo.com) and re-send the welcome email with their code to the right address. She stages it for your approval like her other actions. If the right email already has its own profile, she gives the code instead and flags the two profiles for you to merge.
+
 ## 4.105.12
 - New sign-ups have their own visible list, **Website Sign-ups**. They were going into "Merged Shopify Newsletter", which had been deleted along with the old Klaviyo lists, so they were invisible (still in Profiles and still getting the Welcome Series). Everyone who has ever signed up through a form is in the new list, dated by when they signed up. The live sign-up form and the Welcome Series now use it. Nobody gets the welcome emails again.
 - A list can't be deleted while a live sign-up form or live flow uses it; it tells you which ones.
