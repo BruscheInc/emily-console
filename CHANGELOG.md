@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.104.4
+- Text tests: a cart text sent as a test now carries a real checkout link (your own recent checkout, or the newest one in the store) instead of an empty spot.
+
 ## 4.104.3
 - Fix: texts failed with "INVALID_PARAMETER messageType". Buzzin now sends each text with the message type your Amazon number was registered with (and retries with the other type if Amazon says no).
 - Texts: curly quotes, long dashes and "…" become plain ones, so a text stays in 160-character segments (the abandoned cart text goes from 3 segments to 1).

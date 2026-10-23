@@ -102,7 +102,10 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     if (!guard(req, res)) return;
     try { const b = req.body || {}; const s = store(b.store) || "lb"; const to = MK().normPhone(b.to); if (!to) return res.status(400).json({ error: "Enter a phone number from the internal test list" });
       const tp = await require("./mk-coupons").forTest(s, b.to, "sms", { body: b.body });   // the real profile and a working code, like the live text
-      const body = await compose(s, b, tp.profile, tp.coupon ? { coupon: tp.coupon } : {});
+      // A cart text needs a cart: tests use the person's own recent checkout (or the newest one in the store), like the live text would.
+      const cart = /checkout_url|CheckoutURL|line_items|event\./.test(String(b.body || "")) ? await E().sampleCart(s, tp.profile) : {};
+      if (cart.items && !cart.checkout_url) cart.checkout_url = `${String((await E().brand(s)).shop_url || "").replace(/\/$/, "")}/cart`;
+      const body = await compose(s, b, tp.profile, { ...cart, ...(tp.coupon ? { coupon: tp.coupon } : {}) });
       const row = await require("./mk-send").send({ store: s, channel: "sms", profile: { id: null, phone: to, sms_consent: "subscribed", timezone: "America/Chicago" }, msg: { body }, test: true, idem: `smstest:${to}:${Date.now()}` });
       res.json({ status: row.status, reason: row.reason }); } catch (e) { fail(res, e); }
   });
