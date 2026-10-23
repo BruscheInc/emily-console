@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.6
+- Emily: a failed action left over from an earlier draft no longer blocks "Approve & send" on her newest draft (ticket 9000000666 was stuck on an old "isn't returnable" failure for a return that already existed). Dismiss now works on failed actions too.
+- Attachments waiting to go out ("Attached to your reply" and the chips under the reply box) are now links — click to open the PDF.
+- One-time: any return label from an approved Emily return that never reached the customer is re-queued for the next reply, and still-pending return proposals for orders that already have a return are retired.
+
 ## 4.105.5
 - Emily: before proposing a return + label, she checks whether that order already has a return. If it does, she stops (no duplicate return or label) and instead gives the customer the existing label link and tracking number; the label PDF still attaches to the reply if it hasn't gone out yet. Fixes tickets where she kept re-proposing returns that already existed ("isn't returnable" failures).
 

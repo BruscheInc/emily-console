@@ -895,6 +895,37 @@ async function labelBackfill() {
   await core.syncSet("slack_label_backfill_v1", String(r.rowCount || 0), { at: new Date().toISOString(), files: r.rows });
   console.log(`🏷️  return labels queued for the next reply: ${r.rowCount || 0}${r.rows.length ? " — " + r.rows.map((x) => `${x.ticket_id}: ${x.name}`).join(", ") : ""}`);
 }
+// One-time: re-queue any return label from an approved Emily return that never reached the customer (no unsent copy
+// staged and none sent) — re-downloads the PDF from ShipStation. Also retires still-staged return proposals for orders
+// that already have a return, so nobody approves a duplicate.
+async function labelRestage() {
+  if (await syncGet("return_label_restage_v1")) return;
+  const acts = (await db(`SELECT id, ticket_id, result FROM emily_actions WHERE kind='return_propose' AND status='applied'
+    AND result LIKE 'Return % created%' AND decided_at > now() - interval '30 days'`)).rows;
+  const done = [];
+  for (const a of acts) {
+    const rma = (String(a.result).match(/Return ([A-Z0-9-]+) created/) || [])[1]; if (!rma) continue;
+    const name = `Return label ${rma}.pdf`;
+    const have = (await db(`SELECT staged, sent_at FROM hd_files WHERE ticket_id=$1 AND name=$2`, [String(a.ticket_id), name])).rows;
+    if (have.some((f) => f.sent_at || f.staged)) continue;
+    const rec = (await db(`SELECT data, status FROM hd_returns WHERE rma=$1 ORDER BY created_at DESC LIMIT 1`, [rma])).rows[0];
+    const src = rec && rec.status !== "cancelled" && rec.data && rec.data.label_src; if (!src) continue;
+    try {
+      const r = await fetch(src, { headers: { "API-Key": process.env.SHIPSTATION_V2_KEY || "" } });
+      if (!r.ok) { console.error(`label restage ${rma}: HTTP ${r.status}`); continue; }
+      const f = await core.saveFile({ ticketId: String(a.ticket_id), name, contentType: "application/pdf", buffer: Buffer.from(await r.arrayBuffer()), by: "Buzzin" });
+      await db(`UPDATE hd_files SET staged=true WHERE id=$1`, [f.file_id]);
+      done.push(`${a.ticket_id}: ${name}`);
+    } catch (e) { console.error(`label restage ${rma}:`, e.message); }
+  }
+  const stale = (await db(`UPDATE emily_actions s SET status='dismissed', decided_by='Buzzin', decided_at=now(),
+      result='Not needed — this order already has a return and label'
+    WHERE s.kind='return_propose' AND s.status='staged' AND EXISTS (SELECT 1 FROM hd_returns r WHERE ltrim(r.order_name,'#') = ltrim(s.input->>'order','#')
+      AND r.status <> 'cancelled' AND r.ticket_id::text = s.ticket_id::text) RETURNING s.ticket_id, s.title`)).rows;
+  const q666 = (await db(`SELECT name, staged, sent_at FROM hd_files WHERE ticket_id=9000000666 ORDER BY created_at`)).rows;
+  await core.syncSet("return_label_restage_v1", String(done.length), { at: new Date().toISOString(), done, stale });
+  console.log(`🏷️  return labels re-queued: ${done.length}${done.length ? " — " + done.join(", ") : ""} · stale return proposals retired: ${stale.length}${stale.length ? " — " + stale.map((x) => `${x.ticket_id}: ${x.title}`).join(", ") : ""} · 9000000666 files: ${q666.map((f) => `${f.name} [${f.sent_at ? "sent" : f.staged ? "queued" : "not queued"}]`).join(", ") || "none"}`);
+}
 // Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
 require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
@@ -1000,7 +1031,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

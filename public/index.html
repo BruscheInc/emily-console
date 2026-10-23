@@ -846,7 +846,7 @@ function emilyCard(d){
     </div>
     <div class="ebody">
     <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;margin-bottom:10px">${esc(e.draft||"").replace(/\{\{\s*(DISCOUNT_)?CODE\s*\}\}/gi,'<mark class="ph">code — created when you approve</mark>')}</div>
-    ${actionsBlock(d)}${todoBlock(d)}${(d.pending_files||[]).length?`<div class="acts-em" style="border-color:#158048"><div class="acts-h" style="color:#158048">Attached to your reply</div>${d.pending_files.map(f=>`<div class="act"><span class="t"><b>📎 ${esc(f.name)}</b><small>goes out with the next reply on this ticket</small></span></div>`).join("")}</div>`:""}
+    ${actionsBlock(d)}${todoBlock(d)}${(d.pending_files||[]).length?`<div class="acts-em" style="border-color:#158048"><div class="acts-h" style="color:#158048">Attached to your reply</div>${d.pending_files.map(f=>`<div class="act"><span class="t"><b>📎 ${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(f.name)}</a>`:esc(f.name)}</b><small>goes out with the next reply on this ticket${f.url?" · click to open":""}</small></span></div>`).join("")}</div>`:""}
     </div>
     <div class="efoot">
       <button class="btn" onclick="emilyDecide(${d.id},'approve')">✅ Approve &amp; send</button>
@@ -2042,7 +2042,7 @@ async function openTicket(id){
 const fsize=(n)=>n>=1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round((n||0)/1024))+" KB";
 function attChips(id,files){
   const fs=files||[]; if(!fs.length) return "";
-  return `<div class="attnote">Goes out with the next reply:</div>`+fs.map(f=>`<span class="attchip" title="${esc(f.name)}"><i class="ti ${/^image\//.test(f.content_type||"")?"ti-photo":/pdf/.test(f.content_type||"")||/\.pdf$/i.test(f.name||"")?"ti-file-type-pdf":"ti-file"}"></i> ${esc(f.name)}${f.size?` <small>${fsize(f.size)}</small>`:""}${f.staged?` <button title="Remove" onclick="removeAttachment(${id},'${esc(f.file_id)}')">×</button>`:` <small>(from Emily's action)</small>`}</span>`).join("");
+  return `<div class="attnote">Goes out with the next reply:</div>`+fs.map(f=>`<span class="attchip" title="${esc(f.name)}"><i class="ti ${/^image\//.test(f.content_type||"")?"ti-photo":/pdf/.test(f.content_type||"")||/\.pdf$/i.test(f.name||"")?"ti-file-type-pdf":"ti-file"}"></i> ${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(f.name)}</a>`:esc(f.name)}${f.size?` <small>${fsize(f.size)}</small>`:""}${f.staged?` <button title="Remove" onclick="removeAttachment(${id},'${esc(f.file_id)}')">×</button>`:` <small>(from Emily's action)</small>`}</span>`).join("");
 }
 async function refreshAttachments(id){ try{ const d=await api("/api/ticket/"+id); const el=$("attlist"); if(el) el.innerHTML=attChips(id,d.pending_files); }catch(e){} }
 async function attachFiles(id,input){

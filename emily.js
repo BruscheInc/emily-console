@@ -516,7 +516,7 @@ async function applyAction(id, who, overrides = null) {
     await db(`UPDATE emily_actions SET status='staged', result=NULL, decided_by=NULL, decided_at=NULL WHERE id=$1`, [id]);
     rec.status = "staged"; pendingAct.delete(id);
   }
-  if (rec.status !== "staged") throw new Error(`that action was already ${rec.status}`);
+  if (rec.status !== "staged" && rec.status !== "failed") throw new Error(`that action was already ${rec.status}`);
   const p = overrides ? null : pendingAct.get(id);
   let result;
   try {
@@ -546,7 +546,7 @@ async function pendingFiles(ticketId) {
   for (const a of r.rows) for (const f of a.files || []) if (!f.sent) out.push({ action_id: a.id, ...f });
   // plus anything staff attached in the reply box
   const st = await db(`SELECT id, name, content_type, length(data) size, created_by FROM hd_files WHERE ticket_id=$1 AND staged AND sent_at IS NULL ORDER BY created_at`, [String(ticketId)]).catch(() => ({ rows: [] }));
-  for (const f of st.rows) out.push({ file_id: f.id, name: f.name, content_type: f.content_type, size: Number(f.size), staged: true, by: f.created_by });
+  for (const f of st.rows) out.push({ file_id: f.id, name: f.name, content_type: f.content_type, size: Number(f.size), staged: true, by: f.created_by, url: core.fileUrl("", f.id) });
   return out;
 }
 async function markFilesSent(ticketId) {
@@ -2012,6 +2012,7 @@ async function decide({ ticketId, action, text, who, applyActions = [], override
   if (action !== "edit") {
     try {
       const bad = (await db(`SELECT f.title, f.result FROM emily_actions f WHERE f.ticket_id=$1 AND f.status='failed' AND f.created_at >= $2::timestamptz - interval '15 minutes'
+                               AND f.created_at > coalesce((SELECT max(p.created_at) FROM emily_drafts p WHERE p.ticket_id=f.ticket_id::text AND p.created_at < $2::timestamptz), '-infinity')
                                AND NOT EXISTS (SELECT 1 FROM emily_actions a WHERE a.ticket_id=f.ticket_id AND a.kind=f.kind AND a.status='applied' AND a.decided_at > f.created_at)`, [id, d.created_at])).rows;
       if (bad.length) return { ok: false, error: `"${bad[0].title}" failed (${String(bad[0].result || "").slice(0, 160)}) — the reply wasn't sent because it promises that. Retry the action, or edit the reply.` };
     } catch (_) {}
