@@ -49,7 +49,10 @@ const TRANSIT_14_RULE = "LOST IN TRANSIT — 14-DAY RULE (overrides older wordin
 const OUTLET_SHIPPING_RULE = "OUTLET SHIPPING: Larkspur Baby Outlet has NO free shipping — its prices are already low, and free shipping isn't offered there at this time (no threshold, no code). Say so kindly, and mention that our main store, Larkspur Baby (https://www.larkspurbaby.com), has free shipping on US orders of $75+ — no code needed, it applies automatically at checkout once the cart reaches $75.";
 const NO_OUTLET_DISCOUNTS_RULE = "DISCOUNTS ARE LARKSPUR BABY ONLY: Larkspur Baby Outlet takes and offers NO discounts of any kind — no codes, no sign-up 10%, no military discount, no goodwill or courtesy codes. Never offer or promise a discount for an Outlet order or on the Outlet site. For any question about a specific code, call shopify_check_discount first and answer from it (correct spelling, what it applies to, end date, combining).";
 const MILITARY_RULE = "MILITARY DISCOUNT (Larkspur Baby only): Larkspur Baby (larkspurbaby.com) offers a military discount with the code thankyoumilitary, entered at checkout. It is NOT available at Larkspur Baby Outlet. ONLY share it when the customer explicitly asks about a military discount (or says they are military / a veteran and asks for a discount) — never volunteer it, and never list it when someone asks about discounts, codes or sales in general. When you share it, say it is for Larkspur Baby orders.";
+const SIGNUP_15_RULE = "SIGN-UP DISCOUNT IS 15% (overrides any older \"10% off\" sign-up wording): signing up for Larkspur Baby emails/texts through the website pop-up or footer gives a single-use 15% off code for regular-priced Larkspur Baby items, sent in the welcome email right after sign-up (the welcome text says the code is in the email). Never correct a customer who says 15% down to 10%. If they didn't get it, use shopify_check_subscription with their email (and phone if they gave one): it shows the sign-up, whether the welcome email went out, their usable code, and catches a mistyped email address.";
 const POLICY_PATCHES = [
+  { id: "policy_signup_15_v4_105_11", note: "v4.105.11 — sign-up discount is 15%, not 10%",
+    apply: (key, body) => { if (key !== "rules" || /SIGN-UP DISCOUNT IS 15%/.test(body)) return null; return body.replace(/\s+$/, "") + "\n\n" + SIGNUP_15_RULE; } },
   { id: "policy_no_outlet_discounts_v4_76", note: "v4.76 — no discounts at all at the Outlet; check codes live with shopify_check_discount",
     apply: (key, body) => { if (key !== "rules" || /DISCOUNTS ARE LARKSPUR BABY ONLY/.test(body)) return null; return body.replace(/\s+$/, "") + "\n\n" + NO_OUTLET_DISCOUNTS_RULE; } },
   { id: "policy_military_ask_only_v4_76", note: "v4.76 — military code only when the customer explicitly asks for a military discount",
@@ -336,9 +339,18 @@ async function buzzinSignup(email, phone, brandHint) {
   const em = String(email || "").trim().toLowerCase(); const digits = String(phone || "").replace(/\D/g, "").slice(-10);
   if (!em && digits.length < 10) return { found: false };
   const store = brandHint ? (/OUTLET|LBO/i.test(brandHint) ? "lbo" : /LARKSPUR|LB/i.test(brandHint) ? "lb" : null) : null;
-  const profs = (await db(`SELECT id, store, email, phone, first_name, email_consent, email_consent_at, sms_consent, sms_consent_at, created_at FROM mk_profiles
+  let profs = (await db(`SELECT id, store, email, phone, first_name, email_consent, email_consent_at, sms_consent, sms_consent_at, created_at FROM mk_profiles
     WHERE ((lower(email)=$1 AND $1<>'') OR ($2<>'' AND right(regexp_replace(COALESCE(phone,''),'\\D','','g'),10)=$2)) ${store ? "AND store=$3" : ""} ORDER BY id LIMIT 4`,
     store ? [em, digits, store] : [em, digits])).rows;
+  // Not found by the exact email: they may have mistyped it when signing up (e.g. @yhaoo.com) — look for the same name before the @
+  // on a recent form sign-up.
+  let typo = false;
+  const local = em.split("@")[0];
+  if (!profs.length && local.length >= 5) {
+    profs = (await db(`SELECT id, store, email, phone, first_name, email_consent, email_consent_at, sms_consent, sms_consent_at, created_at FROM mk_profiles
+      WHERE split_part(lower(email),'@',1)=$1 AND lower(email)<>$2 AND 'form' = ANY(sources) ORDER BY created_at DESC LIMIT 3`, [local, em])).rows;
+    typo = profs.length > 0;
+  }
   if (!profs.length) return { found: false };
   const out = [];
   for (const p of profs) {
@@ -351,7 +363,7 @@ async function buzzinSignup(email, phone, brandHint) {
       recent_messages: sends.map((x) => ({ channel: x.channel, subject: x.subject, flow: x.flow, at: x.at, status: x.status, delivered: !!x.delivered, events: x.events || "", reason: x.reason || undefined, sent_to: x.channel === "email" ? x.to_addr : undefined })),
       usable_codes: codes.map((c) => ({ code: c.code, off: c.percent ? `${Number(c.percent)}%` : c.amount ? `$${Number(c.amount)}` : "", expires: c.expires_at })) });
   }
-  return { found: true, profiles: out };
+  return { found: true, profiles: out, ...(typo ? { email_typo: `No sign-up under ${em}, but there is one under ${profs.map((p) => p.email).join(" / ")} — very likely a typo when they signed up, so the welcome email went to the wrong address. Tell them kindly what was typed, give them their code from usable_codes if there is one, and say they'll get our emails at the right address once they sign up with it (or flag for Jose to fix the email on their profile).` } : {}) };
 }
 
 /* ---------------- ShipStation (V1 API — live fulfillment/tracking + approval-gated changes) ----------------

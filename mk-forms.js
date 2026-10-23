@@ -136,6 +136,19 @@ async function issueCoupon(store, form, profile, over = {}) {
 }
 
 /* ---------------- a submission from the store ---------------- */
+// Obvious misspellings of the big email domains (they don't exist, so the welcome email and code would never arrive).
+const DOMAIN_TYPOS = {
+  "yhaoo.com": "yahoo.com", "yaho.com": "yahoo.com", "yahooo.com": "yahoo.com", "yahoo.co": "yahoo.com", "yahoo.con": "yahoo.com", "yahoo.cm": "yahoo.com", "yaoo.com": "yahoo.com", "tahoo.com": "yahoo.com", "uahoo.com": "yahoo.com", "yahho.com": "yahoo.com", "yahoo.om": "yahoo.com",
+  "gmial.com": "gmail.com", "gmal.com": "gmail.com", "gmai.com": "gmail.com", "gamil.com": "gmail.com", "gnail.com": "gmail.com", "gmaill.com": "gmail.com", "gmail.co": "gmail.com", "gmail.con": "gmail.com", "gmail.cm": "gmail.com", "gmail.om": "gmail.com", "gmaik.com": "gmail.com", "gmsil.com": "gmail.com", "gmail.comm": "gmail.com", "fmail.com": "gmail.com",
+  "hotmial.com": "hotmail.com", "hotmal.com": "hotmail.com", "hotmai.com": "hotmail.com", "hotmail.co": "hotmail.com", "hotmail.con": "hotmail.com", "hormail.com": "hotmail.com",
+  "outlok.com": "outlook.com", "outllok.com": "outlook.com", "outlook.co": "outlook.com", "outlook.con": "outlook.com",
+  "iclod.com": "icloud.com", "icoud.com": "icloud.com", "icloud.co": "icloud.com", "icloud.con": "icloud.com", "iclould.com": "icloud.com",
+  "aol.co": "aol.com", "aol.con": "aol.com",
+};
+function fixEmailTypo(e) {
+  const s = String(e || "").trim(), at = s.lastIndexOf("@"); if (at < 1) return s;
+  const dom = s.slice(at + 1).toLowerCase(); return DOMAIN_TYPOS[dom] ? s.slice(0, at + 1) + DOMAIN_TYPOS[dom] : s;
+}
 async function submit(store, b, ip) {
   const form = await get(b.form_id);
   if (!form || form.store !== store) return { error: "This form isn't available." };
@@ -145,6 +158,7 @@ async function submit(store, b, ip) {
   if (status === "draft" && !previewing) return { error: "This form isn't available." };
   const isPreview = status !== "live" || previewing;
   const vals = b.values || {};
+  if (vals.email) vals.email = fixEmailTypo(vals.email);
   // Old store scripts send kind email/phone/question; the v2 script sends kind "step" with every field on the step.
   const hasEmail = !!vals.email, hasPhone = !!vals.phone;
   if (hasPhone && vals.sms_consent_checked !== true) return { error: "Please check the box to agree to texts." };

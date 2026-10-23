@@ -928,7 +928,7 @@ async function labelRestage() {
 }
 // One-time look at recent sign-ups (where they land, whether the welcome email/text went out) — logs only.
 async function signupDiag() {
-  if (await syncGet("signup_diag_v2")) return;
+  if (await syncGet("signup_diag_v3")) return;
   const q = async (sql, a = []) => (await db(sql, a).catch((e) => ({ rows: [{ error: e.message }] }))).rows;
   const subs = await q(`SELECT e.at, f.name form, f.store fstore, e.type, e.preview, p.id pid, p.email, p.phone IS NOT NULL has_phone, p.created_at, p.email_consent, p.sms_consent, p.sources,
       (SELECT string_agg(l.name, ', ') FROM mk_list_members m JOIN mk_lists l ON l.id=m.list_id WHERE m.profile_id=p.id) lists,
@@ -941,8 +941,13 @@ async function signupDiag() {
   const week = await q(`SELECT count(*) FILTER (WHERE e.type='submitted_email' AND NOT e.preview) emails, count(*) FILTER (WHERE e.type='submitted_phone' AND NOT e.preview) phones,
       count(DISTINCT e.profile_id) FILTER (WHERE NOT e.preview AND p.created_at < e.at - interval '1 hour') already_existed
     FROM mk_form_events e LEFT JOIN mk_profiles p ON p.id=e.profile_id WHERE e.at > now() - interval '7 days'`);
-  const forms = await q(`SELECT id, store, name, status, list_id FROM mk_forms WHERE ab_of IS NULL ORDER BY id`);
-  await core.syncSet("signup_diag_v2", "1", { at: new Date().toISOString() });
+  const forms = await q(`SELECT id, store, name, status, list_id, coupon FROM mk_forms WHERE ab_of IS NULL ORDER BY id`);
+  const lists = await q(`SELECT l.id, l.store, l.name, l.archived, l.deleted_by, (SELECT count(*) FROM mk_list_members m WHERE m.list_id=l.id)::int members,
+      (SELECT count(*) FROM mk_list_members m WHERE m.list_id=l.id AND m.added_at > now() - interval '7 days')::int added_7d FROM mk_lists l ORDER BY l.id`);
+  const flows = await q(`SELECT id, name, status, trigger FROM mk_flows WHERE NOT archived AND deleted_at IS NULL AND status <> 'draft' ORDER BY id`);
+  console.log("🔎 SIGNUP-DIAG lists: " + JSON.stringify(lists));
+  console.log("🔎 SIGNUP-DIAG flows: " + JSON.stringify(flows));
+  await core.syncSet("signup_diag_v3", "1", { at: new Date().toISOString() });
   console.log("🔎 SIGNUP-DIAG forms: " + JSON.stringify(forms));
   console.log("🔎 SIGNUP-DIAG week: " + JSON.stringify(week));
   console.log("🔎 SIGNUP-DIAG kenzie: " + JSON.stringify(ken) + " sends: " + JSON.stringify(kenSends));

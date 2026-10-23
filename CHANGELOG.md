@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.11
+- Emily (email + website chat) now knows every factory measurement sheet: Women's Long and Short Sleeve Pajamas, Men's Long and Short Lounge Sets, Sleep Bag, Sleep Bag Walker, Zipper Romper, Convertible One Piece, Zipper Footie, and kids' Long and Short Sleeve Pajamas. She answers length, inseam, sleeve, rise and width questions in inches. Styles without a sheet (Biker Short Set, Shortall, Ruffle Shorty Romper, headbands, blankets…) still go to the team.
+- Sign-up forms fix obviously misspelled email domains (yhaoo.com → yahoo.com, gmial.com → gmail.com, …) so the welcome email and code actually arrive.
+- Emily finds a sign-up even when the customer mistyped their email when signing up, tells them, and can give them their code.
+- Emily: the sign-up discount is 15% (she was still saying 10%).
+- One more one-time sign-up check in the log (lists and live flows).
+
 ## 4.105.10
 - One-time check of recent sign-ups in the Railway log (which form, which profile, lists, and whether the welcome email/text went out), to find where new sign-ups are landing. Nothing changes in the app.
 
