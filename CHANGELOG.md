@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.104.1
+- Email editor header like Klaviyo's: an exit icon at the top left (not a second back arrow) and an Exit button next to Save. The panel's own back arrow stays put while you scroll.
+
 ## 4.104.0
 - Email editor mobile view looks like Klaviyo's: the email is shown at phone width (375px) on the gray canvas, without the phone frame, and the block toolbar sits outside the email instead of on top of it.
 

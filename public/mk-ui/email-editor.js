@@ -19,7 +19,7 @@ async function editTemplate(el, id) {
   el.innerHTML = `<style>${EDITOR_CSS}</style>
   <div class="kx">
     <div class="kx-top">
-      <a href="#templates" class="kx-ib" title="Back to templates">${ICON('arrow-left')}</a>
+      <a href="#templates" class="kx-ib kx-exit" title="Exit to templates"><i class="ti ti-logout" style="transform:scaleX(-1)"></i></a>
       <input id="kxName" class="kx-name" value="${esc(t.name || '')}" aria-label="Email name">
       <span class="pill off">${t.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'}</span>
       <span class="sp"></span>
@@ -27,6 +27,7 @@ async function editTemplate(el, id) {
       <button class="btn" id="kxPrev">${ICON('eye')} Preview</button>
       <button class="btn" id="kxTest">${ICON('send')} Send test</button>
       <button class="btn" id="kxCopy">${ICON('copy')} Duplicate</button>
+      <a class="btn" href="#templates" id="kxExit">Exit</a>
       <button class="btn pri" id="kxSave">Save</button>
     </div>
     <div class="kx-sub">
