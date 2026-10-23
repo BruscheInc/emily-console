@@ -299,6 +299,8 @@ async function renderSettings(el) {
       <table><thead><tr><th>Store</th><th>Email</th><th>Texts</th></tr></thead><tbody><tr><td>Larkspur Baby</td><td>${sw('lb', 'email')}</td><td>${sw('lb', 'sms')}</td></tr><tr><td>Outlet</td><td>${sw('lbo', 'email')}</td><td>${sw('lbo', 'sms')}</td></tr></tbody></table></div>
     <div class="card"><b>Internal test list</b><p class="sub" style="margin:4px 0 10px">Only these emails and phone numbers can receive tests while sending is off. One per line.</p>
       <textarea id="tl" rows="5" style="width:100%">${esc((s.test_list || []).join('\n'))}</textarea></div>
+    <div class="card"><b>Products hidden from emails</b><p class="sub" style="margin:4px 0 10px">A product whose name, handle or SKU contains any of these never shows in an email: not in carts, orders or product blocks. One per line.</p>
+      <textarea id="hp" rows="4" style="width:100%" placeholder="Package Protection">${esc((s.hidden_products || []).join('\n'))}</textarea></div>
     <div class="card"><b>Texts: quiet hours</b><p class="sub" style="margin:4px 0 10px">No marketing texts between these times, in each person's time zone.</p>
       <div style="display:flex;gap:8px;align-items:center"><input type="time" id="qs" value="${esc(s.quiet_hours.start)}"> to <input type="time" id="qe" value="${esc(s.quiet_hours.end)}"></div></div>
     <div class="card"><b>Smart sending</b><p class="sub" style="margin:4px 0 10px">Skip anyone who got a marketing message within this many hours.</p>
@@ -316,7 +318,7 @@ async function renderSettings(el) {
     const sending = { lb: {}, lbo: {} };
     el.querySelectorAll('.sw input[data-k]').forEach((i) => { sending[i.dataset.k][i.dataset.ch] = i.checked; });
     try {
-      await api('/api/mk/settings', { method: 'PUT', body: JSON.stringify({ coupons: { percent: $('cpp').value, days: $('cpd').value, prefix: $('cpx').value }, sending, test_list: $('tl').value.split(/\n|,/).map((x) => x.trim()).filter(Boolean), quiet_hours: { start: $('qs').value, end: $('qe').value }, smart_sending_hours: { email: $('se').value, sms: $('ss').value }, attribution: { email_click_days: $('ae').value, sms_click_days: $('as').value } }) });
+      await api('/api/mk/settings', { method: 'PUT', body: JSON.stringify({ coupons: { percent: $('cpp').value, days: $('cpd').value, prefix: $('cpx').value }, sending, test_list: $('tl').value.split(/\n|,/).map((x) => x.trim()).filter(Boolean), hidden_products: $('hp').value.split(/\n/).map((x) => x.trim()).filter(Boolean), quiet_hours: { start: $('qs').value, end: $('qe').value }, smart_sending_hours: { email: $('se').value, sms: $('ss').value }, attribution: { email_click_days: $('ae').value, sms_click_days: $('as').value } }) });
       toast('Saved'); go();
     } catch (e) { toast(e.message, 1); go(); }
   };

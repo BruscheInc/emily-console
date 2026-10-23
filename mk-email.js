@@ -83,10 +83,20 @@ const sign = (s) => crypto.createHmac("sha256", SECRET).update(s).digest("base64
 const tokenFor = (profileId, store) => { const p = `${profileId}.${store}`; return `${Buffer.from(p).toString("base64url")}.${sign(p)}`; };
 function readToken(t) { try { const [b, s] = String(t).split("."); const p = Buffer.from(b, "base64url").toString(); if (sign(p) !== s) return null; const [id, store] = p.split("."); return { id: Number(id), store }; } catch (_) { return null; } }
 
+/* ---------------- products that never show in emails (package protection etc.) ---------------- */
+let HIDE = { t: 0, words: [] };
+async function hiddenWords() {
+  if (Date.now() - HIDE.t < 30000) return HIDE.words;
+  try { const st = await MK().settings(); HIDE = { t: Date.now(), words: (st.hidden_products || []).map((w) => String(w).toLowerCase().trim()).filter(Boolean) }; } catch (_) {}
+  return HIDE.words;
+}
+const isHidden = (p, words) => { if (!p || !words.length) return false; const hay = [p.title, p.product_title, p.ProductName, p.name, p.handle, p.sku, p.SKU, p.product && p.product.title, p.url].filter(Boolean).join(" ").toLowerCase(); return words.some((w) => hay.includes(w)); };
+async function visibleItems(list) { const w = await hiddenWords(); return (list || []).filter((x) => !isHidden(x, w)); }
+
 /* ---------------- products for product blocks ---------------- */
 async function catalogProducts(store, { ids = [], handles = [], limit = 3, bestsellers = false } = {}) {
   let cat = null; try { cat = await require("./catalog").get(store); } catch (_) {}
-  const all = (cat && cat.products) || [];
+  const hw = await hiddenWords(); const all = ((cat && cat.products) || []).filter((p) => !isHidden(p, hw));
   let pick = handles.length ? handles.map((h) => all.find((p) => p.handle === h)).filter(Boolean) : all.filter((p) => ids.length && ids.includes(p.id));
   if (!pick.length && bestsellers) pick = all.filter((p) => p.available !== false && p.image).slice(0, limit);
   return pick.slice(0, limit).map((p) => ({ title: p.title, url: p.url || "", image: p.image ? p.image + (p.image.includes("?") ? "&" : "?") + "width=400" : "", price: p.price, compare_at: p.compare_at || null, handle: p.handle }));
@@ -260,6 +270,7 @@ async function sampleCart(store, profile) {
 }
 async function contextFor(store, profile, extra = {}) {
   const b = await brand(store);
+  extra = await withoutHidden(extra);
   const tok = profile && profile.id ? tokenFor(profile.id, store) : "preview";
   return {
     first_name: profile && profile.first_name, last_name: profile && profile.last_name, email: profile && profile.email, phone: profile && profile.phone,
@@ -273,6 +284,14 @@ async function contextFor(store, profile, extra = {}) {
   };
 }
 /** Cart/checkout data: event.extra.line_items, event.Items, checkout_url… the way Klaviyo's cart emails read them. */
+async function withoutHidden(extra) {
+  const w = await hiddenWords(); if (!w.length) return extra;
+  const out = { ...extra };
+  if (Array.isArray(extra.items)) out.items = extra.items.filter((x) => !isHidden(x, w));
+  if (extra.event && typeof extra.event === "object") { const ev = { ...extra.event }; for (const k of ["Items", "items"]) if (Array.isArray(ev[k])) ev[k] = ev[k].filter((x) => !isHidden(x, w));
+    if (ev.extra && Array.isArray(ev.extra.line_items)) ev.extra = { ...ev.extra, line_items: ev.extra.line_items.filter((x) => !isHidden(x, w)) }; out.event = ev; }
+  return out;
+}
 function cartFields(extra) {
   const ev = extra.event && typeof extra.event === "object" ? extra.event : cartEvent(extra.items || [], { checkout_url: extra.checkout_url, value: extra.value });
   const items = (ev.extra && ev.extra.line_items) || (extra.items || []).map(cartItem);
@@ -325,7 +344,7 @@ function visibleFor(vis, scope) {
 /** Products for every product block, looked up before the (synchronous) render. */
 async function productsForDoc(store, doc, ctx) {
   const out = {}; let cat = null; try { cat = await require("./catalog").get(store); } catch (_) {}
-  const all = (cat && cat.products) || [];
+  const hw = await hiddenWords(); const all = ((cat && cat.products) || []).filter((p) => !isHidden(p, hw));
   const shape = (p) => ({ title: p.title, url: p.url || "", image: p.image ? p.image + (p.image.includes("?") ? "&" : "?") + "width=600" : "", price: p.price, compare_at: p.compare_at || null, handle: p.handle, description: p.description || "" });
   const blocks = []; MKDoc.walk(doc, (n, kind) => { if (kind === "block" && n.type === "product") blocks.push(n); });
   for (const blk of blocks) {
@@ -649,7 +668,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     if (!guard(req, res)) return;
     try { let cat = null; try { cat = await require("./catalog").get(store(req.query.store) || "lb"); } catch (_) {}
       const q = String(req.query.q || "").trim().toLowerCase(), want = String(req.query.handles || "").split(",").filter(Boolean);
-      const all = (cat && cat.products) || [];
+      const hw = await hiddenWords(); const all = ((cat && cat.products) || []).filter((p) => !isHidden(p, hw));
       const list = want.length ? want.map((h) => all.find((p) => p.handle === h)).filter(Boolean) : req.query.feed ? all.filter((p) => p.available !== false && p.image) : all.filter((p) => !q || String(p.title || "").toLowerCase().includes(q) || String(p.handle || "").includes(q));
       res.json({ products: list.slice(0, 30).map((p) => ({ handle: p.handle, title: p.title, url: p.url || "", image: p.image ? p.image + (p.image.includes("?") ? "&" : "?") + "width=600" : "", price: p.price, compare_at: p.compare_at || null, available: p.available !== false })), loaded: !!cat }); } catch (e) { fail(res, e); }
   });
@@ -797,4 +816,4 @@ async function init() {
   }
 }
 
-module.exports = { usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };
+module.exports = { visibleItems, hiddenWords, usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };

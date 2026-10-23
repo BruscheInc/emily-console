@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.102.0
+- Settings → Products hidden from emails: any product whose name, handle or SKU contains one of these words never shows in an email — not in carts, orders, product blocks or the product picker. Starts with Package Protection and Shipping Protection.
+
 ## 4.101.1
 - Cart tables imported from Klaviyo read Klaviyo's own repeat setting (row_content_repeat: repeat for / item alias) and its dynamic image field directly.
 

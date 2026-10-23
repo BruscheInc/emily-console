@@ -58,6 +58,7 @@ async function migrate() {
 const DEFAULT_SETTINGS = {
   sending: { lb: { email: false, sms: false }, lbo: { email: false, sms: false } },
   test_list: [],                 // internal addresses / phones that may receive tests while sending is off
+  hidden_products: ["Package Protection", "Shipping Protection"],   // never shown in emails (carts, orders, product blocks)
   quiet_hours: { start: "21:00", end: "08:00" },
   smart_sending_hours: { email: 16, sms: 24 },
   attribution: { email_click_days: 5, sms_click_days: 1 },
