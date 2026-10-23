@@ -993,6 +993,16 @@ async function flowEmailNames() {
 }
 // One-time look at the Welcome Series + 10% flow (#12) and everything that states a sign-up percent — logs only.
 // One-time: leftover "15%" wording in the 10% welcome series (a text step's name and the "ends soon" email's preview).
+async function thankYouCheck() {
+  if (await syncGet("thank_you_check_v1")) return;
+  const CP = require("./mk-coupons");
+  for (const t of (await db(`SELECT id, name, subject, blocks, doc, updated_at, updated_by FROM mk_templates WHERE id=20`)).rows) {
+    let raw = JSON.stringify([t.blocks, t.doc]).replace(/\\n/g, " ").replace(/\\"/g, '"').replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+    const hits = [...new Set((raw.match(/[^."{}]{0,70}(\d{1,2}\s?%|\$\s?\d+|code|coupon|expire|valid)[^."{}]{0,70}/gi) || []).map((x) => x.trim()))].filter((x) => !/width|height|px|important/i.test(x)).slice(0, 25);
+    console.log(`🔎 THANKYOU ${t.id} ${t.name} · updated ${t.updated_at && t.updated_at.toISOString()} by ${t.updated_by}: uses_coupon=${CP.usesCoupon(t)} offers=${JSON.stringify(CP.offersIn(t))} text=${JSON.stringify(hits)}`);
+  }
+  await core.syncSet("thank_you_check_v1", "1", {});
+}
 async function welcome10Fix() {
   if (await syncGet("welcome_10_fix_v1")) return;
   const f = (await db(`SELECT id, graph FROM mk_flows WHERE id=12`)).rows[0]; let n = 0;
@@ -1136,7 +1146,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
