@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.104.6
+- Flows: the started-checkout flow is now "Abandoned Checkout", and a new "Abandoned Cart" (draft) sends the same messages when someone adds to cart. Anyone who orders or starts checkout leaves the cart flow, so they only get the checkout reminders.
+
 ## 4.104.5
 - Text preview: cart texts show a real recent checkout link (it opens), and the length counts the short tracked link that real texts carry.
 

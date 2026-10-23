@@ -497,6 +497,23 @@ async function buildAbandonedCart(store, who) {
   return { id: f.id, emails: emails.length, from: src && src.id, text: !!texts[0] };
 }
 
+/** Abandoned Checkout = Started Checkout; Abandoned Cart = Added to Cart (same messages). Someone who goes on to start
+ *  checkout leaves the cart flow, so they only get the checkout reminders. */
+async function splitCartCheckout(store, who) {
+  const co = (await db(`SELECT * FROM mk_flows WHERE store=$1 AND name IN ('Abandoned Cart','Abandoned Checkout') AND trigger->>'event'='started_checkout' AND NOT archived AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`, [store])).rows[0];
+  if (!co) return { skipped: "no started-checkout flow named Abandoned Cart" };
+  if (co.name !== "Abandoned Checkout") await db(`UPDATE mk_flows SET name='Abandoned Checkout', updated_at=now() WHERE id=$1`, [co.id]);
+  const ex = (await db(`SELECT id FROM mk_flows WHERE store=$1 AND trigger->>'event'='added_to_cart' AND name='Abandoned Cart' AND NOT archived AND deleted_at IS NULL`, [store])).rows[0];
+  if (ex) return { checkout: co.id, cart: ex.id, note: "cart flow already there" };
+  const exit = { match: "any", conditions: [{ type: "event", event: "placed_order", op: "at_least", value: 1, window: { kind: "since_start" } }, { type: "event", event: "started_checkout", op: "at_least", value: 1, window: { kind: "since_start" } }] };
+  const f = (await db(`INSERT INTO mk_flows (store, name, status, trigger, entry_filter, exit_filter, reentry, graph, source, notes, updated_by) VALUES ($1,'Abandoned Cart','draft',$2,$3,$4,$5,$6,'buzzin',$7,$8) RETURNING id`,
+    [store, JSON.stringify({ type: "event", event: "added_to_cart" }), co.entry_filter ? JSON.stringify(co.entry_filter) : null, JSON.stringify(exit), JSON.stringify(co.reentry || { mode: "days", days: 7 }), JSON.stringify(co.graph),
+      `Same messages as Abandoned Checkout (#${co.id}), started by Added to Cart. Leaves when they order or start checkout (then the checkout flow takes over). Needs store activity on (Settings → Record store activity). Turn it on when ready.`, who])).rows[0];
+  await db(`INSERT INTO mk_flow_versions (flow_id, version, graph, by_user) VALUES ($1,1,$2,$3) ON CONFLICT DO NOTHING`, [f.id, JSON.stringify(co.graph), who]);
+  FLOW_CACHE.t = 0;
+  return { checkout: co.id, cart: f.id };
+}
+
 /* ---------------- starters ---------------- */
 const STARTER_NAMES = { welcome: "Welcome series", abandoned_checkout: "Abandoned checkout", browse: "Browse abandonment", post_purchase: "Post-purchase thank you", size_up: "Size-up reminder", winback: "Win-back" };
 const STARTERS = {
@@ -595,6 +612,10 @@ async function init() {
   // One-time (Jose asked): a clean abandoned cart flow built from the imported Klaviyo one, with email and text. Left as a draft to review and turn on.
   if (!(await core.syncGet("mk_abandoned_cart_flow_v1").catch(() => null))) {
     setTimeout(() => buildAbandonedCart("lb", "claude").then((r) => core.syncSet("mk_abandoned_cart_flow_v1", new Date().toISOString(), r).then(() => console.log(`🛒 Abandoned cart flow: ${JSON.stringify(r)}`))).catch((e) => console.error("abandoned cart flow:", e.message)), 75000);
+  }
+  // One-time (Jose asked): the started-checkout flow is "Abandoned Checkout"; a copy triggered by Added to Cart is "Abandoned Cart".
+  if (!(await core.syncGet("mk_cart_checkout_split_v1").catch(() => null))) {
+    setTimeout(() => splitCartCheckout("lb", "claude").then((r) => core.syncSet("mk_cart_checkout_split_v1", new Date().toISOString(), r).then(() => console.log(`🛒 Cart / checkout flows: ${JSON.stringify(r)}`))).catch((e) => console.error("cart/checkout flows:", e.message)), 90000);
   }
   if (!(await core.syncGet("mk_klaviyo_flows_v1").catch(() => null))) {
     setTimeout(async () => { try { const t = await core.syncGet("mk_klaviyo_templates_v1").catch(() => null); if (!t) return; const r = await importKlaviyoFlows("lb", "import"); if (r.length) { await core.syncSet("mk_klaviyo_flows_v1", new Date().toISOString(), { n: r.length }); console.log(`🔀 Marketing: ${r.length} Klaviyo flows imported as drafts · ${r.map((x) => `${x.name} ${x.klaviyo_steps}→${x.steps}`).join(" · ")}`); } } catch (e) { console.error("Klaviyo flows import:", e.message); } }, 120 * 1000);
