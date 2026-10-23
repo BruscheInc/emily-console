@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.3
+- Emily: when someone asks about signing up, or says they didn't get the welcome email or code, she now checks Buzzin's own sign-up record (by email or phone): email/text consent, when they signed up, the recent marketing emails and texts with delivered/bounced, and their own still-usable code. She no longer tells someone with a Buzzin sign-up to sign up again; if the welcome email was delivered she points them to Promotions/spam and can give them their code; if it bounced she flags it for Jose.
+
 ## 4.105.2
 - Flow emails and texts can use their own short-link domain (go.larkspurbaby.com) instead of returns.larkspurbaby.com; it switches on once the domain is live (LINK_HOST_LB). Campaigns keep the usual address.
 

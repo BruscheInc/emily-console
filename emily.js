@@ -300,9 +300,9 @@ async function shopifyCheckStock(term, brandHint) {
 // questions. Reads the customer's marketing-consent state so Emily can CONFIRM an already-subscribed
 // customer is on the list instead of telling them to sign up again.
 const CUSTOMER_QUERY = `query($q:String!){customers(first:3,query:$q){edges{node{ firstName numberOfOrders defaultEmailAddress{ emailAddress marketingState marketingOptInLevel } }}}}`;
-async function shopifyCheckSubscription(email, brandHint) {
+async function shopifyCheckSubscription(email, brandHint, phone) {
   const q = (email || "").trim();
-  if (!q || !q.includes("@")) return { error: "Provide the customer's email to check subscription status." };
+  if ((!q || !q.includes("@")) && !phone) return { error: "Provide the customer's email (or phone) to check subscription status." };
   if (!STORES.length) return { error: "No Shopify stores configured." };
   // Route to a brand's store if hinted; otherwise check every store.
   let stores = STORES;
@@ -323,9 +323,35 @@ async function shopifyCheckSubscription(email, brandHint) {
       }
     } catch (e) { errors.push({ store: st.brand, error: e.message }); console.error(`  subscription check ${st.brand} ${q} — ${e.message}`); }
   }
-  console.log(`  subscription check "${q}" → customers=${out.length}${errors.length ? ` errors=${errors.length}` : ""}`);
+  // Buzzin's own marketing sign-ups (the site's sign-up form and texts live here, not in Shopify).
+  const buzzin = await buzzinSignup(q, phone, brandHint).catch((e) => ({ error: e.message }));
+  console.log(`  subscription check "${q}" → customers=${out.length} buzzin=${buzzin && buzzin.found ? buzzin.profiles.length : 0}${errors.length ? ` errors=${errors.length}` : ""}`);
+  if (buzzin && buzzin.found) return { buzzin, shopify: out, note: "Buzzin is the source of truth for email/text sign-ups. If email_subscribed=true they ARE signed up — never tell them to sign up again." };
   if (out.length) return out;
-  return { note: `No customer profile found for "${q}"${errors.length ? ` (couldn't reach: ${[...new Set(errors.map((e) => e.store))].join(", ")})` : ""}. They may not have a profile yet — treat as NOT-yet-subscribed and give the signup steps.`, searched: q };
+  return { note: `No sign-up found for "${q}" in Buzzin or Shopify${errors.length ? ` (couldn't reach: ${[...new Set(errors.map((e) => e.store))].join(", ")})` : ""}. Treat as NOT-yet-subscribed and give the signup steps.`, searched: q };
+}
+/** The person's Buzzin marketing profile: consent, when they signed up, the last marketing emails we sent them
+ *  (with delivery result), and their own welcome/flow discount codes that are still usable. */
+async function buzzinSignup(email, phone, brandHint) {
+  const em = String(email || "").trim().toLowerCase(); const digits = String(phone || "").replace(/\D/g, "").slice(-10);
+  if (!em && digits.length < 10) return { found: false };
+  const store = brandHint ? (/OUTLET|LBO/i.test(brandHint) ? "lbo" : /LARKSPUR|LB/i.test(brandHint) ? "lb" : null) : null;
+  const profs = (await db(`SELECT id, store, email, phone, first_name, email_consent, email_consent_at, sms_consent, sms_consent_at, created_at FROM mk_profiles
+    WHERE ((lower(email)=$1 AND $1<>'') OR ($2<>'' AND right(regexp_replace(COALESCE(phone,''),'\\D','','g'),10)=$2)) ${store ? "AND store=$3" : ""} ORDER BY id LIMIT 4`,
+    store ? [em, digits, store] : [em, digits])).rows;
+  if (!profs.length) return { found: false };
+  const out = [];
+  for (const p of profs) {
+    const sends = (await db(`SELECT s.channel, s.subject, s.status, s.reason, COALESCE(s.sent_at, s.created_at) AS at, s.to_addr, (s.meta->>'delivered')='true' AS delivered,
+        (SELECT string_agg(DISTINCT e.type, ',') FROM mk_send_events e WHERE e.send_id=s.id) AS events, f.name AS flow
+      FROM mk_sends s LEFT JOIN mk_flows f ON f.id=s.flow_id WHERE s.profile_id=$1 ORDER BY s.id DESC LIMIT 8`, [p.id]).catch(() => ({ rows: [] }))).rows;
+    const codes = (await db(`SELECT code, percent, amount, expires_at FROM mk_coupons WHERE profile_id=$1 AND real AND redeemed_at IS NULL AND removed_at IS NULL AND (expires_at IS NULL OR expires_at > now()) ORDER BY id DESC LIMIT 3`, [p.id]).catch(() => ({ rows: [] }))).rows;
+    out.push({ store: p.store, email: p.email, phone: p.phone ? `…${String(p.phone).slice(-4)}` : null, signed_up_at: p.created_at,
+      email_subscribed: p.email_consent === "subscribed", email_consent: p.email_consent, sms_subscribed: p.sms_consent === "subscribed",
+      recent_messages: sends.map((x) => ({ channel: x.channel, subject: x.subject, flow: x.flow, at: x.at, status: x.status, delivered: !!x.delivered, events: x.events || "", reason: x.reason || undefined, sent_to: x.channel === "email" ? x.to_addr : undefined })),
+      usable_codes: codes.map((c) => ({ code: c.code, off: c.percent ? `${Number(c.percent)}%` : c.amount ? `$${Number(c.amount)}` : "", expires: c.expires_at })) });
+  }
+  return { found: true, profiles: out };
 }
 
 /* ---------------- ShipStation (V1 API — live fulfillment/tracking + approval-gated changes) ----------------
@@ -1543,8 +1569,8 @@ const TOOLS = [
     input_schema: { type: "object", properties: { query: { type: "string" }, brand: { type: "string", description: "Larkspur Baby or Larkspur Baby Outlet" }, product_url: { type: "string" } }, required: ["query"] } },
   { name: "shopify_check_stock", description: "Check LIVE stock for a PRODUCT and each of its sizes/variants. Use this WHENEVER a customer asks whether an item/print/size is available, asks what sizes you have, or BEFORE you offer or refuse a replacement in a specific print/size. Pass a product name or print (e.g. 'Puppy Love') or a SKU; optionally a brand hint ('Larkspur Baby' / 'Outlet' / 'Bumbunny'). Returns each size with in_stock (true/false) and quantity. NEVER decide replacement availability from an order's line items — always confirm here first.",
     input_schema: { type: "object", properties: { query: { type: "string" }, brand: { type: "string" } }, required: ["query"] } },
-  { name: "shopify_check_subscription", description: "Check whether a customer is ALREADY subscribed to email / newsletter marketing. Use this WHENEVER a customer asks to sign up for emails, to be added to the newsletter/mailing list, or whether they're on the list. Pass the customer's email (optionally a brand hint). Returns subscribed true/false and marketing_state. If subscribed=true, CONFIRM they're already on the list instead of telling them to sign up.",
-    input_schema: { type: "object", properties: { email: { type: "string" }, brand: { type: "string" } }, required: ["email"] } },
+  { name: "shopify_check_subscription", description: "Check whether a customer is ALREADY subscribed to email / newsletter marketing. Use this WHENEVER a customer asks to sign up for emails, to be added to the newsletter/mailing list, or whether they're on the list. Also use it when someone says they didn't get the welcome email or their discount code. Pass the customer's email and/or phone (optionally a brand hint). Returns Buzzin's sign-up record (email/text consent, when they signed up, the last marketing emails/texts sent with delivered/bounced, and their own still-usable discount codes) plus Shopify's marketing state. If subscribed, CONFIRM they're already on the list instead of telling them to sign up.",
+    input_schema: { type: "object", properties: { email: { type: "string" }, phone: { type: "string" }, brand: { type: "string" } } } },
   { name: "shipstation_lookup", description: "LIVE shipping status from ShipStation (the fulfillment system) by order number or customer email: order status, on-hold, the ship-to address on file, carrier, service, tracking number, ship date, and whether the address can still be changed (only before it ships). Use for any 'where is my order / tracking / did it ship / can I change my address' question — it's the source of truth for fulfillment.",
     input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
   { name: "shopify_propose_email_change", description: "STAGE a change to the EMAIL on an order (Shopify + ShipStation) for Jose's one-click approval, so order and shipping emails go to the right inbox. Use whenever a customer asks to update/correct the email on an order (typo at checkout, old address). Pass the order number, the new email, and ticket_id. Handle it yourself — never leave it as a to-do for the team.",
@@ -1581,7 +1607,7 @@ async function runTool(name, input) {
     if (name === "shopify_lookup_order") return await shopifyLookupOrder(input.query);
     if (name === "shopify_check_stock") return await shopifyCheckStock(input.query, input.brand);
     if (name === "product_info") { const key = /outlet|lbo/i.test(String(input.brand || "")) ? "lbo" : "lb"; const r = await require("./catalog").search(key, String(input.query || ""), { path: String(input.product_url || "") }); return r || { note: "Product knowledge isn't loaded yet — use shopify_check_stock." }; }
-    if (name === "shopify_check_subscription") return await shopifyCheckSubscription(input.email, input.brand);
+    if (name === "shopify_check_subscription") return await shopifyCheckSubscription(input.email, input.brand, input.phone);
     if (name === "shipstation_lookup") return await shipstationLookup(input.query);
     if (name === "shipstation_propose_change") return await shipstationProposeChange(input);
     if (name === "shopify_propose_email_change") return await shopifyProposeEmailChange(input);
@@ -1663,7 +1689,8 @@ const DEFAULT_RULES =
   `STOCK CHECKS — use the shopify_check_stock tool for the SPECIFIC product + size in question. NEVER judge availability from an order's line-item availableForSale — that only reflects the exact variant they already bought, NOT whether a given print/size is available for a replacement. Whenever a customer asks "is X available / what sizes do you have," or before you say ANY item/size is in or out of stock, call shopify_check_stock (pass the print/product name and the brand) and read that size's in_stock/qty. Do NOT tell a customer something is sold out unless shopify_check_stock shows in_stock=false for that exact size. ` +
   `DAMAGED/DEFECTIVE item (torn, ripped, broken snaps, holes): empathize and confirm which item(s). Use shopify_check_stock on that exact print + size BEFORE promising OR refusing a replacement — NEVER promise or deny based on the order alone. If a photo isn't provided yet, ask for one; if it's already attached, thank them (don't re-ask). Then branch on the stock-check result: IN STOCK (in_stock=true) → tell them a replacement of the same item is on its way. OUT OF STOCK (in_stock=false for that size) → do NOT promise the same item; instead warmly invite them to pick a different, IN-STOCK item as their free replacement and we'll ship that out (and offer store credit as an alternative if they'd prefer — a refund is only an option when the order does NOT include Package Protection; if it has Package Protection, the alternatives are replacement or store credit ONLY, never a refund). (Money/inventory move → escalate=true for Jose, but the customer-facing draft is the confident, correct resolution — same-item replacement if in stock, choose-an-in-stock-alternative if not.) ` +
   `CANCELLATIONS / ADDRESS CHANGES — RETENTION FIRST: never make cancelling easy and never confirm a cancellation yourself. Always find the reason first and try to solve it (customer retention is a top priority). If the shipping ADDRESS is wrong, do NOT cancel — offer to correct the shipping address (ask for the correct one, reassure it'll be updated before it ships). If they want to cancel, warmly ask why and address the reason (sizing, timeline, mistake, price) before anything else. Only after a sincere attempt to help, if they still want to cancel, acknowledge kindly and set escalate=true for Jose — do not state the order as cancelled. ` +
-  `EMAIL / NEWSLETTER SIGN-UP — when a customer asks to sign up for emails, to be added to the newsletter/mailing list, or whether they're already subscribed: FIRST call shopify_check_subscription with their email (pass the brand). If subscribed=true, warmly CONFIRM they're already on our list and all set to receive updates — do NOT tell them to go sign up again. If subscribed=false or no profile is found, give the quick steps: enter their email in the footer of the brand's website to subscribe. This is an info answer, not a money move → escalate=false. ` +
+  `EMAIL / NEWSLETTER SIGN-UP — when a customer asks to sign up for emails, to be added to the newsletter/mailing list, or whether they're already subscribed: FIRST call shopify_check_subscription with their email (pass the brand). Buzzin's record (buzzin.profiles) is the source of truth for sign-ups made through the website form and texts; Shopify's state may lag. If email_subscribed=true (or Shopify subscribed=true), warmly CONFIRM they're already on our list — do NOT tell them to sign up again (signing up again does NOT resend the welcome email). Only if neither shows a sign-up, give the quick steps: enter their email in the footer of the brand's website. ` +
+  `"I DIDN'T GET THE WELCOME EMAIL / MY CODE": call shopify_check_subscription with their email and/or phone. If recent_messages shows the welcome email delivered=true, tell them it was sent (say when) to the address on file and to check the Promotions tab and spam folder; if usable_codes has their code, you MAY give them that exact code in the reply so they don't have to dig. If the email bounced or failed, or the address on file looks mistyped, say so kindly, ask them to confirm the right email, and set escalate=true so Jose can fix it. Never invent a code. Info answer → escalate=false unless it bounced/failed. ` +
   `DISCOUNTS / COUPONS / 10% OFF (info question, not a money move): the 10% off is for REGULAR-PRICED Larkspur Baby items only (customers get the code by signing up through the website footer). The MEGALODON SALE items have now MOVED to Larkspur Baby Outlet (LBO) — those are FINAL SALE and do NOT qualify for the 10%, any coupon, or any further discount. If a customer says the sign-up or discount link isn't working, reassure them warmly and point them to the footer sign-up. Do NOT invent or promise a specific code yourself (issuing a code is a money move → use shopify_propose_discount to stage one for Jose's approval only if a courtesy is warranted); but you CAN and SHOULD state this policy directly. ` +
   `FREE SHIPPING (Larkspur Baby): free shipping is available on ALL US Larkspur Baby orders of $75+ USD AFTER DISCOUNTS — i.e., the order subtotal AFTER any codes/discounts must be $75 or more. It applies AUTOMATICALLY at checkout once the threshold is met — the customer doesn't need a code. State this warmly and decisively. LARKSPUR BABY OUTLET has NO free shipping — its prices are already low, and free shipping isn't offered there at this time (no threshold, no code). Say so kindly, and mention that our main store, Larkspur Baby (https://www.larkspurbaby.com), has free shipping on US orders of $75+ — no code needed, it applies automatically at checkout once the cart reaches $75. ` +
   `SHIPPING, TRACKING & DELIVERY STATUS — use shipstation_lookup (order number or email) for the live, authoritative fulfillment status: whether it shipped, carrier/service, tracking number, ship date, the ship-to address on file, and whether it can still be changed. Use it for any "where's my order / tracking / did it ship" question and BEFORE promising any shipping change. ` +
