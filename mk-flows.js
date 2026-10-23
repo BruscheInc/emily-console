@@ -543,6 +543,74 @@ async function outlineFlows() {
   return flows.length;
 }
 
+/** Welcome series (fixes the imported New-Customer-SignUp): every new subscriber gets the emails; texts go to those who can get texts;
+ *  anyone who orders moves to the thank-you path; anyone who never orders is marked SignUp = Lost. */
+async function buildWelcome(store, who) {
+  const ex = (await db(`SELECT id FROM mk_flows WHERE store=$1 AND name='Welcome Series' AND NOT archived AND deleted_at IS NULL`, [store])).rows[0];
+  if (ex) return { skipped: "already there", id: ex.id };
+  const src = (await db(`SELECT * FROM mk_flows WHERE store=$1 AND name='New-Customer-SignUp' AND NOT archived AND deleted_at IS NULL ORDER BY id LIMIT 1`, [store])).rows[0];
+  const nodes = Object.values((src && src.graph && src.graph.nodes) || {});
+  const tpls = (await db(`SELECT id, name, subject FROM mk_templates WHERE store=$1 AND NOT archived`, [store])).rows;
+  // each email: the step in the Klaviyo flow (its subject), else the template by name
+  const pick = (re) => { const n = nodes.find((x) => x.type === "send_email" && x.config && x.config.template_id && (re.test(x.config.subject || "") || re.test((tpls.find((t) => t.id == x.config.template_id) || {}).name || "")));
+    if (n) return { template_id: n.config.template_id, subject: n.config.subject || "", preview: n.config.preview || "" };
+    const t = tpls.find((x) => re.test(x.name || "")); return t ? { template_id: t.id, subject: t.subject || "", preview: "" } : null; };
+  const welcome = pick(/welcome/i), why = pick(/why choose|thousands of moms/i), hurry = pick(/hurry|ends soon/i), thanks = pick(/thank you|first order/i);
+  if (!welcome) return { skipped: "no welcome email found" };
+  // the list that starts it: the one live sign-up forms add people to, else the Klaviyo flow's list, else a newsletter/sign-up list
+  let list = (await db(`SELECT list_id id, count(*) n FROM mk_forms WHERE store=$1 AND status='live' AND list_id IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 1`, [store]).catch(() => ({ rows: [] }))).rows[0];
+  if (!list && src && src.ext_id) {
+    const raw = (await db(`SELECT data FROM hd_klaviyo WHERE kind='flow' AND id=$1`, [src.ext_id]).catch(() => ({ rows: [] }))).rows[0];
+    const trig = raw && raw.data && raw.data.attributes && raw.data.attributes.definition && (raw.data.attributes.definition.triggers || [])[0];
+    if (trig && trig.id) list = (await db(`SELECT id FROM mk_lists WHERE store=$1 AND ext_id LIKE $2 LIMIT 1`, [store, `%${trig.id}`])).rows[0];
+  }
+  if (!list) list = (await db(`SELECT id FROM mk_lists WHERE store=$1 AND (name ILIKE '%newsletter%' OR name ILIKE '%sign%up%' OR name ILIKE '%email list%') ORDER BY id LIMIT 1`, [store])).rows[0];
+  const listName = list ? ((await db(`SELECT name FROM mk_lists WHERE id=$1`, [list.id])).rows[0] || {}).name : null;
+  const em = (c, name) => ({ type: "send_email", config: { template_id: c.template_id, subject: c.subject, preview: c.preview, name, status: "live", smart_sending: false } });
+  const tx = (body, name) => ({ type: "send_sms", config: { body, name, status: "live", add_opt_out: true, quiet_hours: true, smart_sending: false } });
+  const can = (ch) => ({ name: ch === "sms" ? "Can get texts" : "Can get email", condition: { match: "all", conditions: [{ type: "consent", channel: ch, state: "subscribed" }] } });
+  const ordered = { name: "Ordered since joining", condition: { match: "all", conditions: [{ type: "event", event: "placed_order", op: "at_least", value: 1, window: { kind: "since_start" } }] } };
+  const wait = (amount, unit, at) => ({ type: "delay", config: { amount, unit, ...(at ? { until_time: at } : {}) } });
+  const N = {
+    w1: { ...em(welcome, "Welcome email (15% off)"), next: "s1" },
+    s1: { type: "split", config: can("sms"), yes: "s1w", no: "d1" },
+    s1w: { ...wait(5, "minutes"), next: "t1" },
+    t1: { ...tx("Larkspur Baby: Welcome to the Larkspur family! Small brand, big standards. Your 15% off code is in your email.", "Welcome text"), next: "d1" },
+    d1: { ...wait(1, "days", "10:00"), next: "o1" },
+    o1: { type: "split", config: ordered, yes: "p1", no: why ? "w2" : "d2" },
+    ...(why ? { w2: { ...em(why, "Why choose us"), next: "d2" } } : {}),
+    d2: { ...wait(2, "days", "10:00"), next: "o2" },
+    o2: { type: "split", config: ordered, yes: "p1", no: hurry ? "w3" : "d4" },
+    ...(hurry ? { w3: { ...em(hurry, "15% ends soon"), next: "s2" } } : {}),
+    s2: { type: "split", config: can("sms"), yes: "s2w", no: "d4" },
+    s2w: { ...wait(2, "hours"), next: "t2" },
+    t2: { ...tx("Larkspur Baby: Your 15% welcome gift ends soon! Grab your soft essentials before it's gone. Your code is in your email.", "15% ends soon text"), next: "d4" },
+    d4: { ...wait(14, "days", "10:00"), next: "o3" },
+    o3: { type: "split", config: ordered, yes: "p1", no: "lost" },
+    lost: { type: "update_profile", config: { ops: [{ key: "SignUp", value: "Lost" }] } },
+    // ordered: thank them two weeks later with $15 off the next order
+    p1: { ...wait(14, "days", "10:00"), next: "p2" },
+    p2: { type: "update_profile", config: { ops: [{ key: "SignUp", value: "Earned" }] }, next: thanks ? "p3" : undefined },
+    ...(thanks ? { p3: { ...em(thanks, "First order thank you ($15 off)"), next: "p4" },
+      p4: { type: "split", config: can("sms"), yes: "p5", no: "pend" },
+      p5: { ...wait(15, "minutes"), next: "p6" },
+      p6: tx("Larkspur Baby: We left something special in your inbox: $15 off your next order. - Larkspur Founder", "Thank you text"),
+      pend: { type: "end", config: {} } } : {}),
+  };
+  if (!hurry) delete N.s2w, delete N.t2, (N.s2 = undefined);
+  for (const k of Object.keys(N)) { if (N[k] === undefined) delete N[k]; else if (N[k].next === undefined) delete N[k].next; }
+  if (!hurry) N.o2.no = "d4";
+  const graph = { start: "w1", nodes: N };
+  const errs = validate(graph); if (errs.length) throw new Error(errs.join(" "));
+  const entry = { match: "all", conditions: [{ type: "event", event: "placed_order", op: "zero", value: 0, window: { kind: "ever" } }] };
+  const f = (await db(`INSERT INTO mk_flows (store, name, status, trigger, entry_filter, exit_filter, reentry, graph, source, notes, updated_by) VALUES ($1,'Welcome Series','draft',$2,$3,NULL,$4,$5,'buzzin',$6,$7) RETURNING id`,
+    [store, JSON.stringify({ type: "list", list_id: list ? Number(list.id) : null }), JSON.stringify(entry), JSON.stringify({ mode: "once" }), JSON.stringify(graph),
+      `Fixed version of New-Customer-SignUp${src ? ` (#${src.id})` : ""}. Starts when someone joins ${listName ? `"${listName}"` : "a list (pick it on the Trigger)"}; only people who have never ordered. Welcome email → text (if they get texts) → 1 day → Why choose us → 2 days → 15% ends soon email + text → 14 days → SignUp = Lost. Anyone who orders goes to: 14 days → SignUp = Earned → $15-off thank you email + text. Turn it on when ready.`, who])).rows[0];
+  await db(`INSERT INTO mk_flow_versions (flow_id, version, graph, by_user) VALUES ($1,1,$2,$3) ON CONFLICT DO NOTHING`, [f.id, JSON.stringify(graph), who]);
+  FLOW_CACHE.t = 0;
+  return { id: f.id, list: listName || null, emails: [welcome, why, hurry, thanks].filter(Boolean).map((x) => x.template_id) };
+}
+
 /* ---------------- starters ---------------- */
 const STARTER_NAMES = { welcome: "Welcome series", abandoned_checkout: "Abandoned checkout", browse: "Browse abandonment", post_purchase: "Post-purchase thank you", size_up: "Size-up reminder", winback: "Win-back" };
 const STARTERS = {
@@ -649,6 +717,10 @@ async function init() {
   // One-time: print a readable outline of every flow to the log (no customer data), for reviewing them.
   if (!(await core.syncGet("mk_flow_outline_v1").catch(() => null))) {
     setTimeout(() => outlineFlows().then(async (n) => { await core.syncSet("mk_flow_outline_v1", new Date().toISOString(), { n }); }).catch((e) => console.error("flow outline:", e.message)), 20000);
+  }
+  // One-time (Jose asked): a fixed, fuller welcome series built from the Klaviyo sign-up flow's messages. Draft.
+  if (!(await core.syncGet("mk_welcome_series_v1").catch(() => null))) {
+    setTimeout(() => buildWelcome("lb", "claude").then((r) => core.syncSet("mk_welcome_series_v1", new Date().toISOString(), r).then(() => console.log(`💌 Welcome series: ${JSON.stringify(r)}`))).catch((e) => console.error("welcome series:", e.message)), 45000);
   }
   if (!(await core.syncGet("mk_klaviyo_flows_v1").catch(() => null))) {
     setTimeout(async () => { try { const t = await core.syncGet("mk_klaviyo_templates_v1").catch(() => null); if (!t) return; const r = await importKlaviyoFlows("lb", "import"); if (r.length) { await core.syncSet("mk_klaviyo_flows_v1", new Date().toISOString(), { n: r.length }); console.log(`🔀 Marketing: ${r.length} Klaviyo flows imported as drafts · ${r.map((x) => `${x.name} ${x.klaviyo_steps}→${x.steps}`).join(" · ")}`); } } catch (e) { console.error("Klaviyo flows import:", e.message); } }, 120 * 1000);

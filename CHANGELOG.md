@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.0
+- New flow "Welcome Series" (draft), a fixed and fuller version of the Klaviyo New-Customer-SignUp: starts when someone joins the sign-up list (people who have never ordered). Welcome email → welcome text (if they get texts) → 1 day → Why choose us → 2 days → 15% ends soon email + text → 14 days → SignUp = Lost. Anyone who orders along the way goes to: 14 days → SignUp = Earned → $15-off thank you email + text. Texts carry the opt-out line and say 15% (not 10%).
+
 ## 4.104.9
 - Startup log: a one-time outline of every flow (trigger, rules, each step), for reviewing flows.
 
