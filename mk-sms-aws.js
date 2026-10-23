@@ -134,8 +134,24 @@ async function send({ store, to, body, sendId }) {
   const s = senders[store] && senders[store].sms;
   if (!s || !s.phone_id) throw new Error("No Amazon texting number for this store.");
   const { c, M } = sms();
-  const r = await c.send(new M.SendTextMessageCommand({ DestinationPhoneNumber: to, OriginationIdentity: s.phone_id, MessageBody: body, MessageType: "PROMOTIONAL", ConfigurationSetName: CONFIG_SET, Context: { store, send_id: String(sendId || 0) } }));
+  // The number was registered as Transactional or Promotional; Amazon refuses a send whose type doesn't match it.
+  let type = await numberType(s.phone_id);
+  const go = (t) => c.send(new M.SendTextMessageCommand({ DestinationPhoneNumber: to, OriginationIdentity: s.phone_id, MessageBody: body, MessageType: t, ConfigurationSetName: CONFIG_SET, Context: { store, send_id: String(sendId || 0) } }));
+  let r;
+  try { r = await go(type); }
+  catch (e) {
+    if (!/messageType/i.test(String(e.message))) throw e;
+    type = type === "PROMOTIONAL" ? "TRANSACTIONAL" : "PROMOTIONAL"; r = await go(type); TYPES[s.phone_id] = { t: Date.now(), type };
+  }
   return r.MessageId;
+}
+const TYPES = {};
+async function numberType(phoneId) {
+  const hit = TYPES[phoneId]; if (hit && Date.now() - hit.t < 30 * 60e3) return hit.type;
+  let type = "TRANSACTIONAL";
+  try { const n = (await numbers()).find((x) => x.PhoneNumberId === phoneId || x.PhoneNumberArn === phoneId || x.PhoneNumber === phoneId); if (n && n.MessageType) type = n.MessageType; } catch (_) {}
+  TYPES[phoneId] = { t: Date.now(), type };
+  return type;
 }
 
 /* ---------------- replies and delivery reports (SNS → Buzzin) ---------------- */

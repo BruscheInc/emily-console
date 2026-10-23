@@ -54,8 +54,10 @@ async function compose(store, cfg, profile, extra = {}) {
   const brand = st.brand_name || MK().STORES[store] || "";
   if (cfg.brand_prefix !== false && brand && !body.toLowerCase().startsWith(brand.toLowerCase().split(" ")[0].toLowerCase())) body = `${brand}: ${body}`;
   if (cfg.add_opt_out !== false && !/\bSTOP\b/.test(body)) body = `${body} ${st.opt_out || OPT_OUT}`;
-  return body;
+  return plainPunct(body);
 }
+/** Curly quotes, long dashes and "…" make a text Unicode (70-character segments, so it costs about double). Plain versions look the same on a phone. */
+const plainPunct = (t) => String(t).replace(/[‘’‚‛′]/g, "'").replace(/[“”„‟″]/g, '"').replace(/[–—―]/g, "-").replace(/…/g, "...").replace(/[\u00a0\u2009\u200a\u202f]/g, " ").replace(/[\u200b\u200c\u200d\u2060\ufeff]/g, "");
 
 async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS mk_sms_inbound (id BIGSERIAL PRIMARY KEY, store TEXT, from_phone TEXT, to_phone TEXT, body TEXT, keyword TEXT, profile_id BIGINT, ticket_id BIGINT, provider_id TEXT, at TIMESTAMPTZ DEFAULT now())`);
