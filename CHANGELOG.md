@@ -3,6 +3,18 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.106.0
+- Profiles rebuilt to match Klaviyo:
+  - **List:** totals at the top (all, active, suppressed, subscribed to texts; click one to filter), a "View suppressed profiles" button, one search box (name, email or exact phone), and the same columns as Klaviyo: Profile, Email, Phone, Profile created, Profile updated, Location.
+  - **Profile page** (its own page, not a side panel): "All profiles / Name", email · phone · location, and a **Profile actions** menu (Edit profile, Add to list, Unsubscribe). Tabs:
+    - Details: channel consent with history, coupons from the last 90 days, custom properties you can add/edit/delete, profile facts.
+    - Metrics and insights: 30 days / All-time, Placed Order, Revenue, Fulfilled Order, other activity.
+    - Lists and segments: add or remove from a list.
+    - Tickets: customer-service history.
+    - Messages: every email and text sent, with date, activity and type filters.
+  - **Timeline:** the activity timeline sits on the right with an event filter, start/end dates and expandable rows. Orders also show one "Ordered …" row per item.
+- You can edit a profile's name, email and phone (e.g. fix a mistyped sign-up email). Email changes are logged in the consent history.
+
 ## 4.105.13
 - Emily can fix the email on someone's sign-up (e.g. signed up as @yhaoo.com) and re-send the welcome email with their code to the right address. She stages it for your approval like her other actions. If the right email already has its own profile, she gives the code instead and flags the two profiles for you to merge.
 

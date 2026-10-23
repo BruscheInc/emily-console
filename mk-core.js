@@ -399,6 +399,7 @@ async function search({ store, q, consent, tier, list, sort = "newest", limit = 
   if (consent === "email") where.push(`p.email_consent='subscribed'`);
   if (consent === "sms") where.push(`p.sms_consent='subscribed'`);
   if (consent === "none") where.push(`p.email_consent<>'subscribed' AND p.sms_consent<>'subscribed'`);
+  if (consent === "suppressed") where.push(`p.email IS NOT NULL AND p.email_consent<>'subscribed'`);
   if (tier) { args.push(tier); where.push(`p.tier=$${args.length}`); }
   if (list) { args.push(Number(list)); where.push(`EXISTS (SELECT 1 FROM mk_list_members m WHERE m.profile_id=p.id AND m.list_id=$${args.length})`); }
   const W = where.length ? `WHERE ${where.join(" AND ")}` : "";
@@ -407,19 +408,33 @@ async function search({ store, q, consent, tier, list, sort = "newest", limit = 
   // Newest first by default (like Klaviyo), so new sign-ups are at the top. In a list: newest to join the list first.
   const added = list ? `(SELECT max(m.added_at) FROM mk_list_members m WHERE m.profile_id=p.id AND m.list_id=${Number(list) || 0})` : `p.created_at`;
   const ORDER = { newest: `${added} DESC NULLS LAST, p.id DESC`, last_order: `p.last_order_at DESC NULLS LAST, p.id DESC`, last_active: `p.last_engaged_at DESC NULLS LAST, p.id DESC`, spent: `p.total_spent DESC NULLS LAST, p.id DESC` }[sort] || `${added} DESC NULLS LAST, p.id DESC`;
-  const rows = (await db(`SELECT p.id, p.store, p.email, p.phone, p.first_name, p.last_name, p.email_consent, p.sms_consent, p.tier, p.orders_count, p.total_spent, p.last_order_at, p.last_engaged_at, ${added} AS added_at
+  const rows = (await db(`SELECT p.id, p.store, p.email, p.phone, p.first_name, p.last_name, p.email_consent, p.sms_consent, p.tier, p.orders_count, p.total_spent, p.last_order_at, p.last_engaged_at, ${added} AS added_at,
+                          p.created_at, p.updated_at, p.city, p.region, p.country, p.zip
                           FROM mk_profiles p ${W} ORDER BY ${ORDER} LIMIT $${args.length - 1} OFFSET $${args.length}`, args)).rows;
   return { total, rows };
 }
 
+async function profileStats() {
+  const r = (await db(`SELECT count(*)::int total, count(*) FILTER (WHERE email_consent='subscribed')::int active,
+      count(*) FILTER (WHERE email IS NOT NULL AND email_consent<>'subscribed')::int suppressed, count(*) FILTER (WHERE sms_consent='subscribed')::int sms FROM mk_profiles`)).rows[0];
+  return r;
+}
 async function profile(id) {
   const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [Number(id)])).rows[0];
   if (!p) return null;
   const consent = (await db(`SELECT channel, state, previous, source, detail, at FROM mk_consent_log WHERE profile_id=$1 ORDER BY at DESC LIMIT 40`, [p.id])).rows;
-  const events = (await db(`SELECT type, at, value, props, source FROM mk_events WHERE profile_id=$1 ORDER BY at DESC LIMIT 60`, [p.id])).rows;
-  const lists = (await db(`SELECT l.id, l.name, m.added_at FROM mk_list_members m JOIN mk_lists l ON l.id=m.list_id WHERE m.profile_id=$1 ORDER BY l.name`, [p.id])).rows;
+  const events = (await db(`SELECT id, type, at, value, props, source FROM mk_events WHERE profile_id=$1 ORDER BY at DESC LIMIT 300`, [p.id])).rows;
+  const lists = (await db(`SELECT l.id, l.name, l.archived, m.added_at FROM mk_list_members m JOIN mk_lists l ON l.id=m.list_id WHERE m.profile_id=$1 ORDER BY l.name`, [p.id])).rows;
+  const segments = (await db(`SELECT s.id, s.name, m.added_at FROM mk_segment_members m JOIN mk_segments s ON s.id=m.segment_id WHERE m.profile_id=$1 AND NOT COALESCE(s.archived,false) ORDER BY s.name`, [p.id]).catch(() => ({ rows: [] }))).rows;
   const tickets = p.email ? (await db(`SELECT id, subject, status, last_message_at FROM hd_tickets WHERE lower(customer_email)=$1 ORDER BY last_message_at DESC NULLS LAST LIMIT 10`, [p.email]).catch(() => ({ rows: [] }))).rows : [];
-  return { ...p, consent, events, lists, tickets };
+  const coupons = (await db(`SELECT c.code, c.percent, c.amount, c.expires_at, c.redeemed_at, c.removed_at, c.real, c.created_at, f.name AS form, fl.name AS flow
+      FROM mk_coupons c LEFT JOIN mk_forms f ON f.id=c.form_id LEFT JOIN mk_flows fl ON fl.id=c.flow_id WHERE c.profile_id=$1 AND c.real ORDER BY c.id DESC LIMIT 30`, [p.id]).catch(() => ({ rows: [] }))).rows;
+  const sends = (await db(`SELECT s.id, s.channel, s.subject, s.status, s.reason, s.to_addr, COALESCE(s.sent_at, s.created_at) AS at, s.flow_id, s.campaign_id, fl.name AS flow, c.name AS campaign,
+      (SELECT array_agg(DISTINCT e.type) FROM mk_send_events e WHERE e.send_id=s.id AND NOT e.machine) AS events
+      FROM mk_sends s LEFT JOIN mk_flows fl ON fl.id=s.flow_id LEFT JOIN mk_campaigns c ON c.id=s.campaign_id WHERE s.profile_id=$1 ORDER BY s.id DESC LIMIT 200`, [p.id]).catch(() => ({ rows: [] }))).rows;
+  const metrics = (await db(`SELECT type, count(*)::int AS all_n, count(*) FILTER (WHERE at > now() - interval '30 days')::int AS n30,
+      COALESCE(sum(value),0)::float AS all_v, COALESCE(sum(value) FILTER (WHERE at > now() - interval '30 days'),0)::float AS v30 FROM mk_events WHERE profile_id=$1 GROUP BY type`, [p.id]).catch(() => ({ rows: [] }))).rows;
+  return { ...p, consent, events, lists, segments, tickets, coupons, sends, metrics };
 }
 
 async function lists(store) {
@@ -454,5 +469,5 @@ async function init() {
   setTimeout(fill, 30 * 1000); setInterval(fill, 30 * 60 * 1000);
 }
 
-module.exports = { STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
+module.exports = { profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
   recomputeTiers, syncAll, syncFromKlaviyo, syncShopifyCustomers, syncShopifyOrders, overview, search, profile, lists, sizeOf };
