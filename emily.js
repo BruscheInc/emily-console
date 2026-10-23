@@ -1363,10 +1363,13 @@ async function createDiscount(st, { kind, value, code, title, minSubtotal }) {
   const ue = r.discountCodeBasicCreate.userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
   return { note: `Created single-use ${kind === "percentage" ? value + "% off" : "$" + value + " off"} code ${code} in ${st.brand}. Give it to the customer.` };
 }
+// Tickets whose current draft carries Jose's own redraft notes: he can make a one-time exception to a policy
+// (e.g. a courtesy code on an Outlet order). The action is still staged for his approval.
+const ownerOverride = new Set();
 async function shopifyProposeDiscount(input) {
   const st = storeFromOrderOrBrand(input.order, input.brand);
   if (!st) return { error: "Couldn't determine the store — pass the order number or a brand (Larkspur Baby / Outlet / Bumbunny)." };
-  if (/outlet/i.test(st.brand || "")) return { error: "Larkspur Baby Outlet takes and offers no discounts of any kind — don't offer a code for an Outlet order. Offer what the policy allows instead (e.g. store credit where it applies)." };
+  if (/outlet/i.test(st.brand || "") && !ownerOverride.has(String(input.ticket_id || ""))) return { error: "Larkspur Baby Outlet takes and offers no discounts of any kind — don't offer a code for an Outlet order. Offer what the policy allows instead (e.g. store credit where it applies). Only Jose can make an exception, by asking for it in his redraft notes." };
   const kind = String(input.kind || "").toLowerCase();
   if (!["percentage", "fixed", "free_shipping"].includes(kind)) return { error: "kind must be percentage, fixed, or free_shipping." };
   if ((kind === "percentage" || kind === "fixed") && !(Number(input.value) > 0)) return { error: "Provide a positive value for a percentage/fixed discount." };
@@ -1779,7 +1782,7 @@ async function draftForTicket(t, force, guidance) {
     `Follow your playbook. If the message references an order, use shopify_lookup_order first. ` +
     `Before offering ANY goodwill credit, replacement, discount or refund, call customer_history with the customer's email — if they already received the one-time 50% good-faith credit, do not offer it again; escalate instead. ` +
     rulesText + `\n` +
-    (guidance ? `⭐ ADDITIONAL INSTRUCTIONS FROM JOSE for THIS draft (highest priority — apply them to the wording/offer; they override default phrasing but NOT the hard policies above, and money/inventory moves still escalate): ${guidance}\n` : ``) +
+    (guidance ? `⭐ ADDITIONAL INSTRUCTIONS FROM JOSE for THIS draft (highest priority — apply them to the wording/offer; Jose owns the business, so these override the default policies above for THIS ticket only — if he asks for something the policy normally forbids (e.g. a free-shipping or discount code on an Outlet order), do it as a one-time exception: call the matching tool to stage it and write the reply around it. Do not refuse or argue with his instruction. Money/inventory moves are still staged for his approval with escalate=true): ${guidance}\n` : ``) +
     `Then reply with ONLY a JSON object (no prose, no code fences):\n` +
     `{"category":"cs|spam|business|unclear","intent":"tracking|subscription|sizing_care|returns_info|policy_info|damage|lost|missing_items|cancel_or_address|discount|oos_reply|other",` +
     `"sentiment":"positive|neutral|upset","tags":["up to 3 short lowercase tags"],"escalate":true|false,` +
@@ -1817,7 +1820,8 @@ async function handleTicket(ticketId, { force = false, guidance = "" } = {}) {
       if (NOREPLY_RE.test(t.customer_email || "")) { await core.addTags(id, ["automated"]); return { skipped: "no-reply sender" }; }
       if (t.last_inbound_at && Date.now() - new Date(t.last_inbound_at).getTime() > MAX_AGE_DAYS * 86400000) return { skipped: "too old" };
     }
-    const r = await draftForTicket(t, force, guidance);
+    if (guidance) ownerOverride.add(String(t.id));
+    let r; try { r = await draftForTicket(t, force, guidance); } finally { ownerOverride.delete(String(t.id)); }
     if (!r || !r.category) return { skipped: "no result" };
     if (r._skip) return { skipped: r.category };
     if (r.category !== "cs") {

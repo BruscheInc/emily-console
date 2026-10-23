@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.7
+- Emily: notes you give her on "Redraft with notes" now override the default policies for that ticket. If you ask for something the policy normally blocks (like a free-shipping code on an Outlet order), she stages it as a one-time exception and writes the reply around it, instead of refusing. It's still staged for your approval.
+
 ## 4.105.6
 - Emily: a failed action left over from an earlier draft no longer blocks "Approve & send" on her newest draft (ticket 9000000666 was stuck on an old "isn't returnable" failure for a return that already existed). Dismiss now works on failed actions too.
 - Attachments waiting to go out ("Attached to your reply" and the chips under the reply box) are now links — click to open the PDF.
