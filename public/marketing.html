@@ -164,20 +164,21 @@ async function renderOverview(el) {
 }
 
 /* ---------- Profiles ---------- */
-let PQ = { q: '', consent: '', tier: '', list: '', offset: 0 };
+let PQ = { q: '', consent: '', tier: '', list: '', sort: 'newest', offset: 0 };
 async function renderProfiles(el, openId) {
   const lists = (await api('/api/mk/lists')).lists;
   el.innerHTML = `<h1>Profiles</h1><p class="sub">Search anyone, see their consent history, orders, lists and customer-service tickets in one place.</p>
   <div class="bar"><input type="search" id="pq" placeholder="Name, email or phone" value="${esc(PQ.q)}" style="min-width:240px">
     <select id="pc"><option value="">Any consent</option><option value="email">Can get email</option><option value="sms">Can get texts</option><option value="none">Neither</option></select>
     <select id="pt"><option value="">Any tier</option>${Object.entries(TIER).map(([k, [, l]]) => `<option value="${k}">${l}</option>`).join('')}</select>
-    <select id="pl"><option value="">Any list</option>${lists.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
-  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Name</th><th>Email address</th><th>Email consent</th><th>Text consent</th><th>Tier</th><th class="n">Orders</th><th class="n">Spent</th><th>Last order</th></tr></thead><tbody id="pr"></tbody></table></div>
+    <select id="pl"><option value="">Any list</option>${lists.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select>
+    <select id="ps" title="Sort"><option value="newest">Newest first</option><option value="last_order">Last order</option><option value="last_active">Last active</option><option value="spent">Most spent</option></select></div>
+  <div class="card" style="padding:6px"><div class="tw"><table><thead><tr><th>Name</th><th>Email address</th><th>Email consent</th><th>Text consent</th><th>Tier</th><th class="n">Orders</th><th class="n">Spent</th><th>Last order</th><th>Added</th></tr></thead><tbody id="pr"></tbody></table></div>
   <div class="pager"><span id="pn"></span><button class="btn xs" id="pp">Previous</button><button class="btn xs" id="px">Next</button></div></div>`;
-  $('pc').value = PQ.consent; $('pt').value = PQ.tier; $('pl').value = PQ.list;
+  $('pc').value = PQ.consent; $('pt').value = PQ.tier; $('pl').value = PQ.list; $('ps').value = PQ.sort || 'newest';
   const load = async () => {
     const r = await api('/api/mk/profiles?' + qs({ ...PQ, limit: 50 }));
-    $('pr').innerHTML = r.rows.map((p) => `<tr class="click" data-id="${p.id}"><td>${esc([p.first_name, p.last_name].filter(Boolean).join(' ') || '—')}</td><td>${esc(p.email || p.phone || '')}</td><td>${pill(CONSENT, p.email_consent)}</td><td>${pill(CONSENT, p.sms_consent)}</td><td>${pill(TIER, p.tier)}</td><td class="n">${fmtN(p.orders_count)}</td><td class="n">${fmt$(p.total_spent)}</td><td>${fmtD(p.last_order_at)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No one matches.</td></tr>';
+    $('pr').innerHTML = r.rows.map((p) => `<tr class="click" data-id="${p.id}"><td>${esc([p.first_name, p.last_name].filter(Boolean).join(' ') || '—')}</td><td>${esc(p.email || p.phone || '')}</td><td>${pill(CONSENT, p.email_consent)}</td><td>${pill(CONSENT, p.sms_consent)}</td><td>${pill(TIER, p.tier)}</td><td class="n">${fmtN(p.orders_count)}</td><td class="n">${fmt$(p.total_spent)}</td><td>${fmtD(p.last_order_at)}</td><td>${fmtD(p.added_at)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty">No one matches.</td></tr>';
     $('pn').textContent = r.total ? `${fmtN(PQ.offset + 1)}–${fmtN(Math.min(PQ.offset + 50, r.total))} of ${fmtN(r.total)}` : '';
     $('pp').disabled = PQ.offset <= 0; $('px').disabled = PQ.offset + 50 >= r.total;
     document.querySelectorAll('#pr tr.click').forEach((tr) => tr.onclick = () => openProfile(tr.dataset.id));
@@ -186,6 +187,7 @@ async function renderProfiles(el, openId) {
   $('pc').onchange = (e) => { PQ.consent = e.target.value; PQ.offset = 0; load(); };
   $('pt').onchange = (e) => { PQ.tier = e.target.value; PQ.offset = 0; load(); };
   $('pl').onchange = (e) => { PQ.list = e.target.value; PQ.offset = 0; load(); };
+  $('ps').onchange = (e) => { PQ.sort = e.target.value; PQ.offset = 0; load(); };
   $('pp').onclick = () => { PQ.offset = Math.max(0, PQ.offset - 50); load(); };
   $('px').onclick = () => { PQ.offset += 50; load(); };
   await load();

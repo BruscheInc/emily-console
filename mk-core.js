@@ -392,7 +392,7 @@ async function overview(store) {
   return { ...r, tiers, sync, klaviyo_copy: ks ? ks.state : null, syncing: !!syncing, log: syncLog.slice(-20) };
 }
 
-async function search({ store, q, consent, tier, list, limit = 50, offset = 0 }) {
+async function search({ store, q, consent, tier, list, sort = "newest", limit = 50, offset = 0 }) {
   const args = [], where = [];
   // one Brusche audience: profiles aren't split by store
   if (q) { args.push(`%${String(q).toLowerCase()}%`); where.push(`(p.email LIKE $${args.length} OR lower(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) LIKE $${args.length} OR p.phone LIKE $${args.length})`); }
@@ -404,8 +404,11 @@ async function search({ store, q, consent, tier, list, limit = 50, offset = 0 })
   const W = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const total = (await db(`SELECT count(*)::int n FROM mk_profiles p ${W}`, args)).rows[0].n;
   args.push(Math.min(Number(limit) || 50, 200), Math.max(Number(offset) || 0, 0));
-  const rows = (await db(`SELECT p.id, p.store, p.email, p.phone, p.first_name, p.last_name, p.email_consent, p.sms_consent, p.tier, p.orders_count, p.total_spent, p.last_order_at, p.last_engaged_at
-                          FROM mk_profiles p ${W} ORDER BY p.last_order_at DESC NULLS LAST, p.id DESC LIMIT $${args.length - 1} OFFSET $${args.length}`, args)).rows;
+  // Newest first by default (like Klaviyo), so new sign-ups are at the top. In a list: newest to join the list first.
+  const added = list ? `(SELECT max(m.added_at) FROM mk_list_members m WHERE m.profile_id=p.id AND m.list_id=${Number(list) || 0})` : `p.created_at`;
+  const ORDER = { newest: `${added} DESC NULLS LAST, p.id DESC`, last_order: `p.last_order_at DESC NULLS LAST, p.id DESC`, last_active: `p.last_engaged_at DESC NULLS LAST, p.id DESC`, spent: `p.total_spent DESC NULLS LAST, p.id DESC` }[sort] || `${added} DESC NULLS LAST, p.id DESC`;
+  const rows = (await db(`SELECT p.id, p.store, p.email, p.phone, p.first_name, p.last_name, p.email_consent, p.sms_consent, p.tier, p.orders_count, p.total_spent, p.last_order_at, p.last_engaged_at, ${added} AS added_at
+                          FROM mk_profiles p ${W} ORDER BY ${ORDER} LIMIT $${args.length - 1} OFFSET $${args.length}`, args)).rows;
   return { total, rows };
 }
 

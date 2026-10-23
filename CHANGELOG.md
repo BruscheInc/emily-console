@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.4
+- Profiles: newest first by default (new sign-ups at the top), with an Added column and a Sort menu (Newest first, Last order, Last active, Most spent). Filtering by a list sorts by when they joined that list. Before, people with no orders (new sign-ups) sank to the bottom.
+
 ## 4.105.3
 - Emily: when someone asks about signing up, or says they didn't get the welcome email or code, she now checks Buzzin's own sign-up record (by email or phone): email/text consent, when they signed up, the recent marketing emails and texts with delivered/bounced, and their own still-usable code. She no longer tells someone with a Buzzin sign-up to sign up again; if the welcome email was delivered she points them to Promotions/spam and can give them their code; if it bounced she flags it for Jose.
 
