@@ -514,6 +514,35 @@ async function splitCartCheckout(store, who) {
   return { checkout: co.id, cart: f.id };
 }
 
+/** A plain-text outline of each flow: trigger, rules, and every step in order. */
+async function outlineFlows() {
+  const flows = (await db(`SELECT * FROM mk_flows WHERE NOT archived AND deleted_at IS NULL ORDER BY id`)).rows;
+  const tpl = Object.fromEntries((await db(`SELECT id, name, subject FROM mk_templates`)).rows.map((t) => [String(t.id), t]));
+  const cond = (c) => JSON.stringify(c || null).slice(0, 400);
+  for (const f of flows) {
+    const g = f.graph || {}; const N = g.nodes || {}; const lines = [];
+    const seen = new Set();
+    const walk = (id, depth) => { if (!id || !N[id] || depth > 40) return; const n = N[id]; const pad = "  ".repeat(depth);
+      if (seen.has(id)) { lines.push(`${pad}↪ joins ${id}`); return; } seen.add(id); const c = n.config || {};
+      let d = n.type;
+      if (n.type === "delay") d = `wait ${c.amount} ${c.unit}${c.until_time ? ` until ${c.until_time}` : ""}${c.weekdays ? ` on days ${c.weekdays}` : ""}`;
+      if (n.type === "send_email") { const t = tpl[String(c.template_id)]; d = `EMAIL [${c.status || "draft"}] "${c.subject || (t && t.subject) || ""}" tpl#${c.template_id}${t ? ` (${t.name})` : " (MISSING)"} smart=${c.smart_sending !== false}${c.filter && (c.filter.conditions || []).length ? ` filter=${cond(c.filter)}` : ""}`; }
+      if (n.type === "send_sms") d = `TEXT [${c.status || "draft"}] "${String(c.body || "").slice(0, 160)}" smart=${c.smart_sending !== false} optout=${c.add_opt_out !== false}`;
+      if (n.type === "split") d = `SPLIT ${cond(c.condition)}`;
+      if (n.type === "coupon") d = `COUPON ${cond(c)}`;
+      if (n.type === "wait_for") d = `WAIT FOR ${cond(c)}`;
+      if (n.type === "update_profile" || n.type === "list" || n.type === "ab" || n.type === "end") d = `${n.type.toUpperCase()} ${cond(c)}`;
+      lines.push(`${pad}${id}: ${d}`);
+      if (n.type === "split") { lines.push(`${pad} yes →`); walk(n.yes, depth + 1); lines.push(`${pad} no →`); walk(n.no, depth + 1); }
+      else if (n.type === "ab") for (const v of c.variants || []) walk(v.next, depth + 1);
+      else walk(n.next, depth);
+    };
+    walk(g.start, 0);
+    console.log(`🧭 FLOW #${f.id} "${f.name}" store=${f.store} status=${f.status} source=${f.source || ""}\n trigger=${JSON.stringify(f.trigger)}\n entry=${cond(f.entry_filter)}\n exit=${cond(f.exit_filter)}\n reentry=${JSON.stringify(f.reentry)}\n${lines.map((l) => " " + l).join("\n")}`);
+  }
+  return flows.length;
+}
+
 /* ---------------- starters ---------------- */
 const STARTER_NAMES = { welcome: "Welcome series", abandoned_checkout: "Abandoned checkout", browse: "Browse abandonment", post_purchase: "Post-purchase thank you", size_up: "Size-up reminder", winback: "Win-back" };
 const STARTERS = {
@@ -616,6 +645,10 @@ async function init() {
   // One-time (Jose asked): the started-checkout flow is "Abandoned Checkout"; a copy triggered by Added to Cart is "Abandoned Cart".
   if (!(await core.syncGet("mk_cart_checkout_split_v1").catch(() => null))) {
     setTimeout(() => splitCartCheckout("lb", "claude").then((r) => core.syncSet("mk_cart_checkout_split_v1", new Date().toISOString(), r).then(() => console.log(`🛒 Cart / checkout flows: ${JSON.stringify(r)}`))).catch((e) => console.error("cart/checkout flows:", e.message)), 90000);
+  }
+  // One-time: print a readable outline of every flow to the log (no customer data), for reviewing them.
+  if (!(await core.syncGet("mk_flow_outline_v1").catch(() => null))) {
+    setTimeout(() => outlineFlows().then(async (n) => { await core.syncSet("mk_flow_outline_v1", new Date().toISOString(), { n }); }).catch((e) => console.error("flow outline:", e.message)), 20000);
   }
   if (!(await core.syncGet("mk_klaviyo_flows_v1").catch(() => null))) {
     setTimeout(async () => { try { const t = await core.syncGet("mk_klaviyo_templates_v1").catch(() => null); if (!t) return; const r = await importKlaviyoFlows("lb", "import"); if (r.length) { await core.syncSet("mk_klaviyo_flows_v1", new Date().toISOString(), { n: r.length }); console.log(`🔀 Marketing: ${r.length} Klaviyo flows imported as drafts · ${r.map((x) => `${x.name} ${x.klaviyo_steps}→${x.steps}`).join(" · ")}`); } } catch (e) { console.error("Klaviyo flows import:", e.message); } }, 120 * 1000);
