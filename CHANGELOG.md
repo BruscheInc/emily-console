@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.104.8
+- Product blocks (grid) line up like Klaviyo's: every photo the same square size (Shopify photos are cropped to a square), names on one line, prices on one line, Shop now buttons on one line. With "Stack on mobile" on, phones get one product per row.
+- Product prices show as dollars ($28.00).
+
 ## 4.104.7
 - Product blocks set to "Best sellers" now show what actually sells: ranked by units sold in the last 60 days, in stock, with a photo. Gift cards, gift boxes, package protection and hidden products never show.
 

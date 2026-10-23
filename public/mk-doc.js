@@ -133,6 +133,15 @@
   const href = (R, s, scope) => { const u = txt(R, s, scope).trim(); return u ? esc(u).replace(/&amp;/g, '&amp;') : ''; };
   const link = (R, u, inner, style = '') => (u ? `<a href="${u}" target="_blank" style="text-decoration:none;${style}">${inner}</a>` : inner);
 
+  /** 28 → $28.00 (text like "From $20" is left as is). */
+  const money = (v) => { const t = String(v == null ? '' : v).trim(); return /^\d+(\.\d+)?$/.test(t) ? '$' + Number(t).toFixed(2) : t; };
+  /** Product photos the same shape: Shopify's image CDN crops to a square; anything else is squared with CSS where the inbox allows. */
+  function squareImg(u, w) {
+    const src = String(u || ''); if (!/cdn\.shopify\.com|\/cdn\/shop\//.test(src)) return src;
+    const px = Math.min(1200, Math.max(200, Math.round((w || 300) * 2)));
+    const clean = src.replace(/([?&])(width|height|crop)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/\?&+/, '?').replace(/&&+/g, '&');
+    return `${clean}${clean.includes('?') ? '&' : '?'}width=${px}&height=${px}&crop=center`;
+  }
   /* ---------- dynamic tables (rows repeated per item, like Klaviyo's) ---------- */
   const REP_KEYS = ['row_collection', 'dynamic_row_collection', 'repeat_for', 'collection', 'data_source', 'dynamic_collection', 'rows_collection', 'dynamic_data_source', 'source'];
   const ALIAS_KEYS = ['row_alias', 'dynamic_row_alias', 'item_alias', 'alias', 'row_name', 'dynamic_alias'];
@@ -423,13 +432,13 @@ ${sections}${empty}
       const ib = (() => { const w = num(st.item_border_width, 0), s = st.item_border_style || 'none'; return w > 0 && s !== 'none' ? `${w}px ${s} ${col(st.item_border_color) || '#E5E5E5'}` : ''; })();
       const one = (it, imgW) => {
         const u = esc(it.url || '');
-        const img = it.image ? link(R, u, `<img src="${esc(it.image)}" alt="${esc(it.title || '')}" width="${Math.round(imgW)}" style="display:block;width:100%;max-width:${Math.round(imgW)}px;height:auto;border:0;${num(st.item_max_height, 0) ? `max-height:${num(st.item_max_height)}px;object-fit:cover;` : ''}${ta === 'center' ? 'margin:0 auto;' : ''}">`) : '';
+        const img = it.image ? link(R, u, `<img src="${esc(squareImg(it.image, imgW))}" alt="${esc(it.title || '')}" width="${Math.round(imgW)}" style="display:block;width:100%;max-width:${Math.round(imgW)}px;height:auto;aspect-ratio:1/1;object-fit:cover;border:0;${num(st.item_max_height, 0) ? `max-height:${num(st.item_max_height)}px;` : ''}${ta === 'center' ? 'margin:0 auto;' : ''}">`) : '';
         const title = show('show_title') ? `<div style="${fontCss(st, 'title_', 'title_font_color')};padding:${num(st.title_padding_top, 8)}px 0 ${num(st.title_padding_bottom, 2)}px 0">${show('show_title_links', true) ? link(R, u, esc(it.title || ''), `color:inherit`) : esc(it.title || '')}</div>` : '';
         const desc = p.show_description && it.description ? `<div style="${fontCss(st, 'description_', 'description_font_color')};padding:${num(st.description_padding_top, 2)}px 0 ${num(st.description_padding_bottom, 2)}px 0">${esc(String(it.description).slice(0, 160))}</div>` : '';
-        const orig = show('show_original_price', true) && it.compare_at && it.compare_at !== it.price ? ` <span style="${fontCss(st, 'original_price_', 'original_price_font_color')};text-decoration:line-through">${esc(it.compare_at)}</span>` : '';
-        const price = show('show_price') && it.price ? `<div style="${fontCss(st, 'price_', 'price_font_color')};padding:${num(st.price_padding_top, 2)}px 0 ${num(st.price_padding_bottom, 6)}px 0">${esc(it.price)}${orig}</div>` : '';
+        const orig = show('show_original_price', true) && it.compare_at && it.compare_at !== it.price ? ` <span style="${fontCss(st, 'original_price_', 'original_price_font_color')};text-decoration:line-through">${esc(money(it.compare_at))}</span>` : '';
+        const price = show('show_price') && it.price ? `<div style="${fontCss(st, 'price_', 'price_font_color')};padding:${num(st.price_padding_top, 2)}px 0 ${num(st.price_padding_bottom, 6)}px 0">${esc(money(it.price))}${orig}</div>` : '';
         const btn = show('show_button', false) ? `${T(`align="${st.button_alignment || ta}" style="${(st.button_alignment || ta) === 'center' ? 'margin:0 auto;' : ''}"`)}<tr>${btnHtml(R, esc(it.button_text || p.button_text || 'Shop now'), u, st, 'button_')}</tr></table>` : '';
-        return { img, text: title + desc + price + btn };
+        return { img, title, desc, price, btn, text: title + desc + price + btn };
       };
       const ipad = pad(st, 'item_padding', 6);
       if (st.layout && st.layout !== 'horizontal') {
@@ -440,6 +449,21 @@ ${sections}${empty}
         return rows;
       }
       const cw = Math.floor(R.w / nc);
+      if (!ib) {
+        // Grid, lined up: one table row each for the photos, names, prices and buttons, so every product's name, price
+        // and button sit on the same line. Stacking on phones uses a one-per-row copy shown only on mobile.
+        const W = `${(100 / nc).toFixed(2)}%`;
+        let grid = '';
+        for (let r = 0; r < Math.ceil(items.length / nc); r++) {
+          const os = items.slice(r * nc, r * nc + nc).map((it) => one(it, cw - 12));
+          const rowOf = (k, va) => { if (!os.some((o) => o[k])) return ''; const cells = os.map((o) => `<td width="${W}" valign="${va}" style="width:${W};padding:0 ${num(st.item_padding_right, 6)}px 0 ${num(st.item_padding_left, 6)}px;text-align:${ta};vertical-align:${va}">${o[k] || ''}</td>`);
+            while (cells.length < nc) cells.push(`<td width="${W}" style="width:${W}"></td>`); return `<tr>${cells.join('')}</tr>`; };
+          grid += `${T(`width="100%" style="margin-bottom:${num(st.item_padding_bottom, 12)}px"`)}${rowOf('img', 'top')}${rowOf('title', 'top')}${rowOf('desc', 'top')}${rowOf('price', 'top')}${rowOf('btn', 'bottom')}</table>`;
+        }
+        if (st.stack_on_mobile === false || nc === 1) return grid;
+        const stacked = items.map((it) => { const o = one(it, Math.min(R.w, 480) - 12); return `${T('width="100%"')}<tr><td style="padding:${ipad};text-align:${ta}">${o.img}${o.text}</td></tr></table>`; }).join('');
+        return device(grid, { show_on: 'desktop' }, R) + device(stacked, { show_on: 'mobile' }, R);
+      }
       let html = '';
       for (let r = 0; r < Math.ceil(items.length / nc); r++) {
         const cells = items.slice(r * nc, r * nc + nc).map((it) => { const o = one(it, cw - 12); return `<td class="bz-col" width="${(100 / nc).toFixed(2)}%" valign="top" style="width:${100 / nc}%;padding:${ipad};text-align:${ta};vertical-align:top;${ib ? `border:${ib};` : ''}">${o.img}${o.text}</td>`; });
