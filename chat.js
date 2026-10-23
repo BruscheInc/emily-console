@@ -190,7 +190,7 @@ async function knowledge(store) {
   const { must_fix, must_cover, never_change_policy, unchanged_policies, ...rest } = facts;
   // Emily's full rulebook (the one the email side uses): shipping, free shipping, pickup, discounts, the outlet…
   let policies = "";
-  try { policies = String(await core.policyText("rules", "") || "").slice(0, 20000); } catch (e) { console.error("chat policies:", e.message); }
+  try { policies = (require("./garment-specs").text() + "\n\n" + String(await core.policyText("rules", "") || "")).slice(0, 26000); } catch (e) { console.error("chat policies:", e.message); }
   const v = { rules: rest, faq, policies };
   KNOW.set(store, { v, at: Date.now() }); return v;
 }

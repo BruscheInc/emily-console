@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.9
+- Emily (email and website chat) now has the factory measurement sheet for the Men's Long Lounge Set (S–2XL): top length, sleeve, chest, shoulder, and pants inseam, rise, waist, hip, thigh, leg opening. She answers length/inseam questions in inches (cm in brackets), explains flat measurements, and is honest when a tall customer would find them short. Styles without a sheet still go to the team. Sheets live in garment-specs.js.
+
 ## 4.105.8
 - Emily: when her answer comes back without the draft format, she's asked to finish it in the same conversation instead of starting over. Starting over re-did every step and staged actions twice (ticket 9000000753 got two free-shipping codes and no draft).
 - If a draft still fails, she leaves an internal note saying so and cancels the actions she started, so nothing goes out double. Before, a failed redraft just did nothing.

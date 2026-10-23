@@ -114,7 +114,7 @@ async function applyPolicyPatches() {
   }
 }
 
-async function systemPrompt() { let extra = ""; try { extra = await require("./returns").portalRule(); } catch (_) {} return SYSTEM_PROMPT_HEAD + (await core.policyText("playbook", skill)) + extra; }
+async function systemPrompt() { let extra = ""; try { extra = await require("./returns").portalRule(); } catch (_) {} return SYSTEM_PROMPT_HEAD + (await core.policyText("playbook", skill)) + extra + "\n\n" + require("./garment-specs").text(); }
 
 let app = null;   // Slack (Bolt) — set in start() when tokens exist
 
