@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.105.5
+- Emily: before proposing a return + label, she checks whether that order already has a return. If it does, she stops (no duplicate return or label) and instead gives the customer the existing label link and tracking number; the label PDF still attaches to the reply if it hasn't gone out yet. Fixes tickets where she kept re-proposing returns that already existed ("isn't returnable" failures).
+
 ## 4.105.4
 - Profiles: newest first by default (new sign-ups at the top), with an Added column and a Sort menu (Newest first, Last order, Last active, Most spent). Filtering by a list sorts by when they joined that list. Before, people with no orders (new sign-ups) sank to the bottom.
 

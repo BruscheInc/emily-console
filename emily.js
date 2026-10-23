@@ -1550,6 +1550,21 @@ async function returnPropose(input) {
   const R = require("./returns");
   let prep;
   try { prep = await R.staffLookup(order); } catch (e) { return { error: e.message }; }
+  // A return (with its prepaid label) may already exist for this order — never stage a second one.
+  try {
+    const name = String(prep.order.name || order).replace(/^#/, "");
+    const ex = (await db(`SELECT * FROM hd_returns WHERE ltrim(order_name,'#')=$1 AND status <> 'cancelled' ORDER BY created_at`, [name])).rows.map(R.rowToRec);
+    const covers = ex.filter((r) => (r.items || []).some((it) => items.some((i) => (i.sku && it.sku === i.sku) || (i.title && String(it.title || "").toLowerCase().includes(String(i.title).toLowerCase())))));
+    if (covers.length) {
+      const st = await R.settings().catch(() => ({}));
+      const pending = await pendingFiles(input.ticket_id).catch(() => []);
+      return { ok: false, already_returned: true,
+        returns: covers.map((r) => ({ rma: r.rma, status: r.status, created_at: r.created_at, items: (r.items || []).map((i) => `${i.quantity || 1}× ${i.title}`), refund_method: r.refund_method,
+          tracking_number: r.tracking_number, label_link: `${R.linkBase(r.store, st)}/returns/label/${r.id}/${R.labelToken(r.id)}` })),
+        label_pdf_attaches_to_next_reply: pending.length > 0,
+        note: `These items already have a return with a prepaid label — do NOT stage another return. In the reply, give the customer the label link(s) above (they open the printable label) and the tracking number, and say it's already set up. ${pending.length ? "The label PDF(s) will also be attached to this reply automatically." : ""} No approval needed for this (escalate=false).` };
+    }
+  } catch (e) { console.error("return check:", e.message); }
   const method = input.refund_method === "store_credit" ? "store_credit" : "original";
   const blocked = items.map((i) => prep.items.find((x) => (i.sku && x.sku === i.sku) || (i.title && x.title.toLowerCase().includes(String(i.title).toLowerCase())))).filter((x) => x && !x.eligible);
   const summary = `↩️ Return ${items.map((i) => `${i.quantity || 1}× ${i.title || i.sku}${i.reason ? ` (${i.reason})` : ""}`).join(", ")} on ${prep.order.name} · ${method === "store_credit" ? "store credit + bonus" : "refund to original payment"}. Buys a prepaid ShipStation label and attaches it to the reply.${blocked.length ? ` ⚠️ Outside policy: ${blocked.map((b) => `${b.title} — ${b.why}`).join("; ")} (applying overrides it).` : ""}`;
