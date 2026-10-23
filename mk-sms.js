@@ -96,7 +96,13 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     if (!guard(req, res)) return;
     try { const b = req.body || {}; const s = store(b.store) || "lb"; let prof = null; if (b.profile_id) prof = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [Number(b.profile_id)])).rows[0];
       if (!prof) prof = { id: 0, first_name: "Maria", last_name: "Lopez", phone: "+15555550123", props: { last_sizes: ["3-6M"] } };
-      const body = await compose(s, b, prof, { coupon: "WELCOME-8K2Q", checkout_url: "https://lrk.sp/c/x7Qa" }); res.json({ body, ...segments(body) }); } catch (e) { fail(res, e); }
+      // Cart texts show a real recent checkout link, so the link in the preview opens.
+      const cart = /checkout_url|CheckoutURL|line_items|event\./.test(String(b.body || "")) ? await E().sampleCart(s, prof.id ? prof : null) : {};
+      if (cart.items && !cart.checkout_url) cart.checkout_url = `${String((await E().brand(s)).shop_url || "").replace(/\/$/, "")}/cart`;
+      const body = await compose(s, b, prof, { coupon: "WELCOME-8K2Q", ...cart });
+      // Sent texts carry a short tracked link instead of the long one, so count the length that way.
+      const shortBase = `${require("./mk-analytics").brandBase(s)}/l/abcd1234`;
+      res.json({ body, ...segments(body.replace(/https?:\/\/[^\s]+/g, shortBase)) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/mk/sms/test", async (req, res) => {
     if (!guard(req, res)) return;

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.104.5
+- Text preview: cart texts show a real recent checkout link (it opens), and the length counts the short tracked link that real texts carry.
+
 ## 4.104.4
 - Text tests: a cart text sent as a test now carries a real checkout link (your own recent checkout, or the newest one in the store) instead of an empty spot.
 
