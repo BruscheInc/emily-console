@@ -187,7 +187,7 @@ function routes(app, { guard, fail, store }) {
 
 async function init() { await migrate(); }
 /** Revenue credited to each flow or campaign over the last N days (same click rule as the overview), plus how many people got it. */
-async function revenueBy(kind, days = 7) { return MK().memo(`rev:${kind}:${days}`, 300e3, () => revenueBy0(kind, days)); }
+async function revenueBy(kind, days = 7) { return MK().memo(`rev:${kind}:${days}`, 600e3, () => revenueBy0(kind, days)); }
 async function revenueBy0(kind, days = 7) {
   days = Math.min(730, Math.max(1, Number(days) || 7));
   const S = await MK().settings(), key = kind === "campaign" ? "campaign_id" : "flow_id", col = kind === "campaign" ? "campaign_id" : "flow_id";
@@ -218,4 +218,4 @@ async function flowSteps(flowId, days = 30) {
   for (const r of orders) (out[r.step] = out[r.step] || { step: r.step, delivered: 0, recipients: 0, opened: 0, clicked: 0, unsubscribed: 0, bounced: 0 }), out[r.step].orders = r.orders, out[r.step].revenue = r.revenue;
   return out;
 }
-module.exports = { previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };
+module.exports = { revenueBy0, previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };

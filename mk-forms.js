@@ -63,19 +63,20 @@ const DEFAULT_FORM = (brand) => ({
   sms_consent_text: SMS_CONSENT(brand), email_consent_text: EMAIL_CONSENT(brand),
 });
 
+async function formStats() {
+  const out = {};
+  for (const r of (await db(`SELECT form_id, count(*) FILTER (WHERE type='viewed')::int views, count(*) FILTER (WHERE type='submitted_email')::int emails,
+      count(*) FILTER (WHERE type='submitted_phone')::int phones, count(DISTINCT profile_id) FILTER (WHERE type LIKE 'submitted_%')::int submitted
+      FROM mk_form_events WHERE NOT preview GROUP BY form_id`)).rows) out[r.form_id] = { ...r, revenue: 0 };
+  for (const r of (await db(`WITH s AS (SELECT form_id, profile_id, min(at) at FROM mk_form_events WHERE type='submitted_email' AND NOT preview AND profile_id IS NOT NULL GROUP BY 1,2)
+      SELECT s.form_id, COALESCE(sum(o.value),0)::float revenue FROM s JOIN mk_events o ON o.profile_id=s.profile_id AND o.type='placed_order' AND o.at > s.at GROUP BY s.form_id`)).rows) out[r.form_id] = { ...(out[r.form_id] || {}), revenue: r.revenue };
+  return out;
+  }
 async function list(store) {
   const rows = (await db(`SELECT f.*, (SELECT l.name FROM mk_lists l WHERE l.id=f.list_id) list_name, (SELECT count(*)::int FROM mk_forms v WHERE v.ab_of=f.id) variants
     FROM mk_forms f WHERE f.ab_of IS NULL ${store ? "AND f.store=$1" : ""} ORDER BY f.updated_at DESC`, store ? [store] : [])).rows;
   // views, sign-ups and revenue for every form in one pass (cached a minute)
-  const st = await MK().memo("form_stats", 60e3, async () => {
-    const out = {};
-    for (const r of (await db(`SELECT form_id, count(*) FILTER (WHERE type='viewed')::int views, count(*) FILTER (WHERE type='submitted_email')::int emails,
-        count(*) FILTER (WHERE type='submitted_phone')::int phones, count(DISTINCT profile_id) FILTER (WHERE type LIKE 'submitted_%')::int submitted
-        FROM mk_form_events WHERE NOT preview GROUP BY form_id`)).rows) out[r.form_id] = { ...r, revenue: 0 };
-    for (const r of (await db(`WITH s AS (SELECT form_id, profile_id, min(at) at FROM mk_form_events WHERE type='submitted_email' AND NOT preview AND profile_id IS NOT NULL GROUP BY 1,2)
-        SELECT s.form_id, COALESCE(sum(o.value),0)::float revenue FROM s JOIN mk_events o ON o.profile_id=s.profile_id AND o.type='placed_order' AND o.at > s.at GROUP BY s.form_id`)).rows) out[r.form_id] = { ...(out[r.form_id] || {}), revenue: r.revenue };
-    return out;
-  });
+  const st = await MK().memo("form_stats", 600e3, formStats);
   return rows.map((f) => { const x = st[f.id] || st[String(f.id)] || {}; return { ...f, views: x.views || 0, emails: x.emails || 0, phones: x.phones || 0, submitted: x.submitted || 0, revenue: x.revenue || 0 }; });
 }
 async function get(id) { return V2.toV2((await db(`SELECT * FROM mk_forms WHERE id=$1`, [Number(id)])).rows[0] || null); }
@@ -414,4 +415,4 @@ async function init() {
     }
   } catch (e) { console.error("form consent wording:", e.message); }
 }
-module.exports = { clearCache: () => CACHE.clear(), visitorConfig, init, migrate, routes, list, get, create, save, submit, config, issueCoupon, SMS_CONSENT, EMAIL_CONSENT };
+module.exports = { formStats, clearCache: () => CACHE.clear(), visitorConfig, init, migrate, routes, list, get, create, save, submit, config, issueCoupon, SMS_CONSENT, EMAIL_CONSENT };

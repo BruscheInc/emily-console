@@ -69,18 +69,19 @@ function validate(graph) {
 const reachable = (graph) => { const seen = new Set(); const go = (id) => { if (!id || seen.has(id) || !graph.nodes[id]) return; seen.add(id); edges(graph.nodes[id]).forEach(go); }; go(graph.start); return seen; };
 
 /* ---------------- flows ---------------- */
+async function flowCounts() {
+  const out = {};
+  for (const r of (await db(`SELECT flow_id, count(*) FILTER (WHERE status IN ('active','working','paused'))::int in_flow, count(*) FILTER (WHERE entered_at > now() - interval '30 days')::int entered_30d FROM mk_flow_runs GROUP BY flow_id`)).rows) out[r.flow_id] = { ...r };
+  for (const r of (await db(`SELECT flow_id, count(*)::int sends_30d FROM mk_sends WHERE flow_id IS NOT NULL AND created_at > now() - interval '30 days' GROUP BY flow_id`)).rows) out[r.flow_id] = { ...(out[r.flow_id] || {}), sends_30d: r.sends_30d };
+  return out;
+  }
 async function list(store, { archived = false } = {}) {
   const rows = (await db(`SELECT f.id, f.store, f.name, f.status, f.trigger, f.source, f.updated_at, f.version, f.archived,
       (SELECT array_agg(DISTINCT n.value->>'type') FROM jsonb_each(COALESCE(f.graph->'nodes','{}'::jsonb)) n WHERE n.value->>'type' IN ('send_email','send_sms')) channels,
       (SELECT count(*)::int FROM jsonb_object_keys(COALESCE(f.graph->'nodes','{}'::jsonb))) steps
     FROM mk_flows f WHERE f.archived = ${archived ? "true AND f.deleted_at IS NULL" : "false"} ${store ? "AND f.store=$1" : ""} ORDER BY f.status='live' DESC, f.updated_at DESC`, store ? [store] : [])).rows;
   // run / send counts for every flow in two grouped queries (cached a minute) instead of three per flow
-  const c = await MK().memo("flow_counts", 60e3, async () => {
-    const out = {};
-    for (const r of (await db(`SELECT flow_id, count(*) FILTER (WHERE status IN ('active','working','paused'))::int in_flow, count(*) FILTER (WHERE entered_at > now() - interval '30 days')::int entered_30d FROM mk_flow_runs GROUP BY flow_id`)).rows) out[r.flow_id] = { ...r };
-    for (const r of (await db(`SELECT flow_id, count(*)::int sends_30d FROM mk_sends WHERE flow_id IS NOT NULL AND created_at > now() - interval '30 days' GROUP BY flow_id`)).rows) out[r.flow_id] = { ...(out[r.flow_id] || {}), sends_30d: r.sends_30d };
-    return out;
-  });
+  const c = await MK().memo("flow_counts", 600e3, flowCounts);
   return rows.map((f) => { const x = c[f.id] || c[String(f.id)] || {}; return { ...f, in_flow: x.in_flow || 0, entered_30d: x.entered_30d || 0, sends_30d: x.sends_30d || 0 }; });
 }
 async function get(id) { return (await db(`SELECT * FROM mk_flows WHERE id=$1`, [Number(id)])).rows[0] || null; }
@@ -745,4 +746,4 @@ async function couponFor(flow, p, ctx, channel, msg, run) {
   return CP.codesFor(flow.store, p, msg, { real: live, source: `flow ${flow.name}` });
 }
 
-module.exports = { resetCache: () => { FLOW_CACHE.t = 0; }, init, migrate, routes, onEvent, enroll, tick, validate, delayUntil, simulate, importKlaviyoFlows, mergeDuplicates, get, list, save, create, TYPES, STARTER_NAMES };
+module.exports = { flowCounts, resetCache: () => { FLOW_CACHE.t = 0; }, init, migrate, routes, onEvent, enroll, tick, validate, delayUntil, simulate, importKlaviyoFlows, mergeDuplicates, get, list, save, create, TYPES, STARTER_NAMES };

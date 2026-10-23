@@ -555,7 +555,9 @@ async function init() {
   // While the Klaviyo copy is still in progress, check again every 10 minutes so the merge runs when it finishes.
   setInterval(() => { syncAll({ who: "retry" }).catch(() => {}); }, 10 * 60 * 1000);   // finished steps are skipped
   setInterval(() => recomputeTiers().catch(() => {}), 6 * 3600 * 1000);
-  const warmAll = async () => { await warm("stats", 600e3, profileStats0); await warm("list_counts", 600e3, listCounts0); await warm("overview:", 600e3, () => overview0("")); await warm("count::[]", 600e3, async () => (await db(`SELECT count(*)::int n FROM mk_profiles p`)).rows[0].n); };
+  const warmAll = async () => { await warm("stats", 600e3, profileStats0); await warm("list_counts", 600e3, listCounts0); await warm("overview:", 600e3, () => overview0("")); await warm("count::[]", 600e3, async () => (await db(`SELECT count(*)::int n FROM mk_profiles p`)).rows[0].n);
+    try { await warm("flow_counts", 600e3, require("./mk-flows").flowCounts); await warm("form_stats", 600e3, require("./mk-forms").formStats);
+      for (const k of ["flow", "campaign"]) await warm(`rev:${k}:7`, 600e3, () => require("./mk-analytics").revenueBy0(k, 7)); } catch (_) {} };
   setTimeout(warmAll, 45 * 1000); setInterval(warmAll, 2 * 60 * 1000);
   setTimeout(() => pollOrders().catch(() => {}), 2 * 60 * 1000); setInterval(() => pollOrders().catch(() => {}), 5 * 60 * 1000);
   // Keep the all-contacts list complete (catches imports and merges that skip upsertProfile).
