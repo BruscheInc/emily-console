@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.108.1
+- Analytics: **Today** and **Custom** dates (Central time) next to 7 days / 30 days / 90 days / 12 months. Everything on the page follows the period: revenue, revenue by day, top earners, sends, list growth, forms and email health. The page remembers your choice.
+
 ## 4.108.0
 - Flows: the metric period now has **Today** and **Custom dates** (pick a start and end date, Central time), alongside Last 7/30/90/365 days. The same choices are on each flow step's Performance panel. The Flows page remembers your last choice.
 

@@ -96,18 +96,20 @@ async function record(send, type, req, url) {
 }
 
 /* ---------------- reports ---------------- */
-async function overview({ store, days = 30 }) {
-  days = Math.min(730, Math.max(1, Number(days) || 30));
+async function overview({ store, days = 30, from, to }) {
+  const pr = await period(from ? { from, to } : { days: days || 30 });
+  const F = new Date(pr.from).toISOString(), T = new Date(pr.to).toISOString();   // server-made timestamps, safe inline
+  days = pr.days || Math.max(1, Math.ceil((new Date(pr.to) - new Date(pr.from)) / 864e5));
   const S = await MK().settings();
   const ed = S.attribution.email_click_days, sd = S.attribution.sms_click_days;
-  const a = [days]; const sw = (al) => (store ? ` AND ${al}.store=$${a.push(store) && a.length}` : "");
-  const sends = (await db(`SELECT s.channel, s.status, count(*)::int n FROM mk_sends s WHERE s.created_at > now() - ($1 || ' days')::interval AND NOT COALESCE((s.meta->>'test')::boolean,false)${sw("s")} GROUP BY 1,2`, a)).rows;
-  const b = [days]; const sw2 = (al) => (store ? ` AND ${al}.store=$${b.push(store) && b.length}` : "");
-  const ev = (await db(`SELECT s.channel, e.type, count(DISTINCT s.id)::int n FROM mk_send_events e JOIN mk_sends s ON s.id=e.send_id WHERE NOT e.machine AND e.at > now() - ($1 || ' days')::interval${sw2("s")} GROUP BY 1,2`, b)).rows;
+  const a = [F]; const sw = (al) => (store ? ` AND ${al}.store=$${a.push(store) && a.length}` : "");
+  const sends = (await db(`SELECT s.channel, s.status, count(*)::int n FROM mk_sends s WHERE s.created_at >= $1::timestamptz AND s.created_at < '${T}'::timestamptz AND NOT COALESCE((s.meta->>'test')::boolean,false)${sw("s")} GROUP BY 1,2`, a)).rows;
+  const b = [F]; const sw2 = (al) => (store ? ` AND ${al}.store=$${b.push(store) && b.length}` : "");
+  const ev = (await db(`SELECT s.channel, e.type, count(DISTINCT s.id)::int n FROM mk_send_events e JOIN mk_sends s ON s.id=e.send_id WHERE NOT e.machine AND e.at >= $1::timestamptz AND e.at < '${T}'::timestamptz${sw2("s")} GROUP BY 1,2`, b)).rows;
 
   // revenue: all store orders, and the part credited to a click
-  const c = [days, ed, sd]; const sw3 = (al) => (store ? ` AND ${al}.store=$${c.push(store) && c.length}` : "");
-  const credited = `WITH o AS (SELECT e.id, e.profile_id, e.store, e.at, COALESCE(e.value,0) value FROM mk_events e WHERE e.type='placed_order' AND e.at > now() - ($1 || ' days')::interval AND NOT COALESCE((e.props->>'cancelled')::boolean,false)${sw3("e")}),
+  const c = [F, ed, sd]; const sw3 = (al) => (store ? ` AND ${al}.store=$${c.push(store) && c.length}` : "");
+  const credited = `WITH o AS (SELECT e.id, e.profile_id, e.store, e.at, COALESCE(e.value,0) value FROM mk_events e WHERE e.type='placed_order' AND e.at >= $1::timestamptz AND e.at < '${T}'::timestamptz AND NOT COALESCE((e.props->>'cancelled')::boolean,false)${sw3("e")}),
     cr AS (SELECT o.*, k.type ktype, k.props kp FROM o LEFT JOIN LATERAL (SELECT k.type, k.props FROM mk_events k WHERE k.profile_id=o.profile_id AND k.type IN ('clicked_email','clicked_sms') AND k.at <= o.at
            AND k.at > o.at - ((CASE WHEN k.type='clicked_email' THEN $2::int ELSE $3::int END) || ' days')::interval ORDER BY k.at DESC LIMIT 1) k ON o.profile_id IS NOT NULL)`;
   const rev = (await db(`${credited} SELECT count(*)::int orders, COALESCE(sum(value),0)::float total, count(*) FILTER (WHERE ktype IS NOT NULL)::int m_orders, COALESCE(sum(value) FILTER (WHERE ktype IS NOT NULL),0)::float marketing,
@@ -118,18 +120,18 @@ async function overview({ store, days = 30 }) {
   for (const t of top) t.name = (await db(t.kind === "campaign" ? `SELECT name FROM mk_campaigns WHERE id=$1` : `SELECT name FROM mk_flows WHERE id=$1`, [Number(t.id)])).rows.map((x) => x.name)[0] || `#${t.id}`;
 
   // list growth (consent changes per day)
-  const d = [days]; const sw4 = store ? ` AND p.store=$${d.push(store) && d.length}` : "";
+  const d = [F]; const sw4 = store ? ` AND p.store=$${d.push(store) && d.length}` : "";
   const growth = (await db(`SELECT to_char(date_trunc('day', l.at AT TIME ZONE 'America/Chicago'),'YYYY-MM-DD') d, l.channel,
       count(*) FILTER (WHERE l.state='subscribed' AND COALESCE(l.previous,'') <> 'subscribed')::int gained, count(*) FILTER (WHERE l.state IN ('unsubscribed','stopped') AND l.previous='subscribed')::int lost
-    FROM mk_consent_log l JOIN mk_profiles p ON p.id=l.profile_id WHERE l.at > now() - ($1 || ' days')::interval${sw4} GROUP BY 1,2 ORDER BY 1`, d)).rows;
+    FROM mk_consent_log l JOIN mk_profiles p ON p.id=l.profile_id WHERE l.at >= $1::timestamptz AND l.at < '${T}'::timestamptz${sw4} GROUP BY 1,2 ORDER BY 1`, d)).rows;
   const totals = (await db(`SELECT count(*) FILTER (WHERE email_consent='subscribed')::int email, count(*) FILTER (WHERE sms_consent='subscribed')::int sms FROM mk_profiles p WHERE true${store ? " AND p.store=$1" : ""}`, store ? [store] : [])).rows[0];
 
   // forms
-  const f = [days]; const sw5 = store ? ` AND f.store=$${f.push(store) && f.length}` : "";
+  const f = [F]; const sw5 = store ? ` AND f.store=$${f.push(store) && f.length}` : "";
   const forms = (await db(`SELECT f.id, f.name, f.status, count(*) FILTER (WHERE e.type='viewed')::int shown, count(*) FILTER (WHERE e.type='submitted_email')::int emails, count(*) FILTER (WHERE e.type='submitted_phone')::int phones
-    FROM mk_forms f LEFT JOIN mk_form_events e ON e.form_id=f.id AND NOT e.preview AND e.at > now() - ($1 || ' days')::interval WHERE true${sw5} GROUP BY f.id ORDER BY emails DESC, f.id DESC LIMIT 20`, f).catch(() => ({ rows: [] }))).rows;
+    FROM mk_forms f LEFT JOIN mk_form_events e ON e.form_id=f.id AND NOT e.preview AND e.at >= $1::timestamptz AND e.at < '${T}'::timestamptz WHERE true${sw5} GROUP BY f.id ORDER BY emails DESC, f.id DESC LIMIT 20`, f).catch(() => ({ rows: [] }))).rows;
 
-  return { days, attribution: S.attribution, sends, events: ev, revenue: rev, daily, top, growth, list_totals: totals, forms, health: health(sends, ev) };
+  return { days, from: pr.from, to: pr.to, period: pr.label, attribution: S.attribution, sends, events: ev, revenue: rev, daily, top, growth, list_totals: totals, forms, health: health(sends, ev) };
 }
 function health(sends, ev) {
   const sent = (ch) => sends.filter((x) => x.channel === ch && x.status === "sent").reduce((a, x) => a + x.n, 0);
@@ -180,7 +182,7 @@ function routes(app, { guard, fail, store }) {
       if (send) await record(send, "clicked", req, l.url);
     } catch (e) { console.error("link:", e.message); if (!res.headersSent) res.status(500).end(); }
   });
-  app.get("/api/mk/analytics", async (req, res) => { if (!guard(req, res)) return; try { res.json(await overview({ store: store(req.query.store), days: req.query.days })); } catch (e) { fail(res, e); } });
+  app.get("/api/mk/analytics", async (req, res) => { if (!guard(req, res)) return; try { res.json(await overview({ store: store(req.query.store), days: req.query.days, from: req.query.from, to: req.query.to })); } catch (e) { fail(res, e); } });
   app.get("/api/mk/analytics/cohorts", async (req, res) => { if (!guard(req, res)) return; try { res.json({ cohorts: await cohorts(store(req.query.store)) }); } catch (e) { fail(res, e); } });
   app.get("/api/mk/analytics/sends", async (req, res) => { if (!guard(req, res)) return; try { res.json({ rows: await sendsReport({ store: store(req.query.store), kind: req.query.kind }) }); } catch (e) { fail(res, e); } });
 }
