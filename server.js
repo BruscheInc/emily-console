@@ -1041,6 +1041,35 @@ async function welcomeDiag() {
   const live = (await db(`SELECT id, name, status, trigger FROM mk_flows WHERE status='live' AND NOT archived`)).rows; out(`live flows: ${JSON.stringify(live)}`);
   await core.syncSet("welcome_diag_v1", "1", {});
 }
+// One-time performance read of the 10% sign-up form + Welcome Series + 10% (vs the 15% versions before) — logs only.
+async function signupPerf() {
+  if (await syncGet("signup_perf_v1")) return;
+  const out = (m) => console.log("📈 SIGNUP-PERF " + m);
+  const q = async (sql, a = []) => (await db(sql, a).catch((e) => ({ rows: [{ error: e.message }] }))).rows;
+  out("forms by day: " + JSON.stringify(await q(`SELECT f.id, f.name, to_char(date_trunc('day', e.at AT TIME ZONE 'America/Chicago'),'MM-DD') d,
+      count(*) FILTER (WHERE e.type='viewed')::int views, count(DISTINCT e.vid) FILTER (WHERE e.type='viewed')::int viewers,
+      count(*) FILTER (WHERE e.type='submitted_email')::int emails, count(*) FILTER (WHERE e.type='submitted_phone')::int phones, count(*) FILTER (WHERE e.type='closed')::int closed
+    FROM mk_form_events e JOIN mk_forms f ON f.id=e.form_id WHERE NOT e.preview AND e.at > now() - interval '10 days' GROUP BY 1,2,3 ORDER BY 3,1`)));
+  for (const fid of [12, 11]) {
+    const fl = (await q(`SELECT id, name, status, updated_at FROM mk_flows WHERE id=$1`, [fid]))[0] || {};
+    out(`flow ${fid} ${fl.name} (${fl.status}) runs: ` + JSON.stringify(await q(`SELECT status, node_id, count(*)::int n, min(entered_at) first, max(entered_at) last FROM mk_flow_runs WHERE flow_id=$1 AND NOT test GROUP BY 1,2 ORDER BY 3 DESC`, [fid])));
+    out(`flow ${fid} sends: ` + JSON.stringify(await q(`SELECT s.flow_step, s.channel, s.status, count(*)::int n, count(DISTINCT s.id) FILTER (WHERE e.type='opened')::int opened, count(DISTINCT s.id) FILTER (WHERE e.type='clicked')::int clicked,
+        count(DISTINCT s.id) FILTER (WHERE e.type='bounced')::int bounced, count(DISTINCT s.id) FILTER (WHERE e.type='unsubscribed')::int unsub, min(s.created_at) first, max(s.created_at) last
+      FROM mk_sends s LEFT JOIN mk_send_events e ON e.send_id=s.id AND NOT e.machine WHERE s.flow_id=$1 AND NOT COALESCE((s.meta->>'test')::boolean,false) GROUP BY 1,2,3 ORDER BY 1`, [fid])));
+    try { out(`flow ${fid} credited: ` + JSON.stringify(await require("./mk-analytics").flowSteps(fid, 30))); } catch (e) { out("credit err " + e.message); }
+    out(`flow ${fid} people who entered → ordered after entering: ` + JSON.stringify(await q(`SELECT count(DISTINCT r.profile_id)::int entered,
+        count(DISTINCT o.profile_id)::int ordered, COALESCE(sum(o.value),0)::float revenue, count(o.id)::int orders
+      FROM mk_flow_runs r LEFT JOIN mk_events o ON o.profile_id=r.profile_id AND o.type='placed_order' AND o.at > r.entered_at AND NOT COALESCE((o.props->>'cancelled')::boolean,false)
+      WHERE r.flow_id=$1 AND NOT r.test`, [fid])));
+  }
+  out("welcome codes: " + JSON.stringify(await q(`SELECT COALESCE(percent::text, amount::text) off, count(*)::int issued, count(*) FILTER (WHERE redeemed_at IS NOT NULL)::int used, min(created_at) first, max(created_at) last
+    FROM mk_coupons WHERE real AND created_at > now() - interval '10 days' GROUP BY 1`)));
+  out("orders using a WELCOME code (10 days): " + JSON.stringify(await q(`SELECT to_char(date_trunc('day', e.at AT TIME ZONE 'America/Chicago'),'MM-DD') d, count(DISTINCT e.id)::int n, sum(e.value)::float revenue,
+      string_agg(DISTINCT c, ',') codes FROM mk_events e, LATERAL jsonb_array_elements_text(COALESCE(e.props->'discount_codes','[]'::jsonb)) c
+    WHERE e.type='placed_order' AND e.at > now() - interval '10 days' AND upper(c) LIKE 'WELCOME%' GROUP BY 1 ORDER BY 1`)));
+  out("store orders by day (10 days): " + JSON.stringify(await q(`SELECT store, to_char(date_trunc('day', at AT TIME ZONE 'America/Chicago'),'MM-DD') d, count(*)::int n, sum(value)::float revenue FROM mk_events WHERE type='placed_order' AND at > now() - interval '10 days' AND NOT COALESCE((props->>'cancelled')::boolean,false) GROUP BY 1,2 ORDER BY 1,2`)));
+  await core.syncSet("signup_perf_v1", "1", {});
+}
 // Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
 require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
@@ -1146,7 +1175,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

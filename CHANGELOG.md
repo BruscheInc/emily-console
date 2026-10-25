@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.108.2
+- One-time read in the log of how the 10% sign-up form and Welcome Series + 10% are doing (views, sign-ups, sends, opens, clicks, orders, welcome codes used), next to the 15% versions.
+
 ## 4.108.1
 - Analytics: **Today** and **Custom** dates (Central time) next to 7 days / 30 days / 90 days / 12 months. Everything on the page follows the period: revenue, revenue by day, top earners, sends, list growth, forms and email health. The page remembers your choice.
 
