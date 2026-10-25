@@ -679,7 +679,7 @@ async function stats(flowId) {
 function routes(app, { guard, admin, actorOf, fail, store }) {
   const isAdmin = (req) => { const s = core.sessionOf((req.headers.authorization || "").replace(/^Bearer /i, "") || req.query.key || ""); return !!(s && s.role === "admin"); };
   app.get("/api/mk/flows", async (req, res) => { if (!guard(req, res)) return; try { const st = store(req.query.store);
-    const flows = await list(st, { archived: req.query.archived === "1" }); let rev = {}; try { rev = await require("./mk-analytics").revenueBy("flow", req.query.days || 7); } catch (e) {}
+    const flows = await list(st, { archived: req.query.archived === "1" }); let rev = {}; try { const A = require("./mk-analytics"); rev = await A.revenueBy("flow", await A.period(req.query)); } catch (e) {}
     for (const f of flows) { const r = rev[String(f.id)] || {}; f.revenue = r.revenue || 0; f.orders = r.orders || 0; f.recipients = r.recipients || 0; f.rpr = f.recipients ? f.revenue / f.recipients : 0; }
     res.json({ flows, starters: STARTER_NAMES, events: SEG().EVENTS, lists: await MK().lists(st), segments: await SEG().list(st) }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/flows", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!store(b.store)) return res.status(400).json({ error: "Pick a store first" }); res.json(await create(b.store, b.name, actorOf(req), b.starter)); } catch (e) { fail(res, e); } });
@@ -690,7 +690,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
         versions: (await db(`SELECT version, by_user, created_at FROM mk_flow_versions WHERE flow_id=$1 ORDER BY version DESC LIMIT 20`, [f.id])).rows }); } catch (e) { fail(res, e); }
   });
   app.put("/api/mk/flows/:id", async (req, res) => { if (!guard(req, res)) return; try { const f = await save(req.params.id, req.body || {}, actorOf(req), isAdmin(req)); res.json({ ...f, problems: validate(f.graph) }); } catch (e) { fail(res, e); } });
-  app.get("/api/mk/flows/:id/performance", async (req, res) => { if (!guard(req, res)) return; try { res.json({ days: Number(req.query.days) || 30, steps: await require("./mk-analytics").flowSteps(req.params.id, req.query.days || 30) }); } catch (e) { fail(res, e); } });
+  app.get("/api/mk/flows/:id/performance", async (req, res) => { if (!guard(req, res)) return; try { const A = require("./mk-analytics"); const q = { ...req.query }; if (!q.days && !q.from) q.days = 30; res.json({ days: q.days || null, steps: await A.flowSteps(req.params.id, await A.period(q)) }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/flows/:id/clone", async (req, res) => { if (!guard(req, res)) return; try { const src = await get(req.params.id); if (!src) return res.status(404).json({ error: "not found" });
       const f = (await db(`INSERT INTO mk_flows (store, name, trigger, graph, source, updated_by, entry_filter, exit_filter, reentry, notes) VALUES ($1,$2,$3,$4,'buzzin',$5,$6,$7,$8,$9) RETURNING *`,
         [src.store, `${src.name} (copy)`.slice(0, 150), JSON.stringify(src.trigger), JSON.stringify(src.graph), actorOf(req), src.entry_filter ? JSON.stringify(src.entry_filter) : null, src.exit_filter ? JSON.stringify(src.exit_filter) : null, JSON.stringify(src.reentry || { mode: "once" }), src.notes])).rows[0];

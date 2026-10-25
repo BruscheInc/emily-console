@@ -14,18 +14,45 @@ const ADDABLE = ['send_email', 'send_sms', 'delay', 'wait_for', 'split', 'ab', '
 const nid = () => 'n' + Math.random().toString(16).slice(2, 10);
 const C = () => window.MK_conditions;
 
-let FQ = '', FSF = '', FDAYS = 7, FARCH = false, FCHK = new Set();
+let FQ = '', FSF = '', FARCH = false, FCHK = new Set();
+/* Metric period, like Klaviyo: Today, last N days, or custom dates (Central time). A period is {days: 7|'today'} or {from, to}. */
+const PERIODS = [['today', 'Today'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last 365 days'], ['custom', 'Custom dates…']];
+const ymd = (d) => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+const shortD = (s) => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const perLabel = (p) => p.from ? (p.from === p.to ? shortD(p.from) : `${shortD(p.from)} – ${shortD(p.to)}`) : (PERIODS.find(([k]) => k === String(p.days)) || [, 'Last 7 days'])[1];
+const perQS = (p) => (p.from ? { from: p.from, to: p.to } : { days: p.days });
+const perSelect = (id, p, style) => `<select id="${id}" aria-label="Metric period" style="${style || ''}">${PERIODS.map(([k, l]) => `<option value="${k}"${(p.from ? 'custom' : String(p.days)) === k ? ' selected' : ''}>${k === 'custom' && p.from ? esc(perLabel(p)) : l}</option>`).join('')}</select>`;
+function perBind(sel, p, onChange) {
+  if (!sel) return;
+  sel.onchange = () => {
+    if (sel.value !== 'custom') return onChange({ days: sel.value === 'today' ? 'today' : Number(sel.value) });
+    document.querySelectorAll('.fx-per').forEach((m) => m.remove());
+    const r = sel.getBoundingClientRect(), m = document.createElement('div'); m.className = 'fx-per';
+    const today = ymd(Date.now());
+    m.style.cssText = `position:fixed;z-index:90;left:${Math.max(8, Math.min(window.innerWidth - 300, r.left))}px;top:${r.bottom + 6}px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:14px;width:280px`;
+    m.innerHTML = `<div style="font-weight:600;margin-bottom:10px">Custom dates</div>
+      <label style="display:block;font-size:12.5px;color:var(--muted)">Start<input type="date" data-f value="${p.from || ymd(Date.now() - 6 * 864e5)}" max="${today}" style="width:100%;margin-top:4px"></label>
+      <label style="display:block;font-size:12.5px;color:var(--muted);margin-top:8px">End<input type="date" data-t value="${p.to || today}" max="${today}" style="width:100%;margin-top:4px"></label>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn xs" data-x>Cancel</button><button class="btn xs pri" data-ok>Apply</button></div>`;
+    document.body.appendChild(m);
+    const close = () => { m.remove(); sel.value = p.from ? 'custom' : String(p.days); };
+    m.querySelector('[data-x]').onclick = close;
+    m.querySelector('[data-ok]').onclick = () => { let f = m.querySelector('[data-f]').value, t = m.querySelector('[data-t]').value; if (!f || !t) return toast('Pick both dates', 1); if (f > t) [f, t] = [t, f]; m.remove(); onChange({ from: f, to: t }); };
+  };
+}
+let FPER = (() => { try { return JSON.parse(localStorage.getItem('mk_flow_period') || 'null') || { days: 7 }; } catch (e) { return { days: 7 }; } })();
+const savePer = () => { try { localStorage.setItem('mk_flow_period', JSON.stringify(FPER)); } catch (e) {} };
 async function renderFlows(el, id) {
   if (id) return editFlow(el, id);
   const KL = window.MK_KL || {}, I = (n) => `<i class="ti ti-${n}"></i>`;
-  const load = () => api('/api/mk/flows?' + qs({ store: STORE, days: FDAYS, archived: FARCH ? '1' : '' }));
+  const load = () => api('/api/mk/flows?' + qs({ store: STORE, ...perQS(FPER), archived: FARCH ? '1' : '' }));
   let r = await load();
   el.innerHTML = (KL.LCSS || '') + `<style>.kl .cb{width:18px;height:18px;accent-color:#18181B}.kl .bulk{display:flex;align-items:center;gap:10px;background:#F4F4F5;border-radius:10px;padding:8px 12px;margin-bottom:12px}
     .kl .st.paused{background:#FEE2E2;color:#991B1B}.kl .st.test{background:#DBEAFE;color:#1E40AF}.kl .tico{font-size:20px;display:inline-flex;gap:6px}.kl .flab{display:block;font-size:12.5px;color:#52525B;margin-bottom:4px}</style>
     <div class="kl"><div class="kl-h"><h1>${FARCH ? 'Archived flows' : 'Flows'}</h1>${FARCH ? `<button class="btn" id="fback">${I('arrow-left')} Back to flows</button>` : ''}<button class="btn" id="fopt">Options ${I('chevron-down')}</button><button class="btn pri" id="fcr">Create flow</button></div>
     <div class="kl-b"><div class="kl-f" style="align-items:flex-end"><input type="search" id="fq" placeholder="Search flows" value="${esc(FQ)}" aria-label="Search flows">
       <select id="fsf" aria-label="Status"><option value="">Status</option>${Object.entries(FSTATUS).map(([k, [, l]]) => `<option value="${k}"${FSF === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>
-      <div><span class="flab">Metric period</span><select id="fdays" aria-label="Metric period" style="border-style:solid">${[[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [365, 'Last 365 days']].map(([v, l]) => `<option value="${v}"${FDAYS === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div></div>
+      <div><span class="flab">Metric period</span>${perSelect('fdays', FPER, 'border-style:solid')}</div></div>
       <div id="fbulk"></div><div id="fbody"></div></div></div>`;
   const reload = async () => { r = await load(); draw(); };
   const st = () => STORE || 'lb';
@@ -35,7 +62,7 @@ async function renderFlows(el, id) {
     ['Re-import from Klaviyo', 'download', async () => { try { const x = await api('/api/mk/flows/import-klaviyo', { method: 'POST', body: '{}' }); toast(`${x.flows.length} flows imported as drafts`); reload(); } catch (e) { toast(e.message, 1); } }]], { alignRight: true });
   if ($('fback')) $('fback').onclick = () => { FARCH = false; FCHK.clear(); renderFlows(el); };
   $('fq').oninput = () => { FQ = $('fq').value; draw(); }; $('fsf').onchange = () => { FSF = $('fsf').value; draw(); };
-  $('fdays').onchange = async () => { FDAYS = Number($('fdays').value); await reload(); };
+  perBind($('fdays'), FPER, async (np) => { FPER = np; savePer(); renderFlows(el); });
   const archive = async (list, on) => { for (const f of list) { try { await api(`/api/mk/flows/${f.id}/archive`, { method: 'POST', body: JSON.stringify({ archived: on }) }); FCHK.delete(String(f.id)); } catch (e) { toast(e.message, 1); return; } } toast(on ? `Archived ${list.length}` : `Restored ${list.length}`); reload(); };
   const del = async (list) => { if (!confirm(list.length === 1 ? `Delete the flow "${list[0].name}"? Anyone in it leaves the flow. This can't be undone.` : `Delete ${list.length} flows? Anyone in them leaves. This can't be undone.`)) return;
     for (const f of list) { try { await api('/api/mk/flows/' + f.id, { method: 'DELETE' }); FCHK.delete(String(f.id)); } catch (e) { toast(e.message, 1); return; } } toast(`Deleted ${list.length}`); reload(); };
@@ -81,7 +108,7 @@ function trigText(t, ctx = {}) {
 let FL = null, SEL = null, fldirty = false;
 async function editFlow(el, id) {
   FL = await api('/api/mk/flows/' + id); SEL = null; fldirty = false;
-  FL.perfDays = 30; try { FL.perf = (await api(`/api/mk/flows/${id}/performance?days=30`)).steps; } catch (e) { FL.perf = {}; }
+  FL.perfPer = FL.perfPer || { days: 30 }; try { FL.perf = (await api(`/api/mk/flows/${id}/performance?` + qs(perQS(FL.perfPer)))).steps; } catch (e) { FL.perf = {}; }
   el.style.padding = '0';
   el.innerHTML = `<style>
     .fx-top{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}.fx-crumb{display:flex;align-items:center;gap:6px;font-size:17px;min-width:0}.fx-crumb a{color:#52525B;text-decoration:none}.fx-crumb a:hover{text-decoration:underline}
@@ -354,7 +381,7 @@ function perfSection(id, type) {
   const p = (FL.perf || {})[id] || {}, d = p.delivered || 0;
   const row = (l, v, sub) => `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)"><span>${l}</span><span style="text-align:right"><b>${v}</b>${sub ? `<div style="font-size:11.5px;color:var(--muted)">${sub}</div>` : ''}</span></div>`;
   return `<div style="margin:12px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px">
-    <div style="display:flex;align-items:center;gap:8px"><b style="flex:1">Performance</b><select id="flpd" aria-label="Period" style="height:30px;font-size:12.5px">${[[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [365, 'Last 365 days']].map(([v, l]) => `<option value="${v}"${FL.perfDays === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div style="display:flex;align-items:center;gap:8px"><b style="flex:1">Performance</b>${perSelect('flpd', FL.perfPer || { days: 30 }, 'height:30px;font-size:12.5px')}</div>
     ${row('Recipients', fmtN(p.recipients || 0))}${type === 'send_email' ? row('Open rate', pct(p.opened || 0, d), d ? `${fmtN(p.opened || 0)} opened` : '') : ''}${row('Click rate', pct(p.clicked || 0, d), d ? `${fmtN(p.clicked || 0)} clicked` : '')}
     ${row('Placed order', p.orders ? usd(p.revenue) : '—', p.orders ? `${fmtN(p.orders)} order${p.orders > 1 ? 's' : ''} · ${pct(p.orders, p.recipients || 0)} of recipients` : '')}${row('Unsubscribe rate', pct(p.unsubscribed || 0, d))}${type === 'send_email' ? row('Bounce rate', pct(p.bounced || 0, d)) : ''}
     <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Orders count when they come within the click window in Settings → Revenue credit. Test sends aren't counted.</div></div>`;
@@ -412,7 +439,7 @@ function drawRight() {
   const linear = !['split', 'wait_for', 'ab', 'end'].includes(n.type);
   R.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><span class="sp"></span><button class="btn xs danger" id="ndel"><i class="ti ti-trash"></i> Remove step</button></div>${body.includes('%%PERF%%') ? body.replace('%%PERF%%', perfHtml) : perfHtml + body}${linear ? fl2('Then goes to', nextSelect('next', n.next, SEL), 'Pick an existing step to join that path.') : ''}`;
   showPanel();
-  const pd = R.querySelector('#flpd'); if (pd) pd.onchange = async () => { FL.perfDays = Number(pd.value); try { FL.perf = (await api(`/api/mk/flows/${FL.id}/performance?days=${FL.perfDays}`)).steps; } catch (e) {} drawRight(); drawCanvas(); };
+  perBind(R.querySelector('#flpd'), FL.perfPer || { days: 30 }, async (np) => { FL.perfPer = np; try { FL.perf = (await api(`/api/mk/flows/${FL.id}/performance?` + qs(perQS(np)))).steps; } catch (e) {} drawRight(); drawCanvas(); });
   R.querySelectorAll('[data-c]').forEach((x) => { if (x.tagName === 'SELECT') { const v = c[x.dataset.c] == null ? '' : String(c[x.dataset.c]); if ([...x.options].some((o) => o.value === v)) x.value = v; } x.oninput = x.onchange = () => { let v = x.value; if (x.type === 'number') v = Number(v); if (x.dataset.c === 'until_time' && !v) v = null; c[x.dataset.c] = v; mark(); if (x.dataset.c === 'body') smsCount(); if (['kind'].includes(x.dataset.c) || (x.dataset.c === 'template_id')) drawRight();
     // the email's name is one name: renaming it here renames the email itself (and every other flow step that sends it)
     if (n.type === 'send_email' && x.dataset.c === 'name' && c.template_id && String(v).trim()) { clearTimeout(window.__flRen); const tid = c.template_id, nm = String(v).trim(); window.__flRen = setTimeout(async () => { try { await api(`/api/mk/templates/${tid}/rename`, { method: 'POST', body: JSON.stringify({ name: nm }) }); const t = (FL.templates || []).find((y) => String(y.id) === String(tid)); if (t) t.name = nm; } catch (e) { toast(e.message, 1); } }, 700); }

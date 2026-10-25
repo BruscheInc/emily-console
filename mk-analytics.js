@@ -186,36 +186,53 @@ function routes(app, { guard, fail, store }) {
 }
 
 async function init() { await migrate(); }
-/** Revenue credited to each flow or campaign over the last N days (same click rule as the overview), plus how many people got it. */
-async function revenueBy(kind, days = 7) { return MK().memo(`rev:${kind}:${days}`, 600e3, () => revenueBy0(kind, days)); }
-async function revenueBy0(kind, days = 7) {
-  days = Math.min(730, Math.max(1, Number(days) || 7));
+/** A metric period from a request: days=7|30|…, days=today, or from=YYYY-MM-DD&to=YYYY-MM-DD (Central time, whole days).
+    Returns { from, to } as timestamps and a cache key. */
+async function period(q = {}) {
+  const tz = "America/Chicago";
+  if (q.from && /^\d{4}-\d{2}-\d{2}$/.test(String(q.from))) {
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(String(q.to || "")) ? String(q.to) : String(q.from);
+    const r = (await db(`SELECT ($1::date::timestamp AT TIME ZONE '${tz}') f, (($2::date + 1)::timestamp AT TIME ZONE '${tz}') t`, [String(q.from), to])).rows[0];
+    return { from: r.f, to: r.t, key: `${q.from}_${to}`, label: "custom" };
+  }
+  if (String(q.days) === "today") { const r = (await db(`SELECT (date_trunc('day', now() AT TIME ZONE '${tz}') AT TIME ZONE '${tz}') f, now() + interval '1 minute' t`)).rows[0]; return { from: r.f, to: r.t, key: "today", label: "today" }; }
+  const days = Math.min(730, Math.max(1, Number(q.days) || 7));
+  return { from: new Date(Date.now() - days * 864e5), to: new Date(Date.now() + 60e3), key: String(days), days, label: `${days}d` };
+}
+/** Revenue credited to each flow or campaign over a period (same click rule as the overview), plus how many people got it.
+    `p` is a number of days or a period() result. */
+async function revenueBy(kind, p = 7) {
+  const pr = typeof p === "object" && p ? p : await period({ days: p });
+  return MK().memo(`rev:${kind}:${pr.key}`, pr.days ? 600e3 : 60e3, () => revenueBy0(kind, pr));
+}
+async function revenueBy0(kind, p = 7) {
+  const pr = typeof p === "object" && p ? p : await period({ days: p });
   const S = await MK().settings(), key = kind === "campaign" ? "campaign_id" : "flow_id", col = kind === "campaign" ? "campaign_id" : "flow_id";
-  const c = [days, S.attribution.email_click_days, S.attribution.sms_click_days];
-  const rows = (await db(`WITH o AS (SELECT e.id, e.profile_id, e.at, COALESCE(e.value,0) value FROM mk_events e WHERE e.type='placed_order' AND e.at > now() - ($1 || ' days')::interval AND NOT COALESCE((e.props->>'cancelled')::boolean,false)),
+  const c = [pr.from, S.attribution.email_click_days, S.attribution.sms_click_days, pr.to];
+  const rows = (await db(`WITH o AS (SELECT e.id, e.profile_id, e.at, COALESCE(e.value,0) value FROM mk_events e WHERE e.type='placed_order' AND e.at >= $1 AND e.at < $4 AND NOT COALESCE((e.props->>'cancelled')::boolean,false)),
       cr AS (SELECT o.*, k.props kp FROM o JOIN LATERAL (SELECT k.props FROM mk_events k WHERE k.profile_id=o.profile_id AND k.type IN ('clicked_email','clicked_sms') AND k.at <= o.at
              AND k.at > o.at - ((CASE WHEN k.type='clicked_email' THEN $2::int ELSE $3::int END) || ' days')::interval ORDER BY k.at DESC LIMIT 1) k ON true)
     SELECT kp->>'${key}' id, count(*)::int orders, COALESCE(sum(value),0)::float revenue FROM cr WHERE kp->>'${key}' IS NOT NULL GROUP BY 1`, c)).rows;
-  const rec = (await db(`SELECT ${col}::text id, count(DISTINCT profile_id)::int n FROM mk_sends WHERE ${col} IS NOT NULL AND status='sent' AND created_at > now() - ($1 || ' days')::interval AND NOT COALESCE((meta->>'test')::boolean,false) GROUP BY 1`, [days])).rows;
+  const rec = (await db(`SELECT ${col}::text id, count(DISTINCT profile_id)::int n FROM mk_sends WHERE ${col} IS NOT NULL AND status='sent' AND created_at >= $1 AND created_at < $2 AND NOT COALESCE((meta->>'test')::boolean,false) GROUP BY 1`, [pr.from, pr.to])).rows;
   const out = {}; for (const r of rows) out[r.id] = { revenue: r.revenue, orders: r.orders, recipients: 0 };
   for (const r of rec) (out[r.id] = out[r.id] || { revenue: 0, orders: 0, recipients: 0 }).recipients = r.n;
   return out;
 }
 /** Each message step of one flow over N days: recipients, delivered, opens, clicks, unsubscribes, orders and revenue (click credit). */
-async function flowSteps(flowId, days = 30) {
-  days = Math.min(730, Math.max(1, Number(days) || 30)); const S = await MK().settings();
+async function flowSteps(flowId, p = 30) {
+  const pr = typeof p === "object" && p ? p : await period({ days: p }); const S = await MK().settings();
   const sends = (await db(`SELECT s.flow_step step, s.channel, count(DISTINCT s.id) FILTER (WHERE s.status='sent')::int delivered, count(DISTINCT s.profile_id) FILTER (WHERE s.status='sent')::int recipients,
       count(DISTINCT s.id) FILTER (WHERE e.type='opened')::int opened, count(DISTINCT s.id) FILTER (WHERE e.type='clicked')::int clicked, count(DISTINCT s.id) FILTER (WHERE e.type='unsubscribed')::int unsubscribed,
       count(DISTINCT s.id) FILTER (WHERE e.type='bounced')::int bounced
     FROM mk_sends s LEFT JOIN mk_send_events e ON e.send_id=s.id AND NOT e.machine
-    WHERE s.flow_id=$1 AND s.created_at > now() - ($2 || ' days')::interval AND NOT COALESCE((s.meta->>'test')::boolean,false) GROUP BY 1,2`, [Number(flowId), days])).rows;
-  const orders = (await db(`WITH o AS (SELECT e.profile_id, e.at, COALESCE(e.value,0) value FROM mk_events e WHERE e.type='placed_order' AND e.at > now() - ($1 || ' days')::interval AND NOT COALESCE((e.props->>'cancelled')::boolean,false)),
+    WHERE s.flow_id=$1 AND s.created_at >= $2 AND s.created_at < $3 AND NOT COALESCE((s.meta->>'test')::boolean,false) GROUP BY 1,2`, [Number(flowId), pr.from, pr.to])).rows;
+  const orders = (await db(`WITH o AS (SELECT e.profile_id, e.at, COALESCE(e.value,0) value FROM mk_events e WHERE e.type='placed_order' AND e.at >= $1 AND e.at < $5 AND NOT COALESCE((e.props->>'cancelled')::boolean,false)),
       cr AS (SELECT o.*, k.props kp FROM o JOIN LATERAL (SELECT k.props FROM mk_events k WHERE k.profile_id=o.profile_id AND k.type IN ('clicked_email','clicked_sms') AND k.at <= o.at
              AND k.at > o.at - ((CASE WHEN k.type='clicked_email' THEN $2::int ELSE $3::int END) || ' days')::interval ORDER BY k.at DESC LIMIT 1) k ON true)
-    SELECT kp->>'flow_step' step, count(*)::int orders, COALESCE(sum(value),0)::float revenue FROM cr WHERE kp->>'flow_id' = $4 GROUP BY 1`, [days, S.attribution.email_click_days, S.attribution.sms_click_days, String(flowId)])).rows;
+    SELECT kp->>'flow_step' step, count(*)::int orders, COALESCE(sum(value),0)::float revenue FROM cr WHERE kp->>'flow_id' = $4 GROUP BY 1`, [pr.from, S.attribution.email_click_days, S.attribution.sms_click_days, String(flowId), pr.to])).rows;
   const out = {};
   for (const r of sends) out[r.step] = { ...r, orders: 0, revenue: 0 };
   for (const r of orders) (out[r.step] = out[r.step] || { step: r.step, delivered: 0, recipients: 0, opened: 0, clicked: 0, unsubscribed: 0, bounced: 0 }), out[r.step].orders = r.orders, out[r.step].revenue = r.revenue;
   return out;
 }
-module.exports = { revenueBy0, previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };
+module.exports = { period, revenueBy0, previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };
