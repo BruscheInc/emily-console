@@ -328,6 +328,11 @@ let ordersBusy = false;
 async function pollOrders() {
   if (ordersBusy) return; ordersBusy = true;
   try {
+    if (!(await core.syncGet("mk_coupon_redeem_backfill_v1").catch(() => null))) {
+      const r = await db(`UPDATE mk_coupons c SET redeemed_at=x.at FROM (SELECT upper(code) code, min(e.at) at FROM mk_events e, LATERAL jsonb_array_elements_text(COALESCE(e.props->'discount_codes','[]'::jsonb)) code
+          WHERE e.type='placed_order' AND NOT COALESCE((e.props->>'cancelled')::boolean,false) GROUP BY 1) x WHERE upper(c.code)=x.code AND c.redeemed_at IS NULL`);
+      await core.syncSet("mk_coupon_redeem_backfill_v1", String(r.rowCount || 0), {}); console.log(`🏷️  coupons marked used from past orders: ${r.rowCount || 0}`);
+    }
     for (const store of ["lb", "lbo"]) {
       let st; try { st = R().shopFor(store); } catch (_) { continue; }
       const key = `mk_orders_live_${store}`;
@@ -371,7 +376,10 @@ async function liveOrder(store, o) {
     if (fresh(at)) await track(store, type, { profileId: pid, at, value: val, props: pr, source: "shopify", extId });
     else await db(`INSERT INTO mk_events (profile_id, store, type, at, value, props, source, ext_id) VALUES ($1,$2,$3,$4,$5,$6,'shopify',$7) ON CONFLICT (store, type, ext_id) WHERE ext_id IS NOT NULL DO NOTHING`, [pid, store, type, at, val, JSON.stringify(pr), extId]);
   };
-  for (const c of o.discountCodes || []) await once("coupon_used", `${o.id}:${c}`, o.createdAt, null, { code: c, order: o.name });
+  for (const c of o.discountCodes || []) {
+    await once("coupon_used", `${o.id}:${c}`, o.createdAt, null, { code: c, order: o.name });
+    if (!o.cancelledAt) await db(`UPDATE mk_coupons SET redeemed_at=COALESCE(redeemed_at,$2) WHERE upper(code)=upper($1)`, [c, o.createdAt]).catch(() => {});   // Buzzin-made codes: mark used
+  }
   for (const f of o.fulfillments || []) { const t = (f.trackingInfo || [])[0] || {}; await once("fulfilled_order", f.id, f.createdAt, value, { name: o.name, items, tracking_number: t.number || null, carrier: t.company || null, tracking_url: t.url || null }); }
   for (const r of o.refunds || []) await once("refunded_order", r.id, r.createdAt, Number((r.totalRefundedSet && r.totalRefundedSet.shopMoney.amount) || 0), { name: o.name });
   if (o.cancelledAt) await once("cancelled_order", `x:${o.id}`, o.cancelledAt, value, { name: o.name });
