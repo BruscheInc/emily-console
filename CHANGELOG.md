@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.108.6
+- One-time deep check of the 10% sign-up form and Welcome Series + 10% in the log: form steps, where people drop off, each sign-up's path through the flow, sends/opens/clicks, codes and orders.
+
 ## 4.108.5
 - "Record store activity" turned on for Larkspur Baby. It was off, so product views and add-to-cart were never recorded. That meant the Abandoned Cart flow could never start, and profiles had no browsing history.
 
