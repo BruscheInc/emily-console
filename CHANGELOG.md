@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.108.4
+- One-time deep check of the Abandoned Cart and Abandoned Checkout flows in the log: their steps, who entered and why others didn't, sends, opens, clicks and orders.
+
 ## 4.108.3
 - Buzzin-made discount codes (welcome 10%/15%, thank-you $15…) are marked **used** when an order uses them (they always showed "Unused", and Emily could offer a code that was already spent). Past orders are applied once.
 
