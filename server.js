@@ -1097,6 +1097,16 @@ async function cartDiag() {
   out("settings sending: " + JSON.stringify(((await require("./mk-core").settings()) || {}).sending));
   await core.syncSet("cart_diag_v1", "1", {});
 }
+// One-time: "Record store activity" was off for Larkspur Baby, so no add-to-cart/product-view events were recorded and the
+// Abandoned Cart flow could never start. Turn it on for Larkspur Baby (Outlet stays as it is).
+async function trackingOn() {
+  if (await syncGet("tracking_on_lb_v1")) return;
+  const MK = require("./mk-core"); const cur = await MK.settings(); const t = { ...(cur.tracking || {}) };
+  const was = !!t.lb; t.lb = true; await MK.saveSettings({ tracking: t }, "Buzzin");
+  try { require("./mk-forms").clearCache(); } catch (_) {}
+  await core.syncSet("tracking_on_lb_v1", "1", { was });
+  console.log(`🛒 store activity tracking for Larkspur Baby: ${was ? "already on" : "turned on"}`);
+}
 // Staff: local pickup orders waiting to be collected, with ready / reminder emails (pickup.js)
 require("./pickup").routes(app, { guard, actorOf });
 // Staff: goodwill exceptions — waive specific return / claim policies for one order (exceptions.js)
@@ -1202,7 +1212,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); setTimeout(() => cartDiag().catch((e) => console.error("cart diag:", e.message)), 45000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); setTimeout(() => cartDiag().catch((e) => console.error("cart diag:", e.message)), 45000); setTimeout(() => trackingOn().catch((e) => console.error("tracking on:", e.message)), 47000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
