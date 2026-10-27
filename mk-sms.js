@@ -41,7 +41,9 @@ async function actualRate(store) {
   return r && r.n && r.parts ? { per_segment: Math.round((r.cost / r.parts) * 1e5) / 1e5, texts: r.n, spent: Math.round(r.cost * 100) / 100 } : null;
 }
 /** The price used for estimates: AWS's real one when there are reports, otherwise the one typed in Texting. */
-async function rateFor(store) { const a = await actualRate(store); if (a) return { per_segment: a.per_segment, source: "aws", texts: a.texts }; const s = await smsSettings(store); return s.cost_per_segment == null ? null : { per_segment: Number(s.cost_per_segment), source: "manual" }; }
+async function rateFor(store) { const a = await actualRate(store); if (a) return { per_segment: a.per_segment, source: "aws", texts: a.texts }; const s = await smsSettings(store); return s.cost_per_segment == null ? { per_segment: DEFAULT_RATE, source: "default" } : { per_segment: Number(s.cost_per_segment), source: "manual" }; }
+/** AWS US toll-free list price per segment (about $0.0065 base + carrier fee up to $0.003), rounded up so estimates don't come in low. Used only until AWS reports real prices. */
+const DEFAULT_RATE = 0.0095;
 async function saveSmsSettings(store, patch, who) {
   const all = (await core.setting("mk_sms", null)) || {};
   const cur = await smsSettings(store);

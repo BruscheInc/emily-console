@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.108.9
+- Text campaigns always show a cost before sending. Until AWS reports real prices, it uses AWS's US toll-free list price ($0.0095 per segment incl. carrier fees).
+
 ## 4.108.8
 - Text cost now comes from AWS: each delivery report carries what the text cost (price + carrier fee), and Buzzin saves it. Estimates use that real price; the box in Texting is only a fallback.
 - Texting settings shows what AWS is actually charging per segment.
