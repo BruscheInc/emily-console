@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.109.0
+- Text campaigns check the AWS monthly texting limit: the cost box shows the limit, what's been spent this month and what's left after this send.
+- If a text campaign would go over the limit, it shows a red warning with how many texts would go out before AWS stops, and Buzzin won't schedule it.
+- Texting settings shows this month's text spend against the limit.
+- Each text now records how many segments it used, so the month's spend is counted right.
+
 ## 4.108.9
 - Text campaigns always show a cost before sending. Until AWS reports real prices, it uses AWS's US toll-free list price ($0.0095 per segment incl. carrier fees).
 

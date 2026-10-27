@@ -44,6 +44,30 @@ async function actualRate(store) {
 async function rateFor(store) { const a = await actualRate(store); if (a) return { per_segment: a.per_segment, source: "aws", texts: a.texts }; const s = await smsSettings(store); return s.cost_per_segment == null ? { per_segment: DEFAULT_RATE, source: "default" } : { per_segment: Number(s.cost_per_segment), source: "manual" }; }
 /** AWS US toll-free list price per segment (about $0.0065 base + carrier fee up to $0.003), rounded up so estimates don't come in low. Used only until AWS reports real prices. */
 const DEFAULT_RATE = 0.0095;
+/** Texting spend so far this calendar month (UTC, the way AWS counts its limit), both stores: AWS's real price where it has reported, otherwise segments × price. */
+async function monthSpend() {
+  const rate = (await rateFor("lb")).per_segment;
+  const r = (await db(`SELECT count(*)::int n, COALESCE(sum(CASE WHEN meta ? 'price' THEN (meta->>'price')::float + COALESCE((meta->>'carrier_fee')::float,0)
+      ELSE COALESCE((meta->>'segments')::int,1) * $1::float END),0)::float cost FROM mk_sends WHERE channel='sms' AND status IN ('sent','sending') AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`, [rate])).rows[0];
+  return { texts: r.n, spent: Math.round(r.cost * 100) / 100 };
+}
+let LIMIT_CACHE = { at: 0, v: null };
+/** AWS's monthly texting limit (the $50 cap until AWS raises it). Null when AWS can't be reached. */
+async function monthlyLimit() {
+  if (Date.now() - LIMIT_CACHE.at < 10 * 60e3) return LIMIT_CACHE.v;
+  let v = null; try { const A = require("./mk-sms-aws"); if (A.configured()) v = (await A.status()).monthly_limit; } catch (_) {}
+  LIMIT_CACHE = { at: Date.now(), v: v == null ? null : Number(v) }; return LIMIT_CACHE.v;
+}
+/** Does a send of this cost fit under the AWS limit? When it doesn't, about how many texts would go out before AWS stops. */
+async function budget(total, perText, startAt) {
+  const limit = await monthlyLimit(); if (limit == null) return null;
+  const now = new Date(), start = startAt ? new Date(startAt) : now;
+  const sameMonth = start.getUTCFullYear() === now.getUTCFullYear() && start.getUTCMonth() === now.getUTCMonth();
+  const m = sameMonth ? await monthSpend() : { spent: 0, texts: 0 };
+  const left = Math.max(0, Math.round((limit - m.spent) * 100) / 100);
+  const over = total != null && total > left;
+  return { limit, spent: m.spent, left, next_month: !sameMonth, over, over_by: over ? Math.round((total - left) * 100) / 100 : 0, fits_texts: over && perText ? Math.floor(left / perText) : null };
+}
 async function saveSmsSettings(store, patch, who) {
   const all = (await core.setting("mk_sms", null)) || {};
   const cur = await smsSettings(store);
@@ -131,7 +155,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     if (!guard(req, res)) return;
     try { const s = store(req.params.store); if (!s) return res.status(400).json({ error: "unknown store" });
       const P = require("./mk-sms-providers");
-      res.json({ ...(await smsSettings(s)), actual_rate: await actualRate(s), providers: P.list(), connected: await require("./mk-send").ready(s, "sms"), keywords: KEYWORDS,
+      res.json({ ...(await smsSettings(s)), actual_rate: await actualRate(s), month: { ...(await monthSpend()), limit: await monthlyLimit() }, providers: P.list(), connected: await require("./mk-send").ready(s, "sms"), keywords: KEYWORDS,
         sent_30d: (await db(`SELECT status, count(*)::int n FROM mk_sends WHERE store=$1 AND channel='sms' AND created_at > now() - interval '30 days' GROUP BY 1`, [s])).rows }); } catch (e) { fail(res, e); }
   });
   app.put("/api/mk/sms/settings/:store", async (req, res) => { if (!admin(req, res)) return; try { const s = store(req.params.store); if (!s) return res.status(400).json({ error: "unknown store" }); const saved = await saveSmsSettings(s, req.body || {}, actorOf(req)); try { const A = require("./mk-sms-aws"); if (A.configured()) A.syncKeywords().catch((e) => console.error("keyword sync:", e.message)); } catch (_) {} res.json(saved); } catch (e) { fail(res, e); } });
@@ -160,4 +184,4 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
 }
 
 async function init() { await migrate(); }
-module.exports = { actualRate, rateFor, init, migrate, routes, compose, segments, inbound, smsSettings, saveSmsSettings, OPT_OUT, KEYWORDS };
+module.exports = { monthSpend, monthlyLimit, budget, actualRate, rateFor, init, migrate, routes, compose, segments, inbound, smsSettings, saveSmsSettings, OPT_OUT, KEYWORDS };

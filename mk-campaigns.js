@@ -89,7 +89,9 @@ async function costFor(c, n) {
     body = body.replace(/https?:\/\/[^\s]+/g, require("./mk-analytics").shortUrl(c.store, "AbC123"));
     const seg = require("./mk-sms").segments(body);
     const rate = await require("./mk-sms").rateFor(c.store), per = rate ? rate.per_segment : null;
-    return { channel: "sms", sends: n, segments: seg.segments, encoding: seg.encoding, per_segment: per, rate_source: rate ? rate.source : null, rate_texts: rate ? rate.texts || null : null, total: per == null ? null : round2(n * seg.segments * per) };
+    const total = per == null ? null : round2(n * seg.segments * per);
+    const budget = await require("./mk-sms").budget(total, per == null ? null : seg.segments * per, c.schedule && c.schedule.mode === "at" ? c.schedule.at : null);
+    return { channel: "sms", sends: n, segments: seg.segments, encoding: seg.encoding, per_segment: per, rate_source: rate ? rate.source : null, rate_texts: rate ? rate.texts || null : null, total, budget };
   }
   const per1000 = Number(S.email_cost_per_1000 == null ? 0.10 : S.email_cost_per_1000);
   let bytes = 0;
@@ -172,6 +174,8 @@ async function schedule(id, who, isAdmin) {
   if (c.status !== "draft" && !(c.status === "pending" && isAdmin)) throw new Error("Only a draft can be scheduled.");
   const p = await problems(c); if (p.length) throw new Error(p.join(" "));
   const est = await estimate(c);
+  const b = est.cost && est.cost.budget;
+  if (b && b.over) throw new Error(`This would cost about $${est.cost.total.toFixed(2)}, but only $${b.left.toFixed(2)} is left of your $${b.limit} AWS texting limit${b.next_month ? "" : " this month"}. AWS would stop it after about ${(b.fits_texts || 0).toLocaleString()} texts. Raise the limit in AWS or send to fewer people.`);
   if (!isAdmin) {
     await db(`UPDATE mk_campaigns SET status='pending', approval=$2, start_at=$3, updated_at=now() WHERE id=$1`, [c.id, JSON.stringify({ requested_by: who, requested_at: new Date().toISOString() }), startFor(c)]);
     core.slackPost(`📣 Campaign waiting for approval: *${c.name}* (${c.channel === "sms" ? "text" : "email"}, about ${est.recipients.toLocaleString()} people) — requested by ${who}. Approve it in Buzzin → Marketing → Campaigns.`).catch(() => {});

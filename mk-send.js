@@ -106,7 +106,8 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
       return r2;
     }
     const providerId = await require("./mk-sms-aws").send({ store, to, body: msg.body, sendId: row.id });
-    const r3 = (await db(`UPDATE mk_sends SET status='sent', provider_id=$2, sent_at=now() WHERE id=$1 RETURNING *`, [row.id, providerId])).rows[0];
+    const segs = require("./mk-sms").segments(msg.body).segments;
+    const r3 = (await db(`UPDATE mk_sends SET status='sent', provider_id=$2, sent_at=now(), meta = meta || jsonb_build_object('segments', $3::int) WHERE id=$1 RETURNING *`, [row.id, providerId, segs])).rows[0];
     if (profile.id) await MK().track(store, "received_sms", { profileId: profile.id, props: { send_id: String(row.id), campaign_id: campaignId ? String(campaignId) : null, flow_id: flowId ? String(flowId) : null }, source: "buzzin", extId: `recv:${row.id}` }).catch(() => {});
     return r3;
   } catch (e) {

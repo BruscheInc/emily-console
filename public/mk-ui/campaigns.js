@@ -153,6 +153,15 @@ function drawAudience(ro, mark) {
   $('cskip').onchange = (e) => { a.skip_open_problems = e.target.checked; mark(); estimate(); };
 }
 const money = (x) => '$' + Number(x || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Texts: where this send leaves the month against the AWS texting limit, and a red warning when it would go over. */
+function smsBudget(c) {
+  const b = c.budget; if (!b) return '';
+  const row = (l, v) => `<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px"><span style="color:var(--muted)">${l}</span><span>${v}</span></div>`;
+  let h = `<div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:8px">${row('AWS monthly limit', money(b.limit))}${b.next_month ? '' : row('Spent this month', money(b.spent))}${row('Left' + (b.next_month ? ' (new month)' : ''), money(b.left))}`;
+  if (b.over) h += `<div class="note" style="margin-top:8px;background:#fdecec;border-color:#f3b4b4;color:#9b1c1c"><b>Over your limit by ${money(b.over_by)}.</b> AWS would stop after about ${fmtN(b.fits_texts || 0)} texts and the rest wouldn't go out. Buzzin won't schedule it until the limit is raised in AWS or the audience is smaller.</div>`;
+  else if (c.total != null) h += row('Left after this send', money(Math.max(0, b.left - c.total)));
+  return h + '</div>';
+}
 /** Estimated cost box under the audience count (email: SES send + data fee and daily-limit check; text: segments × price). */
 function costHtml(c) {
   if (!c) return '';
@@ -161,7 +170,7 @@ function costHtml(c) {
   let h = `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px"><div style="color:var(--muted);font-size:12.5px;font-weight:700">ESTIMATED COST</div>`;
   if (c.channel === 'sms') {
     if (c.total == null) return h + `<div style="font-size:13px;margin-top:6px">${fmtN(c.sends)} texts × ${c.segments} segment${c.segments === 1 ? '' : 's'} each. The price fills in on its own once AWS reports back on the next texts sent (or set one in <a href="#texting">Texting</a>).</div></div>`;
-    return h + `<div style="font-size:26px;font-weight:800">${money(c.total)}</div>${row('Texts', fmtN(c.sends))}${row('Segments each', `${c.segments}${c.encoding ? ` (${esc(c.encoding)})` : ''}`)}${row('Price per segment', '$' + c.per_segment)}<div style="font-size:11.5px;color:var(--muted);margin-top:6px">${c.rate_source === 'aws' ? `Price is AWS's real charge (incl. carrier fees) from your last ${fmtN(c.rate_texts)} delivered texts.` : c.rate_source === 'default' ? "Price is AWS's US toll-free list price incl. carrier fees. It switches to your real price once AWS reports on delivered texts." : 'Price is the one set in Texting.'}</div></div>`;
+    return h + `<div style="font-size:26px;font-weight:800">${money(c.total)}</div>${row('Texts', fmtN(c.sends))}${row('Segments each', `${c.segments}${c.encoding ? ` (${esc(c.encoding)})` : ''}`)}${row('Price per segment', '$' + c.per_segment)}${smsBudget(c)}<div style="font-size:11.5px;color:var(--muted);margin-top:6px">${c.rate_source === 'aws' ? `Price is AWS's real charge (incl. carrier fees) from your last ${fmtN(c.rate_texts)} delivered texts.` : c.rate_source === 'default' ? "Price is AWS's US toll-free list price incl. carrier fees. It switches to your real price once AWS reports on delivered texts." : 'Price is the one set in Texting.'}</div></div>`;
   }
   h += `<div style="font-size:26px;font-weight:800">${money(c.total)}</div>${row('Emails', fmtN(c.sends))}${row(`Sending ($${Number(c.per_1000).toFixed(2)} per 1,000) <a href="javascript:void 0" data-rate style="font-size:12px">change</a>`, money(c.send_fee))}${row(`Data (${c.email_kb} KB each, $0.12/GB)`, money(c.data_fee))}`;
   const s = c.ses, warn = [];
