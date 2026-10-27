@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.108.8
+- Text cost now comes from AWS: each delivery report carries what the text cost (price + carrier fee), and Buzzin saves it. Estimates use that real price; the box in Texting is only a fallback.
+- Texting settings shows what AWS is actually charging per segment.
+- Text estimates count segments with the short link, not the long one (it said 2 segments when the text was 1).
+
 ## 4.108.7
 - Campaign texts and emails now use the short link domain too (go.larkspurbaby.com), not just flows. Previews and tests match.
 - Links are shorter: go.larkspurbaby.com/AbC123 (6 characters, no "/l/"). Older links keep working.

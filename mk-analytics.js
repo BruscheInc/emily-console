@@ -244,4 +244,4 @@ async function flowSteps(flowId, p = 30) {
   for (const r of orders) (out[r.step] = out[r.step] || { step: r.step, delivered: 0, recipients: 0, opened: 0, clicked: 0, unsubscribed: 0, bounced: 0 }), out[r.step].orders = r.orders, out[r.step].revenue = r.revenue;
   return out;
 }
-module.exports = { linkHosts, period, revenueBy0, previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };
+module.exports = { shortUrl, linkHosts, period, revenueBy0, previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };

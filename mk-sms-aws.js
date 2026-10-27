@@ -171,7 +171,10 @@ async function onMessage(m) {
   if (!send) return;
   const t = ["TEXT_DELIVERED", "TEXT_SUCCESSFUL"].includes(type) ? "delivered" : ["TEXT_QUEUED", "TEXT_PENDING", "TEXT_SENT"].includes(type) ? null : "failed";
   if (!t) return;
-  await db(`INSERT INTO mk_send_events (send_id, type, meta) VALUES ($1,$2,$3)`, [send.id, t, JSON.stringify({ status: type, reason: m.messageStatusDescription || null })]);
+  // AWS puts what the text cost in its report (price + carrier fee, for all its segments); kept on the send so costs are real, not typed in.
+  const price = Number(m.totalMessagePrice), fee = Number(m.totalCarrierFee), parts = Number(m.totalMessageParts);
+  if (Number.isFinite(price) && price > 0) await db(`UPDATE mk_sends SET meta = meta || $2::jsonb WHERE id=$1`, [send.id, JSON.stringify({ price, carrier_fee: Number.isFinite(fee) ? fee : 0, parts: parts > 0 ? parts : null })]);
+  await db(`INSERT INTO mk_send_events (send_id, type, meta) VALUES ($1,$2,$3)`, [send.id, t, JSON.stringify({ status: type, reason: m.messageStatusDescription || null, price: Number.isFinite(price) ? price : null, carrier_fee: Number.isFinite(fee) ? fee : null })]);
   if (t === "delivered") await db(`UPDATE mk_sends SET status='sent', meta = meta || '{"delivered":true}'::jsonb WHERE id=$1`, [send.id]);
   else await db(`UPDATE mk_sends SET status='failed', reason=$2 WHERE id=$1`, [send.id, type.toLowerCase()]);
 }

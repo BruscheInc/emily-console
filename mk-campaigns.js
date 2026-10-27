@@ -84,11 +84,12 @@ async function sesLimits() {
 async function costFor(c, n) {
   const S = await MK().settings();
   if (c.channel === "sms") {
-    const sms = await require("./mk-sms").smsSettings(c.store);
-    const body = await require("./mk-sms").compose(c.store, c.content || {}, SAMPLE, { coupon: "WELCOME-8K2Q", checkout_url: "https://lrk.sp/c/x7Qa" });
+    let body = await require("./mk-sms").compose(c.store, c.content || {}, SAMPLE, { coupon: "WELCOME-8K2Q", checkout_url: "https://lrk.sp/c/x7Qa" });
+    // Links go out shortened, so count segments with the short link in place of the long one (same as the preview).
+    body = body.replace(/https?:\/\/[^\s]+/g, require("./mk-analytics").shortUrl(c.store, "AbC123"));
     const seg = require("./mk-sms").segments(body);
-    const per = sms.cost_per_segment == null ? null : Number(sms.cost_per_segment);
-    return { channel: "sms", sends: n, segments: seg.segments, encoding: seg.encoding, per_segment: per, total: per == null ? null : round2(n * seg.segments * per) };
+    const rate = await require("./mk-sms").rateFor(c.store), per = rate ? rate.per_segment : null;
+    return { channel: "sms", sends: n, segments: seg.segments, encoding: seg.encoding, per_segment: per, rate_source: rate ? rate.source : null, rate_texts: rate ? rate.texts || null : null, total: per == null ? null : round2(n * seg.segments * per) };
   }
   const per1000 = Number(S.email_cost_per_1000 == null ? 0.10 : S.email_cost_per_1000);
   let bytes = 0;

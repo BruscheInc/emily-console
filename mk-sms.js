@@ -34,6 +34,14 @@ async function smsSettings(store) {
   const d = DEFAULT_SMS(store), v = all[store] || {};
   return { ...d, ...v, replies: { ...d.replies, ...(v.replies || {}) }, number: { ...d.number, ...(v.number || {}) } };
 }
+/** What a segment really costs, from AWS's delivery reports over the last 90 days (price + carrier fee ÷ segments). Null until reports come in. */
+async function actualRate(store) {
+  const r = (await db(`SELECT count(*)::int n, sum((meta->>'price')::float + COALESCE((meta->>'carrier_fee')::float,0))::float cost, sum(COALESCE((meta->>'parts')::int,1))::int parts
+    FROM mk_sends WHERE store=$1 AND channel='sms' AND meta ? 'price' AND created_at > now() - interval '90 days'`, [store])).rows[0];
+  return r && r.n && r.parts ? { per_segment: Math.round((r.cost / r.parts) * 1e5) / 1e5, texts: r.n, spent: Math.round(r.cost * 100) / 100 } : null;
+}
+/** The price used for estimates: AWS's real one when there are reports, otherwise the one typed in Texting. */
+async function rateFor(store) { const a = await actualRate(store); if (a) return { per_segment: a.per_segment, source: "aws", texts: a.texts }; const s = await smsSettings(store); return s.cost_per_segment == null ? null : { per_segment: Number(s.cost_per_segment), source: "manual" }; }
 async function saveSmsSettings(store, patch, who) {
   const all = (await core.setting("mk_sms", null)) || {};
   const cur = await smsSettings(store);
@@ -121,7 +129,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
     if (!guard(req, res)) return;
     try { const s = store(req.params.store); if (!s) return res.status(400).json({ error: "unknown store" });
       const P = require("./mk-sms-providers");
-      res.json({ ...(await smsSettings(s)), providers: P.list(), connected: await require("./mk-send").ready(s, "sms"), keywords: KEYWORDS,
+      res.json({ ...(await smsSettings(s)), actual_rate: await actualRate(s), providers: P.list(), connected: await require("./mk-send").ready(s, "sms"), keywords: KEYWORDS,
         sent_30d: (await db(`SELECT status, count(*)::int n FROM mk_sends WHERE store=$1 AND channel='sms' AND created_at > now() - interval '30 days' GROUP BY 1`, [s])).rows }); } catch (e) { fail(res, e); }
   });
   app.put("/api/mk/sms/settings/:store", async (req, res) => { if (!admin(req, res)) return; try { const s = store(req.params.store); if (!s) return res.status(400).json({ error: "unknown store" }); const saved = await saveSmsSettings(s, req.body || {}, actorOf(req)); try { const A = require("./mk-sms-aws"); if (A.configured()) A.syncKeywords().catch((e) => console.error("keyword sync:", e.message)); } catch (_) {} res.json(saved); } catch (e) { fail(res, e); } });
@@ -150,4 +158,4 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
 }
 
 async function init() { await migrate(); }
-module.exports = { init, migrate, routes, compose, segments, inbound, smsSettings, saveSmsSettings, OPT_OUT, KEYWORDS };
+module.exports = { actualRate, rateFor, init, migrate, routes, compose, segments, inbound, smsSettings, saveSmsSettings, OPT_OUT, KEYWORDS };
