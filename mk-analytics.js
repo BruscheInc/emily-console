@@ -32,7 +32,12 @@ async function migrate() {
 }
 
 /* ---------------- instrumenting messages ---------------- */
-const code = () => crypto.randomBytes(6).toString("base64url");
+const code = () => crypto.randomBytes(5).toString("base64url").slice(0, 6);
+/** Saves a new short code (6 characters) for the address; a clash just tries another code. */
+async function newLink(sendId, url) {
+  for (let i = 0; i < 5; i++) { const c = code(); const r = await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,$2,$3) ON CONFLICT (code) DO NOTHING RETURNING code`, [c, sendId, url]); if (r.rows[0]) return c; }
+  throw new Error("Couldn't make a short link");
+}
 function withUtm(url, { channel, name }) {
   try {
     const u = new URL(url);
@@ -44,13 +49,15 @@ function withUtm(url, { channel, name }) {
 /** A short link for previews (no send behind it, so no click is recorded); the same link is reused for the same address. */
 async function previewLink(store, url, flow) {
   const ex = (await db(`SELECT code FROM mk_links WHERE send_id IS NULL AND url=$1 LIMIT 1`, [url])).rows[0];
-  const c = ex ? ex.code : code(); if (!ex) await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,NULL,$2)`, [c, url]);
-  return `${(flow && linkHost(store)) || brandBase(store)}/l/${c}`;
+  const c = ex ? ex.code : await newLink(null, url);
+  return shortUrl(store, c);
 }
-/** Flow messages use the store's own short-link domain once it is set up (LINK_HOST_LB=go.larkspurbaby.com); everything else uses the store address. */
-const linkHost = (store) => { const h = String(process.env[`LINK_HOST_${String(store || "").toUpperCase()}`] || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, ""); return h ? `https://${h}` : null; };
-const linkBase = (send) => (send && send.flow_id && linkHost(send.store)) || brandBase(send.store);
-async function link(send, url) { const c = code(); await db(`INSERT INTO mk_links (code, send_id, url) VALUES ($1,$2,$3)`, [c, send.id, url]); return `${linkBase(send)}/l/${c}`; }
+/** Campaigns and flows use the store's own short-link domain once it is set up (LINK_HOST_LB=go.larkspurbaby.com) as go.larkspurbaby.com/AbC123;
+ *  a store without one keeps the store address with /l/. */
+const linkHostName = (store) => String(process.env[`LINK_HOST_${String(store || "").toUpperCase()}`] || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
+const linkHosts = () => Object.keys(process.env).filter((k) => /^LINK_HOST_/.test(k)).map((k) => linkHostName(k.slice(10))).filter(Boolean);
+const shortUrl = (store, c) => { const h = linkHostName(store); return h ? `https://${h}/${c}` : `${brandBase(store)}/l/${c}`; };
+async function link(send, url) { return shortUrl(send.store, await newLink(send.id, url)); }
 /** Email: wrap links (not unsubscribe/preferences/mailto) and add the open pixel. */
 async function instrumentEmail(html, send, name, opts = {}) {
   const seen = new Map();
@@ -237,4 +244,4 @@ async function flowSteps(flowId, p = 30) {
   for (const r of orders) (out[r.step] = out[r.step] || { step: r.step, delivered: 0, recipients: 0, opened: 0, clicked: 0, unsubscribed: 0, bounced: 0 }), out[r.step].orders = r.orders, out[r.step].revenue = r.revenue;
   return out;
 }
-module.exports = { period, revenueBy0, previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };
+module.exports = { linkHosts, period, revenueBy0, previewLink, brandBase, flowSteps, revenueBy, init, migrate, routes, instrumentEmail, instrumentSms, overview, cohorts, sendsReport, withUtm };

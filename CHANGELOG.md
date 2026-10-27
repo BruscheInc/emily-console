@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.108.7
+- Campaign texts and emails now use the short link domain too (go.larkspurbaby.com), not just flows. Previews and tests match.
+- Links are shorter: go.larkspurbaby.com/AbC123 (6 characters, no "/l/"). Older links keep working.
+- go.larkspurbaby.com only opens links; anything else there goes to the store.
+
 ## 4.108.6
 - One-time deep check of the 10% sign-up form and Welcome Series + 10% in the log: form steps, where people drop off, each sign-up's path through the flow, sends/opens/clicks, codes and orders.
 

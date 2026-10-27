@@ -29,6 +29,16 @@ const VERSION = require("./package.json").version;
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8").replace(/__VERSION__/g, VERSION);
 // Branded portal domains (returns.larkspurbaby.com, returns.larkspurbabyoutlet.com) show only that store's portal —
 // never Buzzin. "/" is the portal; anything outside the portal's own paths goes back to "/".
+// Short-link domains (go.larkspurbaby.com): go.larkspurbaby.com/AbC123 opens the link; nothing else of Buzzin is served there.
+app.use((req, res, next) => {
+  const h = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().split(":")[0].toLowerCase();
+  if (!h || !require("./mk-analytics").linkHosts().includes(h)) return next();
+  const p = req.path;
+  if (/^\/[A-Za-z0-9_-]{4,20}$/.test(p)) { req.url = "/l" + req.url; return next(); }
+  if (p.startsWith("/l/") || p.startsWith("/mk/")) return next();
+  const store = h.replace(/^go\./, "");
+  return res.redirect(302, `https://${store}/`);
+});
 app.use((req, res, next) => {
   const d = R.storeForHost(String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().split(":")[0]);
   if (!d) return next();
