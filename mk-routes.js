@@ -81,6 +81,7 @@ module.exports = function mount(app, { guard, isAdmin, actorOf, VERSION }) {
     try {
       const st = store(req.query.store), name = String(req.query.name || "").trim().slice(0, 120);
       if (!st || !name) return res.status(400).json({ error: "store and name are required" });
+      console.log(`📋 list upload "${name}" started: ${String(req.body || "").length} bytes, ${typeof req.body}`);
       const rows = require("./mk-merge").parseCsv(String(req.body || "").replace(/^\uFEFF/, ""));
       const head = (rows.shift() || []).map((h) => h.trim().toLowerCase());
       const col = (...names) => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
@@ -118,8 +119,9 @@ module.exports = function mount(app, { guard, isAdmin, actorOf, VERSION }) {
       await db(`INSERT INTO mk_list_members (list_id, profile_id, source) SELECT $1, x, 'upload' FROM unnest($2::bigint[]) x ON CONFLICT DO NOTHING`, [list.id, arr]);
       const c = (await db(`SELECT count(*)::int n, count(*) FILTER (WHERE p.email_consent='subscribed')::int email_ok, count(*) FILTER (WHERE p.sms_consent='subscribed')::int sms_ok FROM mk_list_members m JOIN mk_profiles p ON p.id=m.profile_id WHERE m.list_id=$1`, [list.id])).rows[0];
       if (MK.clearMemo) MK.clearMemo();
+      console.log(`📋 list upload "${list.name}" (${list.id}): ${rows.length} rows · ${matched} matched · ${created} new · ${skipped} skipped → ${c.n} members · ${c.sms_ok} textable`);
       res.json({ list_id: list.id, name: list.name, rows: rows.length, matched, created, skipped, ...c });
-    } catch (e) { fail(res, e); }
+    } catch (e) { console.error("list upload:", e.message); fail(res, e); }
   });
   app.post("/api/mk/sync", async (req, res) => { if (!admin(req, res)) return; MK.syncAll({ force: !!(req.body && req.body.force), who: actorOf(req) }).catch(() => {}); res.json({ ok: true, started: true }); });
 
