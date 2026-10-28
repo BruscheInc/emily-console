@@ -182,7 +182,7 @@ async function isMember(segmentId, profileId) { return !!(await db(`SELECT 1 FRO
 let refreshing = false;
 async function refreshAll() {
   if (refreshing) return; refreshing = true;
-  try { for (const s of (await db(`SELECT id FROM mk_segments WHERE NOT archived ORDER BY refreshed_at NULLS FIRST`)).rows) { try { await refresh(s.id); } catch (e) { console.error(`segment ${s.id}:`, e.message); } } }
+  try { for (const s of (await db(`SELECT id FROM mk_segments WHERE NOT archived AND NOT (definition ? 'limit' AND COALESCE(definition->>'limit','') NOT IN ('', 'null')) ORDER BY refreshed_at NULLS FIRST`)).rows) { try { await refresh(s.id); } catch (e) { console.error(`segment ${s.id}:`, e.message); } } }
   finally { refreshing = false; }
 }
 

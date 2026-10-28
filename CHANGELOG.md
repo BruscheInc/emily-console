@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.4
+- Buzzin checks the database every minute for stuck queries (logs any running over 20 seconds, stops any over 3 minutes).
+- Segments with a size cap aren't rebuilt in the background (too heavy); they update when saved.
+- Fix: Lists page error "Cannot set properties of null" after an upload.
+
 ## 0.0.3
 - Fix: a heavy segment build left running in the database by earlier updates was holding everything up (list uploads stalled). On start, Buzzin now stops database queries stuck for over 3 minutes, and the heavy "Ready to convert" build is off.
 

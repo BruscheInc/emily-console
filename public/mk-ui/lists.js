@@ -24,7 +24,7 @@ async function renderGroups(el) {
       <div id="gbulk"></div>
       <table><thead><tr><th style="width:34px"><input type="checkbox" class="cb" id="gall" aria-label="Select all"></th><th>Name</th><th>Type</th><th class="n">Members</th><th>Created ↓</th><th style="width:44px"></th></tr></thead><tbody id="gtb"></tbody></table>
       <div id="gcount" style="padding:14px 0;color:#3F3F46"></div></div></div>`;
-  const reload = async () => { items = (await api('/api/mk/groups')).items; draw(); };
+  const reload = async () => { items = (await api('/api/mk/groups')).items; if (document.getElementById('gtb')) draw(); };
   const open = (x) => { if (x.kind === 'segment') location.hash = '#segments/' + x.id; else { window.PQ = { q: '', consent: '', tier: '', list: String(x.id), offset: 0 }; try { PQ = window.PQ; } catch (e) {} location.hash = '#profiles'; } };
   const visible = () => items.filter((x) => (!TYPE || x.kind === TYPE) && (!Q || x.name.toLowerCase().includes(Q.toLowerCase())));
   const del = async (list) => {
