@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.11
+- The version number shows under the bee logo at the top of the left bar.
+
 ## 0.0.10
 - Marketing is its own section in the left bar: its panel lists Audience (Overview, Profiles, Lists & segments, Merge & import), Build (Campaigns, Flows, Sign-up forms, Email templates, Brand kits, Texting) and Results (Analytics, Domain & DNS, Marketing settings).
 - Content is split: it keeps Website FAQs, Website chat and Customer emails; the LB/LBO portal design links moved to Returns.

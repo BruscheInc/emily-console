@@ -26,3 +26,5 @@ body:has(#keygate:not(.hidden)) .bz-rail,body:has(#gate:not(.hidden)) .bz-rail{d
 body.has-rail:has(#keygate:not(.hidden)),body.has-rail:has(#gate:not(.hidden)){padding-left:0}
 @media (max-width:640px){body.has-rail{padding-left:60px}.bz-rail{width:60px}.bz-rail .ri span{display:none}.bz-rail .ri{padding:12px 0}.bz-rail .rlogo img{width:30px;height:30px}.bz-rail .rmenu{left:54px}}
 
+.bz-rail .rlogo{flex-direction:column;align-items:center;gap:6px;text-decoration:none}
+.bz-rail .rver{font-size:10.5px;font-weight:700;color:var(--bz-rail-ink);letter-spacing:.02em}

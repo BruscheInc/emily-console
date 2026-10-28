@@ -21,7 +21,7 @@
   const item = (x) => `<a class="ri${x.m === here ? " on" : ""}" data-m="${x.m}" href="${hrefFor(x)}" title="${esc(x.l)}" aria-label="${esc(x.l)}"><i class="ti ti-${x.i}"></i><span>${esc(x.l)}</span><b class="rb" hidden></b></a>`;
   const nav = document.createElement("nav");
   nav.className = "bz-rail"; nav.setAttribute("aria-label", "Buzzin");
-  nav.innerHTML = `<a class="rlogo" href="/" title="Buzzin"><img src="/logo.svg?v=bee2" alt="Buzzin" width="34" height="34"></a>
+  nav.innerHTML = `<a class="rlogo" href="/" title="Buzzin"><img src="/logo.svg?v=bee2" alt="Buzzin" width="34" height="34"><small class="rver" id="bzRailVer"></small></a>
     <div class="rmods">${MODS.map(item).join("")}</div>
     <div class="rfoot">
       <a class="ri" data-m="settings" href="${onDesk ? "#" : "/?mod=settings"}" title="Settings" aria-label="Settings"><i class="ti ti-settings"></i><span>Settings</span></a>
@@ -56,4 +56,6 @@
     user(name) { if (!name) return; const ini = String(name).trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase(); const av = nav.querySelector("#bzRailAv"); if (av) av.textContent = ini; const w = nav.querySelector("#bzRailWho"); if (w) w.textContent = name; try { localStorage.setItem("bz_user", name); } catch (_) {} },
   };
   try { const u = localStorage.getItem("bz_user"); if (u) window.bzRail.user(u); } catch (_) {}
+  // version under the logo (the number in package.json; it changes with every update)
+  fetch("/api/version").then((r) => r.json()).then((v) => { const el = nav.querySelector("#bzRailVer"); if (el && v && v.version) { el.textContent = "v" + v.version; el.title = "Buzzin " + v.version; } }).catch(() => {});
 })();
