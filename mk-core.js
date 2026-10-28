@@ -158,11 +158,16 @@ async function ensureList(store, name, { source = "buzzin", ext_id = null, descr
 }
 /** A list kept in step with a Shopify customer-segment query (e.g. "viewed a product in 180 days, no order in 180 days").
  *  Shopify runs the query; Buzzin matches each customer to a profile (Shopify id, then email) and replaces the list's members. */
-async function syncShopifyQueryList(store, query, name) {
+async function syncShopifyQueryList(store, query, name, alts = []) {
   const st = R().shopFor(store);
   const list = await ensureList(store, name, { source: "shopify_query", ext_id: query.slice(0, 300), description: `From Shopify: ${query}` });
-  const mk = (await R().gql(st, `mutation C($q: String!) { customerSegmentMembersQueryCreate(input: { query: $q }) { customerSegmentMembersQuery { id done } userErrors { message } } }`, { q: query })).customerSegmentMembersQueryCreate;
-  if (mk.userErrors && mk.userErrors.length) throw new Error("Shopify: " + mk.userErrors.map((e) => e.message).join("; "));
+  let mk = null, errs = [];
+  for (const q of [query, ...alts]) {
+    try { const r = (await R().gql(st, `mutation C($q: String!) { customerSegmentMembersQueryCreate(input: { query: $q }) { customerSegmentMembersQuery { id done } userErrors { message } } }`, { q })).customerSegmentMembersQueryCreate;
+      if (r.userErrors && r.userErrors.length) { errs.push(`${q} → ${r.userErrors.map((e) => e.message).join("; ")}`); continue; } mk = r; break; }
+    catch (e) { errs.push(`${q} → ${e.message}`); }
+  }
+  if (!mk) throw new Error("Shopify: " + errs.join(" | "));
   const qid = mk.customerSegmentMembersQuery.id;
   for (let i = 0; i < 120; i++) { const q = (await R().gql(st, `query Q($id: ID!) { customerSegmentMembersQuery(id: $id) { done currentCount } }`, { id: qid })).customerSegmentMembersQuery; if (q && q.done) break; await new Promise((r) => setTimeout(r, 2000)); }
   const ids = new Set(); let after = null, total = 0;

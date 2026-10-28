@@ -1119,14 +1119,17 @@ async function trackingOn() {
 }
 // One-time deep look at the 10% sign-up form (#6) and Welcome Series + 10% (#12) — logs only.
 /** Shopify lists Buzzin keeps in step every day (Shopify's own browsing data). */
-const SHOPIFY_LISTS = [{ store: "lb", name: "Shopify: viewed a product in 180 days, no order in 180 days", query: "storefront.product_viewed MATCHES (date >= -180d) AND orders_placed NOT MATCHES (date >= -180d)" }];
+// Shopify's segment API speaks the segment query language (storefront_event.…), not the newer ShopifyQL shown in the admin; the first form it accepts is used.
+// "No order in 180 days" is checked on Buzzin's side (it has every order), so the list is just the viewers.
+const SHOPIFY_LISTS = [{ store: "lb", name: "Shopify: viewed a product in 180 days", query: "storefront_event.product_viewed MATCHES (date >= -180d)",
+  alts: ["storefront.product_viewed MATCHES (date >= -180d)", "storefront_event.product_viewed MATCHES (date > -180d)"] }];
 async function syncShopifyLists() {
-  for (const l of SHOPIFY_LISTS) { try { const r = await require("./mk-core").syncShopifyQueryList(l.store, l.query, l.name); console.log(`🛒 Shopify list "${l.name}": ${r.shopify} in Shopify · ${r.matched} matched to profiles`); } catch (e) { console.error(`Shopify list "${l.name}":`, e.message); } }
+  for (const l of SHOPIFY_LISTS) { try { const r = await require("./mk-core").syncShopifyQueryList(l.store, l.query, l.name, l.alts); console.log(`🛒 Shopify list "${l.name}": ${r.shopify} in Shopify · ${r.matched} matched to profiles`); } catch (e) { console.error(`Shopify list "${l.name}":`, e.message); } }
 }
 /** "Ready to convert": said yes to texts, engaged in the last 180 days (viewed products on Shopify, clicked, carted, opened or visited) and no order in 180 days.
  *  The 5,000 most recently engaged. Replaces the first version of this segment. */
 async function convertSms5k() {
-  if (await syncGet("convert_sms_5k_v2")) return;
+  if (await syncGet("convert_sms_5k_v3")) return;
   await syncShopifyLists();
   const SEG = require("./mk-segments");
   const list = (await db(`SELECT id FROM mk_lists WHERE store='lb' AND source='shopify_query' AND ext_id=$1`, [SHOPIFY_LISTS[0].query.slice(0, 300)])).rows[0];
@@ -1145,12 +1148,12 @@ async function convertSms5k() {
     { type: "event", event: "placed_order", op: "zero", window: d180 },
     { group: { match: "any", conditions: engaged } }] };
   const all = await SEG.count({ ...definition, limit: null }, "lb");
-  const old = (await db(`SELECT id FROM mk_segments WHERE store='lb' AND name='Engaged 180 days + SMS (top 5,000)' AND NOT archived ORDER BY id DESC LIMIT 1`)).rows[0];
+  const old = (await db(`SELECT id FROM mk_segments WHERE store='lb' AND name IN ('Engaged 180 days + SMS (top 5,000)','Ready to convert: engaged 180 days, no order (SMS, top 5,000)') AND NOT archived ORDER BY id DESC LIMIT 1`)).rows[0];
   const s = await SEG.save({ id: old ? old.id : null, store: "lb", name: "Ready to convert: engaged 180 days, no order (SMS, top 5,000)",
     description: "Said yes to texts, engaged in the last 180 days (viewed products on Shopify, clicked, added to cart, started checkout, opened or visited) and no order in 180 days. Most recently engaged 5,000.", definition }, "Claude");
   const r = await SEG.refresh(s.id);
   console.log(`🎯 segment ${s.id} "Ready to convert": ${r.n} people (of ${all.n} who match)`);
-  await core.syncSet("convert_sms_5k_v2", String(s.id), { all: all.n, kept: r.n });
+  await core.syncSet("convert_sms_5k_v3", String(s.id), { all: all.n, kept: r.n });
 }
 async function welcomeDeep() {
   if (await syncGet("welcome_deep_v1")) return;
