@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.14
+- Schedule or send panel now works like Klaviyo's: billing estimate at the top (the button stays disabled with "Calculating your send cost" until it's done), errors banner with a Review button, Schedule / Send now cards, scheduling options, date and time, quiet hours, "Determine recipients at send time", and the primary button at the bottom left ("Schedule message" / "Send now").
+- Clicking it shows a confirmation inside the panel with the exact day and time (or a red "Yes, send now"), the number of people and the cost. Nothing is scheduled or sent until you confirm.
+- The campaign's When box says "Not scheduled yet" instead of "As soon as it's scheduled".
+
 ## 0.0.13
 - Fix (campaign sent early): a campaign saved with the default "as soon as it's scheduled" went out the moment Schedule/Approve was clicked. Now Buzzin refuses to start a campaign right away unless "Send now" was chosen and confirmed; the Schedule panel opens on Schedule, and both Schedule and Send now ask you to confirm the exact time (or "RIGHT NOW") first. Approve asks too.
 - Campaign 5: the 5,331 held texts go Wed Oct 28 at 10:00 AM Central. The 310 people who already got it are not texted again.

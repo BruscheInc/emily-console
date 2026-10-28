@@ -270,7 +270,7 @@ function drawAB(ro, mark) {
 /* ---- When: a short summary here; choosing happens in the "Schedule or send" drawer (like Klaviyo) ---- */
 function whenText(s, isSms) {
   s = s || {};
-  const t = s.mode === 'at' && s.at ? `At ${fmtDT(s.at)} (your time)` : s.mode === 'local' && s.date ? `${new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${fmtTime(s.time || '10:00')} in each person's time zone${s.passed === 'now' ? ' · where that time has passed: right away' : ' · where it has passed: the next day'}` : 'As soon as it\'s scheduled';
+  const t = s.mode === 'at' && s.at ? `At ${fmtDT(s.at)} (your time)` : s.mode === 'local' && s.date ? `${new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${fmtTime(s.time || '10:00')} in each person's time zone${s.passed === 'now' ? ' · where that time has passed: right away' : ' · where it has passed: the next day'}` : 'Not scheduled yet';
   return t + (isSms ? (s.quiet === 'skip' ? ' · skip people in quiet hours' : ` · quiet hours: wait until morning${s.max_delay_hours ? ` (up to ${s.max_delay_hours} h)` : ''}`) : '');
 }
 function fmtTime(hm) { const [h, m] = String(hm || '10:00').split(':').map(Number); const d = new Date(2000, 0, 1, h, m); return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
@@ -292,7 +292,7 @@ async function openSchedule() {
   const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, hm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const soon = new Date(Date.now() + 3600e3); soon.setMinutes(0, 0, 0);
   if (s0.mode === 'at' && s0.at) { const d = new Date(s0.at); st.date = ymd(d); st.time = hm(d); } else if (s0.mode === 'local') { st.date = s0.date; st.time = s0.time || '10:00'; } else { st.date = ymd(soon); st.time = hm(soon); }
-  let est = null;
+  let est = null, confirming = false, estErr = null;
   const back = document.createElement('div'); back.className = 'sd-back';
   const dr = document.createElement('aside'); dr.className = 'sd'; dr.setAttribute('role', 'dialog'); dr.setAttribute('aria-label', 'Schedule or send campaign');
   document.body.append(back, dr);
@@ -305,17 +305,19 @@ async function openSchedule() {
   const draw = () => {
     const probs = (CP.problems || []).slice(); if (fixedPast()) probs.push('Pick a send time in the future.');
     const c = est && est.cost, b = c && c.budget;
+    const when = st.how === 'now' ? 'right now' : st.opt === 'fixed' ? (st.date && st.time ? new Date(`${st.date}T${st.time}`).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' Central' : '') : `${st.date ? new Date(st.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : ''} at ${fmtTime(st.time)} in each person's time zone`;
     if (b && b.over) probs.push(`This would cost about $${c.total.toFixed(2)}, more than the $${b.left.toFixed(2)} left of your AWS texting limit.`);
     dr.innerHTML = `<div class="sd-h"><div><h2>Schedule or send campaign</h2><div class="sd-sub">${esc(CP.name)}</div></div><button class="sd-x" aria-label="Close"><i class="ti ti-x"></i></button></div>
     <div class="sd-b">
-      ${probs.length ? `<div class="sd-err"><i class="ti ti-alert-circle"></i><div><b>Review and fix ${probs.length} ${probs.length === 1 ? 'error' : 'errors'} before ${st.how === 'now' ? 'sending' : 'scheduling'}.</b><ul>${probs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div></div>` : ''}
+      ${probs.length ? `<div class="sd-err"><i class="ti ti-alert-circle"></i><div style="flex:1"><b>Review and fix ${probs.length} ${probs.length === 1 ? 'error' : 'errors'} before ${st.how === 'now' ? 'sending' : 'scheduling'}.</b><ul>${probs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div><button class="btn" id="sdrev">Review</button></div>` : ''}
+      <div class="sd-bill"><div class="sd-bh"><i class="ti ti-receipt"></i> Billing estimate</div>${!est && !estErr ? '<div class="sd-calc"><span class="sd-spin"></span><div><b>Calculating your send cost</b><div class="sd-hint" style="margin:2px 0 0">You can\'t schedule until this finishes.</div></div></div>' : estErr ? `<div class="sd-hint">Couldn't calculate the cost (${esc(estErr)}). You can still schedule.</div>` : `<div class="sd-sum">${`<div><span>Recipients</span><b>${fmtN(c.sends)}</b></div>`}${c.total != null ? `<div><span>${isSms ? `${c.segments} segment${c.segments === 1 ? '' : 's'} each` : 'Estimated cost'}</span><b>$${c.total.toFixed(2)}</b></div>` : ''}${b ? `<div><span>AWS limit left</span><b class="${b.over ? 'bad' : ''}">$${b.left.toFixed(2)} of $${b.limit}</b></div>` : ''}</div>`}</div>
       <div class="sd-cards">
         <label class="sd-card${st.how === 'schedule' ? ' on' : ''}"><input type="radio" name="sdhow" value="schedule"${st.how === 'schedule' ? ' checked' : ''}><i class="ti ti-calendar"></i><b>Schedule</b><span>Choose a future date and time to send</span></label>
         <label class="sd-card${st.how === 'now' ? ' on' : ''}"><input type="radio" name="sdhow" value="now"${st.how === 'now' ? ' checked' : ''}><i class="ti ti-send"></i><b>Send now</b><span>Start sending your campaign immediately</span></label>
       </div>
       ${st.how === 'schedule' ? `
       <label class="sd-l" for="sdopt">Scheduling options <em>*</em></label>
-      <select id="sdopt" class="sd-in"><option value="fixed"${st.opt === 'fixed' ? ' selected' : ''}>Fixed send time</option><option value="local"${st.opt === 'local' ? ' selected' : ''}>Recipient's local time</option></select>
+      <select id="sdopt" class="sd-in"><option value="fixed"${st.opt === 'fixed' ? ' selected' : ''}>Fixed send time</option><option value="local"${st.opt === 'local' ? ' selected' : ''}>Send in recipients' local time zones</option></select>
       <div class="sd-hint">${st.opt === 'fixed' ? 'Everyone gets it at the same moment (your time, Central).' : 'Each person gets it at this hour where they live (Central if unknown).'}</div>
       <div class="sd-2"><div><label class="sd-l" for="sdd">Date <em>*</em></label><div class="sd-ic"><i class="ti ti-calendar"></i><input id="sdd" type="date" class="sd-in" value="${esc(st.date || '')}" min="${ymd(new Date(Date.now() - 864e5))}"></div></div>
         <div><label class="sd-l" for="sdt">Time</label><div class="sd-ic"><i class="ti ti-clock"></i><input id="sdt" type="time" class="sd-in" value="${esc(st.time || '10:00')}"></div></div></div>
@@ -326,11 +328,15 @@ async function openSchedule() {
         <label class="sd-opt${st.quiet === 'delay' ? ' on' : ''}"><span class="sd-r"><input type="radio" name="sdq" value="delay"${st.quiet === 'delay' ? ' checked' : ''}> <b>Delay to next allowed time</b> <span class="sd-tag">Recommended</span></span><small>Delayed texts go out automatically in the morning.</small>
           ${st.quiet === 'delay' ? `<label class="sd-r sd-in2"><input type="checkbox" id="sdmax"${st.maxOn ? ' checked' : ''}> Set a maximum delay</label>${st.maxOn ? `<div class="sd-in2" style="display:flex;align-items:center;gap:8px;margin-top:6px"><input id="sdmaxh" type="number" min="1" max="72" value="${st.maxH}" class="sd-in" style="width:90px"> hours after sending starts, then skip</div>` : '<small class="sd-in2">Recommended for time-sensitive messages.</small>'}` : ''}</label>
         <label class="sd-opt${st.quiet === 'skip' ? ' on' : ''}"><span class="sd-r"><input type="radio" name="sdq" value="skip"${st.quiet === 'skip' ? ' checked' : ''}> <b>Skip messages</b></span><small>People in quiet hours don't get this campaign.</small></label></div>` : ''}
-      <div class="sd-sec"><b>Who gets it</b><div class="sd-hint">The audience is set when sending starts, so anyone who joins or leaves before then is counted.</div>
-        <div class="sd-sum" id="sdsum">${c ? `<div><span>People</span><b>${fmtN(c.sends)}</b></div>${c.total != null ? `<div><span>Estimated cost</span><b>$${c.total.toFixed(2)}</b></div>` : ''}${b ? `<div><span>AWS limit left</span><b class="${b.over ? 'bad' : ''}">$${b.left.toFixed(2)} of $${b.limit}</b></div>` : ''}` : '<div><span>Counting…</span></div>'}</div></div>
+      <div class="sd-sec"><label class="sd-r" style="margin-top:0;cursor:default"><input type="checkbox" checked disabled> <b style="font-weight:500">Determine recipients at send time</b><small>Buzzin finalizes recipients right before the first messages go out. Later changes to the lists or segments don't affect it after that.</small></label></div>
     </div>
-    <div class="sd-f"><button class="btn" id="sdcancel">Cancel</button><button class="btn pri" id="sdgo"${probs.length ? ' disabled' : ''}>${st.how === 'now' ? '<i class="ti ti-send"></i> Send now' : `<i class="ti ti-calendar-check"></i> Schedule ${isSms ? 'text' : 'email'}`}</button></div>`;
-    dr.querySelector('.sd-x').onclick = close; $('sdcancel').onclick = close;
+    <div class="sd-f${confirming ? ' cf' : ''}">${confirming ? `<div class="sd-cfm ${st.how === 'now' ? 'now' : ''}"><i class="ti ti-${st.how === 'now' ? 'alert-triangle' : 'calendar-check'}"></i><div><b>${st.how === 'now' ? `Send to ${c ? fmtN(c.sends) + (c.sends === 1 ? ' person' : ' people') : 'everyone'} right now?` : `Schedule for ${esc(when)}?`}</b><div class="sd-hint" style="margin:2px 0 0">${st.how === 'now' ? 'Texts and emails can\'t be taken back once they go out.' : `${c ? fmtN(c.sends) + (c.sends === 1 ? ' person' : ' people') : 'The audience'}${c && c.total != null ? ` · about $${c.total.toFixed(2)}` : ''}. You can unschedule any time before then.`}</div></div></div>
+      <div class="sd-fb"><button class="btn pri${st.how === 'now' ? ' sd-red' : ''}" id="sdyes">${st.how === 'now' ? 'Yes, send now' : 'Confirm schedule'}</button><button class="btn" id="sdback">Back</button></div>`
+      : `<button class="btn pri" id="sdgo"${probs.length || (!est && !estErr) ? ' disabled' : ''}>${!est && !estErr ? '<span class="sd-spin w"></span> ' : ''}${st.how === 'now' ? 'Send now' : `Schedule ${isSms ? 'message' : 'email'}`}</button><button class="btn" id="sdcancel">Cancel</button>`}</div>`;
+    dr.querySelector('.sd-x').onclick = close; if ($('sdcancel')) $('sdcancel').onclick = close;
+    if ($('sdrev')) $('sdrev').onclick = () => { close(); const p = $('cprob'); if (p) p.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+    if ($('sdback')) $('sdback').onclick = () => { confirming = false; draw(); };
+    if (confirming) { dr.querySelectorAll('.sd-b input,.sd-b select').forEach((x) => x.disabled = true); }
     dr.querySelectorAll('[name=sdhow]').forEach((r) => r.onchange = () => { st.how = r.value; draw(); });
     dr.querySelectorAll('[name=sdpass]').forEach((r) => r.onchange = () => { st.passed = r.value; });
     dr.querySelectorAll('[name=sdq]').forEach((r) => r.onchange = () => { st.quiet = r.value; draw(); });
@@ -339,28 +345,25 @@ async function openSchedule() {
     const t = $('sdt'); if (t) t.onchange = () => { st.time = t.value; draw(); };
     const mx = $('sdmax'); if (mx) mx.onchange = () => { st.maxOn = mx.checked; draw(); };
     const mh = $('sdmaxh'); if (mh) mh.oninput = () => { st.maxH = Math.max(1, Math.min(72, Number(mh.value) || 12)); };
-    $('sdgo').onclick = async () => {
+    const build = () => {
       const sc = { ...(CP.schedule || {}) };
       if (st.how === 'now') Object.assign(sc, { mode: 'now', at: null });
       else if (st.opt === 'fixed') Object.assign(sc, { mode: 'at', at: new Date(`${st.date}T${st.time}`).toISOString() });
       else Object.assign(sc, { mode: 'local', date: st.date, time: st.time, passed: st.passed });
       if (isSms) Object.assign(sc, { quiet: st.quiet, max_delay_hours: st.quiet === 'delay' && st.maxOn ? st.maxH : null });
-      if (st.how === 'now') {
-        const n = est && est.cost ? fmtN(est.cost.sends) : 'everyone in the audience';
-        if (!confirm(`Send "${CP.name}" to ${n} people RIGHT NOW?\n\nThis can't be undone. Press Cancel to pick a date and time instead.`)) return;
-      } else {
-        const when = st.opt === 'fixed' ? new Date(sc.at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : `${st.date} at ${fmtTime(st.time)} in each person's time zone`;
-        if (!confirm(`Schedule "${CP.name}" for ${when}?`)) return;
-      }
-      CP.schedule = sc; $('sdgo').disabled = true;
-      try { await save(); await api(`/api/mk/campaigns/${CP.id}/schedule`, { method: 'POST', body: JSON.stringify({ send_now: st.how === 'now' }) }); close(); toast(st.how === 'now' ? 'Sending started (or sent for approval)' : 'Scheduled (or sent for approval)'); go(); }
-      catch (e) { $('sdgo').disabled = false; toast(e.message, 1); }
+      return sc;
+    };
+    if ($('sdgo')) $('sdgo').onclick = () => { confirming = true; draw(); };
+    if ($('sdyes')) $('sdyes').onclick = async () => {
+      const sc = build(); CP.schedule = sc; $('sdyes').disabled = true; $('sdyes').innerHTML = '<span class="sd-spin w"></span> ' + (st.how === 'now' ? 'Sending…' : 'Scheduling…');
+      try { await save(); await api(`/api/mk/campaigns/${CP.id}/schedule`, { method: 'POST', body: JSON.stringify({ send_now: st.how === 'now' }) }); close(); toast(st.how === 'now' ? 'Sending started (or sent for approval)' : `Scheduled for ${when}`); go(); }
+      catch (e) { confirming = false; draw(); toast(e.message, 1); }
     };
   };
   draw();
   try { const at = st.how === 'schedule' && st.opt === 'fixed' ? new Date(`${st.date}T${st.time}`).toISOString() : null;
     est = await api('/api/mk/campaigns/estimate', { method: 'POST', body: JSON.stringify({ store: CP.store, channel: CP.channel, audience: CP.audience, smart_sending: CP.smart_sending, content: CP.content, ab: CP.ab, schedule: at ? { mode: 'at', at } : CP.schedule }) });
-    if (dr.isConnected) draw(); } catch (_) {}
+    if (dr.isConnected) draw(); } catch (e) { estErr = e.message; if (dr.isConnected) draw(); }
 }
 if (!document.getElementById('sd-css')) { const css = document.createElement('style'); css.id = 'sd-css'; css.textContent = `
 .sd-back{position:fixed;inset:0;background:rgba(22,21,29,.42);z-index:90;animation:sdf .15s}
@@ -370,8 +373,12 @@ if (!document.getElementById('sd-css')) { const css = document.createElement('st
 .sd-h h2{margin:0;font-size:21px;font-weight:700;letter-spacing:-.01em}.sd-sub{color:var(--muted);font-size:15px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sd-x{width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:20px;display:grid;place-items:center;flex:none}.sd-x:hover{background:var(--panel2)}
 .sd-b{flex:1;overflow-y:auto;padding:22px 28px 28px}
-.sd-f{border-top:1px solid var(--line);padding:16px 28px;display:flex;gap:10px;justify-content:flex-end}.sd-f .btn{height:44px;padding:0 20px;font-size:14.5px}
-.sd-err{display:flex;gap:10px;background:#FDECEA;border:1px solid #F5C2BD;color:#9B1C1C;border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:14px}.sd-err>.ti{font-size:20px;color:#D92D20;flex:none;margin-top:1px}.sd-err ul{margin:6px 0 0;padding-left:18px}
+.sd-f{border-top:1px solid var(--line);padding:16px 28px;display:flex;gap:10px;justify-content:flex-start;align-items:center}.sd-f.cf{flex-direction:column;align-items:stretch;gap:12px}
+.sd-fb{display:flex;gap:10px}.sd-cfm{display:flex;gap:12px;align-items:flex-start;background:var(--bz-blue-soft,#EAF2FF);border:1px solid #C9DCFD;border-radius:10px;padding:12px 14px}.sd-cfm>.ti{font-size:22px;color:var(--bz-blue,#2F7BF5)}.sd-cfm.now{background:#FFF4E5;border-color:#F7C98B}.sd-cfm.now>.ti{color:#B54708}.sd-cfm b{font-size:15px}
+.sd-red{background:#D92D20!important;border-color:#D92D20!important}.sd-red:hover{background:#B42318!important}
+.sd-bill{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:18px}.sd-bh{font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px}.sd-bill .sd-sum{margin-top:10px}
+.sd-calc{display:flex;gap:12px;align-items:center;margin-top:10px}.sd-spin{width:18px;height:18px;border-radius:50%;border:2px solid #D0D5DD;border-top-color:var(--bz-blue,#2F7BF5);animation:sdspin .8s linear infinite;flex:none;display:inline-block;vertical-align:-3px}.sd-spin.w{width:14px;height:14px;border-color:rgba(255,255,255,.4);border-top-color:#fff}@keyframes sdspin{to{transform:rotate(360deg)}}.sd-f .btn{height:44px;padding:0 20px;font-size:14.5px}
+.sd-err{display:flex;gap:10px;align-items:flex-start;background:#FDECEA;border:1px solid #F5C2BD;color:#9B1C1C;border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:14px}.sd-err>.ti{font-size:20px;color:#D92D20;flex:none;margin-top:1px}.sd-err ul{margin:6px 0 0;padding-left:18px}
 .sd-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
 .sd-card{position:relative;display:flex;flex-direction:column;gap:4px;border:1px solid var(--line2);border-radius:10px;padding:16px 18px;cursor:pointer;background:#fff;transition:border-color .12s,box-shadow .12s}
 .sd-card:hover{border-color:#9CA3AF}.sd-card.on{border:2px solid var(--bz-blue,#2F7BF5);padding:15px 17px;box-shadow:0 0 0 3px rgba(47,123,245,.12)}
