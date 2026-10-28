@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.111.0
+- Buzzin now pulls Shopify's own browsing data: a list "Shopify: viewed a product in 180 days, no order in 180 days", refreshed daily from Shopify's customer segments.
+- New segment "Ready to convert: engaged 180 days, no order (SMS, top 5,000)": said yes to texts, engaged in the last 180 days (viewed products on Shopify, clicked, carted, started checkout, opened or visited) and no order in 180 days. Replaces "Engaged 180 days + SMS (top 5,000)".
+
 ## 4.110.0
 - Segments can keep at most a set number of people ("Keep at most 5,000 people"), most recently engaged first. Useful for keeping a text send under the AWS limit.
 - New Larkspur Baby segment "Engaged 180 days + SMS (top 5,000)": said yes to texts and opened/clicked, visited the site or ordered in the last 180 days.

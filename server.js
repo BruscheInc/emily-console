@@ -1118,23 +1118,39 @@ async function trackingOn() {
   console.log(`🛒 store activity tracking for Larkspur Baby: ${was ? "already on" : "turned on"}`);
 }
 // One-time deep look at the 10% sign-up form (#6) and Welcome Series + 10% (#12) — logs only.
-/** One-time: the 5,000 most recently engaged people (last 180 days) who said yes to texts, for Larkspur Baby. */
-async function engagedSms5k() {
-  if (await syncGet("engaged_sms_5k_v1")) return;
+/** Shopify lists Buzzin keeps in step every day (Shopify's own browsing data). */
+const SHOPIFY_LISTS = [{ store: "lb", name: "Shopify: viewed a product in 180 days, no order in 180 days", query: "storefront.product_viewed MATCHES (date >= -180d) AND orders_placed NOT MATCHES (date >= -180d)" }];
+async function syncShopifyLists() {
+  for (const l of SHOPIFY_LISTS) { try { const r = await require("./mk-core").syncShopifyQueryList(l.store, l.query, l.name); console.log(`🛒 Shopify list "${l.name}": ${r.shopify} in Shopify · ${r.matched} matched to profiles`); } catch (e) { console.error(`Shopify list "${l.name}":`, e.message); } }
+}
+/** "Ready to convert": said yes to texts, engaged in the last 180 days (viewed products on Shopify, clicked, carted, opened or visited) and no order in 180 days.
+ *  The 5,000 most recently engaged. Replaces the first version of this segment. */
+async function convertSms5k() {
+  if (await syncGet("convert_sms_5k_v2")) return;
+  await syncShopifyLists();
   const SEG = require("./mk-segments");
+  const list = (await db(`SELECT id FROM mk_lists WHERE store='lb' AND source='shopify_query' AND ext_id=$1`, [SHOPIFY_LISTS[0].query.slice(0, 300)])).rows[0];
+  const d180 = { kind: "last_days", days: 180 };
+  const engaged = [
+    { type: "field", field: "last_engaged_at", op: "within_days", value: 180 },
+    { type: "event", event: "clicked_email", op: "at_least", value: 1, window: d180 },
+    { type: "event", event: "clicked_sms", op: "at_least", value: 1, window: d180 },
+    { type: "event", event: "viewed_product", op: "at_least", value: 1, window: d180 },
+    { type: "event", event: "added_to_cart", op: "at_least", value: 1, window: d180 },
+    { type: "event", event: "started_checkout", op: "at_least", value: 1, window: d180 },
+    { type: "event", event: "active_on_site", op: "at_least", value: 1, window: d180 }];
+  if (list) engaged.unshift({ type: "list", list_id: list.id, in: true });
   const definition = { match: "all", limit: 5000, conditions: [
     { type: "consent", channel: "sms", state: "subscribed" },
-    { group: { match: "any", conditions: [
-      { type: "field", field: "last_engaged_at", op: "within_days", value: 180 },
-      { type: "event", event: "placed_order", op: "at_least", value: 1, window: { kind: "last_days", days: 180 } },
-      { type: "event", event: "clicked_sms", op: "at_least", value: 1, window: { kind: "last_days", days: 180 } },
-      { type: "event", event: "clicked_email", op: "at_least", value: 1, window: { kind: "last_days", days: 180 } },
-      { type: "event", event: "active_on_site", op: "at_least", value: 1, window: { kind: "last_days", days: 180 } }] } }] };
+    { type: "event", event: "placed_order", op: "zero", window: d180 },
+    { group: { match: "any", conditions: engaged } }] };
   const all = await SEG.count({ ...definition, limit: null }, "lb");
-  const s = await SEG.save({ store: "lb", name: "Engaged 180 days + SMS (top 5,000)", description: "Said yes to texts and engaged (opened/clicked, visited, or ordered) in the last 180 days. Most recently engaged 5,000.", definition }, "Claude");
+  const old = (await db(`SELECT id FROM mk_segments WHERE store='lb' AND name='Engaged 180 days + SMS (top 5,000)' AND NOT archived ORDER BY id DESC LIMIT 1`)).rows[0];
+  const s = await SEG.save({ id: old ? old.id : null, store: "lb", name: "Ready to convert: engaged 180 days, no order (SMS, top 5,000)",
+    description: "Said yes to texts, engaged in the last 180 days (viewed products on Shopify, clicked, added to cart, started checkout, opened or visited) and no order in 180 days. Most recently engaged 5,000.", definition }, "Claude");
   const r = await SEG.refresh(s.id);
-  console.log(`🎯 segment ${s.id} "${s.name}": ${r.n} people (${r.s} can get texts) out of ${all.n} who match`);
-  await core.syncSet("engaged_sms_5k_v1", String(s.id), { all: all.n, kept: r.n });
+  console.log(`🎯 segment ${s.id} "Ready to convert": ${r.n} people (of ${all.n} who match)`);
+  await core.syncSet("convert_sms_5k_v2", String(s.id), { all: all.n, kept: r.n });
 }
 async function welcomeDeep() {
   if (await syncGet("welcome_deep_v1")) return;
@@ -1265,7 +1281,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); setTimeout(() => cartDiag().catch((e) => console.error("cart diag:", e.message)), 45000); setTimeout(() => trackingOn().catch((e) => console.error("tracking on:", e.message)), 47000); setTimeout(() => welcomeDeep().catch((e) => console.error("welcome deep:", e.message)), 50000); setTimeout(() => engagedSms5k().catch((e) => console.error("engaged sms 5k:", e.message)), 53000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); setTimeout(() => cartDiag().catch((e) => console.error("cart diag:", e.message)), 45000); setTimeout(() => trackingOn().catch((e) => console.error("tracking on:", e.message)), 47000); setTimeout(() => welcomeDeep().catch((e) => console.error("welcome deep:", e.message)), 50000); setTimeout(() => convertSms5k().catch((e) => console.error("convert sms 5k:", e.message)), 53000); setInterval(() => syncShopifyLists().catch(() => {}), 24 * 3600e3); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.

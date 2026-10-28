@@ -156,6 +156,32 @@ async function ensureList(store, name, { source = "buzzin", ext_id = null, descr
   }
   return (await db(`INSERT INTO mk_lists (store, name, description, source, ext_id) VALUES ($1,$2,$3,$4,$5) RETURNING *`, [store, name, description, source, ext_id])).rows[0];
 }
+/** A list kept in step with a Shopify customer-segment query (e.g. "viewed a product in 180 days, no order in 180 days").
+ *  Shopify runs the query; Buzzin matches each customer to a profile (Shopify id, then email) and replaces the list's members. */
+async function syncShopifyQueryList(store, query, name) {
+  const st = R().shopFor(store);
+  const list = await ensureList(store, name, { source: "shopify_query", ext_id: query.slice(0, 300), description: `From Shopify: ${query}` });
+  const mk = (await R().gql(st, `mutation C($q: String!) { customerSegmentMembersQueryCreate(input: { query: $q }) { customerSegmentMembersQuery { id done } userErrors { message } } }`, { q: query })).customerSegmentMembersQueryCreate;
+  if (mk.userErrors && mk.userErrors.length) throw new Error("Shopify: " + mk.userErrors.map((e) => e.message).join("; "));
+  const qid = mk.customerSegmentMembersQuery.id;
+  for (let i = 0; i < 120; i++) { const q = (await R().gql(st, `query Q($id: ID!) { customerSegmentMembersQuery(id: $id) { done currentCount } }`, { id: qid })).customerSegmentMembersQuery; if (q && q.done) break; await new Promise((r) => setTimeout(r, 2000)); }
+  const ids = new Set(); let after = null, total = 0;
+  for (let page = 0; page < 400; page++) {
+    const r = (await R().gql(st, `query M($id: ID!, $after: String) { customerSegmentMembers(queryId: $id, first: 250, after: $after) { edges { node { id defaultEmailAddress { emailAddress } } } pageInfo { hasNextPage endCursor } } }`, { id: qid, after })).customerSegmentMembers;
+    for (const e of r.edges) {
+      total++;
+      const num = String(e.node.id).split("/").pop(), email = e.node.defaultEmailAddress && e.node.defaultEmailAddress.emailAddress;
+      const p = (await db(`SELECT id FROM mk_profiles WHERE shopify_id=$1 OR ($2::text IS NOT NULL AND email=lower($2)) ORDER BY (shopify_id=$1) DESC LIMIT 1`, [`gid://shopify/Customer/${num}`, email || null])).rows[0];
+      if (p) ids.add(Number(p.id));
+    }
+    if (!r.pageInfo.hasNextPage) break; after = r.pageInfo.endCursor;
+  }
+  const arr = [...ids];
+  await db(`DELETE FROM mk_list_members WHERE list_id=$1 AND NOT (profile_id = ANY($2::bigint[]))`, [list.id, arr]);
+  await db(`INSERT INTO mk_list_members (list_id, profile_id, source) SELECT $1, x, 'shopify' FROM unnest($2::bigint[]) x ON CONFLICT DO NOTHING`, [list.id, arr]);
+  clearMemo();
+  return { list_id: list.id, shopify: total, matched: arr.length };
+}
 /* One list that holds every Brusche contact, like Klaviyo's "Shopify Merged Newsletter". New profiles join it automatically. */
 const ALL_LIST = "Shopify Merged Newsletter";
 let allListId = null;
@@ -573,5 +599,5 @@ async function init() {
   setTimeout(fill, 30 * 1000); setInterval(fill, 30 * 60 * 1000);
 }
 
-module.exports = { memo, clearMemo, pollOrders, profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
+module.exports = { syncShopifyQueryList, memo, clearMemo, pollOrders, profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
   recomputeTiers, syncAll, syncFromKlaviyo, syncShopifyCustomers, syncShopifyOrders, overview, search, profile, lists, sizeOf };
