@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.12
+- Emergency: campaign 5 ("Outlet SMS 10/28/2026") started early. Any texts not yet sent are held (not cancelled) while the cause is fixed.
+
 ## 0.0.11
 - The version number shows under the bee logo at the top of the left bar.
 
