@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.6
+- New segment from the uploaded "Website Visitors 180 Days" list: can get texts, no order in 180 days.
+
 ## 0.0.5
 - Fix: after each update, queries left behind by the old copy of Buzzin held the database, and startup changes queued behind them blocked every read (list uploads hung). Buzzin now clears those every 20 seconds.
 
