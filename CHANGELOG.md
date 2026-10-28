@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.8
+- New look for all of Buzzin: a dark icon bar on the far left switches between Home, Tickets, Shipping, Returns, Marketing, Content and Reports (with red counts), on every page including Marketing and the studios. Settings and your account sit at the bottom.
+- Each part gets a light side panel with its views and counts (e.g. Tickets: LBO tickets, LB tickets, Out of stock, mailboxes), search and a blue "+ New ticket".
+- Ticket list redone: requester with initials avatar, subject with preview, order, assignee, status pill (Open, Draft ready, Replied, Closed) and last message. Primary buttons are blue.
+
 ## 0.0.7
 - Opening a list or segment now shows its own page like Klaviyo: name, Members (count) tab and a members table (profile, email, phone, location, date added) with search and paging. Segments have an "Edit definition" button. Lists no longer jump to All profiles.
 - Fixes the "This page didn't load" error when opening a segment.

@@ -1,0 +1,28 @@
+/* Buzzin · dark app rail (loaded by bz-rail.js on every page) */
+:root{--bz-rail:#2D2C34;--bz-rail-2:#3D3C46;--bz-rail-ink:#A8A7B2;--bz-pane:#F3F5F8;--bz-pane-line:#E3E7ED;
+  --bz-blue:#2F7BF5;--bz-blue-ink:#1F63D6;--bz-blue-soft:#EAF2FF;--bz-ring:0 0 0 3px rgba(47,123,245,.22)}
+body.has-rail{padding-left:76px}
+.bz-rail{position:fixed;left:0;top:0;bottom:0;width:76px;z-index:70;background:var(--bz-rail);display:flex;flex-direction:column;align-items:stretch;padding:12px 0 calc(12px + env(safe-area-inset-bottom,0px));font-family:inherit}
+.bz-rail .rlogo{display:flex;justify-content:center;padding:2px 0 16px}
+.bz-rail .rlogo img{width:36px;height:36px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.bz-rail .rmods{display:flex;flex-direction:column;gap:2px;flex:1;overflow-y:auto;scrollbar-width:none}
+.bz-rail .rmods::-webkit-scrollbar{display:none}
+.bz-rail .ri{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px 9px;color:var(--bz-rail-ink);text-decoration:none;font-size:11px;font-weight:600;letter-spacing:.01em;transition:background .12s,color .12s}
+.bz-rail .ri .ti{font-size:22px}
+.bz-rail .ri:hover{color:#fff;background:rgba(255,255,255,.05)}
+.bz-rail .ri.on{color:#fff;background:var(--bz-rail-2)}
+.bz-rail .ri.on:before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--bz-honey)}
+.bz-rail .ri:focus-visible{outline:2px solid var(--bz-honey);outline-offset:-2px;border-radius:0}
+.bz-rail .rb{position:absolute;top:5px;left:calc(50% + 4px);min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#F04438;color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--bz-rail)}
+.bz-rail .rb[hidden]{display:none}
+.bz-rail .rfoot{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:6px;border-top:1px solid rgba(255,255,255,.08);padding-top:10px}
+.bz-rail .rav{align-self:center;width:38px;height:38px;border-radius:50%;border:2px solid rgba(255,255,255,.18);background:var(--bz-honey);color:var(--bz-ink);font-weight:800;font-size:13px;cursor:pointer;display:grid;place-items:center;padding:0}
+.bz-rail .rmenu{position:absolute;left:68px;bottom:0;width:230px;background:#fff;border:1px solid var(--bz-line);border-radius:12px;box-shadow:var(--bz-sh-3);padding:6px;z-index:80}
+.bz-rail .rmenu[hidden]{display:none}
+.bz-rail .rme{padding:8px 10px 10px;font-weight:700;border-bottom:1px solid var(--bz-line);margin-bottom:4px;color:var(--bz-ink)}
+.bz-rail .rmenu a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--bz-ink-2);text-decoration:none;font-size:13.5px}
+.bz-rail .rmenu a:hover{background:var(--bz-hover)}
+body:has(#keygate:not(.hidden)) .bz-rail,body:has(#gate:not(.hidden)) .bz-rail{display:none}
+body.has-rail:has(#keygate:not(.hidden)),body.has-rail:has(#gate:not(.hidden)){padding-left:0}
+@media (max-width:640px){body.has-rail{padding-left:60px}.bz-rail{width:60px}.bz-rail .ri span{display:none}.bz-rail .ri{padding:12px 0}.bz-rail .rlogo img{width:30px;height:30px}.bz-rail .rmenu{left:54px}}
+

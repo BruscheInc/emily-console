@@ -366,6 +366,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .whok{font-size:11.5px;color:#1e7a4c;background:#e8f6ee;border-radius:6px;padding:2px 7px;white-space:nowrap}.whok.short{color:#b03a2e;background:#fdecea}
 </style>
 <link rel="stylesheet" href="/bz-ui.css?v=__VERSION__">
+<script src="/bz-rail.js?v=__VERSION__" defer></script>
 </head>
 <body class="bz-hd">
 <div id="keygate" class="keyprompt hidden">
@@ -388,8 +389,9 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 <div id="app" class="hidden" style="display:flex;height:100%">
 <aside class="side">
   <div class="brand"><img class="mark" src="logo.svg" alt="" width="34" height="34"><div><div class="name">Buzzin <span id="ver" class="ver"></span></div><div class="subname">Larkspur Baby · Outlet</div></div></div>
+  <div class="phd"><h2 id="modtitle">Tickets</h2><button class="btn" id="ptnew" onclick="newTicketModal()" title="Start a new email conversation with a customer">+ New ticket</button></div>
   <div class="side-scroll">
-  <button class="nav-search" onclick="sideSearch()" title="Search tickets (⌘K)"><i class="ti ti-search"></i><span>Search</span><kbd>⌘K</kbd></button>
+  <button class="nav-search" onclick="sideSearch()" title="Search tickets (⌘K)"><i class="ti ti-search"></i><span>Search in all tickets…</span><kbd>⌘K</kbd></button>
   <button class="nav view top" data-view="home" onclick="setView('home')"><i class="i ti ti-home"></i><span>Home</span></button>
   <div class="grp" data-g="inbox"><button class="nav gh" onclick="toggleGrp('inbox')"><i class="i ti ti-inbox"></i><span>Inbox</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
@@ -444,7 +446,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 <div class="mainarea">
   <div class="listcol" id="listcol">
     <div class="listhead">
-      <div class="lh1"><h1 id="viewtitle">LBO Tickets</h1><span class="showing" id="showing"></span><span class="sp"></span><button class="btn" onclick="newTicketModal()" title="Start a new email conversation with a customer">+ New ticket</button><button class="btn sec" onclick="loadList(true);loadCounts()">↻ Refresh</button></div>
+      <div class="lh1"><h1 id="viewtitle">LBO Tickets</h1><span class="showing" id="showing"></span><span class="sp"></span><button class="btn newt" onclick="newTicketModal()" title="Start a new email conversation with a customer">+ New ticket</button><button class="btn sec" onclick="loadList(true);loadCounts()" title="Refresh"><i class="ti ti-refresh"></i> Refresh</button></div>
       <div class="lh2">
         <div class="seg">
           <button class="tab on" data-tab="pending" onclick="setTab('pending')">Pending<span class="n" id="n-pending"></span></button>
@@ -457,7 +459,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
       </div>
     </div>
     <div id="bulkbar" class="bulkbar hidden"><b id="bulkn">0 selected</b><button class="btn xs" id="bulkclose" onclick="bulkStatus('closed',this)">Close selected</button><button class="btn sec xs" id="bulkopen" onclick="bulkStatus('open',this)">Reopen selected</button><button class="btn sec xs" onclick="SEL.clear();syncBulk()">Clear</button></div>
-    <div class="tablewrap"><table class="tickets"><thead><tr><th class="c-ck"><input type="checkbox" id="selall" title="Select all on this page" onclick="selAll(this.checked)"></th><th class="c-t">Ticket</th><th class="c-ord">Order</th><th class="c-ost">Order status</th><th class="c-tags">Tags</th><th class="c-cust">Customer</th><th class="c-last">Last message ↓</th></tr></thead><tbody id="list"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody></table></div>
+    <div class="tablewrap"><table class="tickets"><thead><tr><th class="c-ck"><input type="checkbox" id="selall" title="Select all on this page" onclick="selAll(this.checked)"></th><th class="c-req">Requester</th><th class="c-t">Subject</th><th class="c-ord">Order</th><th class="c-asg">Assignee</th><th class="c-st">Status</th><th class="c-last">Last message ↓</th></tr></thead><tbody id="list"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody></table></div>
     <div id="stuckwrap" class="tablewrap" style="display:none"></div>
     <div class="pager"><span id="pageinfo"></span><span class="sp"></span><button class="btn sec xs" id="prevpg" onclick="page(-1)">‹ Prev</button><button class="btn sec xs" id="nextpg" onclick="page(1)">Next ›</button></div>
   </div>
@@ -534,11 +536,12 @@ function fmtDay(ts){try{return new Date(ts).toLocaleDateString([],{month:"short"
 if(!KEY){ $("keygate").classList.remove("hidden"); }
 else {(async()=>{
   let role=null; try{ role=await (await fetch("/api/role?key="+encodeURIComponent(KEY))).json(); }catch(e){}
-  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); if(role.user){ $("acctName").textContent=role.user; $("acctAv").textContent=String(role.user).trim().split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase(); } if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); checkVersion(true).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
+  if(role&&role.ok){ ME=role; $("app").classList.remove("hidden"); if(role.user){ $("acctName").textContent=role.user; if(window.bzRail) bzRail.user(role.user); $("acctAv").textContent=String(role.user).trim().split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase(); } if("serviceWorker" in navigator){let _r=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(_r)return;_r=true;location.reload();});window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));} applyView(); loadCounts(); loadList(); checkVersion(true).catch(()=>{}); try{ const tk=new URLSearchParams(location.search).get("ticket"); if(tk) setTimeout(()=>openTicket(Number(tk)),300); }catch(e){} setInterval(()=>{if(!document.hidden){loadCounts(); if(!document.body.classList.contains("viewing"))loadList(false,true);}},30000); }
   else { $("keygate").classList.remove("hidden"); $("gateMsg").textContent="Your session has ended — sign in again."; try{localStorage.removeItem("ec_key");}catch(e){} }
 })();}
 
-function applyView(){document.querySelectorAll(".nav.view").forEach(b=>b.classList.toggle("on",b.dataset.view===VIEW)); initGroups();}
+function applyView(){document.querySelectorAll(".nav.view").forEach(b=>b.classList.toggle("on",b.dataset.view===VIEW)); initGroups(); showMod(modOf(VIEW));
+  try{ const m=new URLSearchParams(location.search).get("mod"); if(m){ history.replaceState(null,"",location.pathname+location.hash); if(m==="settings") setTimeout(()=>window.openSettings&&openSettings(),300); else setTimeout(()=>goMod(m),0); } }catch(e){} }
 /* ---- sidebar groups (Klaviyo-style categories, Gorgias-style view counts) ---- */
 function grpState(){ try{ return JSON.parse(localStorage.getItem("ec_groups")||"{}"); }catch(e){ return {}; } }
 // Buzzin opens with every group collapsed except Inbox (and the group holding the page you're on). Opening and closing
@@ -551,7 +554,27 @@ function sideSearch(){ const ticketViews=["lb","lbo","lb_tickets","lbo_tickets",
 document.addEventListener("keydown",(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){ e.preventDefault(); sideSearch(); } });
 document.addEventListener("click",(e)=>{ const m=$("acctMenu"); if(m&&!m.classList.contains("hidden")&&!e.target.closest(".acct")) m.classList.add("hidden"); });
 function setTab(t){TAB=t;OFFSET=0;document.querySelectorAll(".tab[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));loadList();}
-function setView(v){VIEW=v;OFFSET=0;try{localStorage.setItem("ec_view",v);}catch(e){}
+/* ---- app rail modules: each rail icon shows one part of Buzzin in the panel ---- */
+const MODS={home:[],tickets:["inbox","mail"],ship:["ship"],returns:["returns"],content:["content"],analytics:["analytics"]};
+const MOD_TITLES={home:"Home",tickets:"Tickets",ship:"Shipping",returns:"Returns & claims",content:"Content",analytics:"Reports"};
+function modOf(v){ if(v==="home") return "home"; const b=document.querySelector(`.side .nav.view[data-view="${v}"]`); const g=b&&b.closest(".grp"); const gid=g&&g.dataset.g; for(const m in MODS) if(MODS[m].includes(gid)) return m; return "tickets"; }
+function showMod(m){
+  document.body.dataset.mod=m; if(window.bzRail) bzRail.set(m);
+  let first=true; document.querySelectorAll(".side .grp").forEach(g=>{ const on=(MODS[m]||[]).includes(g.dataset.g); g.classList.toggle("mod-on",on); g.classList.toggle("first",on&&first); g.classList.toggle("only",on&&(MODS[m]||[]).length===1); if(on) first=false; });
+  const t=$("modtitle"); if(t) t.textContent=MOD_TITLES[m]||"Buzzin";
+  const nb=$("ptnew"); if(nb) nb.style.display=m==="tickets"?"":"none";
+  const ns=document.querySelector(".nav-search"); if(ns) ns.style.display=m==="tickets"?"":"none";
+}
+function goMod(m){
+  document.body.classList.remove("pane-open");
+  if(m==="home"){ if(document.body.classList.contains("viewing")) closeThread(); return setView("home"); }
+  if(modOf(VIEW)===m){ showMod(m); if(window.innerWidth<=920) document.body.classList.add("pane-open"); return; }
+  const first=document.querySelector(`.side .grp[data-g="${(MODS[m]||[])[0]}"] .nav.view`);
+  if(first){ if(document.body.classList.contains("viewing")) closeThread(); setView(first.dataset.view); }
+  else { showMod(m); document.body.classList.add("pane-open"); }
+}
+document.addEventListener("click",(e)=>{ if(document.body.classList.contains("pane-open")&&!e.target.closest(".side")&&!e.target.closest(".bz-rail")) document.body.classList.remove("pane-open"); });
+function setView(v){VIEW=v;OFFSET=0;try{localStorage.setItem("ec_view",v);}catch(e){} showMod(modOf(v)); document.body.classList.remove("pane-open");
   document.querySelectorAll(".nav.view").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
   const g=document.querySelector(`.side .nav.view[data-view="${v}"]`); const gp=g&&g.closest(".grp"); if(gp) gp.classList.remove("closed");
   loadList(true);loadCounts();}
@@ -563,6 +586,7 @@ async function loadCounts(){try{
   const pkv=$("v-pickup"); if(pkv) pkv.textContent=c.pickup||""; const sv=$("v-stuck"); if(sv) sv.textContent=(c.stuck&&c.stuck.never_scanned)||""; const uv=$("v-undelivered"); if(uv) uv.textContent=(c.stuck&&c.stuck.undelivered)||""; const rv=$("v-returns"); if(rv) rv.textContent=(c.returns&&(c.returns.attention||c.returns.open))||""; const cv=$("v-claims"); if(cv) cv.textContent=c.claims||""; const riv=$("v-ritems"); if(riv) riv.textContent=(c.returns&&c.returns.unchecked)||""; const lv=$("v-loop"); if(lv){ const L=c.returns&&c.returns.loop; lv.textContent=L?(L.attention||L.open||""):""; }
   // tab title carries the pending count, like a real inbox
   const pend=(c.views&&c.views.lbo_tickets||0)+(c.views&&c.views.lb_tickets||0); document.title=pend?`(${pend}) Buzzin`:"Buzzin";
+  if(window.bzRail){ bzRail.badge("tickets",pend); bzRail.badge("returns",(c.returns&&(c.returns.attention||0))+(c.claims||0)); bzRail.badge("ship",(c.stuck&&c.stuck.never_scanned)||0); }
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
@@ -687,15 +711,26 @@ async function loadList(force,silent){
     if(!tickets.length){el.innerHTML='<tr><td colspan="7" class="empty">No '+TAB+' tickets here.</td></tr>';syncBulk();return;}
     el.innerHTML=tickets.map(t=>`<tr class="row ${CUR===t.id?"on":""} ${SEL.has(t.id)?"sel":""}" onclick="openTicket(${t.id})">
       <td class="c-ck" onclick="event.stopPropagation()"><input type="checkbox" ${SEL.has(t.id)?"checked":""} onclick="selOne(${t.id},this.checked)"></td>
-      <td class="c-t"><div class="subj ${t.unread?"unread":""}">${esc(t.subject||"(no subject)")}${t.messages_count>1?`<span class="cnt" title="${t.messages_count} messages">${t.messages_count}</span>`:""}<span class="tno">#${t.id}</span></div><div class="exc">${esc((t.excerpt||"").replace(/\s+/g," ")).slice(0,140)}</div></td>
-      <td class="c-ord">${t.order_number?(t.order_info&&t.order_info.admin_url?`<a class="ordno" href="${esc(t.order_info.admin_url)}" target="_blank" rel="noopener" title="Open this order in Shopify" onclick="event.stopPropagation()">#${esc(t.order_number)} ↗</a>`:`<span class="ordno">#${esc(t.order_number)}</span>`):'<span class="exc">—</span>'}</td>
-      <td class="c-ost">${orderStatusChips(t.order_info)}</td>
-      <td class="c-tags"><div class="chips">${chipsFor(t)}</div></td>
-      <td class="c-cust" title="${esc(t.customer.email||"")}">${esc(t.customer.name||"")}</td>
+      <td class="c-req"><div class="req"><span class="av" style="background:${avColor(t.customer.email||t.customer.name)}">${esc(initials(t.customer.name||t.customer.email))}</span><div><div class="nm">${esc(t.customer.name||t.customer.email||"Unknown")}</div><div class="em">${esc(t.customer.name&&t.customer.email&&t.customer.name!==t.customer.email?t.customer.email:(t.brand||"").toUpperCase())}</div></div></div></td>
+      <td class="c-t"><div class="subj ${t.unread?"unread":""}">${esc(t.subject||"(no subject)")}${t.messages_count>1?`<span class="cnt" title="${t.messages_count} messages">${t.messages_count}</span>`:""}<span class="tno">#${t.id}</span></div><div class="exc">${esc((t.excerpt||"").replace(/\s+/g," ")).slice(0,140)}</div>${chipsFor(t)?`<div class="chips" style="margin-top:6px">${chipsFor(t)}</div>`:""}</td>
+      <td class="c-ord">${t.order_number?(t.order_info&&t.order_info.admin_url?`<a class="ordno" href="${esc(t.order_info.admin_url)}" target="_blank" rel="noopener" title="Open this order in Shopify" onclick="event.stopPropagation()">#${esc(t.order_number)} ↗</a>`:`<span class="ordno">#${esc(t.order_number)}</span>`)+`<div style="margin-top:5px">${orderStatusChips(t.order_info)}</div>`:'<span class="exc">—</span>'}</td>
+      <td class="c-asg">${t.assignee?esc(t.assignee):'<span class="unas">Unassigned</span>'}</td>
+      <td class="c-st">${statusPill(t)}</td>
       <td class="c-last ${t.unread?"unread":""}">${fmt(t.last)}</td>
     </tr>`).join("");
     syncBulk();
   }catch(e){el.innerHTML='<tr><td colspan="7" class="empty">Couldn\'t load tickets.</td></tr>';}
+}
+// Requester avatar: initials on a steady color picked from the email, like a help desk.
+const AV_COLORS=["#E8833A","#2F7BF5","#17A673","#9B51E0","#D9534F","#0EA5A4","#C9821A","#5468D4","#B5487A","#4F8A3B"];
+function avColor(k){ let h=0; for(const ch of String(k||"?")) h=(h*31+ch.charCodeAt(0))>>>0; return AV_COLORS[h%AV_COLORS.length]; }
+function initials(n){ n=String(n||"?").replace(/@.*/,"").replace(/[._-]+/g," ").trim(); const w=n.split(/\s+/).filter(Boolean); return ((w[0]||"?")[0]+(w.length>1?w[w.length-1][0]:"")).toUpperCase(); }
+// Status pill: Open (waiting on us), Draft ready (Emily drafted), Replied (waiting on the customer), Closed.
+function statusPill(t){
+  if(t.status==="closed") return '<span class="st closed">Closed</span>';
+  if(t.emily==="drafted"&&t.category==="pending") return '<span class="st draft" title="Emily has a reply ready">Draft ready</span>';
+  if(t.category==="sent") return '<span class="st replied" title="We replied; waiting on the customer">Replied</span>';
+  return '<span class="st open">Open</span>';
 }
 // Bulk select: tick tickets in the list, then close or reopen them together.
 const SEL=new Set();
