@@ -123,7 +123,8 @@ async function editCampaign(el, id) {
   drawProblems(); drawAudience(ro, mark); drawContent(ro, mark); drawAB(ro, mark); drawTiming(ro, mark); if (isE) drawResend(ro, mark); estimate(); previewMsg(); if ($('crep')) drawReport();
   const act = (btn, path, msg) => { const b = $(btn); if (b) b.onclick = async () => { try { if (cdirty) await save(); await api(`/api/mk/campaigns/${CP.id}/${path}`, { method: 'POST', body: '{}' }); toast(msg); cdirty = false; go(); } catch (e) { toast(e.message, 1); } }; };
   if ($('csched')) $('csched').onclick = () => openSchedule();
-  act('capprove', 'approve', 'Approved and scheduled'); act('cunsched', 'unschedule', 'Back to draft'); act('cstop', 'cancel', 'Stopped');
+  if ($('capprove')) $('capprove').onclick = async () => { const now = ((CP.schedule || {}).mode || 'now') === 'now'; if (!confirm(now ? `Approve and send "${CP.name}" RIGHT NOW?` : `Approve "${CP.name}" for ${whenText(CP.schedule, CP.channel === 'sms')}?`)) return; try { if (cdirty) await save(); await api(`/api/mk/campaigns/${CP.id}/approve`, { method: 'POST', body: JSON.stringify({ send_now: now }) }); toast('Approved'); cdirty = false; go(); } catch (e) { toast(e.message, 1); } };
+  if (false) act('capprove', 'approve', 'Approved and scheduled'); act('cunsched', 'unschedule', 'Back to draft'); act('cstop', 'cancel', 'Stopped');
   if ($('csave')) $('csave').onclick = () => save().then(() => toast('Saved')).catch((e) => toast(e.message, 1));
   $('ccopy').onclick = async () => { try { const c = await api('/api/mk/campaigns', { method: 'POST', body: JSON.stringify({ copy_of: CP.id }) }); cdirty = false; location.hash = '#campaigns/' + c.id; } catch (e) { toast(e.message, 1); } };
   if ($('cdel')) $('cdel').onclick = async () => { if ($('cdel').dataset.c !== '1') { $('cdel').dataset.c = '1'; $('cdel').textContent = 'Click again to delete'; return; } try { await api('/api/mk/campaigns/' + CP.id, { method: 'DELETE' }); cdirty = false; location.hash = '#campaigns'; } catch (e) { toast(e.message, 1); } };
@@ -286,7 +287,7 @@ async function openSchedule() {
   if (cdirty) { try { await save(); } catch (e) { return toast(e.message, 1); } }
   const isSms = CP.channel === 'sms';
   const s0 = CP.schedule || {};
-  const st = { how: s0.mode === 'now' || !s0.mode ? 'now' : 'schedule', opt: s0.mode === 'local' ? 'local' : 'fixed', passed: s0.passed || 'next_day', quiet: s0.quiet || 'delay', maxOn: !!s0.max_delay_hours, maxH: s0.max_delay_hours || 12 };
+  const st = { how: 'schedule', opt: s0.mode === 'local' ? 'local' : 'fixed', passed: s0.passed || 'next_day', quiet: s0.quiet || 'delay', maxOn: !!s0.max_delay_hours, maxH: s0.max_delay_hours || 12 };
   const now = new Date(), pad = (n) => String(n).padStart(2, '0');
   const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, hm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const soon = new Date(Date.now() + 3600e3); soon.setMinutes(0, 0, 0);
@@ -344,8 +345,15 @@ async function openSchedule() {
       else if (st.opt === 'fixed') Object.assign(sc, { mode: 'at', at: new Date(`${st.date}T${st.time}`).toISOString() });
       else Object.assign(sc, { mode: 'local', date: st.date, time: st.time, passed: st.passed });
       if (isSms) Object.assign(sc, { quiet: st.quiet, max_delay_hours: st.quiet === 'delay' && st.maxOn ? st.maxH : null });
+      if (st.how === 'now') {
+        const n = est && est.cost ? fmtN(est.cost.sends) : 'everyone in the audience';
+        if (!confirm(`Send "${CP.name}" to ${n} people RIGHT NOW?\n\nThis can't be undone. Press Cancel to pick a date and time instead.`)) return;
+      } else {
+        const when = st.opt === 'fixed' ? new Date(sc.at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : `${st.date} at ${fmtTime(st.time)} in each person's time zone`;
+        if (!confirm(`Schedule "${CP.name}" for ${when}?`)) return;
+      }
       CP.schedule = sc; $('sdgo').disabled = true;
-      try { await save(); await api(`/api/mk/campaigns/${CP.id}/schedule`, { method: 'POST', body: '{}' }); close(); toast(st.how === 'now' ? 'Sending started (or sent for approval)' : 'Scheduled (or sent for approval)'); go(); }
+      try { await save(); await api(`/api/mk/campaigns/${CP.id}/schedule`, { method: 'POST', body: JSON.stringify({ send_now: st.how === 'now' }) }); close(); toast(st.how === 'now' ? 'Sending started (or sent for approval)' : 'Scheduled (or sent for approval)'); go(); }
       catch (e) { $('sdgo').disabled = false; toast(e.message, 1); }
     };
   };

@@ -169,8 +169,10 @@ function startFor(c) {
   return new Date();
 }
 
-async function schedule(id, who, isAdmin) {
+async function schedule(id, who, isAdmin, opts = {}) {
   const c = await get(id); if (!c) throw Object.assign(new Error("not found"), { status: 404 });
+  // A campaign only goes out right away when someone chose "Send now" and confirmed it; anything else needs a time.
+  if (((c.schedule || {}).mode || "now") === "now" && !opts.sendNow) throw new Error('Pick a date and time, or choose "Send now" and confirm it.');
   if (c.status !== "draft" && !(c.status === "pending" && isAdmin)) throw new Error("Only a draft can be scheduled.");
   const p = await problems(c); if (p.length) throw new Error(p.join(" "));
   const est = await estimate(c);
@@ -373,8 +375,8 @@ function routes(app, { guard, admin, isAdmin, actorOf, fail, store }) {
   app.put("/api/mk/campaigns/:id", async (req, res) => { if (!guard(req, res)) return; try { const c = await update(req.params.id, req.body || {}, actorOf(req)); res.json({ ...c, problems: await problems(c) }); } catch (e) { fail(res, e); } });
   app.delete("/api/mk/campaigns/:id", async (req, res) => { if (!guard(req, res)) return; try { const c = await get(req.params.id); if (c && ["sending"].includes(c.status)) return res.status(400).json({ error: "Stop it first." }); await db(`UPDATE mk_campaigns SET archived=true WHERE id=$1`, [Number(req.params.id)]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/estimate", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!store(b.store)) return res.status(400).json({ error: "store required" }); res.json(await estimate({ store: b.store, channel: b.channel === "sms" ? "sms" : "email", audience: b.audience || {}, smart_sending: !!b.smart_sending, content: b.content || {}, ab: b.ab || {}, schedule: b.schedule || {} }, { fresh: !!b.fresh })); } catch (e) { fail(res, e); } });
-  app.post("/api/mk/campaigns/:id/schedule", async (req, res) => { if (!guard(req, res)) return; try { res.json(await schedule(req.params.id, actorOf(req), !!(isAdmin && isAdmin(req)))); } catch (e) { fail(res, e); } });
-  app.post("/api/mk/campaigns/:id/approve", async (req, res) => { if (!admin(req, res)) return; try { res.json(await schedule(req.params.id, actorOf(req), true)); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/campaigns/:id/schedule", async (req, res) => { if (!guard(req, res)) return; try { res.json(await schedule(req.params.id, actorOf(req), !!(isAdmin && isAdmin(req)), { sendNow: !!(req.body && req.body.send_now) })); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/campaigns/:id/approve", async (req, res) => { if (!admin(req, res)) return; try { res.json(await schedule(req.params.id, actorOf(req), true, { sendNow: !!(req.body && req.body.send_now) })); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/unschedule", async (req, res) => { if (!guard(req, res)) return; try { res.json(await unschedule(req.params.id, actorOf(req))); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/cancel", async (req, res) => { if (!guard(req, res)) return; try { res.json(await cancel(req.params.id, actorOf(req))); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/test", async (req, res) => { if (!guard(req, res)) return; try { res.json({ results: await testSend(req.params.id, (req.body || {}).to) }); } catch (e) { fail(res, e); } });

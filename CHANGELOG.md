@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.13
+- Fix (campaign sent early): a campaign saved with the default "as soon as it's scheduled" went out the moment Schedule/Approve was clicked. Now Buzzin refuses to start a campaign right away unless "Send now" was chosen and confirmed; the Schedule panel opens on Schedule, and both Schedule and Send now ask you to confirm the exact time (or "RIGHT NOW") first. Approve asks too.
+- Campaign 5: the 5,331 held texts go Wed Oct 28 at 10:00 AM Central. The 310 people who already got it are not texted again.
+
 ## 0.0.12
 - Emergency: campaign 5 ("Outlet SMS 10/28/2026") started early. Any texts not yet sent are held (not cancelled) while the cause is fixed.
 
