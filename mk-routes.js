@@ -102,12 +102,12 @@ module.exports = function mount(app, { guard, isAdmin, actorOf, VERSION }) {
       }
       // Match everyone in one pass (Shopify id, then email, then phone) instead of one lookup per row.
       const bySid = new Map(), byEm = new Map(), byPh = new Map();
-      for (let i = 0; i < ents.length; i += 5000) {
-        const part = ents.slice(i, i + 5000);
-        const found = (await db(`SELECT id, shopify_id, email, phone FROM mk_profiles WHERE shopify_id = ANY($1::text[]) OR email = ANY($2::text[]) OR phone = ANY($3::text[])`,
-          [part.map((e) => e.gid).filter(Boolean), part.map((e) => e.email).filter(Boolean), part.map((e) => e.phone).filter(Boolean)])).rows;
-        for (const p of found) { if (p.shopify_id) bySid.set(p.shopify_id, p.id); if (p.email && !byEm.has(p.email)) byEm.set(p.email, p.id); if (p.phone && !byPh.has(p.phone)) byPh.set(p.phone, p.id); }
-      }
+      // Three hash joins against the file's values (fast with or without indexes).
+      const uniq = (a) => [...new Set(a.filter(Boolean))];
+      for (const p of (await db(`SELECT p.id, p.shopify_id FROM mk_profiles p JOIN unnest($1::text[]) x(v) ON p.shopify_id = x.v`, [uniq(ents.map((e) => e.gid))])).rows) bySid.set(p.shopify_id, p.id);
+      for (const p of (await db(`SELECT DISTINCT ON (p.email) p.id, p.email FROM mk_profiles p JOIN unnest($1::text[]) x(v) ON p.email = x.v ORDER BY p.email, p.id`, [uniq(ents.map((e) => e.email))])).rows) byEm.set(p.email, p.id);
+      for (const p of (await db(`SELECT DISTINCT ON (p.phone) p.id, p.phone FROM mk_profiles p JOIN unnest($1::text[]) x(v) ON p.phone = x.v ORDER BY p.phone, p.id`, [uniq(ents.map((e) => e.phone))])).rows) byPh.set(p.phone, p.id);
+      console.log(`📋 list upload matched: ${bySid.size} by Shopify id · ${byEm.size} by email · ${byPh.size} by phone`);
       for (const e of ents) {
         let id = (e.gid && bySid.get(e.gid)) || (e.email && byEm.get(e.email)) || (!e.email && e.phone && byPh.get(e.phone)) || null;
         if (id) { matched++; ids.add(Number(id)); continue; }

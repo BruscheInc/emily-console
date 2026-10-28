@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.2
+- Fix: list upload stalled on the live database while matching people. It now matches with three quick lookups, so the whole file takes seconds.
+
 ## 0.0.1
 - Version numbering restarted at 0.0.1 (everything before this is listed below under the old 4.x numbers). From here each update bumps the last number: 0.0.2, 0.0.3…
 
