@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.10
+- Marketing is its own section in the left bar: its panel lists Audience (Overview, Profiles, Lists & segments, Merge & import), Build (Campaigns, Flows, Sign-up forms, Email templates, Brand kits, Texting) and Results (Analytics, Domain & DNS, Marketing settings).
+- Content is split: it keeps Website FAQs, Website chat and Customer emails; the LB/LBO portal design links moved to Returns.
+
 ## 0.0.9
 - Campaigns: new "Schedule or send" panel like Klaviyo. Pick Schedule or Send now; scheduling options (fixed time or each person's local time); date and time; for local time, what to do where the hour has already passed (send right away or the next day); for texts, quiet hours (delay until morning, with an optional maximum delay, or skip); people and cost against the AWS limit; errors listed at the top before you can schedule.
 

@@ -17,7 +17,7 @@
   if (!document.querySelector('link[href*="tabler-icons"]')) { const t = document.createElement("link"); t.rel = "stylesheet"; t.href = "/tabler-icons.css"; document.head.appendChild(t); }
   if (!document.querySelector('link[href^="/bz-rail.css"]')) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "/bz-rail.css?" + (((document.currentScript || {}).src || "").split("?")[1] || "v=1"); document.head.appendChild(l); }
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const hrefFor = (x) => (x.href ? x.href : onDesk ? "#" : "/?mod=" + x.m);
+  const hrefFor = (x) => (onDesk ? "#" : x.href && x.m === here ? x.href : x.href || "/?mod=" + x.m);
   const item = (x) => `<a class="ri${x.m === here ? " on" : ""}" data-m="${x.m}" href="${hrefFor(x)}" title="${esc(x.l)}" aria-label="${esc(x.l)}"><i class="ti ti-${x.i}"></i><span>${esc(x.l)}</span><b class="rb" hidden></b></a>`;
   const nav = document.createElement("nav");
   nav.className = "bz-rail"; nav.setAttribute("aria-label", "Buzzin");
@@ -37,7 +37,7 @@
       e.preventDefault();
       if (a.dataset.m === "settings") { if (window.openSettings) window.openSettings(); return; }
       const x = MODS.find((y) => y.m === a.dataset.m);
-      if (x && x.href) { location.href = x.href; return; }
+      if (x && x.href && !window.goMod) { location.href = x.href; return; }
       if (window.goMod) window.goMod(a.dataset.m);
       return;
     }

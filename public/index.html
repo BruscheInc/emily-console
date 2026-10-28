@@ -420,15 +420,36 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
     <button class="nav sub" onclick="retExceptions()"><i class="si ti ti-sparkles"></i><span>Order exceptions</span></button>
     <a class="nav sub" href="https://returns.larkspurbaby.com" target="_blank" rel="noopener"><i class="si ti ti-external-link"></i><span>LB return portal</span><i class="ext ti ti-arrow-up-right"></i></a>
     <a class="nav sub" href="https://returns.larkspurbabyoutlet.com" target="_blank" rel="noopener"><i class="si ti ti-external-link"></i><span>LBO return portal</span><i class="ext ti ti-arrow-up-right"></i></a>
+    <a class="nav sub" href="/returns-studio?store=lb"><i class="si ti ti-palette"></i><span>LB portal design</span></a>
+    <a class="nav sub" href="/returns-studio?store=lbo"><i class="si ti ti-palette"></i><span>LBO portal design</span></a>
   </div></div>
-  <div class="grp" data-g="content"><button class="nav gh" onclick="toggleGrp('content')"><i class="i ti ti-layout-board"></i><span>Content</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="grp" data-g="content"><button class="nav gh" onclick="toggleGrp('content')"><i class="i ti ti-layout-board"></i><span>Website &amp; emails</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
     <button class="nav sub" onclick="faqModal()"><i class="si ti ti-help-circle"></i><span>Website FAQs</span></button>
     <a class="nav sub" href="/chat-studio" target="_blank" rel="noopener"><i class="si ti ti-message-chatbot"></i><span>Website chat</span><i class="ext ti ti-arrow-up-right"></i></a>
-    <a class="nav sub" href="/marketing" target="_blank" rel="noopener"><i class="si ti ti-speakerphone"></i><span>Marketing</span><i class="ext ti ti-arrow-up-right"></i></a>
     <a class="nav sub" href="/email-studio" target="_blank" rel="noopener"><i class="si ti ti-mail-cog"></i><span>Customer emails</span><i class="ext ti ti-arrow-up-right"></i></a>
-    <a class="nav sub" href="/returns-studio?store=lb" target="_blank" rel="noopener"><i class="si ti ti-palette"></i><span>LB portal design</span><i class="ext ti ti-arrow-up-right"></i></a>
-    <a class="nav sub" href="/returns-studio?store=lbo" target="_blank" rel="noopener"><i class="si ti ti-palette"></i><span>LBO portal design</span><i class="ext ti ti-arrow-up-right"></i></a>
+  </div></div>
+  <div class="grp" data-g="mk_aud"><button class="nav gh"><i class="i ti ti-users"></i><span>Audience</span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <a class="nav sub" href="/marketing#overview"><i class="si ti ti-layout-dashboard"></i><span>Overview</span></a>
+    <a class="nav sub" href="/marketing#profiles"><i class="si ti ti-users"></i><span>Profiles</span></a>
+    <a class="nav sub" href="/marketing#lists"><i class="si ti ti-list-details"></i><span>Lists &amp; segments</span></a>
+    <a class="nav sub" href="/marketing#consolidate"><i class="si ti ti-git-merge"></i><span>Merge &amp; import</span></a>
+  </div></div>
+  <div class="grp" data-g="mk_build"><button class="nav gh"><i class="i ti ti-speakerphone"></i><span>Build</span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <a class="nav sub" href="/marketing#campaigns"><i class="si ti ti-speakerphone"></i><span>Campaigns</span></a>
+    <a class="nav sub" href="/marketing#flows"><i class="si ti ti-git-branch"></i><span>Flows</span></a>
+    <a class="nav sub" href="/marketing#forms"><i class="si ti ti-forms"></i><span>Sign-up forms</span></a>
+    <a class="nav sub" href="/marketing#templates"><i class="si ti ti-template"></i><span>Email templates</span></a>
+    <a class="nav sub" href="/marketing#brand"><i class="si ti ti-brush"></i><span>Brand kits</span></a>
+    <a class="nav sub" href="/marketing#texting"><i class="si ti ti-message"></i><span>Texting</span></a>
+  </div></div>
+  <div class="grp" data-g="mk_res"><button class="nav gh"><i class="i ti ti-chart-bar"></i><span>Results</span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <a class="nav sub" href="/marketing#analytics"><i class="si ti ti-chart-bar"></i><span>Analytics</span></a>
+    <a class="nav sub" href="/marketing#dns"><i class="si ti ti-world"></i><span>Domain &amp; DNS</span></a>
+    <a class="nav sub" href="/marketing#settings"><i class="si ti ti-settings"></i><span>Marketing settings</span></a>
   </div></div>
   <div class="grp" data-g="analytics"><button class="nav gh" onclick="toggleGrp('analytics')"><i class="i ti ti-chart-pie"></i><span>Analytics</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
@@ -555,8 +576,8 @@ document.addEventListener("keydown",(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLo
 document.addEventListener("click",(e)=>{ const m=$("acctMenu"); if(m&&!m.classList.contains("hidden")&&!e.target.closest(".acct")) m.classList.add("hidden"); });
 function setTab(t){TAB=t;OFFSET=0;document.querySelectorAll(".tab[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));loadList();}
 /* ---- app rail modules: each rail icon shows one part of Buzzin in the panel ---- */
-const MODS={home:[],tickets:["inbox","mail"],ship:["ship"],returns:["returns"],content:["content"],analytics:["analytics"]};
-const MOD_TITLES={home:"Home",tickets:"Tickets",ship:"Shipping",returns:"Returns & claims",content:"Content",analytics:"Reports"};
+const MODS={home:[],tickets:["inbox","mail"],ship:["ship"],returns:["returns"],marketing:["mk_aud","mk_build","mk_res"],content:["content"],analytics:["analytics"]};
+const MOD_TITLES={home:"Home",tickets:"Tickets",ship:"Shipping",returns:"Returns & claims",marketing:"Marketing",content:"Content",analytics:"Reports"};
 function modOf(v){ if(v==="home") return "home"; const b=document.querySelector(`.side .nav.view[data-view="${v}"]`); const g=b&&b.closest(".grp"); const gid=g&&g.dataset.g; for(const m in MODS) if(MODS[m].includes(gid)) return m; return "tickets"; }
 function showMod(m){
   document.body.dataset.mod=m; if(window.bzRail) bzRail.set(m);
