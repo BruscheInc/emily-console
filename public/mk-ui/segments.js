@@ -14,7 +14,7 @@ async function renderSegments(el, id) {
   ${r.segments.map((s) => `<tr class="click" data-id="${s.id}"><td><b>${esc(s.name)}</b>${s.starter ? ' <span class="pill off">built in</span>' : ''}</td><td class="n">${s.member_count == null ? '…' : fmtN(s.member_count)}</td><td class="n">${s.email_ok == null ? '' : fmtN(s.email_ok)}</td><td class="n">${s.sms_ok == null ? '' : fmtN(s.sms_ok)}</td><td>${s.refreshed_at ? fmtDT(s.refreshed_at) : 'Not yet'}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No segments yet.</td></tr>'}
   </tbody></table></div></div>`;
   el.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => { location.hash = '#segments/' + tr.dataset.id; });
-  const make = async (body) => { const s = await api('/api/mk/segments', { method: 'POST', body: JSON.stringify({ store: STORE, ...body }) }); location.hash = '#segments/' + s.id; };
+  const make = async (body) => { const s = await api('/api/mk/segments', { method: 'POST', body: JSON.stringify({ store: STORE, ...body }) }); location.hash = '#segments/' + s.id + '/edit'; };
   $('sgnew').onclick = () => make({ name: 'New segment' }).catch((e) => toast(e.message, 1));
   $('sgai').onclick = async () => {
     const words = $('sgw').value.trim(); if (!words) return;

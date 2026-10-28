@@ -2,14 +2,47 @@
    tick boxes for deleting several at once, and Create (list, segment, or a segment Emily builds from a description). */
 (() => {
 (window.MK_EXTRA = window.MK_EXTRA || []).push((S) => {
-  const li = S.find((x) => x.id === 'lists'); if (li) { li.label = 'Lists & segments'; li.render = renderGroups; }
+  const li = S.find((x) => x.id === 'lists'); if (li) { li.label = 'Lists & segments'; li.render = (el, id) => (id ? renderMembers(el, 'list', id) : renderGroups(el)); }
   const sg = S.find((x) => x.id === 'segments');
-  if (sg) { const edit = sg.render; sg.hidden = true; sg.render = (el, id) => (id ? edit(el, id) : (location.hash = '#lists', null)); }
+  // #segments/16 → members (like Klaviyo); #segments/16/edit → the definition editor
+  if (sg) { const edit = sg.render; sg.hidden = true; sg.render = (el, id) => (!id ? (location.hash = '#lists', null) : location.hash.split('/')[2] === 'edit' ? edit(el, id) : renderMembers(el, 'segment', id)); }
 });
 
 const ICON = (n) => `<i class="ti ti-${n}"></i>`;
 let TYPE = '', Q = '', CHECKED = new Set();
 const key = (x) => x.kind + ':' + x.id;
+
+/** One list or segment, laid out like Klaviyo: breadcrumb, Members (count) tab, and a members table. */
+async function renderMembers(el, kind, id) {
+  const KL = window.MK_KL || {};
+  let off = 0, q = '';
+  el.innerHTML = (KL.LCSS || '') + `<style>.gm-h{display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid var(--line)}.gm-h .bc{font-size:20px;color:var(--muted)}.gm-h .bc a{color:var(--muted);text-decoration:none}.gm-h .bc b{color:var(--ink)}
+    .gm-tabs{display:flex;gap:24px;padding:0 24px;border-bottom:1px solid var(--line)}.gm-tabs span{padding:12px 0;font-weight:700;border-bottom:2px solid var(--ink)}
+    .gm-b{padding:16px 24px}.gm-b table{width:100%}.gm-b td,.gm-b th{padding:12px 10px;text-align:left;border-bottom:1px solid var(--line)}.gm-b th{font-weight:500;color:var(--muted)}.gm-b td a{color:#2563EB;text-decoration:none}
+    .gm-pg{display:flex;align-items:center;gap:10px;padding:14px 0;color:var(--muted)}</style>
+    <div class="kl"><div class="card" style="padding:0">
+    <div class="gm-h"><div class="bc"><a href="#lists">Lists &amp; segments</a> / <b id="gmn">…</b></div><span class="pill off">${kind === 'segment' ? 'Segment' : 'List'}</span><span class="sp" style="flex:1"></span>
+      ${kind === 'segment' ? `<a class="btn pri" href="#segments/${id}/edit">Edit definition</a>` : ''}</div>
+    <div class="gm-tabs"><span id="gmt">Members</span></div>
+    <div class="gm-b"><input type="search" id="gmq" placeholder="Search name, email or phone" style="min-width:300px" aria-label="Search members">
+      <table style="margin-top:12px"><thead><tr><th>Profile</th><th>Email</th><th>Phone number</th><th>Location</th><th>Date added ↓</th></tr></thead><tbody id="gmb"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody></table>
+      <div class="gm-pg"><button class="btn xs" id="gmp" aria-label="Previous page"><i class="ti ti-chevron-left"></i></button><span id="gmc"></span><button class="btn xs" id="gmx" aria-label="Next page"><i class="ti ti-chevron-right"></i></button></div></div></div></div>`;
+  const load = async () => {
+    const r = await api(`/api/mk/groups/${kind}/${id}/members?` + qs({ offset: off, limit: 50, q }));
+    if (!document.getElementById('gmb')) return;
+    $('gmn').textContent = r.name; $('gmt').textContent = `Members (${fmtN(r.total)})`;
+    const loc = (p) => [p.city, p.region || p.country].filter(Boolean).join(', ');
+    $('gmb').innerHTML = r.rows.map((p) => `<tr><td><a href="#profiles/${p.id}">${esc([p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || p.phone || 'Profile ' + p.id)}</a></td><td>${esc(p.email || '')}</td><td>${esc(p.phone || '')}</td><td>${esc(loc(p))}</td><td>${p.added_at ? fmtDT(p.added_at) : '—'}</td></tr>`).join('')
+      || `<tr><td colspan="5" class="empty">${q ? 'Nobody matches that search.' : kind === 'segment' ? 'Nobody is in this segment yet. It updates every few minutes.' : 'This list is empty.'}</td></tr>`;
+    $('gmc').textContent = r.total ? `${fmtN(off + 1)} – ${fmtN(Math.min(off + r.rows.length, r.total))} of ${fmtN(r.total)}` : '';
+    $('gmp').disabled = off === 0; $('gmx').disabled = off + r.rows.length >= r.total;
+  };
+  let t = null;
+  $('gmq').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); off = 0; load().catch((er) => toast(er.message, 1)); }, 300); };
+  $('gmp').onclick = () => { off = Math.max(0, off - 50); load().catch((er) => toast(er.message, 1)); };
+  $('gmx').onclick = () => { off += 50; load().catch((er) => toast(er.message, 1)); };
+  await load();
+}
 
 async function renderGroups(el) {
   const KL = window.MK_KL || {};
@@ -25,7 +58,7 @@ async function renderGroups(el) {
       <table><thead><tr><th style="width:34px"><input type="checkbox" class="cb" id="gall" aria-label="Select all"></th><th>Name</th><th>Type</th><th class="n">Members</th><th>Created ↓</th><th style="width:44px"></th></tr></thead><tbody id="gtb"></tbody></table>
       <div id="gcount" style="padding:14px 0;color:#3F3F46"></div></div></div>`;
   const reload = async () => { items = (await api('/api/mk/groups')).items; if (document.getElementById('gtb')) draw(); };
-  const open = (x) => { if (x.kind === 'segment') location.hash = '#segments/' + x.id; else { window.PQ = { q: '', consent: '', tier: '', list: String(x.id), offset: 0 }; try { PQ = window.PQ; } catch (e) {} location.hash = '#profiles'; } };
+  const open = (x) => { location.hash = (x.kind === 'segment' ? '#segments/' : '#lists/') + x.id; };
   const visible = () => items.filter((x) => (!TYPE || x.kind === TYPE) && (!Q || x.name.toLowerCase().includes(Q.toLowerCase())));
   const del = async (list) => {
     list = list.filter((x) => !x.fixed); if (!list.length) return toast('That list holds every contact and can\'t be deleted.', 1);
@@ -37,9 +70,9 @@ async function renderGroups(el) {
       toast(r.errors && r.errors.length ? r.errors[0] : `Deleted ${r.deleted}`, r.errors && r.errors.length ? 1 : 0); list.forEach((x) => CHECKED.delete(key(x))); reload(); } catch (e) { toast(e.message, 1); }
   };
   const rowMenu = (x, anchor) => KL.menu(anchor, [
-    ...(x.kind === 'segment' ? [['Update definition', 'filter', () => open(x)]] : [['View members', 'users', () => open(x)]]),
+    ...(x.kind === 'segment' ? [['View members', 'users', () => open(x)], ['Update definition', 'filter', () => { location.hash = '#segments/' + x.id + '/edit'; }]] : [['View members', 'users', () => open(x)]]),
     [`Edit ${x.kind === 'segment' ? 'segment' : 'list'} name`, 'pencil', async () => { const n = prompt('Name', x.name); if (!n || n === x.name) return; try { await api(`/api/mk/groups/${x.kind}/${x.id}/rename`, { method: 'POST', body: JSON.stringify({ name: n }) }); toast('Renamed'); reload(); } catch (e) { toast(e.message, 1); } }],
-    ['Clone', 'copy', async () => { try { const c = await api(`/api/mk/groups/${x.kind}/${x.id}/clone`, { method: 'POST', body: '{}' }); toast('Copied'); if (c.kind === 'segment') location.hash = '#segments/' + c.id; else reload(); } catch (e) { toast(e.message, 1); } }],
+    ['Clone', 'copy', async () => { try { const c = await api(`/api/mk/groups/${x.kind}/${x.id}/clone`, { method: 'POST', body: '{}' }); toast('Copied'); if (c.kind === 'segment') location.hash = '#segments/' + c.id + '/edit'; else reload(); } catch (e) { toast(e.message, 1); } }],
     [x.starred ? 'Remove star' : 'Star', 'star', async () => { await api(`/api/mk/groups/${x.kind}/${x.id}/star`, { method: 'POST', body: '{}' }).catch(() => {}); reload(); }],
     [`Delete ${x.kind === 'segment' ? 'segment' : 'list'}`, 'trash', () => del([x]), { danger: true, disabled: !!x.fixed }],
   ], { alignRight: true });
@@ -78,7 +111,7 @@ async function renderGroups(el) {
           reload(); } catch (e) { toast(e.message, 1); } };
       inp.click(); }],
     ['List', 'list-details', async () => { const name = prompt('List name'); if (!name) return; try { await api('/api/mk/lists', { method: 'POST', body: JSON.stringify({ store: st(), name }) }); toast('List added'); reload(); } catch (e) { toast(e.message, 1); } }],
-    ['Segment', 'filter', async () => { try { const s = await api('/api/mk/segments', { method: 'POST', body: JSON.stringify({ store: st(), name: 'New segment' }) }); location.hash = '#segments/' + s.id; } catch (e) { toast(e.message, 1); } }],
+    ['Segment', 'filter', async () => { try { const s = await api('/api/mk/segments', { method: 'POST', body: JSON.stringify({ store: st(), name: 'New segment' }) }); location.hash = '#segments/' + s.id + '/edit'; } catch (e) { toast(e.message, 1); } }],
     ['Segment from a description', 'sparkles', () => aiBox()],
   ], { alignRight: true });
   const aiBox = () => {
@@ -88,7 +121,7 @@ async function renderGroups(el) {
       const words = $('sgw').value.trim(); if (!words) return; $('sgaio').innerHTML = '<div class="empty">Emily is building it…</div>';
       try { const x = await api('/api/mk/segments/from-words', { method: 'POST', body: JSON.stringify({ store: st(), words }) });
         $('sgaio').innerHTML = `<div style="margin-top:10px"><b>${esc(x.name)}</b><div style="color:var(--muted);margin-top:2px">${esc(x.explanation || '')}</div><div style="margin-top:6px"><b>${fmtN(x.n)}</b> people · ${fmtN(x.email_ok)} can get email · ${fmtN(x.sms_ok)} can get texts</div><button class="btn pri xs" id="sgok" style="margin-top:8px">Create this segment</button></div>`;
-        $('sgok').onclick = async () => { try { const s = await api('/api/mk/segments', { method: 'POST', body: JSON.stringify({ store: st(), name: x.name, description: x.explanation, definition: x.definition }) }); location.hash = '#segments/' + s.id; } catch (e) { toast(e.message, 1); } };
+        $('sgok').onclick = async () => { try { const s = await api('/api/mk/segments', { method: 'POST', body: JSON.stringify({ store: st(), name: x.name, description: x.explanation, definition: x.definition }) }); location.hash = '#segments/' + s.id + '/edit'; } catch (e) { toast(e.message, 1); } };
       } catch (e) { $('sgaio').innerHTML = `<div class="note" style="margin-top:10px">${esc(e.message)}</div>`; }
     };
   };

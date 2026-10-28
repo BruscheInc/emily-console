@@ -52,6 +52,22 @@ async function remove(kind, id, who) {
 function routes(app, { guard, admin, actorOf, fail }) {
   const K = (k) => (k === "segment" ? "segment" : k === "list" ? "list" : null);
   app.get("/api/mk/groups", async (req, res) => { if (!guard(req, res)) return; try { res.json({ items: await all() }); } catch (e) { fail(res, e); } });
+  // Members of a list or segment, newest first (Klaviyo's Members tab).
+  app.get("/api/mk/groups/:kind/:id/members", async (req, res) => {
+    if (!guard(req, res)) return;
+    try {
+      const kind = K(req.params.kind), id = Number(req.params.id); if (!kind) return res.status(400).json({ error: "kind" });
+      const T = kind === "list" ? { g: "mk_lists", m: "mk_list_members", k: "list_id" } : { g: "mk_segments", m: "mk_segment_members", k: "segment_id" };
+      const g = (await db(`SELECT * FROM ${T.g} WHERE id=$1`, [id])).rows[0]; if (!g) return res.status(404).json({ error: "not found" });
+      const lim = Math.min(100, Math.max(1, Number(req.query.limit) || 50)), off = Math.max(0, Number(req.query.offset) || 0), q = String(req.query.q || "").trim().toLowerCase();
+      const args = [id]; let where = `m.${T.k}=$1`;
+      if (q) { args.push(`%${q.replace(/[\\%_]/g, (c) => "\\" + c)}%`); where += ` AND (p.email ILIKE $2 OR p.phone ILIKE $2 OR (COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) ILIKE $2)`; }
+      const total = (await db(`SELECT count(*)::int n FROM ${T.m} m JOIN mk_profiles p ON p.id=m.profile_id WHERE ${where}`, args)).rows[0].n;
+      const rows = (await db(`SELECT p.id, p.first_name, p.last_name, p.email, p.phone, p.city, p.region, p.country, p.email_consent, p.sms_consent, m.added_at
+        FROM ${T.m} m JOIN mk_profiles p ON p.id=m.profile_id WHERE ${where} ORDER BY m.added_at DESC, p.id DESC LIMIT ${lim} OFFSET ${off}`, args)).rows;
+      res.json({ kind, id, name: g.name, description: g.description || null, total, rows, offset: off, limit: lim });
+    } catch (e) { fail(res, e); }
+  });
   app.get("/api/mk/groups/:kind/:id/usage", async (req, res) => { if (!guard(req, res)) return; try { res.json({ used_by: await usage(K(req.params.kind), req.params.id) }); } catch (e) { fail(res, e); } });
   app.post("/api/mk/groups/delete", async (req, res) => {   // body: { items: [{kind, id}] }
     if (!admin(req, res)) return;

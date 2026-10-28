@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.7
+- Opening a list or segment now shows its own page like Klaviyo: name, Members (count) tab and a members table (profile, email, phone, location, date added) with search and paging. Segments have an "Edit definition" button. Lists no longer jump to All profiles.
+- Fixes the "This page didn't load" error when opening a segment.
+
 ## 0.0.6
 - New segment from the uploaded "Website Visitors 180 Days" list: can get texts, no order in 180 days.
 
