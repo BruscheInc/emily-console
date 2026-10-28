@@ -13,6 +13,7 @@
  *    { type:"list",    list_id, in:true }
  *    { type:"segment", segment_id, in:true }
  *    { type:"size",    op:"any_of"|"none_of", values:["0-3M","3-6M"] }
+ *  Optional  limit: N  keeps only the N most recently engaged people who match (e.g. a 5,000-person text audience).
  *    { type:"buzzin",  what:"open_ticket"|"recent_return"|"open_claim", in:true, days:30 }
  * ============================================================================================= */
 const core = require("./core");
@@ -31,6 +32,11 @@ const EVENTS = { placed_order: "Placed order", started_checkout: "Started checko
 
 /** Compile a definition to a SQL boolean expression. `args` collects bind values; ctx.since is the flow-start time. */
 function compile(def, args, ctx = {}, depth = 0) {
+  // "Keep at most N people": the N most recently engaged of everyone who matches.
+  if (depth === 0 && def && Number(def.limit) > 0) {
+    const inner = compile({ ...def, limit: null }, args, ctx, 0);
+    return `p.id IN (SELECT p.id FROM mk_profiles p WHERE ${inner} ORDER BY p.last_engaged_at DESC NULLS LAST, p.id DESC LIMIT ${A(args, Math.floor(Number(def.limit)))})`;
+  }
   if (!def || !Array.isArray(def.conditions) || !def.conditions.length || depth > 3) return "TRUE";
   const parts = def.conditions.map((c) => c.group ? `(${compile(c.group, args, ctx, depth + 1)})` : one(c, args, ctx)).filter(Boolean);
   if (!parts.length) return "TRUE";

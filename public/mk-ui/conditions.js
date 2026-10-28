@@ -6,6 +6,7 @@ const SIZES = ['NEWBORN', '0-3M', '3-6M', '6-9M', '6-12M', '9-12M', '12-18M', '1
 const o = (pairs, v) => pairs.map(([a, l]) => `<option value="${esc(a)}"${String(v) === String(a) ? ' selected' : ''}>${esc(l)}</option>`).join('');
 
 function summarize(def, ctx = {}) {
+  if (def && def.limit) return `${summarize({ ...def, limit: null }, ctx)} · top ${Number(def.limit).toLocaleString('en-US')} most recently engaged`;
   if (!def || !(def.conditions || []).length) return 'Everyone';
   const one = (c) => {
     if (c.group) return '(' + summarize(c.group, ctx) + ')';

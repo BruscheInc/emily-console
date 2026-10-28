@@ -34,12 +34,16 @@ async function editSegment(el, id) {
   let dirty = false, timer = null;
   el.innerHTML = `<div class="bar" style="align-items:center"><a href="#segments" class="btn xs" aria-label="Back"><i class="ti ti-arrow-left"></i></a><input id="sgn" type="text" value="${esc(s.name)}" style="font-weight:700;min-width:260px" aria-label="Segment name"><span class="pill off">${s.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'}</span><span class="sp"></span><span class="pill hon hidden" id="sgd">Unsaved</span><button class="btn danger" id="sgdel"><i class="ti ti-trash"></i></button><button class="btn pri" id="sgsave">Save</button></div>
   <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px;align-items:start">
-    <div class="card"><label class="lab" for="sgdesc">Description (optional)</label><input id="sgdesc" type="text" value="${esc(s.description || '')}" style="width:100%"><div id="sgc" style="margin-top:12px"></div></div>
+    <div class="card"><label class="lab" for="sgdesc">Description (optional)</label><input id="sgdesc" type="text" value="${esc(s.description || '')}" style="width:100%"><div id="sgc" style="margin-top:12px"></div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><label style="display:flex;align-items:center;gap:8px;font-size:13.5px"><input type="checkbox" id="sglimon" ${s.definition && s.definition.limit ? 'checked' : ''}> Keep at most <input id="sglim" type="number" min="1" step="1" value="${(s.definition && s.definition.limit) || 5000}" style="width:100px"> people</label>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">Keeps the most recently engaged people first. Handy for keeping a text send under your AWS limit.</div></div></div>
     <div class="card"><div id="sgcount"><div class="empty">Counting…</div></div></div></div>`;
   const mark = () => { dirty = true; $('sgd').classList.remove('hidden'); clearTimeout(timer); timer = setTimeout(preview, 500); };
   window.onbeforeunload = () => dirty ? 'Unsaved changes' : undefined;
   $('sgn').oninput = mark; $('sgdesc').oninput = () => { dirty = true; $('sgd').classList.remove('hidden'); };
   MK_conditions.editor($('sgc'), s.definition, ctx, mark);
+  const setLim = () => { const v = Math.floor(Number($('sglim').value)); s.definition.limit = $('sglimon').checked && v > 0 ? v : null; mark(); };
+  $('sglimon').onchange = setLim; $('sglim').oninput = () => { if ($('sglimon').checked) setLim(); };
   async function preview() {
     try { const r = await api('/api/mk/segments/preview', { method: 'POST', body: JSON.stringify({ store: s.store, definition: s.definition }) });
       $('sgcount').innerHTML = `<div style="font-size:30px;font-weight:800">${fmtN(r.n)}</div><div style="color:var(--muted)">people right now · ${fmtN(r.email_ok)} can get email · ${fmtN(r.sms_ok)} can get texts</div>

@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.110.0
+- Segments can keep at most a set number of people ("Keep at most 5,000 people"), most recently engaged first. Useful for keeping a text send under the AWS limit.
+- New Larkspur Baby segment "Engaged 180 days + SMS (top 5,000)": said yes to texts and opened/clicked, visited the site or ordered in the last 180 days.
+
 ## 4.109.0
 - Text campaigns check the AWS monthly texting limit: the cost box shows the limit, what's been spent this month and what's left after this send.
 - If a text campaign would go over the limit, it shows a red warning with how many texts would go out before AWS stops, and Buzzin won't schedule it.

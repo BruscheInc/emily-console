@@ -1118,6 +1118,24 @@ async function trackingOn() {
   console.log(`🛒 store activity tracking for Larkspur Baby: ${was ? "already on" : "turned on"}`);
 }
 // One-time deep look at the 10% sign-up form (#6) and Welcome Series + 10% (#12) — logs only.
+/** One-time: the 5,000 most recently engaged people (last 180 days) who said yes to texts, for Larkspur Baby. */
+async function engagedSms5k() {
+  if (await syncGet("engaged_sms_5k_v1")) return;
+  const SEG = require("./mk-segments");
+  const definition = { match: "all", limit: 5000, conditions: [
+    { type: "consent", channel: "sms", state: "subscribed" },
+    { group: { match: "any", conditions: [
+      { type: "field", field: "last_engaged_at", op: "within_days", value: 180 },
+      { type: "event", event: "placed_order", op: "at_least", value: 1, window: { kind: "last_days", days: 180 } },
+      { type: "event", event: "clicked_sms", op: "at_least", value: 1, window: { kind: "last_days", days: 180 } },
+      { type: "event", event: "clicked_email", op: "at_least", value: 1, window: { kind: "last_days", days: 180 } },
+      { type: "event", event: "active_on_site", op: "at_least", value: 1, window: { kind: "last_days", days: 180 } }] } }] };
+  const all = await SEG.count({ ...definition, limit: null }, "lb");
+  const s = await SEG.save({ store: "lb", name: "Engaged 180 days + SMS (top 5,000)", description: "Said yes to texts and engaged (opened/clicked, visited, or ordered) in the last 180 days. Most recently engaged 5,000.", definition }, "Claude");
+  const r = await SEG.refresh(s.id);
+  console.log(`🎯 segment ${s.id} "${s.name}": ${r.n} people (${r.s} can get texts) out of ${all.n} who match`);
+  await core.syncSet("engaged_sms_5k_v1", String(s.id), { all: all.n, kept: r.n });
+}
 async function welcomeDeep() {
   if (await syncGet("welcome_deep_v1")) return;
   const out = (m) => console.log("🌱 WELCOME-DEEP " + m);
@@ -1247,7 +1265,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); setTimeout(() => cartDiag().catch((e) => console.error("cart diag:", e.message)), 45000); setTimeout(() => trackingOn().catch((e) => console.error("tracking on:", e.message)), 47000); setTimeout(() => welcomeDeep().catch((e) => console.error("welcome deep:", e.message)), 50000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); setTimeout(() => cartDiag().catch((e) => console.error("cart diag:", e.message)), 45000); setTimeout(() => trackingOn().catch((e) => console.error("tracking on:", e.message)), 47000); setTimeout(() => welcomeDeep().catch((e) => console.error("welcome deep:", e.message)), 50000); setTimeout(() => engagedSms5k().catch((e) => console.error("engaged sms 5k:", e.message)), 53000); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
