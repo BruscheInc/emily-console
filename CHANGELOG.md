@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.112.2
+- Fix: list upload matched people one at a time and could run out of time on big files, leaving an empty list. It now matches everyone at once (8,600 rows in about a second).
+- Uploading again under the same list name fills that list instead of making a second one.
+
 ## 4.112.1
 - New segment from the uploaded product-viewer list: people on it who can get texts and haven't ordered in 180 days.
 - Stopped the daily Shopify product-view pull (Shopify's API doesn't offer that data); uploads cover it.

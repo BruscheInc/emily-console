@@ -88,17 +88,31 @@ module.exports = function mount(app, { guard, isAdmin, actorOf, VERSION }) {
         cFn = col("first name", "first_name"), cLn = col("last name", "last_name");
       if (cEm < 0 && cPh < 0) return res.status(400).json({ error: "The file needs an Email or Phone column." });
       const v = (r, i) => (i >= 0 ? String(r[i] || "").trim().replace(/^'/, "") : "");
-      const list = await MK.ensureList(st, name, { description: `Uploaded from a file by ${actorOf(req)}` });
+      // Uploading again under the same name adds to that list (e.g. after an upload that didn't finish).
+      const list = (await db(`SELECT * FROM mk_lists WHERE store=$1 AND lower(name)=lower($2) AND NOT archived ORDER BY id DESC LIMIT 1`, [st, name])).rows[0]
+        || await MK.ensureList(st, name, { description: `Uploaded from a file by ${actorOf(req)}` });
       let matched = 0, created = 0, skipped = 0; const ids = new Set();
+      const ents = [];
       for (const r of rows) {
         if (!r.length || (r.length === 1 && !r[0])) continue;
-        const email = v(r, cEm) || null, phone = v(r, cPh) || v(r, cPh2) || null, sid = v(r, cId);
+        const email = (v(r, cEm) || "").toLowerCase() || null, phone = MK.normPhone(v(r, cPh) || v(r, cPh2)), sid = v(r, cId);
         if (!email && !phone) { skipped++; continue; }
-        const before = await MK.findProfile(null, { email: email && email.toLowerCase(), phone: MK.normPhone(phone), shopifyId: /^\d+$/.test(sid) ? `gid://shopify/Customer/${sid}` : null });
-        const p = before || await MK.upsertProfile(st, { email, phone, first_name: v(r, cFn) || null, last_name: v(r, cLn) || null, shopify_id: /^\d+$/.test(sid) ? `gid://shopify/Customer/${sid}` : null }, "csv");
+        ents.push({ email, phone, gid: /^\d+$/.test(sid) ? `gid://shopify/Customer/${sid}` : null, first_name: v(r, cFn) || null, last_name: v(r, cLn) || null });
+      }
+      // Match everyone in one pass (Shopify id, then email, then phone) instead of one lookup per row.
+      const bySid = new Map(), byEm = new Map(), byPh = new Map();
+      for (let i = 0; i < ents.length; i += 5000) {
+        const part = ents.slice(i, i + 5000);
+        const found = (await db(`SELECT id, shopify_id, email, phone FROM mk_profiles WHERE shopify_id = ANY($1::text[]) OR email = ANY($2::text[]) OR phone = ANY($3::text[])`,
+          [part.map((e) => e.gid).filter(Boolean), part.map((e) => e.email).filter(Boolean), part.map((e) => e.phone).filter(Boolean)])).rows;
+        for (const p of found) { if (p.shopify_id) bySid.set(p.shopify_id, p.id); if (p.email && !byEm.has(p.email)) byEm.set(p.email, p.id); if (p.phone && !byPh.has(p.phone)) byPh.set(p.phone, p.id); }
+      }
+      for (const e of ents) {
+        let id = (e.gid && bySid.get(e.gid)) || (e.email && byEm.get(e.email)) || (!e.email && e.phone && byPh.get(e.phone)) || null;
+        if (id) { matched++; ids.add(Number(id)); continue; }
+        const p = await MK.upsertProfile(st, { email: e.email, phone: e.phone, first_name: e.first_name, last_name: e.last_name, shopify_id: e.gid }, "csv");
         if (!p) { skipped++; continue; }
-        if (before) matched++; else created++;
-        ids.add(Number(p.id));
+        created++; ids.add(Number(p.id)); if (e.email) byEm.set(e.email, p.id);
       }
       const arr = [...ids];
       await db(`INSERT INTO mk_list_members (list_id, profile_id, source) SELECT $1, x, 'upload' FROM unnest($2::bigint[]) x ON CONFLICT DO NOTHING`, [list.id, arr]);
