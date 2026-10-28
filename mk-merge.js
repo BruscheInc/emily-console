@@ -330,4 +330,4 @@ async function init() {
   await db(`UPDATE mk_profiles SET props = props - 'last_sizes' WHERE jsonb_typeof(props->'last_sizes') IS DISTINCT FROM 'array' AND props ? 'last_sizes'`).catch((e) => console.error("last_sizes cleanup:", e.message));
 }
 
-module.exports = { init, migrate, routes, resolveId, backup, merge, mergePreview, sharedPhones, tagSmsCandidates, parseCsv, upload, importPreview, runImport };
+module.exports = { parseCsv, init, migrate, routes, resolveId, backup, merge, mergePreview, sharedPhones, tagSmsCandidates, parseCsv, upload, importPreview, runImport };

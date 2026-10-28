@@ -68,6 +68,15 @@ async function renderGroups(el) {
   $('gt').onchange = () => { TYPE = $('gt').value; draw(); };
   const st = () => STORE || 'lb';
   $('gcr').onclick = () => KL.menu($('gcr'), [
+    ['List from a CSV file', 'upload', () => {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,text/csv';
+      inp.onchange = async () => { const f = inp.files[0]; if (!f) return; const name = prompt('Name for the new list', f.name.replace(/\.csv$/i, '')); if (!name) return;
+        toast('Uploading ' + f.name + '… this can take a minute');
+        try { const r = await fetch('/api/mk/lists/upload?' + qs({ store: st(), name }), { method: 'POST', headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'text/csv' }, body: f });
+          const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || 'Upload failed');
+          alert(`"${j.name}" is ready: ${fmtN(j.n)} people.\n\n${fmtN(j.matched)} matched existing profiles · ${fmtN(j.created)} new · ${fmtN(j.skipped)} rows had no email or phone.\n\nCan get email: ${fmtN(j.email_ok)} · Can get texts: ${fmtN(j.sms_ok)}\n(Consent is what's on file; the file's columns aren't used for it.)`);
+          reload(); } catch (e) { toast(e.message, 1); } };
+      inp.click(); }],
     ['List', 'list-details', async () => { const name = prompt('List name'); if (!name) return; try { await api('/api/mk/lists', { method: 'POST', body: JSON.stringify({ store: st(), name }) }); toast('List added'); reload(); } catch (e) { toast(e.message, 1); } }],
     ['Segment', 'filter', async () => { try { const s = await api('/api/mk/segments', { method: 'POST', body: JSON.stringify({ store: st(), name: 'New segment' }) }); location.hash = '#segments/' + s.id; } catch (e) { toast(e.message, 1); } }],
     ['Segment from a description', 'sparkles', () => aiBox()],

@@ -74,6 +74,39 @@ module.exports = function mount(app, { guard, isAdmin, actorOf, VERSION }) {
     if (!admin(req, res)) return;
     try { const b = req.body || {}; if (!store(b.store) || !String(b.name || "").trim()) return res.status(400).json({ error: "store and name are required" }); res.json({ list: await MK.ensureList(b.store, String(b.name).trim().slice(0, 120), { description: b.description || null }) }); } catch (e) { fail(res, e); }
   });
+  /* A list from a CSV (e.g. a Shopify customer export): each row is matched to a profile by Shopify id, email or phone, or a new
+     profile is made. Consent is never taken from the file: people keep whatever email/text consent is on file (new people have none). */
+  app.post("/api/mk/lists/upload", require("express").text({ type: () => true, limit: "60mb" }), async (req, res) => {
+    if (!admin(req, res)) return;
+    try {
+      const st = store(req.query.store), name = String(req.query.name || "").trim().slice(0, 120);
+      if (!st || !name) return res.status(400).json({ error: "store and name are required" });
+      const rows = require("./mk-merge").parseCsv(String(req.body || "").replace(/^\uFEFF/, ""));
+      const head = (rows.shift() || []).map((h) => h.trim().toLowerCase());
+      const col = (...names) => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+      const cId = col("customer id", "id"), cEm = col("email", "email address"), cPh = col("phone", "phone number", "sms phone"), cPh2 = col("default address phone"),
+        cFn = col("first name", "first_name"), cLn = col("last name", "last_name");
+      if (cEm < 0 && cPh < 0) return res.status(400).json({ error: "The file needs an Email or Phone column." });
+      const v = (r, i) => (i >= 0 ? String(r[i] || "").trim().replace(/^'/, "") : "");
+      const list = await MK.ensureList(st, name, { description: `Uploaded from a file by ${actorOf(req)}` });
+      let matched = 0, created = 0, skipped = 0; const ids = new Set();
+      for (const r of rows) {
+        if (!r.length || (r.length === 1 && !r[0])) continue;
+        const email = v(r, cEm) || null, phone = v(r, cPh) || v(r, cPh2) || null, sid = v(r, cId);
+        if (!email && !phone) { skipped++; continue; }
+        const before = await MK.findProfile(null, { email: email && email.toLowerCase(), phone: MK.normPhone(phone), shopifyId: /^\d+$/.test(sid) ? `gid://shopify/Customer/${sid}` : null });
+        const p = before || await MK.upsertProfile(st, { email, phone, first_name: v(r, cFn) || null, last_name: v(r, cLn) || null, shopify_id: /^\d+$/.test(sid) ? `gid://shopify/Customer/${sid}` : null }, "csv");
+        if (!p) { skipped++; continue; }
+        if (before) matched++; else created++;
+        ids.add(Number(p.id));
+      }
+      const arr = [...ids];
+      await db(`INSERT INTO mk_list_members (list_id, profile_id, source) SELECT $1, x, 'upload' FROM unnest($2::bigint[]) x ON CONFLICT DO NOTHING`, [list.id, arr]);
+      const c = (await db(`SELECT count(*)::int n, count(*) FILTER (WHERE p.email_consent='subscribed')::int email_ok, count(*) FILTER (WHERE p.sms_consent='subscribed')::int sms_ok FROM mk_list_members m JOIN mk_profiles p ON p.id=m.profile_id WHERE m.list_id=$1`, [list.id])).rows[0];
+      if (MK.clearMemo) MK.clearMemo();
+      res.json({ list_id: list.id, name: list.name, rows: rows.length, matched, created, skipped, ...c });
+    } catch (e) { fail(res, e); }
+  });
   app.post("/api/mk/sync", async (req, res) => { if (!admin(req, res)) return; MK.syncAll({ force: !!(req.body && req.body.force), who: actorOf(req) }).catch(() => {}); res.json({ ok: true, started: true }); });
 
   /* settings */
