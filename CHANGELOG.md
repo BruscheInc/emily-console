@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 4.112.1
+- New segment from the uploaded product-viewer list: people on it who can get texts and haven't ordered in 180 days.
+- Stopped the daily Shopify product-view pull (Shopify's API doesn't offer that data); uploads cover it.
+
 ## 4.112.0
 - Lists & segments → Create → "List from a CSV file": upload a file (e.g. a Shopify customer export) and it becomes a list. Rows are matched to profiles by Shopify id, email or phone; anyone new gets a profile. Email and text consent stay as on file; the file's consent columns are not used.
 

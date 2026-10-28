@@ -1121,7 +1121,8 @@ async function trackingOn() {
 /** Shopify lists Buzzin keeps in step every day (Shopify's own browsing data). */
 // Shopify's segment API speaks the segment query language (storefront_event.…), not the newer ShopifyQL shown in the admin; the first form it accepts is used.
 // "No order in 180 days" is checked on Buzzin's side (it has every order), so the list is just the viewers.
-const SHOPIFY_LISTS = [{ store: "lb", name: "Shopify: viewed a product in 180 days", query: "storefront_event.product_viewed MATCHES (date >= -180d)",
+const SHOPIFY_LISTS = [];   // Shopify's API doesn't offer product views ("MATCHES is unexpected"); viewers come from an uploaded export instead.
+const SHOPIFY_LISTS_OFF = [{ store: "lb", name: "Shopify: viewed a product in 180 days", query: "storefront_event.product_viewed MATCHES (date >= -180d)",
   alts: ["storefront.product_viewed MATCHES (date >= -180d)", "storefront_event.product_viewed MATCHES (date > -180d)"] }];
 async function syncShopifyLists() {
   for (const l of SHOPIFY_LISTS) { try { const r = await require("./mk-core").syncShopifyQueryList(l.store, l.query, l.name, l.alts); console.log(`🛒 Shopify list "${l.name}": ${r.shopify} in Shopify · ${r.matched} matched to profiles`); } catch (e) { console.error(`Shopify list "${l.name}":`, e.message); } }
@@ -1154,6 +1155,21 @@ async function convertSms5k() {
   const r = await SEG.refresh(s.id);
   console.log(`🎯 segment ${s.id} "Ready to convert": ${r.n} people (of ${all.n} who match)`);
   await core.syncSet("convert_sms_5k_v3", String(s.id), { all: all.n, kept: r.n });
+}
+/** One-time: from the uploaded Shopify product-viewer list, the people who can get texts and haven't ordered in 180 days. Logs the counts. */
+async function viewerSegment() {
+  if (await syncGet("viewer_seg_v1")) return;
+  const list = (await db(`SELECT id, name FROM mk_lists WHERE NOT archived AND description LIKE 'Uploaded from a file%' ORDER BY id DESC LIMIT 1`)).rows[0];
+  if (!list) { console.log("👀 viewer segment: no uploaded list yet"); return; }
+  const SEG = require("./mk-segments");
+  const definition = { match: "all", conditions: [{ type: "list", list_id: list.id, in: true }, { type: "consent", channel: "sms", state: "subscribed" },
+    { type: "event", event: "placed_order", op: "zero", window: { kind: "last_days", days: 180 } }] };
+  const s = await SEG.save({ store: "lb", name: `${list.name}: can text, no order in 180 days`, description: `From the uploaded list "${list.name}". Said yes to texts and no order in the last 180 days.`, definition }, "Claude");
+  const r = await SEG.refresh(s.id);
+  const L = (await db(`SELECT count(*)::int n, count(*) FILTER (WHERE p.sms_consent='subscribed')::int sms, count(*) FILTER (WHERE p.email_consent='subscribed')::int email,
+      count(*) FILTER (WHERE p.sms_consent='subscribed' AND p.last_order_at > now() - interval '180 days')::int sms_ordered FROM mk_list_members m JOIN mk_profiles p ON p.id=m.profile_id WHERE m.list_id=$1`, [list.id])).rows[0];
+  console.log(`👀 viewer list ${list.id} "${list.name}": ${L.n} people · ${L.email} can get email · ${L.sms} can get texts (${L.sms_ordered} of them ordered in 180 days) → segment ${s.id}: ${r.n} people`);
+  await core.syncSet("viewer_seg_v1", String(s.id), { list: list.id, ...L, seg: r.n });
 }
 async function welcomeDeep() {
   if (await syncGet("welcome_deep_v1")) return;
@@ -1284,7 +1300,7 @@ app.post("/api/returns/:id/:act", async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 (async () => {
-  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); setTimeout(() => cartDiag().catch((e) => console.error("cart diag:", e.message)), 45000); setTimeout(() => trackingOn().catch((e) => console.error("tracking on:", e.message)), 47000); setTimeout(() => welcomeDeep().catch((e) => console.error("welcome deep:", e.message)), 50000); setTimeout(() => convertSms5k().catch((e) => console.error("convert sms 5k:", e.message)), 53000); setInterval(() => syncShopifyLists().catch(() => {}), 24 * 3600e3); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
+  if (pool) { try { await migrate(); try { await require("./pickup").migrate(); } catch (e) { console.error("pickup migrate:", e.message); } try { await labelBackfill(); } catch (e) { console.error("label backfill:", e.message); } try { await labelRestage(); } catch (e) { console.error("label restage:", e.message); } setTimeout(() => signupDiag().catch((e) => console.error("signup diag:", e.message)), 5000); try { await signupList(); } catch (e) { console.error("sign-up list:", e.message); } setTimeout(() => flowEmailNames().catch((e) => console.error("flow email names:", e.message)), 15000); setTimeout(() => welcomeDiag().catch((e) => console.error("welcome diag:", e.message)), 20000); setTimeout(() => welcomeText().catch((e) => console.error("welcome text:", e.message)), 25000); setTimeout(() => welcome10Fix().catch((e) => console.error("welcome 10 fix:", e.message)), 30000); setTimeout(() => thankYouCheck().catch((e) => console.error("thank you check:", e.message)), 32000); setTimeout(() => signupPerf().catch((e) => console.error("signup perf:", e.message)), 40000); setTimeout(() => cartDiag().catch((e) => console.error("cart diag:", e.message)), 45000); setTimeout(() => trackingOn().catch((e) => console.error("tracking on:", e.message)), 47000); setTimeout(() => welcomeDeep().catch((e) => console.error("welcome deep:", e.message)), 50000); setTimeout(() => convertSms5k().catch((e) => console.error("convert sms 5k:", e.message)), 53000); setTimeout(() => viewerSegment().catch((e) => console.error("viewer segment:", e.message)), 30000); setInterval(() => syncShopifyLists().catch(() => {}), 24 * 3600e3); console.log("🗄️  Buzzin schema ready"); await core.loadSessions(); await core.renameStoredText(); } catch (e) { console.error("migrate failed:", e.message); } }
   if (pool) { try { if (!(await syncGet("classify_v3_9"))) { const r = await core.classifyBacklog(); await core.syncSet("classify_v3_9", String(r.junk), { at: new Date().toISOString(), ...r }); } } catch (e) { console.error("classify:", e.message); } }
   if (pool) { try { if (!(await syncGet("order_link_v4_12"))) { const n = await core.backfillTicketOrders(); await core.syncSet("order_link_v4_12", String(n), { at: new Date().toISOString() }); } } catch (e) { console.error("order link:", e.message); } }
   // One-time after v3.1: fold together tickets that arrived twice (Gorgias import + Gmail) before the two paths were linked.
