@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.3
+- Fix: a heavy segment build left running in the database by earlier updates was holding everything up (list uploads stalled). On start, Buzzin now stops database queries stuck for over 3 minutes, and the heavy "Ready to convert" build is off.
+
 ## 0.0.2
 - Fix: list upload stalled on the live database while matching people. It now matches with three quick lookups, so the whole file takes seconds.
 
