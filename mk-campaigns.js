@@ -159,7 +159,7 @@ async function problems(c) {
   const s = c.schedule || {};
   if (s.mode === "at" && !(s.at && new Date(s.at) > new Date(Date.now() - 60e3))) p.push("Pick a send time in the future.");
   if (s.mode === "local" && !(s.date && /^\d{2}:\d{2}$/.test(s.time || ""))) p.push("Pick a date and a time for the time-zone send.");
-  if (s.mode === "local" && s.date && startFor(c) < new Date()) p.push("That date is too soon for every time zone to get it at that hour. Pick a later date.");
+  if (s.mode === "local" && s.date && /^\d{2}:\d{2}$/.test(s.time || "") && new Date(Date.UTC(...s.date.split("-").map(Number).map((n, i) => (i === 1 ? n - 1 : n)), ...s.time.split(":").map(Number)) + 12 * 3600e3) < new Date(Date.now() - 24 * 3600e3)) p.push("That date has passed everywhere. Pick a later date.");
   return p;
 }
 function startFor(c) {
@@ -211,7 +211,9 @@ async function snapshot(c) {
   let due = "now()";
   if (s.mode === "local") {
     const local = `${s.date} ${s.time}:00`;
-    due = `(${A(args, local)}::timestamp AT TIME ZONE COALESCE(tz.name, ${A(args, DEFAULT_TZ)}))`;
+    const at = `(${A(args, local)}::timestamp AT TIME ZONE COALESCE(tz.name, ${A(args, DEFAULT_TZ)}))`;
+    // where that hour has already passed: the next day at the same hour (default, like Klaviyo) or right away
+    due = s.passed === "now" ? `GREATEST(${at}, now())` : `CASE WHEN ${at} < now() THEN ${at} + interval '1 day' ELSE ${at} END`;
   }
   const ab = c.ab || {};
   if (ab.enabled && (ab.variants || []).length >= 2) {
@@ -268,7 +270,13 @@ async function deliver(c, r, S) {
   let cpn; try { cpn = await campCoupon(c, p, "sms", { body: v.body }); } catch (e) { return { status: "skipped", note: `couldn't make a coupon code (${e.message})` }; }
   const body = await SMS.compose(c.store, { body: v.body, add_opt_out: v.add_opt_out !== false }, p, cpn && cpn.coupon ? { coupon: cpn.coupon } : {});
   const row = await SEND().send({ store: c.store, channel: "sms", profile: p, msg: { body, media: v.media || null }, idem, campaignId: c.id, messageId: `camp:${c.id}:${variant || "main"}` });
-  if (row.status === "deferred") return { status: "queued", later: true, note: "quiet hours" };
+  if (row.status === "deferred") {
+    const s = c.schedule || {};
+    if (s.quiet === "skip") return { status: "skipped", note: "quiet hours (skipped)" };
+    const max = Number(s.max_delay_hours) || 0;
+    if (max && c.started_at && Date.now() - new Date(c.started_at).getTime() > max * 3600e3) return { status: "skipped", note: `quiet hours (past the ${max}-hour limit)` };
+    return { status: "queued", later: true, note: "quiet hours" };
+  }
   return { status: row.status, send_id: row.id, note: row.reason };
 }
 
@@ -364,7 +372,7 @@ function routes(app, { guard, admin, isAdmin, actorOf, fail, store }) {
   });
   app.put("/api/mk/campaigns/:id", async (req, res) => { if (!guard(req, res)) return; try { const c = await update(req.params.id, req.body || {}, actorOf(req)); res.json({ ...c, problems: await problems(c) }); } catch (e) { fail(res, e); } });
   app.delete("/api/mk/campaigns/:id", async (req, res) => { if (!guard(req, res)) return; try { const c = await get(req.params.id); if (c && ["sending"].includes(c.status)) return res.status(400).json({ error: "Stop it first." }); await db(`UPDATE mk_campaigns SET archived=true WHERE id=$1`, [Number(req.params.id)]); res.json({ ok: true }); } catch (e) { fail(res, e); } });
-  app.post("/api/mk/campaigns/estimate", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!store(b.store)) return res.status(400).json({ error: "store required" }); res.json(await estimate({ store: b.store, channel: b.channel === "sms" ? "sms" : "email", audience: b.audience || {}, smart_sending: !!b.smart_sending, content: b.content || {}, ab: b.ab || {} }, { fresh: !!b.fresh })); } catch (e) { fail(res, e); } });
+  app.post("/api/mk/campaigns/estimate", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!store(b.store)) return res.status(400).json({ error: "store required" }); res.json(await estimate({ store: b.store, channel: b.channel === "sms" ? "sms" : "email", audience: b.audience || {}, smart_sending: !!b.smart_sending, content: b.content || {}, ab: b.ab || {}, schedule: b.schedule || {} }, { fresh: !!b.fresh })); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/schedule", async (req, res) => { if (!guard(req, res)) return; try { res.json(await schedule(req.params.id, actorOf(req), !!(isAdmin && isAdmin(req)))); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/approve", async (req, res) => { if (!admin(req, res)) return; try { res.json(await schedule(req.params.id, actorOf(req), true)); } catch (e) { fail(res, e); } });
   app.post("/api/mk/campaigns/:id/unschedule", async (req, res) => { if (!guard(req, res)) return; try { res.json(await unschedule(req.params.id, actorOf(req))); } catch (e) { fail(res, e); } });

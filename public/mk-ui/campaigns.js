@@ -109,7 +109,7 @@ async function editCampaign(el, id) {
   el.innerHTML = `<div class="bar" style="align-items:center;flex-wrap:wrap"><a href="#campaigns" class="bz-crumb">Campaigns</a><span style="color:var(--bz-faint)">/</span><input id="cn" type="text" value="${esc(CP.name)}" class="bz-title-in" aria-label="Campaign name"${ro ? ' disabled' : ''}>${pill(CSTATUS, CP.status)}<span class="pill off">${CP.store === 'lbo' ? 'Outlet' : 'Larkspur Baby'} · ${isE ? 'Email' : 'Text'}</span>
     <span class="sp"></span><span class="pill hon hidden" id="cd">Unsaved</span>
     ${['sending', 'sent'].includes(CP.status) ? '<button class="btn" id="crpt"><i class="ti ti-chart-bar"></i> View report</button>' : ''}<button class="btn" id="ccopy"><i class="ti ti-copy"></i> Copy</button>${ro ? '' : '<button class="btn danger" id="cdel"><i class="ti ti-trash"></i></button>'}<button class="btn" id="cpv"><i class="ti ti-eye"></i> Preview</button><button class="btn" id="ctest"><i class="ti ti-send"></i> Send a test</button>
-    ${CP.status === 'draft' ? '<button class="btn" id="csave">Save</button><button class="btn pri" id="csched"><i class="ti ti-calendar-check"></i> Schedule</button>' : ''}
+    ${CP.status === 'draft' ? '<button class="btn" id="csave">Save</button><button class="btn pri" id="csched"><i class="ti ti-calendar-check"></i> Schedule or send</button>' : ''}
     ${CP.status === 'pending' ? '<button class="btn" id="cunsched">Back to draft</button><button class="btn pri" id="capprove"><i class="ti ti-check"></i> Approve</button>' : ''}
     ${CP.status === 'scheduled' ? '<button class="btn" id="cunsched">Unschedule</button>' : ''}${CP.status === 'sending' ? '<button class="btn danger" id="cstop">Stop sending</button>' : ''}</div>
   ${CP.note ? `<div class="note">${esc(CP.note)}</div>` : ''}${!CP.sending_on && ['draft', 'pending', 'scheduled'].includes(CP.status) ? `<div class="note" style="background:var(--panel2);color:var(--muted)">${isE ? 'Email' : 'Text'} sending is off for this store, so a scheduled campaign won't go out. It waits up to 6 hours past its time, then returns to Draft. Tests are held too until a sender is connected.</div>` : ''}
@@ -122,7 +122,8 @@ async function editCampaign(el, id) {
   if (!ro) $('cn').oninput = () => { CP.name = $('cn').value; mark(); };
   drawProblems(); drawAudience(ro, mark); drawContent(ro, mark); drawAB(ro, mark); drawTiming(ro, mark); if (isE) drawResend(ro, mark); estimate(); previewMsg(); if ($('crep')) drawReport();
   const act = (btn, path, msg) => { const b = $(btn); if (b) b.onclick = async () => { try { if (cdirty) await save(); await api(`/api/mk/campaigns/${CP.id}/${path}`, { method: 'POST', body: '{}' }); toast(msg); cdirty = false; go(); } catch (e) { toast(e.message, 1); } }; };
-  act('csched', 'schedule', 'Scheduled (or sent for approval)'); act('capprove', 'approve', 'Approved and scheduled'); act('cunsched', 'unschedule', 'Back to draft'); act('cstop', 'cancel', 'Stopped');
+  if ($('csched')) $('csched').onclick = () => openSchedule();
+  act('capprove', 'approve', 'Approved and scheduled'); act('cunsched', 'unschedule', 'Back to draft'); act('cstop', 'cancel', 'Stopped');
   if ($('csave')) $('csave').onclick = () => save().then(() => toast('Saved')).catch((e) => toast(e.message, 1));
   $('ccopy').onclick = async () => { try { const c = await api('/api/mk/campaigns', { method: 'POST', body: JSON.stringify({ copy_of: CP.id }) }); cdirty = false; location.hash = '#campaigns/' + c.id; } catch (e) { toast(e.message, 1); } };
   if ($('cdel')) $('cdel').onclick = async () => { if ($('cdel').dataset.c !== '1') { $('cdel').dataset.c = '1'; $('cdel').textContent = 'Click again to delete'; return; } try { await api('/api/mk/campaigns/' + CP.id, { method: 'DELETE' }); cdirty = false; location.hash = '#campaigns'; } catch (e) { toast(e.message, 1); } };
@@ -265,20 +266,124 @@ function drawAB(ro, mark) {
   b('cabp', 'test_pct'); b('cabw', 'wait_hours'); b('cabm', 'metric');
 }
 
+/* ---- When: a short summary here; choosing happens in the "Schedule or send" drawer (like Klaviyo) ---- */
+function whenText(s, isSms) {
+  s = s || {};
+  const t = s.mode === 'at' && s.at ? `At ${fmtDT(s.at)} (your time)` : s.mode === 'local' && s.date ? `${new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${fmtTime(s.time || '10:00')} in each person's time zone${s.passed === 'now' ? ' · where that time has passed: right away' : ' · where it has passed: the next day'}` : 'As soon as it\'s scheduled';
+  return t + (isSms ? (s.quiet === 'skip' ? ' · skip people in quiet hours' : ` · quiet hours: wait until morning${s.max_delay_hours ? ` (up to ${s.max_delay_hours} h)` : ''}`) : '');
+}
+function fmtTime(hm) { const [h, m] = String(hm || '10:00').split(':').map(Number); const d = new Date(2000, 0, 1, h, m); return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
 function drawTiming(ro, mark) {
   const s = CP.schedule || (CP.schedule = { mode: 'now' });
-  const local = (d) => { if (!d) return ''; const x = new Date(d); const p = (n) => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}T${p(x.getHours())}:${p(x.getMinutes())}`; };
-  $('ctime').innerHTML = `<div style="font-weight:800;font-size:15px"><i class="ti ti-clock"></i> When</div>
-    ${[['now', 'As soon as it\'s scheduled'], ['at', 'At a set time'], ['local', 'At a set hour in each person\'s time zone']].map(([k, l]) => `<label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="radio" name="cmode" value="${k}"${s.mode === k ? ' checked' : ''}${dis(ro)}> ${l}</label>`).join('')}
-    ${s.mode === 'at' ? `<input id="cat" type="datetime-local" value="${local(s.at)}" style="margin-top:8px"${dis(ro)}><div style="font-size:12px;color:var(--muted);margin-top:4px">Your computer's time.</div>` : ''}
-    ${s.mode === 'local' ? `<div style="display:flex;gap:8px;margin-top:8px"><input id="cld" type="date" value="${esc(s.date || '')}"${dis(ro)}><input id="clt" type="time" value="${esc(s.time || '10:00')}"${dis(ro)}></div><div style="font-size:12px;color:var(--muted);margin-top:4px">Each person gets it at this hour where they live (Central time if unknown). Schedule it at least a day ahead so every time zone can make it.</div>` : ''}
-    ${CP.start_at ? `<div style="margin-top:10px"><b>Starts:</b> ${fmtDT(CP.start_at)}</div>` : ''}${CP.approval && CP.approval.requested_by ? `<div style="font-size:12.5px;color:var(--muted);margin-top:4px">Requested by ${esc(CP.approval.requested_by)}${CP.approval.approved_by ? ` · approved by ${esc(CP.approval.approved_by)}` : ''}</div>` : ''}`;
-  if (ro) return;
-  $('ctime').querySelectorAll('[name=cmode]').forEach((r) => r.onchange = () => { s.mode = r.value; if (s.mode === 'local' && !s.time) s.time = '10:00'; mark(); drawTiming(ro, mark); });
-  const at = $('cat'); if (at) at.onchange = () => { s.at = at.value ? new Date(at.value).toISOString() : null; mark(); };
-  const ld = $('cld'); if (ld) ld.onchange = () => { s.date = ld.value; mark(); };
-  const lt = $('clt'); if (lt) lt.onchange = () => { s.time = lt.value; mark(); };
+  $('ctime').innerHTML = `<div style="display:flex;align-items:center;gap:10px"><div style="font-weight:800;font-size:15px;flex:1"><i class="ti ti-clock"></i> When</div>${ro ? '' : '<button class="btn xs" id="cwhen">Change</button>'}</div>
+    <div style="margin-top:8px">${esc(whenText(s, CP.channel === 'sms'))}</div>
+    ${CP.start_at ? `<div style="margin-top:8px"><b>Starts:</b> ${fmtDT(CP.start_at)}</div>` : ''}${CP.approval && CP.approval.requested_by ? `<div style="font-size:12.5px;color:var(--muted);margin-top:4px">Requested by ${esc(CP.approval.requested_by)}${CP.approval.approved_by ? ` · approved by ${esc(CP.approval.approved_by)}` : ''}</div>` : ''}`;
+  if (!ro) $('cwhen').onclick = () => openSchedule();
 }
+
+/* ---- "Schedule or send campaign" drawer ---- */
+async function openSchedule() {
+  if (cdirty) { try { await save(); } catch (e) { return toast(e.message, 1); } }
+  const isSms = CP.channel === 'sms';
+  const s0 = CP.schedule || {};
+  const st = { how: s0.mode === 'now' || !s0.mode ? 'now' : 'schedule', opt: s0.mode === 'local' ? 'local' : 'fixed', passed: s0.passed || 'next_day', quiet: s0.quiet || 'delay', maxOn: !!s0.max_delay_hours, maxH: s0.max_delay_hours || 12 };
+  const now = new Date(), pad = (n) => String(n).padStart(2, '0');
+  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, hm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const soon = new Date(Date.now() + 3600e3); soon.setMinutes(0, 0, 0);
+  if (s0.mode === 'at' && s0.at) { const d = new Date(s0.at); st.date = ymd(d); st.time = hm(d); } else if (s0.mode === 'local') { st.date = s0.date; st.time = s0.time || '10:00'; } else { st.date = ymd(soon); st.time = hm(soon); }
+  let est = null;
+  const back = document.createElement('div'); back.className = 'sd-back';
+  const dr = document.createElement('aside'); dr.className = 'sd'; dr.setAttribute('role', 'dialog'); dr.setAttribute('aria-label', 'Schedule or send campaign');
+  document.body.append(back, dr);
+  const close = () => { back.remove(); dr.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); }; document.addEventListener('keydown', onKey);
+  back.onclick = close;
+  const passedAnywhere = () => { if (st.how !== 'schedule' || st.opt !== 'local' || !st.date || !st.time) return false; const [Y, M, D] = st.date.split('-').map(Number), [h, m] = st.time.split(':').map(Number); return Date.UTC(Y, M - 1, D, h, m) - 14 * 3600e3 < Date.now(); };
+  const nextDay = () => { const d = new Date(st.date + 'T12:00:00'); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }); };
+  const fixedPast = () => st.how === 'schedule' && st.opt === 'fixed' && st.date && st.time && new Date(`${st.date}T${st.time}`) < new Date(Date.now() - 60e3);
+  const draw = () => {
+    const probs = (CP.problems || []).slice(); if (fixedPast()) probs.push('Pick a send time in the future.');
+    const c = est && est.cost, b = c && c.budget;
+    if (b && b.over) probs.push(`This would cost about $${c.total.toFixed(2)}, more than the $${b.left.toFixed(2)} left of your AWS texting limit.`);
+    dr.innerHTML = `<div class="sd-h"><div><h2>Schedule or send campaign</h2><div class="sd-sub">${esc(CP.name)}</div></div><button class="sd-x" aria-label="Close"><i class="ti ti-x"></i></button></div>
+    <div class="sd-b">
+      ${probs.length ? `<div class="sd-err"><i class="ti ti-alert-circle"></i><div><b>Review and fix ${probs.length} ${probs.length === 1 ? 'error' : 'errors'} before ${st.how === 'now' ? 'sending' : 'scheduling'}.</b><ul>${probs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div></div>` : ''}
+      <div class="sd-cards">
+        <label class="sd-card${st.how === 'schedule' ? ' on' : ''}"><input type="radio" name="sdhow" value="schedule"${st.how === 'schedule' ? ' checked' : ''}><i class="ti ti-calendar"></i><b>Schedule</b><span>Choose a future date and time to send</span></label>
+        <label class="sd-card${st.how === 'now' ? ' on' : ''}"><input type="radio" name="sdhow" value="now"${st.how === 'now' ? ' checked' : ''}><i class="ti ti-send"></i><b>Send now</b><span>Start sending your campaign immediately</span></label>
+      </div>
+      ${st.how === 'schedule' ? `
+      <label class="sd-l" for="sdopt">Scheduling options <em>*</em></label>
+      <select id="sdopt" class="sd-in"><option value="fixed"${st.opt === 'fixed' ? ' selected' : ''}>Fixed send time</option><option value="local"${st.opt === 'local' ? ' selected' : ''}>Recipient's local time</option></select>
+      <div class="sd-hint">${st.opt === 'fixed' ? 'Everyone gets it at the same moment (your time, Central).' : 'Each person gets it at this hour where they live (Central if unknown).'}</div>
+      <div class="sd-2"><div><label class="sd-l" for="sdd">Date <em>*</em></label><div class="sd-ic"><i class="ti ti-calendar"></i><input id="sdd" type="date" class="sd-in" value="${esc(st.date || '')}" min="${ymd(new Date(Date.now() - 864e5))}"></div></div>
+        <div><label class="sd-l" for="sdt">Time</label><div class="sd-ic"><i class="ti ti-clock"></i><input id="sdt" type="time" class="sd-in" value="${esc(st.time || '10:00')}"></div></div></div>
+      ${passedAnywhere() ? `<div class="sd-sec"><b>The selected time has passed in some time zones</b><div class="sd-hint">For these time zones, when would you like to send?</div>
+        <label class="sd-r"><input type="radio" name="sdpass" value="now"${st.passed === 'now' ? ' checked' : ''}> Send immediately</label>
+        <label class="sd-r"><input type="radio" name="sdpass" value="next_day"${st.passed !== 'now' ? ' checked' : ''}> Send the following day<small>${esc(nextDay())} at ${esc(fmtTime(st.time))} recipient time</small></label></div>` : ''}` : ''}
+      ${isSms ? `<div class="sd-sec"><b>Manage messages sent in quiet hours</b><div class="sd-hint">Texts never go out at night where the person lives. Delay or skip people in quiet hours; everyone else gets it normally.</div>
+        <label class="sd-opt${st.quiet === 'delay' ? ' on' : ''}"><span class="sd-r"><input type="radio" name="sdq" value="delay"${st.quiet === 'delay' ? ' checked' : ''}> <b>Delay to next allowed time</b> <span class="sd-tag">Recommended</span></span><small>Delayed texts go out automatically in the morning.</small>
+          ${st.quiet === 'delay' ? `<label class="sd-r sd-in2"><input type="checkbox" id="sdmax"${st.maxOn ? ' checked' : ''}> Set a maximum delay</label>${st.maxOn ? `<div class="sd-in2" style="display:flex;align-items:center;gap:8px;margin-top:6px"><input id="sdmaxh" type="number" min="1" max="72" value="${st.maxH}" class="sd-in" style="width:90px"> hours after sending starts, then skip</div>` : '<small class="sd-in2">Recommended for time-sensitive messages.</small>'}` : ''}</label>
+        <label class="sd-opt${st.quiet === 'skip' ? ' on' : ''}"><span class="sd-r"><input type="radio" name="sdq" value="skip"${st.quiet === 'skip' ? ' checked' : ''}> <b>Skip messages</b></span><small>People in quiet hours don't get this campaign.</small></label></div>` : ''}
+      <div class="sd-sec"><b>Who gets it</b><div class="sd-hint">The audience is set when sending starts, so anyone who joins or leaves before then is counted.</div>
+        <div class="sd-sum" id="sdsum">${c ? `<div><span>People</span><b>${fmtN(c.sends)}</b></div>${c.total != null ? `<div><span>Estimated cost</span><b>$${c.total.toFixed(2)}</b></div>` : ''}${b ? `<div><span>AWS limit left</span><b class="${b.over ? 'bad' : ''}">$${b.left.toFixed(2)} of $${b.limit}</b></div>` : ''}` : '<div><span>Counting…</span></div>'}</div></div>
+    </div>
+    <div class="sd-f"><button class="btn" id="sdcancel">Cancel</button><button class="btn pri" id="sdgo"${probs.length ? ' disabled' : ''}>${st.how === 'now' ? '<i class="ti ti-send"></i> Send now' : `<i class="ti ti-calendar-check"></i> Schedule ${isSms ? 'text' : 'email'}`}</button></div>`;
+    dr.querySelector('.sd-x').onclick = close; $('sdcancel').onclick = close;
+    dr.querySelectorAll('[name=sdhow]').forEach((r) => r.onchange = () => { st.how = r.value; draw(); });
+    dr.querySelectorAll('[name=sdpass]').forEach((r) => r.onchange = () => { st.passed = r.value; });
+    dr.querySelectorAll('[name=sdq]').forEach((r) => r.onchange = () => { st.quiet = r.value; draw(); });
+    const o = $('sdopt'); if (o) o.onchange = () => { st.opt = o.value; draw(); };
+    const d = $('sdd'); if (d) d.onchange = () => { st.date = d.value; draw(); };
+    const t = $('sdt'); if (t) t.onchange = () => { st.time = t.value; draw(); };
+    const mx = $('sdmax'); if (mx) mx.onchange = () => { st.maxOn = mx.checked; draw(); };
+    const mh = $('sdmaxh'); if (mh) mh.oninput = () => { st.maxH = Math.max(1, Math.min(72, Number(mh.value) || 12)); };
+    $('sdgo').onclick = async () => {
+      const sc = { ...(CP.schedule || {}) };
+      if (st.how === 'now') Object.assign(sc, { mode: 'now', at: null });
+      else if (st.opt === 'fixed') Object.assign(sc, { mode: 'at', at: new Date(`${st.date}T${st.time}`).toISOString() });
+      else Object.assign(sc, { mode: 'local', date: st.date, time: st.time, passed: st.passed });
+      if (isSms) Object.assign(sc, { quiet: st.quiet, max_delay_hours: st.quiet === 'delay' && st.maxOn ? st.maxH : null });
+      CP.schedule = sc; $('sdgo').disabled = true;
+      try { await save(); await api(`/api/mk/campaigns/${CP.id}/schedule`, { method: 'POST', body: '{}' }); close(); toast(st.how === 'now' ? 'Sending started (or sent for approval)' : 'Scheduled (or sent for approval)'); go(); }
+      catch (e) { $('sdgo').disabled = false; toast(e.message, 1); }
+    };
+  };
+  draw();
+  try { const at = st.how === 'schedule' && st.opt === 'fixed' ? new Date(`${st.date}T${st.time}`).toISOString() : null;
+    est = await api('/api/mk/campaigns/estimate', { method: 'POST', body: JSON.stringify({ store: CP.store, channel: CP.channel, audience: CP.audience, smart_sending: CP.smart_sending, content: CP.content, ab: CP.ab, schedule: at ? { mode: 'at', at } : CP.schedule }) });
+    if (dr.isConnected) draw(); } catch (_) {}
+}
+if (!document.getElementById('sd-css')) { const css = document.createElement('style'); css.id = 'sd-css'; css.textContent = `
+.sd-back{position:fixed;inset:0;background:rgba(22,21,29,.42);z-index:90;animation:sdf .15s}
+.sd{position:fixed;top:0;right:0;bottom:0;width:min(580px,100vw);background:#fff;z-index:91;display:flex;flex-direction:column;box-shadow:-20px 0 50px rgba(22,21,29,.18);animation:sds .2s cubic-bezier(.2,.7,.2,1)}
+@keyframes sds{from{transform:translateX(40px);opacity:.4}}@keyframes sdf{from{opacity:0}}
+.sd-h{display:flex;align-items:flex-start;gap:12px;padding:24px 28px 20px;border-bottom:1px solid var(--line)}.sd-h>div{flex:1;min-width:0}
+.sd-h h2{margin:0;font-size:21px;font-weight:700;letter-spacing:-.01em}.sd-sub{color:var(--muted);font-size:15px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sd-x{width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:20px;display:grid;place-items:center;flex:none}.sd-x:hover{background:var(--panel2)}
+.sd-b{flex:1;overflow-y:auto;padding:22px 28px 28px}
+.sd-f{border-top:1px solid var(--line);padding:16px 28px;display:flex;gap:10px;justify-content:flex-end}.sd-f .btn{height:44px;padding:0 20px;font-size:14.5px}
+.sd-err{display:flex;gap:10px;background:#FDECEA;border:1px solid #F5C2BD;color:#9B1C1C;border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:14px}.sd-err>.ti{font-size:20px;color:#D92D20;flex:none;margin-top:1px}.sd-err ul{margin:6px 0 0;padding-left:18px}
+.sd-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
+.sd-card{position:relative;display:flex;flex-direction:column;gap:4px;border:1px solid var(--line2);border-radius:10px;padding:16px 18px;cursor:pointer;background:#fff;transition:border-color .12s,box-shadow .12s}
+.sd-card:hover{border-color:#9CA3AF}.sd-card.on{border:2px solid var(--bz-blue,#2F7BF5);padding:15px 17px;box-shadow:0 0 0 3px rgba(47,123,245,.12)}
+.sd-card input{position:absolute;top:16px;right:16px;width:20px;height:20px;accent-color:var(--bz-blue,#2F7BF5)}
+.sd-card>.ti{font-size:24px;margin-bottom:8px}.sd-card b{font-size:16px}.sd-card span{color:var(--muted);font-size:14px;line-height:1.4}
+.sd-l{display:block;font-weight:600;font-size:15px;margin:20px 0 8px}.sd-l em{color:#D92D20;font-style:normal}
+.sd-in{width:100%;height:46px;border:1px solid var(--line2);border-radius:8px;padding:0 12px;font-size:15px;background:#fff}
+.sd-in:focus{border-color:var(--bz-blue,#2F7BF5);box-shadow:0 0 0 3px rgba(47,123,245,.18);outline:none}
+.sd-ic{position:relative}.sd-ic>.ti{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--muted);pointer-events:none}.sd-ic .sd-in{padding-left:40px}
+.sd-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.sd-hint{color:var(--muted);font-size:13.5px;margin-top:6px;line-height:1.45}
+.sd-sec{margin-top:26px}.sd-sec>b{font-size:15.5px;font-weight:600}
+.sd-r{display:flex;align-items:center;gap:10px;font-size:15px;margin-top:14px;cursor:pointer;flex-wrap:wrap}.sd-r input{width:20px;height:20px;margin:0;accent-color:var(--bz-blue,#2F7BF5)}
+.sd-r small{flex-basis:100%;padding-left:30px;color:var(--muted);font-size:13.5px;margin-top:-4px}
+.sd-opt{display:block;border:1px solid var(--line2);border-radius:10px;padding:2px 18px 14px;margin-top:12px;cursor:pointer}.sd-opt.on{border:2px solid var(--bz-blue,#2F7BF5);padding:1px 17px 13px}
+.sd-opt>small{display:block;color:var(--muted);font-size:13.5px;padding-left:30px;margin-top:4px}.sd-in2{margin-left:30px!important;padding-left:0}.sd-opt small.sd-in2{display:block;padding-left:30px;margin-left:0!important}
+.sd-tag{font-size:12px;font-weight:600;background:var(--panel2);border-radius:6px;padding:2px 8px;color:var(--ink)}
+.sd-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}.sd-sum>div{background:var(--panel2);border-radius:10px;padding:10px 12px}.sd-sum span{display:block;font-size:12px;color:var(--muted)}.sd-sum b{font-size:17px}.sd-sum b.bad{color:#D92D20}
+@media (max-width:640px){.sd-cards,.sd-2,.sd-sum{grid-template-columns:1fr}.sd-h,.sd-b,.sd-f{padding-left:18px;padding-right:18px}}`; document.head.appendChild(css); }
+
 function drawResend(ro, mark) {
   const r = CP.resend || (CP.resend = { enabled: false, after_hours: 48, subject: '' });
   $('cresend').innerHTML = `<label style="display:flex;gap:8px;align-items:center;font-weight:800;font-size:15px"><input type="checkbox" id="cren"${r.enabled ? ' checked' : ''}${dis(ro)}><i class="ti ti-repeat"></i> Resend to people who didn't open</label>
