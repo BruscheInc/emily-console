@@ -748,10 +748,10 @@ function avColor(k){ let h=0; for(const ch of String(k||"?")) h=(h*31+ch.charCod
 function initials(n){ n=String(n||"?").replace(/@.*/,"").replace(/[._-]+/g," ").trim(); const w=n.split(/\s+/).filter(Boolean); return ((w[0]||"?")[0]+(w.length>1?w[w.length-1][0]:"")).toUpperCase(); }
 // Status pill: Open (waiting on us), Draft ready (Emily drafted), Replied (waiting on the customer), Closed.
 function statusPill(t){
-  if(t.status==="closed") return '<span class="st closed">Closed</span>';
-  if(t.emily==="drafted"&&t.category==="pending") return '<span class="st draft" title="Emily has a reply ready">Draft ready</span>';
-  if(t.category==="sent") return '<span class="st replied" title="We replied; waiting on the customer">Replied</span>';
-  return '<span class="st open">Open</span>';
+  if(t.status==="closed") return '<span class="tst closed">Closed</span>';
+  if(t.emily==="drafted"&&t.category==="pending") return '<span class="tst draft" title="Emily has a reply ready">Draft ready</span>';
+  if(t.category==="sent") return '<span class="tst replied" title="We replied; waiting on the customer">Replied</span>';
+  return '<span class="tst open">Open</span>';
 }
 // Bulk select: tick tickets in the list, then close or reopen them together.
 const SEL=new Set();
