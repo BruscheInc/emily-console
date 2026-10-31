@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.18
+- One-time Saturday re-check (logs only): 10% vs 15% sign-up form and welcome flow results since Oct 22, and the abandoned cart/checkout flows.
+
 ## 0.0.17
 - One-time check of the ticket views (waiting counts per view, waiting tickets, newest mail per mailbox) in the log.
 
