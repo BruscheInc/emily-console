@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.17
+- One-time check of the ticket views (waiting counts per view, waiting tickets, newest mail per mailbox) in the log.
+
 ## 0.0.16
 - Fix: Emily's proposed actions under a draft (e.g. "Address change — order #…") overlapped the "Emily also proposed" heading, and the order status chips in the side panel were squeezed. The new ticket status pill style was leaking onto them.
 
