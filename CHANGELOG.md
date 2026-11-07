@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.19
+- Unsubscribes: someone who unsubscribed can only be re-subscribed by opting in again themselves (a form, a JOIN text, or a dated Shopify/Klaviyo opt-in made after they unsubscribed). A sync or import without a date never re-subscribes them.
+- Text STOP replies are matched more loosely and cover the FCC revocation words: "Stop.", "stop!", "STOP ALL", "REVOKE", "OPT OUT", "unsubscribe me", "please stop texting me", "take me off your list". ("Cancel my order" is not treated as an opt-out.)
+- If Amazon refuses a text because the number opted out with them, Buzzin marks that person unsubscribed for texts.
+- One-time opt-out audit in the log (anything sent after an opt-out, re-subscribes, STOP replies).
+
 ## 0.0.18
 - One-time Saturday re-check (logs only): 10% vs 15% sign-up form and welcome flow results since Oct 22, and the abandoned cart/checkout flows.
 

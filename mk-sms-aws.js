@@ -177,6 +177,8 @@ async function onMessage(m) {
   await db(`INSERT INTO mk_send_events (send_id, type, meta) VALUES ($1,$2,$3)`, [send.id, t, JSON.stringify({ status: type, reason: m.messageStatusDescription || null, price: Number.isFinite(price) ? price : null, carrier_fee: Number.isFinite(fee) ? fee : null })]);
   if (t === "delivered") await db(`UPDATE mk_sends SET status='sent', meta = meta || '{"delivered":true}'::jsonb WHERE id=$1`, [send.id]);
   else await db(`UPDATE mk_sends SET status='failed', reason=$2 WHERE id=$1`, [send.id, type.toLowerCase()]);
+  // Amazon refused because the number is on its opt-out list (they texted STOP some other way): mark them unsubscribed in Buzzin too
+  if (t === "failed" && /opt(ed)?[\s_-]?out/i.test(`${type} ${m.messageStatusDescription || ""}`) && send.profile_id) { const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [send.profile_id])).rows[0]; if (p) await require("./mk-core").setConsent(p, "sms", "unsubscribed", { source: "carrier_opt_out", detail: m.messageStatusDescription || type }); }
 }
 
 function routes(app, { admin, actorOf, fail }) {

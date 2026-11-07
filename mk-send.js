@@ -114,6 +114,8 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
     // Amazon asked us to slow down: not a failure — drop the row so the message is retried
     if (/throttl|rate exceeded|too ?many ?requests|maximum sending rate/i.test(`${e.name} ${e.message}`)) { await db(`DELETE FROM mk_sends WHERE id=$1`, [row.id]); return { id: null, status: "deferred", reason: "sending too fast — tries again shortly" }; }
     await db(`UPDATE mk_sends SET status='failed', reason=$2 WHERE id=$1`, [row.id, String(e.message).slice(0, 300)]);
+    // the number is on Amazon's opt-out list: they've said stop — keep Buzzin in step
+    if (channel === "sms" && profile.id && /opt(ed)?[\s_-]?out/i.test(`${e.name} ${e.message}`)) await MK().setConsent(profile, "sms", "unsubscribed", { source: "carrier_opt_out", detail: String(e.message).slice(0, 120) }).catch(() => {});
     return { ...row, status: "failed", reason: e.message };
   }
 }

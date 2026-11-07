@@ -140,6 +140,9 @@ async function setConsent(profile, channel, state, { source, detail, wording, at
   const curState = profile[col] || "never", curAt = profile[atCol] ? new Date(profile[atCol]) : null;
   if (curState === state) return false;
   if (curState === "stopped" && !(state === "subscribed" && /^form/.test(source || ""))) return false;
+  // Unsubscribed stays unsubscribed unless the person opts in again themselves: a sign-up form / JOIN text, or a
+  // dated opt-in from Shopify or Klaviyo that happened after they unsubscribed. An import with no date never re-subscribes anyone.
+  if (curState === "unsubscribed" && state === "subscribed" && !/^form/.test(source || "") && !(at && curAt && new Date(at) > curAt)) return false;
   if (state !== "stopped" && curAt && curAt > when && curState !== "never") return false;   // an older record never overrides a newer one
   await db(`UPDATE mk_profiles SET ${col}=$2, ${atCol}=$3, updated_at=now() WHERE id=$1`, [profile.id, state, when]);
   await db(`INSERT INTO mk_consent_log (profile_id, channel, state, previous, source, detail, wording, at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,

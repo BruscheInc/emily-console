@@ -97,16 +97,19 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS mk_sms_inbound (id BIGSERIAL PRIMARY KEY, store TEXT, from_phone TEXT, to_phone TEXT, body TEXT, keyword TEXT, profile_id BIGINT, ticket_id BIGINT, provider_id TEXT, at TIMESTAMPTZ DEFAULT now())`);
 }
 
-const KEYWORDS = { stop: ["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"], help: ["HELP", "INFO"], join: ["JOIN", "START", "UNSTOP", "YES"] };
+const KEYWORDS = { stop: ["STOP", "STOPALL", "STOP ALL", "UNSUBSCRIBE", "UNSUB", "CANCEL", "END", "QUIT", "REVOKE", "OPTOUT", "OPT OUT", "STOP PLEASE", "PLEASE STOP"], help: ["HELP", "INFO"], join: ["JOIN", "START", "UNSTOP", "YES"] };
+/** Opt-out wording inside a longer reply ("please stop texting me", "unsubscribe me", "take me off your list"). FCC rules say any reasonable
+ *  way of saying stop counts, so these unsubscribe too (the message still becomes a ticket). "Cancel"/"end" alone in a sentence don't — "cancel my order" isn't an opt-out. */
+const STOP_PHRASE = /\b(stop|unsubscribe|unsub|opt[\s-]?out|revoke|remove me|take me off|don'?t (text|message) me|no more (texts|messages))\b/i;
 /** A text that came in (from the provider's webhook, once connected). Keywords change consent; anything else becomes a ticket. */
 async function inbound(store, { from, to, body, providerId }) {
-  const phone = MK().normPhone(from); const word = String(body || "").trim().toUpperCase();
+  const phone = MK().normPhone(from); const word = String(body || "").toUpperCase().replace(/[^A-Z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   let prof = phone ? await MK().findProfile(store, { phone }) : null;
   if (!prof && phone) prof = await MK().upsertProfile(store, { phone }, "sms");
   let keyword = null, reply = null;
   const st = await smsSettings(store); const b = await E().brand(store);
   const fill = (t) => String(t).replace(/\{\{\s*brand\s*\}\}/g, st.brand_name).replace(/\{\{\s*reply_to\s*\}\}/g, (b.sender && b.sender.reply_to) || "");
-  if (KEYWORDS.stop.includes(word)) { keyword = "stop"; if (prof) await MK().setConsent(prof, "sms", "unsubscribed", { source: "sms_keyword", detail: word }); reply = fill(st.replies.stop); }
+  if (KEYWORDS.stop.includes(word) || (!KEYWORDS.join.includes(word) && STOP_PHRASE.test(String(body || "")))) { keyword = "stop"; if (prof) await MK().setConsent(prof, "sms", "unsubscribed", { source: "sms_keyword", detail: word }); reply = fill(st.replies.stop); }
   else if (KEYWORDS.help.includes(word)) { keyword = "help"; reply = fill(st.replies.help); }
   else if (KEYWORDS.join.includes(word)) { keyword = "join"; if (prof) await MK().setConsent(prof, "sms", "subscribed", { source: "form:sms_keyword", detail: word, wording: `Texted ${word} to subscribe` }); reply = fill(st.replies.join); }
   let ticketId = null;
