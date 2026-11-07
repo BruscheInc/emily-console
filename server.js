@@ -1297,20 +1297,20 @@ async function optoutFix() {
 }
 /** One-time: copy every opt-out made in Buzzin (and the opt-out repair) to Shopify, so Shopify's own marketing stops for those people too. */
 async function optoutToShopify() {
-  if (await syncGet("optout_shopify_v1")) return;
+  if (await syncGet("optout_shopify_v2")) return;
   const rows = (await db(`SELECT DISTINCT ON (l.profile_id, l.channel) l.profile_id, l.channel FROM mk_consent_log l JOIN mk_profiles p ON p.id=l.profile_id
     WHERE l.state IN ('unsubscribed','stopped') AND COALESCE(l.source,'') NOT IN ('shopify','klaviyo','merge','shopify_export')
       AND ((l.channel='email' AND p.email_consent IN ('unsubscribed','stopped')) OR (l.channel='sms' AND p.sms_consent IN ('unsubscribed','stopped')))`)).rows;
   let changed = 0, done = 0;
   for (const r of rows) {
     const p = (await db(`SELECT * FROM mk_profiles WHERE id=$1`, [r.profile_id])).rows[0]; if (!p) continue;
-    try { changed += await core.pushOptOutToShopify(p, r.channel); }
+    try { changed += await require("./mk-core").pushOptOutToShopify(p, r.channel); }
     catch (e) { if (/missing permissions/i.test(e.message)) { console.error("🚫 OPT→SHOPIFY stopped: the Emily Shopify app needs the write_customers scope to change marketing consent. Add it, then restart Buzzin."); return; } console.error("opt-out push:", e.message); }
     if (++done % 100 === 0) console.log(`🚫 OPT→SHOPIFY ${done}/${rows.length} checked · ${changed} changed in Shopify`);
     await new Promise((res) => setTimeout(res, 250));
   }
   console.log(`🚫 OPT→SHOPIFY done: ${rows.length} people checked · ${changed} were still subscribed in Shopify and are now unsubscribed there`);
-  await core.syncSet("optout_shopify_v1", String(changed), { checked: rows.length });
+  await core.syncSet("optout_shopify_v2", String(changed), { checked: rows.length });
 }
 async function listCheck() {
   console.log("📋 recent lists: " + JSON.stringify((await db(`SELECT l.id, l.name, l.store, l.archived, l.created_at, (SELECT count(*)::int FROM mk_list_members m WHERE m.list_id=l.id) n FROM mk_lists l WHERE l.created_at > now() - interval '1 day' ORDER BY l.id DESC LIMIT 10`)).rows));
