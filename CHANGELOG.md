@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.21
+- Unsubscribes now reach Shopify: when someone opts out in Buzzin (unsubscribe link, STOP text, bounce, spam complaint, or staff), Buzzin marks them unsubscribed in both Shopify stores too, so Shopify's own emails and texts stop for them as well.
+- One-time catch-up: every past Buzzin opt-out is copied to Shopify (logged as "OPT→SHOPIFY").
+
 ## 0.0.20
 - Opt-out repair: profiles whose most recent consent change was an unsubscribe but still showed "subscribed" are set back to unsubscribed (logged as "opt-out repair"). The emails that went out after an opt-out are logged with their history to find the cause.
 

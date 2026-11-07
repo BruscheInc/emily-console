@@ -148,7 +148,31 @@ async function setConsent(profile, channel, state, { source, detail, wording, at
   await db(`INSERT INTO mk_consent_log (profile_id, channel, state, previous, source, detail, wording, at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
     [profile.id, channel, state, curState, source || null, detail || null, wording || null, when]);
   profile[col] = state; profile[atCol] = when;
+  // An opt-out made in Buzzin (link, STOP, bounce, complaint, staff) is copied to both Shopify stores, so Shopify's own emails
+  // and texts (Shopify Email, its abandoned-checkout messages) stop too. Opt-outs that came FROM Shopify aren't sent back.
+  if ((state === "unsubscribed" || state === "stopped") && source !== "shopify") pushOptOutToShopify(profile, channel).catch((e) => console.error("shopify opt-out push:", e.message));
   return true;
+}
+/** Mark a person unsubscribed (email or SMS marketing) in every Shopify store where they're a customer. */
+async function pushOptOutToShopify(profile, channel) {
+  const R = require("./returns"); const key = channel === "sms" ? profile.phone : profile.email; if (!key) return 0;
+  let n = 0;
+  for (const store of ["lb", "lbo"]) {
+    const st = R.shopFor && R.shopFor(store); if (!st) continue;
+    const q = channel === "sms" ? `phone:${String(key).replace(/[^+\d]/g, "")}` : `email:${String(key).toLowerCase()}`;
+    const found = await R.gql(st, `query F($q: String!) { customers(first: 3, query: $q) { nodes { id defaultEmailAddress { emailAddress } defaultPhoneNumber { phoneNumber } emailMarketingConsent { marketingState } smsMarketingConsent { marketingState } } } }`, { q }).catch(() => null);
+    for (const c of ((found && found.customers && found.customers.nodes) || [])) {
+      if (channel === "email" && String((c.defaultEmailAddress && c.defaultEmailAddress.emailAddress) || "").toLowerCase() !== String(key).toLowerCase()) continue;
+      const cur = channel === "sms" ? c.smsMarketingConsent && c.smsMarketingConsent.marketingState : c.emailMarketingConsent && c.emailMarketingConsent.marketingState;
+      if (!cur || cur === "UNSUBSCRIBED" || cur === "NOT_SUBSCRIBED") continue;
+      const m = channel === "sms"
+        ? await R.gql(st, `mutation U($i: CustomerSmsMarketingConsentUpdateInput!) { customerSmsMarketingConsentUpdate(input: $i) { userErrors { message } } }`, { i: { customerId: c.id, smsMarketingConsent: { marketingState: "UNSUBSCRIBED", consentUpdatedAt: new Date().toISOString() } } })
+        : await R.gql(st, `mutation U($i: CustomerEmailMarketingConsentUpdateInput!) { customerEmailMarketingConsentUpdate(input: $i) { userErrors { message } } }`, { i: { customerId: c.id, emailMarketingConsent: { marketingState: "UNSUBSCRIBED", consentUpdatedAt: new Date().toISOString() } } });
+      const errs = m && (m.customerSmsMarketingConsentUpdate || m.customerEmailMarketingConsentUpdate || {}).userErrors;
+      if (errs && errs.length) console.error(`shopify opt-out ${store} ${c.id}: ${errs.map((e) => e.message).join("; ")}`); else n++;
+    }
+  }
+  return n;
 }
 
 /* ---------------- lists ---------------- */
@@ -607,5 +631,5 @@ async function init() {
   setTimeout(fill, 30 * 1000); setInterval(fill, 30 * 60 * 1000);
 }
 
-module.exports = { syncShopifyQueryList, memo, clearMemo, pollOrders, profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
+module.exports = { pushOptOutToShopify, syncShopifyQueryList, memo, clearMemo, pollOrders, profileStats, STORES, init, migrate, settings, saveSettings, normEmail, normPhone, findProfile, upsertProfile, setConsent, ensureList, addToList, track, allContactsList, fillAllContacts,
   recomputeTiers, syncAll, syncFromKlaviyo, syncShopifyCustomers, syncShopifyOrders, overview, search, profile, lists, sizeOf };
