@@ -277,14 +277,15 @@ app.post("/api/emily/compose", async (req, res) => {
 });
 app.post("/api/ticket/new", async (req, res) => {
   if (!guard(req, res)) return;
-  const { mailbox, to, name, order, subject, text } = req.body || {};
+  const { mailbox, to, name, order, subject, text, tag } = req.body || {};
+  const extraTag = ["address-verification", "out-of-stock", "shipping-delay", "order-question"].includes(tag) ? tag : null;
   const box = String(mailbox || "").toLowerCase();
   if (!core.ACTIVE_MAILBOXES.includes(box)) return res.status(400).json({ error: "Pick a store first." });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(to || "").trim())) return res.status(400).json({ error: "Enter a valid customer email." });
   if (!String(subject || "").trim() || !String(text || "").trim()) return res.status(400).json({ error: "Subject and message are both needed." });
   const who = actorOf(req);
   try {
-    const r = await core.sendNewEmail({ mailbox: box, to: String(to).trim(), subject: String(subject).trim(), text: String(text), who, tags: ["agent-started"], name: String(name || "").trim() || undefined });
+    const r = await core.sendNewEmail({ mailbox: box, to: String(to).trim(), subject: String(subject).trim(), text: String(text), who, tags: ["agent-started", ...(extraTag ? [extraTag] : [])], name: String(name || "").trim() || undefined });
     const id = r.ticket_id;
     if (order) await core.setTicketOrder(id, `#${String(order).trim()}`).catch(() => {});
     await core.audit({ ticketId: id, kind: "ticket-created", detail: `New conversation started with ${String(to).trim()} from ${core.brandForAddress(box)}${order ? ` about ${String(order).trim()}` : ""}`, who, target: String(to).trim() });

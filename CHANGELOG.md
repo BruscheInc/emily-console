@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.26
+- New ticket: "Quick emails" buttons — Address verification, Out of stock, Shipping delay, Need more info. Each uses the order you picked: address check shows the address on file and asks why; out of stock lists the order's items to tick and the options to offer (refund, swap, wait, store credit, ship the rest); delay asks why and the new ship date. One click and Emily drafts it.
+- Tickets started this way are tagged (address-verification, out-of-stock, shipping-delay, order-question). Out-of-stock ones show up in the Out of stock view.
+
 ## 0.0.25
 - Orders: the counts on the status filters are exact (Shopify stops counting at 10,000 unless asked not to).
 
