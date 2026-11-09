@@ -925,6 +925,106 @@ async function findAnything(raw) {
   }
   return { orders: list, customers: [...customers.values()].slice(0, 10), shipstation, errors };
 }
+/* ---- Orders section: every Shopify order, live, by store; and one order with everything Shopify has on it ---- */
+function storeForKey(k) { return String(k).toLowerCase() === "lbo" ? storeForPrefix("LBO") : storeForPrefix("LB"); }
+function keyForStore(st) { return st === storeForPrefix("LBO") ? "lbo" : "lb"; }
+const ORDER_STATUS_Q = {
+  all: "", open: "status:open", unfulfilled: "fulfillment_status:unfulfilled AND status:open", fulfilled: "fulfillment_status:shipped",
+  unpaid: "financial_status:pending OR financial_status:authorized OR financial_status:partially_paid", refunded: "financial_status:refunded OR financial_status:partially_refunded", cancelled: "status:cancelled",
+};
+const LIST_Q = `query($n:Int!,$after:String,$q:String){orders(first:$n,after:$after,query:$q,sortKey:CREATED_AT,reverse:true){
+  nodes{ id name createdAt email phone cancelledAt displayFinancialStatus displayFulfillmentStatus subtotalLineItemsQuantity tags sourceName
+    totalPriceSet{shopMoney{amount}} totalRefundedSet{shopMoney{amount}} customer{displayName} shippingAddress{name city provinceCode} lineItems(first:2){nodes{title}} }
+  pageInfo{hasNextPage endCursor} }}`;
+function orderSearchQ(raw) {
+  const q = String(raw || "").trim().replace(/^#/, ""); if (!q) return "";
+  const e = (x) => String(x).replace(/["\\]/g, "");
+  const om = q.toUpperCase().replace(/\s+/g, "").match(/^(LBO|LB|BB)0*(\d{3,})$/);
+  if (om) return `name:#${om[1]}${om[2]} OR name:${om[1]}${om[2]}`;
+  if (/^\d{4,7}$/.test(q)) return `name:#LB${q} OR name:#LBO${q} OR name:${q} OR name:#${q}`;
+  if (/@/.test(q)) return `email:"${e(q)}"`;
+  return e(q);
+}
+async function ordersList({ store = "all", status = "all", q = "", cursors = {} } = {}) {
+  const keys = store === "all" ? ["lb", "lbo"] : [store];
+  const parts = [ORDER_STATUS_Q[status] || "", orderSearchQ(q)].filter(Boolean).map((x) => `(${x})`);
+  const query = parts.join(" AND ") || null;
+  const n = keys.length > 1 ? 25 : 50;
+  const rows = [], next = {}, errors = [];
+  await Promise.all(keys.map(async (k) => {
+    if (cursors && cursors[k] === null) return;   // that store has no more pages
+    const st = storeForKey(k); if (!st) return;
+    try {
+      const d = await storeGraphQL(st, LIST_Q, { n, after: (cursors && cursors[k]) || null, q: query });
+      for (const o of d.orders.nodes) rows.push({ store_key: k, store: st.brand, id: o.id, name: o.name, created_at: o.createdAt, cancelled: !!o.cancelledAt,
+        customer: (o.customer && o.customer.displayName) || (o.shippingAddress && o.shippingAddress.name) || "", email: o.email || "", phone: o.phone || "",
+        place: o.shippingAddress ? [o.shippingAddress.city, o.shippingAddress.provinceCode].filter(Boolean).join(", ") : "",
+        total: Number(o.totalPriceSet.shopMoney.amount), refunded: Number(o.totalRefundedSet.shopMoney.amount), financial: o.displayFinancialStatus, fulfillment: o.displayFulfillmentStatus,
+        items: o.subtotalLineItemsQuantity, first_item: (o.lineItems.nodes[0] || {}).title || "", more_items: o.lineItems.nodes.length > 1, tags: o.tags, source: o.sourceName });
+      next[k] = d.orders.pageInfo.hasNextPage ? d.orders.pageInfo.endCursor : null;
+    } catch (e) { errors.push(e.message); next[k] = null; }
+  }));
+  rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  return { rows, cursors: next, more: Object.values(next).some(Boolean), errors };
+}
+const COUNTS_CACHE = { t: 0, v: null };
+async function orderCounts() {
+  if (COUNTS_CACHE.v && Date.now() - COUNTS_CACHE.t < 60000) return COUNTS_CACHE.v;
+  const fields = Object.entries(ORDER_STATUS_Q).map(([k, q]) => `${k}: ordersCount(${q ? `query:${JSON.stringify(q)}` : ""}){count}`).join(" ");
+  const out = {};
+  await Promise.all(["lb", "lbo"].map(async (k) => { const st = storeForKey(k); if (!st) return; try { const d = await storeGraphQL(st, `query{ ${fields} }`, {}); out[k] = Object.fromEntries(Object.keys(ORDER_STATUS_Q).map((x) => [x, d[x] ? d[x].count : null])); } catch (e) { out[k] = { error: e.message }; } }));
+  COUNTS_CACHE.t = Date.now(); COUNTS_CACHE.v = out; return out;
+}
+const MONEY = `shopMoney{amount}`;
+const FULL_Q = `query($id:ID!){ order(id:$id){
+ id name createdAt updatedAt processedAt closedAt cancelledAt cancelReason confirmed test email phone note tags sourceName poNumber edited
+ displayFinancialStatus displayFulfillmentStatus paymentGatewayNames discountCodes app{name} customAttributes{key value}
+ subtotalPriceSet{${MONEY}} totalDiscountsSet{${MONEY}} totalShippingPriceSet{${MONEY}} totalTaxSet{${MONEY}} totalPriceSet{shopMoney{amount currencyCode}} totalRefundedSet{${MONEY}} totalOutstandingSet{${MONEY}} currentTotalPriceSet{${MONEY}}
+ discountApplications(first:10){nodes{ __typename allocationMethod targetType value{ ... on MoneyV2{amount} ... on PricingPercentageValue{percentage}} ... on DiscountCodeApplication{code} ... on AutomaticDiscountApplication{title} ... on ManualDiscountApplication{title} ... on ScriptDiscountApplication{title} }}
+ customer{ id displayName defaultEmailAddress{emailAddress} defaultPhoneNumber{phoneNumber} numberOfOrders amountSpent{amount} createdAt tags note }
+ shippingAddress{ name company address1 address2 city province provinceCode zip country countryCodeV2 phone }
+ billingAddress{ name company address1 address2 city provinceCode zip country phone }
+ shippingLines(first:5){nodes{ title code source originalPriceSet{${MONEY}} discountedPriceSet{${MONEY}} }}
+ lineItems(first:100){nodes{ id title variantTitle sku vendor quantity currentQuantity refundableQuantity unfulfilledQuantity originalUnitPriceSet{${MONEY}} discountedUnitPriceAfterAllDiscountsSet{${MONEY}} discountedTotalSet{${MONEY}} image{url(transform:{maxWidth:120})} variant{ id inventoryQuantity availableForSale } product{ id } }}
+ fulfillments(first:20){ id name status displayStatus createdAt deliveredAt estimatedDeliveryAt inTransitAt location{name} trackingInfo{number url company} fulfillmentLineItems(first:50){nodes{ quantity lineItem{ title variantTitle } }} }
+ refunds(first:20){ id createdAt note totalRefundedSet{${MONEY}} refundLineItems(first:50){nodes{ quantity restockType lineItem{ title variantTitle } }} }
+ transactions(first:30){ id kind status gateway formattedGateway createdAt amountSet{${MONEY}} paymentDetails{ ... on CardPaymentDetails{ company number } } }
+ returns(first:10){nodes{ id name status createdAt }}
+ events(first:80, sortKey:CREATED_AT, reverse:true){nodes{ createdAt message appTitle }}
+}}`;
+async function orderFull(storeKey, idOrName) {
+  const st = storeForKey(storeKey); if (!st) throw new Error("Unknown store");
+  let id = String(idOrName || "");
+  if (!/^gid:/.test(id)) {   // an order number → its id
+    const d = await storeGraphQL(st, LIST_Q, { n: 1, after: null, q: orderSearchQ(id) });
+    const o = d.orders.nodes[0]; if (!o) return { error: `Order ${idOrName} not found in ${st.brand}.` }; id = o.id;
+  }
+  const d = await storeGraphQL(st, FULL_Q, { id });
+  const o = d.order; if (!o) return { error: "Order not found." };
+  const m = (x) => (x && x.shopMoney ? Number(x.shopMoney.amount) : 0);
+  let ss = null; if (shipstationConfigured()) { try { const f = await shipstationLookup(ssOrderNo(String(o.name).replace(/^#/, ""))); ss = Array.isArray(f) ? f : null; } catch (_) {} }
+  let others = [];
+  if (o.customer) { try { const cid = String(o.customer.id).split("/").pop(); others = ((await storeGraphQL(st, LIST_Q, { n: 10, after: null, q: `customer_id:${cid}` })).orders.nodes || []).filter((x) => x.id !== o.id).map((x) => ({ id: x.id, name: x.name, created_at: x.createdAt, total: m(x.totalPriceSet), financial: x.displayFinancialStatus, fulfillment: x.displayFulfillmentStatus, cancelled: !!x.cancelledAt })); } catch (_) {} }
+  return {
+    store_key: storeKey, store: st.brand, admin_url: adminOrderUrl(st, o.id), id: o.id, name: o.name,
+    created_at: o.createdAt, updated_at: o.updatedAt, processed_at: o.processedAt, closed_at: o.closedAt, cancelled_at: o.cancelledAt, cancel_reason: o.cancelReason, test: o.test, confirmed: o.confirmed, edited: o.edited,
+    email: o.email, phone: o.phone, note: o.note, tags: o.tags, source: o.sourceName, channel: o.app && o.app.name, po_number: o.poNumber,
+    financial: o.displayFinancialStatus, fulfillment: o.displayFulfillmentStatus, gateways: o.paymentGatewayNames, discount_codes: o.discountCodes, attributes: o.customAttributes,
+    currency: o.totalPriceSet.shopMoney.currencyCode,
+    money: { subtotal: m(o.subtotalPriceSet), discounts: m(o.totalDiscountsSet), shipping: m(o.totalShippingPriceSet), tax: m(o.totalTaxSet), total: m(o.totalPriceSet), refunded: m(o.totalRefundedSet), outstanding: m(o.totalOutstandingSet), current_total: m(o.currentTotalPriceSet) },
+    discounts: (o.discountApplications.nodes || []).map((x) => ({ kind: x.__typename.replace("DiscountApplication", ""), name: x.code || x.title || "", amount: x.value && x.value.amount != null ? Number(x.value.amount) : null, percent: x.value && x.value.percentage != null ? x.value.percentage : null, target: x.targetType })),
+    customer: o.customer ? { id: o.customer.id, name: o.customer.displayName, email: o.customer.defaultEmailAddress && o.customer.defaultEmailAddress.emailAddress, phone: o.customer.defaultPhoneNumber && o.customer.defaultPhoneNumber.phoneNumber, orders: Number(o.customer.numberOfOrders || 0), spent: m({ shopMoney: o.customer.amountSpent }), since: o.customer.createdAt, tags: o.customer.tags, note: o.customer.note, admin_url: `https://admin.shopify.com/store/${String(st.domain).replace(/\.myshopify\.com$/i, "")}/customers/${String(o.customer.id).split("/").pop()}` } : null,
+    shipping_address: o.shippingAddress, billing_address: o.billingAddress,
+    shipping_lines: (o.shippingLines.nodes || []).map((x) => ({ title: x.title, source: x.source, price: m(x.discountedPriceSet), original: m(x.originalPriceSet) })),
+    items: (o.lineItems.nodes || []).map((x) => ({ title: x.title, variant: x.variantTitle, sku: x.sku, vendor: x.vendor, quantity: x.quantity, current_quantity: x.currentQuantity, refundable: x.refundableQuantity, unfulfilled: x.unfulfilledQuantity, unit_price: m(x.originalUnitPriceSet), paid_each: m(x.discountedUnitPriceAfterAllDiscountsSet), line_total: m(x.discountedTotalSet), image: x.image && x.image.url, stock: x.variant ? x.variant.inventoryQuantity : null, available: x.variant ? x.variant.availableForSale : null })),
+    fulfillments: (o.fulfillments || []).map((f) => ({ name: f.name, status: f.displayStatus || f.status, at: f.createdAt, delivered_at: f.deliveredAt, eta: f.estimatedDeliveryAt, in_transit_at: f.inTransitAt, location: f.location && f.location.name, tracking: f.trackingInfo || [], items: (f.fulfillmentLineItems.nodes || []).map((x) => ({ quantity: x.quantity, title: x.lineItem.title, variant: x.lineItem.variantTitle })) })),
+    refunds: (o.refunds || []).map((r) => ({ at: r.createdAt, note: r.note, amount: m(r.totalRefundedSet), items: (r.refundLineItems.nodes || []).map((x) => ({ quantity: x.quantity, restock: x.restockType, title: x.lineItem.title, variant: x.lineItem.variantTitle })) })),
+    transactions: (o.transactions || []).map((t) => ({ kind: t.kind, status: t.status, gateway: t.formattedGateway || t.gateway, at: t.createdAt, amount: m(t.amountSet), card: t.paymentDetails && t.paymentDetails.company ? `${t.paymentDetails.company} ${String(t.paymentDetails.number || "").replace(/[•\s]+/g, " ").trim()}` : null })),
+    returns: (o.returns.nodes || []).map((r) => ({ name: r.name, status: r.status, at: r.createdAt })),
+    events: (o.events.nodes || []).map((e) => ({ at: e.createdAt, text: String(e.message || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'"), app: e.appTitle })),
+    shipstation: ss, other_orders: others,
+  };
+}
 async function ssCancel(orderId) {
   const o = await ssReq("GET", `/orders/${orderId}`);
   if (!o || !o.orderId) throw new Error(`ShipStation order ${orderId} not found.`);
@@ -2564,4 +2664,4 @@ async function start() {
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { findAnything, stageAction, claimsKit: () => ({ anthropic, model: CLAUDE_MODEL, storeGraphQL, orderDetail, cancelOrder, refundOrder, issueStoreCredit, findCustomer, prepareReplacement, createReplacementOrder, applyAddressChange, ssV2Track, carrierFromNumber, customerHistory }), STORES, storeToken, storeForPrefix, composeEmail, __test: { applyPolicyPatches: () => applyPolicyPatches(), propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache, prepareReplacement, createReplacementOrder }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };
+module.exports = { ordersList, orderCounts, orderFull, findAnything, stageAction, claimsKit: () => ({ anthropic, model: CLAUDE_MODEL, storeGraphQL, orderDetail, cancelOrder, refundOrder, issueStoreCredit, findCustomer, prepareReplacement, createReplacementOrder, applyAddressChange, ssV2Track, carrierFromNumber, customerHistory }), STORES, storeToken, storeForPrefix, composeEmail, __test: { applyPolicyPatches: () => applyPolicyPatches(), propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache, prepareReplacement, createReplacementOrder }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };

@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.24
+- New Orders section (shopping bag on the left rail): every Shopify order, live from both stores, newest first. Filter by store (All stores, Larkspur Baby, Larkspur Baby Outlet) and by status (Open, Unfulfilled, Fulfilled, Unpaid, Refunded, Cancelled) with counts, plus search by order number, name or email.
+- Opening an order shows everything Shopify has on it: items with photos, SKUs and stock, payment breakdown, discounts, transactions and card, fulfillments with tracking and delivery dates, ShipStation status, refunds, returns, the full Shopify timeline, customer (orders, spend, tags, notes), shipping and billing addresses, order notes and extra fields, other orders from the same customer, and any Buzzin tickets with them.
+- "Create ticket" on an order opens New ticket already filled in (store, email, name, order) so you just tell Emily what to say.
+
 ## 0.0.23
 - New ticket: a "Find the customer or order" search at the top. Type a name, email, phone, order number or tracking number and it searches both Shopify stores and ShipStation live, so customers who have never written in can be found.
 - Picking an order fills in the email, name, order number and the right store, and shows the order (items, payment, shipping status, ShipStation status, ship-to address, tracking). Emily then drafts the email from your notes with that order in front of her.

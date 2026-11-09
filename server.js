@@ -128,6 +128,24 @@ app.get("/api/order/:name", async (req, res) => {
   try { const o = await require("./emily").orderDetail(req.params.name); if (o.error) return res.status(400).json(o); if (o.note) return res.status(404).json(o); res.json(o); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
+app.get("/api/orders/list", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { let cursors = {}; try { cursors = JSON.parse(String(req.query.cursors || "{}")); } catch (_) {}
+    res.json(await require("./emily").ordersList({ store: ["lb", "lbo"].includes(req.query.store) ? req.query.store : "all", status: String(req.query.status || "all"), q: String(req.query.q || ""), cursors })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/orders/counts", async (req, res) => { if (!guard(req, res)) return; try { res.json(await require("./emily").orderCounts()); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.get("/api/orders/full", async (req, res) => {
+  if (!guard(req, res)) return;
+  try {
+    const o = await require("./emily").orderFull(String(req.query.store || "lb"), String(req.query.id || req.query.name || ""));
+    if (o.error) return res.status(404).json(o);
+    const emails = [o.email, o.customer && o.customer.email].filter(Boolean).map((x) => x.toLowerCase());
+    const bare = String(o.name).replace(/^#/, "");
+    o.tickets = (await db(`SELECT id, subject, status, brand, last_message_at FROM hd_tickets WHERE (lower(customer_email) = ANY($1) OR upper(replace(order_number,'#','')) = upper($2)) AND NOT COALESCE(spam,false) ORDER BY last_message_at DESC NULLS LAST LIMIT 15`, [emails, bare]).catch(() => db(`SELECT id, subject, status, brand, last_message_at FROM hd_tickets WHERE lower(customer_email) = ANY($1) AND NOT COALESCE(spam,false) ORDER BY last_message_at DESC NULLS LAST LIMIT 15`, [emails]))).rows;
+    res.json(o);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.get("/api/find", async (req, res) => {
   if (!guard(req, res)) return;
   try { res.json(await require("./emily").findAnything(String(req.query.q || ""))); } catch (e) { res.status(500).json({ error: e.message }); }

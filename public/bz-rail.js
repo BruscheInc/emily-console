@@ -6,6 +6,7 @@
   const MODS = [
     { m: "home", i: "home", l: "Home" },
     { m: "tickets", i: "inbox", l: "Tickets" },
+    { m: "orders", i: "shopping-bag", l: "Orders" },
     { m: "ship", i: "truck-delivery", l: "Shipping" },
     { m: "returns", i: "arrow-back-up", l: "Returns" },
     { m: "marketing", i: "speakerphone", l: "Marketing", href: "/marketing" },

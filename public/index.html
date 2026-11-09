@@ -272,6 +272,22 @@
   .modal .iti{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}.modal .iti input[type=number]{width:64px}.modal .iti .t{flex:1;min-width:0}
   .tagchip{background:rgba(20,30,50,.06);color:var(--muted);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
 
+  .ordhead .ordsearch{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:0 10px;min-width:260px}
+  .ordhead .ordsearch input{border:0;background:none;padding:8px 0;font-size:13.5px;outline:none;color:var(--ink);width:100%}
+  .ordtbl tbody tr{cursor:pointer} .ordtbl td.r,.ordtbl th.r{text-align:right}
+  .opill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);text-transform:capitalize;vertical-align:middle}
+  .opill.ok{background:#e8f6ee;border-color:#bfe5cf;color:#1d7a46}.opill.warn{background:#fff6dd;border-color:#f3dd9b;color:#8a6100}.opill.bad{background:#fdecec;border-color:#f3c4c4;color:#b42318}.opill.mut{background:#eef0f4;color:#4b5563}
+  .ordback{padding:12px 22px 0}.ordtop{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;padding:10px 22px 14px;border-bottom:1px solid var(--line)}
+  .ordtop h2{margin:0 0 4px;font-size:22px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ordacts{display:flex;gap:8px;flex-wrap:wrap}.ordacts a.btn{text-decoration:none}
+  .ordgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:16px;padding:16px 22px 30px}
+  @media(max-width:920px){.ordgrid{grid-template-columns:1fr}}
+  .ocard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;line-height:1.45}
+  .och{font-weight:700;font-size:14px;margin-bottom:10px}.osub{font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:12px 0 4px}
+  .okv{display:flex;justify-content:space-between;gap:12px;padding:3px 0}.okv.tot{font-weight:700;border-top:1px solid var(--line);margin-top:4px;padding-top:7px}
+  .oitems{width:100%;border-collapse:collapse}.oitems td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}.oitems tr:first-child td{border-top:0}.oitems td.r{text-align:right;white-space:nowrap}
+  .oimg{width:48px}.oimg img{width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+  .ofl{padding:8px 0;border-top:1px solid var(--line)}.ofl:first-child{border-top:0;padding-top:0}
+  .otl{max-height:340px;overflow:auto;display:flex;flex-direction:column;gap:6px}
   .ntfind{margin:6px 0 4px}.ntfind input{flex:1}
   .ntr-list{margin-top:8px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
   .ntr-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:8px 12px 4px}
@@ -405,6 +421,12 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
     <button class="nav view sub" data-view="lbo_tickets" onclick="setView('lbo_tickets')"><i class="si ti ti-tag"></i><span>LBO tickets</span><span class="n" id="v-lbo_tickets"></span></button>
     <button class="nav view sub" data-view="lb_tickets" onclick="setView('lb_tickets')"><i class="si ti ti-tag"></i><span>LB tickets</span><span class="n" id="v-lb_tickets"></span></button>
     <button class="nav view sub" data-view="oos" onclick="setView('oos')"><i class="si ti ti-package-off"></i><span>Out of stock</span><span class="n" id="v-oos"></span></button>
+  </div></div>
+  <div class="grp" data-g="orders"><button class="nav gh" onclick="toggleGrp('orders')"><i class="i ti ti-shopping-bag"></i><span>Orders</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <button class="nav view sub" data-view="orders_all" onclick="setView('orders_all')"><i class="si ti ti-stack-2"></i><span>All stores</span></button>
+    <button class="nav view sub" data-view="orders_lb" onclick="setView('orders_lb')"><i class="si ti ti-building-store"></i><span>Larkspur Baby</span><span class="n" id="v-orders_lb"></span></button>
+    <button class="nav view sub" data-view="orders_lbo" onclick="setView('orders_lbo')"><i class="si ti ti-building-store"></i><span>Larkspur Baby Outlet</span><span class="n" id="v-orders_lbo"></span></button>
   </div></div>
   <div class="grp" data-g="mail"><button class="nav gh" onclick="toggleGrp('mail')"><i class="i ti ti-mail"></i><span>Mailboxes</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
@@ -583,8 +605,8 @@ document.addEventListener("keydown",(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLo
 document.addEventListener("click",(e)=>{ const m=$("acctMenu"); if(m&&!m.classList.contains("hidden")&&!e.target.closest(".acct")) m.classList.add("hidden"); });
 function setTab(t){TAB=t;OFFSET=0;document.querySelectorAll(".tab[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));loadList();}
 /* ---- app rail modules: each rail icon shows one part of Buzzin in the panel ---- */
-const MODS={home:[],tickets:["inbox","mail"],ship:["ship"],returns:["returns"],marketing:["mk_aud","mk_build","mk_res"],content:["content"],analytics:["analytics"]};
-const MOD_TITLES={home:"Home",tickets:"Tickets",ship:"Shipping",returns:"Returns & claims",marketing:"Marketing",content:"Content",analytics:"Reports"};
+const MODS={home:[],tickets:["inbox","mail"],orders:["orders"],ship:["ship"],returns:["returns"],marketing:["mk_aud","mk_build","mk_res"],content:["content"],analytics:["analytics"]};
+const MOD_TITLES={home:"Home",tickets:"Tickets",orders:"Orders",ship:"Shipping",returns:"Returns & claims",marketing:"Marketing",content:"Content",analytics:"Reports"};
 function modOf(v){ if(v==="home") return "home"; const b=document.querySelector(`.side .nav.view[data-view="${v}"]`); const g=b&&b.closest(".grp"); const gid=g&&g.dataset.g; for(const m in MODS) if(MODS[m].includes(gid)) return m; return "tickets"; }
 function showMod(m){
   document.body.dataset.mod=m; if(window.bzRail) bzRail.set(m);
@@ -618,7 +640,7 @@ async function loadCounts(){try{
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -742,6 +764,88 @@ async function ntSend(){
   }catch(e){toast("Couldn't send",true);b.disabled=false;b.textContent="Send & create ticket";}
 }
 
+/* ---- Orders: every Shopify order, live, filtered by store and status; open one to see everything and start a ticket ---- */
+const ORD={status:"all",q:"",rows:[],cursors:{},more:false,counts:null,open:null};
+const ORD_TABS=[["all","All"],["open","Open"],["unfulfilled","Unfulfilled"],["fulfilled","Fulfilled"],["unpaid","Unpaid"],["refunded","Refunded"],["cancelled","Cancelled"]];
+const ordStore=()=>VIEW==="orders_lb"?"lb":VIEW==="orders_lbo"?"lbo":"all";
+const money2=(n)=>"$"+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const lc=(x)=>String(x||"").toLowerCase().replace(/_/g," ");
+function ordPill(kind,v){ const t=lc(v); let c="";
+  if(kind==="pay") c=/^paid$/.test(t)?"ok":/refund/.test(t)?"mut":/pending|authorized|partially paid|overdue/.test(t)?"warn":"";
+  else c=/^fulfilled$/.test(t)?"ok":/unfulfilled|on hold/.test(t)?"warn":"";
+  return `<span class="opill ${c}">${esc(t||"—")}</span>`; }
+async function loadOrders(more){
+  const w=$("stuckwrap"); ORD.open=null;
+  if(!more){ ORD.rows=[]; ORD.cursors={}; w.innerHTML=ordHead()+'<div class="empty">Loading orders from Shopify…</div>'; }
+  const store=ordStore();
+  if(!ORD.counts||!more) api("/api/orders/counts").then(c=>{ ORD.counts=c; ordTabs(); const a=$("v-orders_lb"),b=$("v-orders_lbo"); if(a&&c.lb) a.textContent=c.lb.unfulfilled||""; if(b&&c.lbo) b.textContent=c.lbo.unfulfilled||""; }).catch(()=>{});
+  try{
+    const d=await api(`/api/orders/list?store=${store}&status=${ORD.status}&q=${encodeURIComponent(ORD.q)}&cursors=${encodeURIComponent(JSON.stringify(more?ORD.cursors:{}))}`);
+    if(d.error) throw new Error(d.error);
+    if(ordStore()!==store) return;
+    ORD.rows=ORD.rows.concat(d.rows); ORD.cursors=d.cursors; ORD.more=d.more;
+    $("showing").textContent=ORD.rows.length?`${ORD.rows.length}${ORD.more?"+":""} order${ORD.rows.length===1?"":"s"}`:"";
+    const showStore=store==="all";
+    const body=ORD.rows.length?`<table class="tickets ordtbl"><thead><tr><th>Order</th><th>Date</th><th>Customer</th>${showStore?"<th>Store</th>":""}<th>Items</th><th class="r">Total</th><th>Payment</th><th>Fulfillment</th></tr></thead><tbody>${ORD.rows.map((o,i)=>`<tr onclick="openOrder(${i})">
+      <td><b>${esc(o.name)}</b>${o.tags&&o.tags.length?`<div class="exc">${esc(o.tags.slice(0,3).join(", "))}</div>`:""}</td>
+      <td>${fmtDay(o.created_at)}<div class="exc">${new Date(o.created_at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</div></td>
+      <td>${esc(o.customer||"—")}<div class="exc">${esc(o.email||o.phone||"")}</div></td>
+      ${showStore?`<td><span class="chip">${o.store_key==="lbo"?"Outlet":"Larkspur"}</span></td>`:""}
+      <td><div class="exc" style="color:var(--ink)">${esc(o.first_item||"")}${o.more_items?" + more":""}</div><div class="exc">${o.items||0} item${o.items==1?"":"s"}</div></td>
+      <td class="r">${money2(o.total)}${o.refunded?`<div class="exc">−${money2(o.refunded)} refunded</div>`:""}</td>
+      <td>${ordPill("pay",o.financial)}</td>
+      <td>${o.cancelled?'<span class="opill bad">cancelled</span>':ordPill("ful",o.fulfillment)}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">No orders${ORD.q?` matching "${esc(ORD.q)}"`:""}.</div>`;
+    w.innerHTML=ordHead()+(d.errors&&d.errors.length?`<div class="empty" style="color:#b45309">${d.errors.map(esc).join("<br>")}</div>`:"")+body+(ORD.more?`<div style="text-align:center;padding:14px"><button class="btn sec" id="ordmore" onclick="this.disabled=true;this.textContent='Loading…';loadOrders(true)">Load more orders</button></div>`:"");
+    ordTabs();
+  }catch(e){ w.innerHTML=ordHead()+`<div class="empty">Couldn't load orders: ${esc(e.message||"")}</div>`; }
+}
+function ordHead(){ return `<div class="stuckhead ordhead"><div class="ordsearch"><i class="ti ti-search"></i><input id="ordq" value="${esc(ORD.q)}" placeholder="Search order #, name, email…" onkeydown="if(event.key==='Enter'){ORD.q=this.value.trim();loadOrders();}"></div><div class="seg" id="ordtabs"></div></div>`; }
+function ordTabs(){ const el=$("ordtabs"); if(!el) return; const c=ORD.counts||{}, st=ordStore();
+  const n=(k)=>{ const a=st==="all"?["lb","lbo"]:[st]; let t=0,ok=false; for(const s of a){ if(c[s]&&c[s][k]!=null){ t+=c[s][k]; ok=true; } } return ok?t.toLocaleString():""; };
+  el.innerHTML=ORD_TABS.map(([k,l])=>`<button class="tab ${ORD.status===k?"on":""}" onclick="ORD.status='${k}';loadOrders()">${l}<span class="n">${n(k)}</span></button>`).join(""); }
+function openOrder(i){ const o=ORD.rows[i]; if(o) showOrder(o.store_key,o.id); }
+async function showOrder(storeKey,id){
+  const w=$("stuckwrap"); w.innerHTML='<div class="empty">Loading the full order from Shopify…</div>'; w.scrollTop=0;
+  let o; try{ o=await api(`/api/orders/full?store=${storeKey}&id=${encodeURIComponent(id)}`); }catch(e){ o={error:e.message}; }
+  if(!o||o.error){ w.innerHTML=`<div class="ordback"><button class="btn sec xs" onclick="loadOrders()"><i class="ti ti-arrow-left"></i> Orders</button></div><div class="empty">${esc((o&&o.error)||"Couldn't load the order")}</div>`; return; }
+  ORD.open=o; $("showing").textContent="";
+  const a=(x)=>x&&x.address1?esc([x.name,x.company,x.address1,x.address2,[x.city,x.provinceCode||x.province,x.zip].filter(Boolean).join(" "),x.country].filter(Boolean).join("\n")).replace(/\n/g,"<br>")+(x.phone?`<br>${esc(x.phone)}`:""):'<span class="exc">None</span>';
+  const dt=(d)=>d?new Date(d).toLocaleString([], {month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"}):"";
+  const M=o.money, c=o.customer;
+  const ss=(o.shipstation||[])[0];
+  const card=(title,inner)=>`<div class="ocard"><div class="och">${title}</div>${inner}</div>`;
+  const kv=(k,v)=>v||v===0?`<div class="okv"><span>${k}</span><span>${v}</span></div>`:"";
+  w.innerHTML=`<div class="ordback"><button class="btn sec xs" onclick="loadOrders()"><i class="ti ti-arrow-left"></i> Orders</button></div>
+  <div class="ordtop"><div><h2>${esc(o.name)} ${ordPill("pay",o.financial)} ${o.cancelled_at?'<span class="opill bad">cancelled</span>':ordPill("ful",o.fulfillment)}${o.test?' <span class="opill">test</span>':""}</h2>
+    <div class="exc">${esc(o.store)} · ${dt(o.created_at)}${o.channel?` · from ${esc(o.channel)}`:""}</div></div>
+    <div class="ordacts"><button class="btn" onclick="orderTicket()"><i class="ti ti-mail"></i> Create ticket</button><a class="btn sec" href="${esc(o.admin_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Open in Shopify</a></div></div>
+  <div class="ordgrid"><div>
+    ${card(`Items <span class="exc">${o.items.reduce((t,x)=>t+(x.quantity||0),0)}</span>`,`<table class="oitems">${o.items.map(x=>`<tr><td class="oimg">${x.image?`<img src="${esc(x.image)}" alt="">`:""}</td><td><b>${esc(x.title)}</b>${x.variant?`<div class="exc">${esc(x.variant)}</div>`:""}<div class="exc">${x.sku?`SKU ${esc(x.sku)}`:""}${x.stock!=null&&x.sku?` · ${x.stock} in stock`:""}${x.unfulfilled?` · ${x.unfulfilled} unfulfilled`:""}${x.current_quantity!==x.quantity?` · ${x.quantity-x.current_quantity} removed`:""}</div></td><td class="r">${money2(x.paid_each)} × ${x.current_quantity}${x.paid_each!==x.unit_price?`<div class="exc"><s>${money2(x.unit_price)}</s></div>`:""}</td><td class="r"><b>${money2(x.line_total)}</b></td></tr>`).join("")}</table>`)}
+    ${card("Payment",`${kv("Subtotal",money2(M.subtotal))}${M.discounts?kv("Discounts"+(o.discount_codes&&o.discount_codes.length?` (${esc(o.discount_codes.join(", "))})`:""),"−"+money2(M.discounts)):""}${kv("Shipping"+(o.shipping_lines[0]?` · ${esc(o.shipping_lines[0].title)}`:""),money2(M.shipping))}${kv("Tax",money2(M.tax))}<div class="okv tot"><span>Total</span><span>${money2(M.total)}</span></div>${M.refunded?kv("Refunded","−"+money2(M.refunded)):""}${M.refunded?kv("Net",money2(M.current_total)):""}${M.outstanding?kv("Balance due",money2(M.outstanding)):""}
+      ${o.discounts.length?`<div class="osub">Discounts applied</div>${o.discounts.map(x=>`<div class="exc">${esc(x.kind)}: ${esc(x.name||"")} ${x.percent!=null?`${x.percent}%`:x.amount!=null?money2(x.amount):""} ${x.target?`on ${lc(x.target)}`:""}</div>`).join("")}`:""}
+      ${o.transactions.length?`<div class="osub">Transactions</div>${o.transactions.map(t=>`<div class="okv"><span>${esc(lc(t.kind))} · ${esc(lc(t.status))} · ${esc(t.gateway||"")}${t.card?` · ${esc(t.card)}`:""}<div class="exc">${dt(t.at)}</div></span><span>${money2(t.amount)}</span></div>`).join("")}`:""}`)}
+    ${card("Fulfillment",`${o.fulfillments.length?o.fulfillments.map(f=>`<div class="ofl"><div><b>${esc(lc(f.status))}</b> · ${dt(f.at)}${f.location?` · ${esc(f.location)}`:""}</div>${f.tracking.map(t=>`<div>${t.url?`<a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.company||"")} ${esc(t.number)}</a>`:`${esc(t.company||"")} ${esc(t.number)}`}</div>`).join("")}${f.delivered_at?`<div class="exc">Delivered ${dt(f.delivered_at)}</div>`:f.eta?`<div class="exc">Expected ${dt(f.eta)}</div>`:""}<div class="exc">${f.items.map(x=>`${x.quantity}× ${esc(x.title)}${x.variant?` – ${esc(x.variant)}`:""}`).join("<br>")}</div></div>`).join(""):'<div class="exc">Not fulfilled yet.</div>'}
+      ${ss?`<div class="osub">ShipStation</div>${(o.shipstation||[]).map(x=>`<div>${esc(lc(x.shipstation_status||(x.shipped?"shipped":"")))}${x.tracking_number?` · ${esc(x.carrier||"")} ${esc(x.tracking_number)}`:""}${x.ship_date?` · shipped ${fmtDay(x.ship_date)}`:""}${x.on_hold?` · on hold${x.hold_until?" until "+fmtDay(x.hold_until):""}`:""}</div>`).join("")}`:""}`)}
+    ${o.refunds.length?card("Refunds",o.refunds.map(r=>`<div class="ofl"><div class="okv"><span><b>${dt(r.at)}</b></span><span>${money2(r.amount)}</span></div>${r.items.map(x=>`<div class="exc">${x.quantity}× ${esc(x.title)}${x.variant?` – ${esc(x.variant)}`:""}${x.restock&&x.restock!=="NO_RESTOCK"?` · ${lc(x.restock)}`:""}</div>`).join("")}${r.note?`<div class="exc">“${esc(r.note)}”</div>`:""}</div>`).join("")):""}
+    ${o.returns.length?card("Returns",o.returns.map(r=>`<div class="okv"><span>${esc(r.name)} · ${esc(lc(r.status))}</span><span class="exc">${fmtDay(r.at)}</span></div>`).join("")):""}
+    ${card("Timeline",`<div class="otl">${o.events.map(e=>`<div><span class="exc">${dt(e.at)}</span> ${esc(e.text)}${e.app?` <span class="exc">· ${esc(e.app)}</span>`:""}</div>`).join("")||'<div class="exc">No events.</div>'}</div>`)}
+  </div><div>
+    ${card("Customer",c?`<div><b><a href="${esc(c.admin_url)}" target="_blank" rel="noopener">${esc(c.name||"")}</a></b></div><div>${esc(c.email||o.email||"")}</div>${c.phone||o.phone?`<div>${esc(c.phone||o.phone)}</div>`:""}<div class="exc">${c.orders} order${c.orders===1?"":"s"} · ${money2(c.spent)} spent · customer since ${fmtDay(c.since)}</div>${c.tags&&c.tags.length?`<div class="exc">Tags: ${esc(c.tags.join(", "))}</div>`:""}${c.note?`<div class="exc">Note: ${esc(c.note)}</div>`:""}`:`<div>${esc(o.email||"No customer")}</div>`)}
+    ${card("Shipping address",a(o.shipping_address))}
+    ${card("Billing address",a(o.billing_address))}
+    ${card("Details",`${kv("Source",esc(o.channel||o.source||""))}${kv("Payment via",esc((o.gateways||[]).join(", ")))}${kv("Shipping",esc(o.shipping_lines.map(x=>`${x.title} (${money2(x.price)})`).join(", ")))}${o.po_number?kv("PO",esc(o.po_number)):""}${o.tags&&o.tags.length?kv("Tags",esc(o.tags.join(", "))):""}${o.cancel_reason?kv("Cancel reason",esc(lc(o.cancel_reason))):""}${o.edited?kv("Edited","yes"):""}${kv("Last updated",dt(o.updated_at))}${o.note?`<div class="osub">Order note</div><div>${esc(o.note)}</div>`:""}${(o.attributes||[]).length?`<div class="osub">Extra fields</div>${o.attributes.map(x=>kv(esc(x.key),esc(x.value))).join("")}`:""}`)}
+    ${card(`Buzzin tickets <span class="exc">${o.tickets.length}</span>`,o.tickets.length?o.tickets.map(t=>`<div class="okv"><span><a href="javascript:void 0" onclick="openTicket(${t.id})">${esc(t.subject||"(no subject)")}</a><div class="exc">${esc(t.status)} · ${fmtDay(t.last_message_at)}</div></span></div>`).join(""):'<div class="exc">No tickets with this customer yet.</div>')}
+    ${o.other_orders.length?card("Other orders from this customer",o.other_orders.map(x=>`<div class="okv"><span><a href="javascript:void 0" onclick="showOrder('${o.store_key}','${esc(x.id)}')">${esc(x.name)}</a> <span class="exc">${fmtDay(x.created_at)}</span></span><span>${money2(x.total)}</span></div>`).join("")):""}
+  </div></div>`;
+}
+async function orderTicket(){
+  const o=ORD.open; if(!o) return;
+  await newTicketModal();
+  ntSetStore(o.store); ntFill(o.email||(o.customer&&o.customer.email)||"",(o.customer&&o.customer.name)||(o.shipping_address&&o.shipping_address.name)||"",String(o.name).replace(/^#/,""));
+  const fq=document.querySelector(".ntfind"); if(fq) fq.style.display="none";
+  ntShowOrder(o.name); setTimeout(()=>{ const n=$("nt-notes"); if(n) n.focus(); },80);
+  if(!o.email&&!(o.customer&&o.customer.email)) toast("This order has no email. Type one in before sending",true);
+}
 function chipsFor(t){
   const hide=new Set(["emily-drafted","emily-sent"]); const out=[];
   if(VIEW==="oos"&&t.oos){ out.push(oosChips(t)); for(const g of (t.tags||[])){ if(hide.has(g)||g==="oos-offer"||g==="emily") continue; out.push(`<span class="chip">${esc(g)}</span>`); if(out.length>=6) break; } return out.join(""); }
@@ -755,11 +859,12 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="7" class="empty">Loading…</td></tr>';_listSig="";SEL.clear();syncBulk();}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
-  const isStuck=VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="pickup"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
+  const isStuck=/^orders_/.test(VIEW)||VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="pickup"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
+  if(/^orders_/.test(VIEW)){ if(!silent) loadOrders(); return; }
   if(VIEW==="home") return loadHome(silent);
   if(VIEW==="activity") return loadActivity(silent);
   if(VIEW==="emily_replies") return loadReplies(silent);
