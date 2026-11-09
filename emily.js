@@ -970,7 +970,7 @@ async function ordersList({ store = "all", status = "all", q = "", cursors = {} 
 const COUNTS_CACHE = { t: 0, v: null };
 async function orderCounts() {
   if (COUNTS_CACHE.v && Date.now() - COUNTS_CACHE.t < 60000) return COUNTS_CACHE.v;
-  const fields = Object.entries(ORDER_STATUS_Q).map(([k, q]) => `${k}: ordersCount(${q ? `query:${JSON.stringify(q)}` : ""}){count}`).join(" ");
+  const fields = Object.entries(ORDER_STATUS_Q).map(([k, q]) => `${k}: ordersCount(limit:null${q ? `, query:${JSON.stringify(q)}` : ""}){count}`).join(" ");
   const out = {};
   await Promise.all(["lb", "lbo"].map(async (k) => { const st = storeForKey(k); if (!st) return; try { const d = await storeGraphQL(st, `query{ ${fields} }`, {}); out[k] = Object.fromEntries(Object.keys(ORDER_STATUS_Q).map((x) => [x, d[x] ? d[x].count : null])); } catch (e) { out[k] = { error: e.message }; } }));
   COUNTS_CACHE.t = Date.now(); COUNTS_CACHE.v = out; return out;

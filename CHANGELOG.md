@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.25
+- Orders: the counts on the status filters are exact (Shopify stops counting at 10,000 unless asked not to).
+
 ## 0.0.24
 - New Orders section (shopping bag on the left rail): every Shopify order, live from both stores, newest first. Filter by store (All stores, Larkspur Baby, Larkspur Baby Outlet) and by status (Open, Unfulfilled, Fulfilled, Unpaid, Refunded, Cancelled) with counts, plus search by order number, name or email.
 - Opening an order shows everything Shopify has on it: items with photos, SKUs and stock, payment breakdown, discounts, transactions and card, fulfillments with tracking and delivery dates, ShipStation status, refunds, returns, the full Shopify timeline, customer (orders, spend, tags, notes), shipping and billing addresses, order notes and extra fields, other orders from the same customer, and any Buzzin tickets with them.
