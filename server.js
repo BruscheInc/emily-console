@@ -128,6 +128,10 @@ app.get("/api/order/:name", async (req, res) => {
   try { const o = await require("./emily").orderDetail(req.params.name); if (o.error) return res.status(400).json(o); if (o.note) return res.status(404).json(o); res.json(o); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
+app.get("/api/find", async (req, res) => {
+  if (!guard(req, res)) return;
+  try { res.json(await require("./emily").findAnything(String(req.query.q || ""))); } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.get("/api/customer", async (req, res) => {
   if (!guard(req, res)) return;
   try { const r = await require("./emily").customerProfile(String(req.query.email || ""), String(req.query.order || "")); if (r.error) return res.status(400).json(r); res.json(r); }

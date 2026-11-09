@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.23
+- New ticket: a "Find the customer or order" search at the top. Type a name, email, phone, order number or tracking number and it searches both Shopify stores and ShipStation live, so customers who have never written in can be found.
+- Picking an order fills in the email, name, order number and the right store, and shows the order (items, payment, shipping status, ShipStation status, ship-to address, tracking). Emily then drafts the email from your notes with that order in front of her.
+
 ## 0.0.22
 - Fix: the one-time catch-up that copies past opt-outs to Shopify didn't run in 0.0.21 (it called the wrong module). It runs now.
 

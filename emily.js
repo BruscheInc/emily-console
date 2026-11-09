@@ -855,6 +855,76 @@ async function orderDetail(raw) {
   }
   return { note: `No order found for "${raw}" in ${stores.map((s) => s.brand).join(", ")}.` };
 }
+/* ---- Find: search both Shopify stores (orders + customers) and ShipStation at once, live.
+   Used by "New ticket" so a customer can be found even when they've never written in. ---- */
+const FIND_ORDERS_Q = `query($q:String!){orders(first:10,query:$q,sortKey:CREATED_AT,reverse:true){nodes{
+  id name email phone createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus subtotalLineItemsQuantity
+  totalPriceSet{shopMoney{amount}} customer{id displayName} shippingAddress{name phone city provinceCode}
+  lineItems(first:3){nodes{title}} }}}`;
+const FIND_CUSTOMERS_Q = `query($q:String!){customers(first:6,query:$q){nodes{
+  id displayName defaultEmailAddress{emailAddress} defaultPhoneNumber{phoneNumber} numberOfOrders amountSpent{amount} }}}`;
+async function findAnything(raw) {
+  const q = String(raw || "").trim().replace(/^#/, "");
+  if (q.length < 2) return { orders: [], customers: [], shipstation: [] };
+  const digits = q.replace(/\D/g, "");
+  const isEmail = /@/.test(q);
+  const om = q.toUpperCase().replace(/\s+/g, "").match(/^(LBO|LB|BB)0*(\d{3,})$/);
+  const isOrderNo = !!om || /^\d{4,6}$/.test(q);
+  const isPhone = !isEmail && !om && digits.length >= 7 && /^[\d\s()+.-]+$/.test(q);
+  const isTracking = !isEmail && !isPhone && !om && /^[A-Z0-9]{10,}$/i.test(q.replace(/\s+/g, "")) && /\d/.test(q);
+  const esc = (x) => String(x).replace(/["\\]/g, "");
+  const orders = new Map(), customers = new Map(), errors = [];
+  const addOrder = (st, n) => {
+    if (orders.has(n.id)) return;
+    orders.set(n.id, { store: st.brand, name: n.name, created_at: n.createdAt, cancelled: !!n.cancelledAt,
+      customer: (n.customer && n.customer.displayName) || (n.shippingAddress && n.shippingAddress.name) || "", email: n.email || "", phone: n.phone || (n.shippingAddress && n.shippingAddress.phone) || "",
+      place: n.shippingAddress ? [n.shippingAddress.city, n.shippingAddress.provinceCode].filter(Boolean).join(", ") : "",
+      total: n.totalPriceSet ? Number(n.totalPriceSet.shopMoney.amount) : 0, financial: n.displayFinancialStatus, fulfillment: n.displayFulfillmentStatus,
+      items: n.subtotalLineItemsQuantity, first_item: n.lineItems && n.lineItems.nodes[0] ? n.lineItems.nodes[0].title : "" });
+  };
+  await Promise.all(STORES.map(async (st) => {
+    try {
+      const oq = isEmail ? `email:"${esc(q)}"` : om ? `name:${om[1]}${om[2]} OR name:#${om[1]}${om[2]}` : isOrderNo ? `name:LB${digits} OR name:#LB${digits} OR name:LBO${digits} OR name:#LBO${digits} OR name:${digits} OR name:#${digits}` : isPhone ? null : isTracking ? null : esc(q);
+      if (oq) for (const n of ((await storeGraphQL(st, FIND_ORDERS_Q, { q: oq })).orders || {}).nodes || []) addOrder(st, n);
+      if (isOrderNo || isTracking) return;
+      const cq = isEmail ? `email:"${esc(q)}"` : isPhone ? `phone:+1${digits.slice(-10)} OR phone:${digits}` : esc(q);
+      const cs = ((await storeGraphQL(st, FIND_CUSTOMERS_Q, { q: cq })).customers || {}).nodes || [];
+      for (const c of cs) {
+        const email = (c.defaultEmailAddress && c.defaultEmailAddress.emailAddress) || "";
+        const key = (email || c.id).toLowerCase();
+        const prev = customers.get(key);
+        const orderCount = Number(c.numberOfOrders || 0);
+        if (prev) { prev.stores.push(st.brand); prev.orders_count += orderCount; prev.spent += Number((c.amountSpent && c.amountSpent.amount) || 0); }
+        else customers.set(key, { name: c.displayName, email, phone: (c.defaultPhoneNumber && c.defaultPhoneNumber.phoneNumber) || "", stores: [st.brand], orders_count: orderCount, spent: Number((c.amountSpent && c.amountSpent.amount) || 0) });
+      }
+      // a customer's own recent orders, so a name or phone search lists their orders too
+      for (const c of cs.slice(0, 3)) {
+        if (!Number(c.numberOfOrders || 0)) continue;
+        const id = String(c.id).split("/").pop();
+        for (const n of ((await storeGraphQL(st, FIND_ORDERS_Q, { q: `customer_id:${id}` })).orders || {}).nodes || []) addOrder(st, n);
+      }
+    } catch (e) { errors.push(`${st.brand}: ${e.message}`); }
+  }));
+  // ShipStation: tracking numbers, and names/emails Shopify didn't find
+  const shipstation = [];
+  if (shipstationConfigured() && (isTracking || (!orders.size && !isOrderNo))) {
+    try {
+      const params = isTracking ? `trackingNumber=${encodeURIComponent(q.replace(/\s+/g, ""))}` : isEmail ? `customerEmail=${encodeURIComponent(q)}` : isPhone ? null : `customerName=${encodeURIComponent(q)}`;
+      if (params) {
+        const path = isTracking ? `/shipments?${params}&pageSize=10` : `/orders?${params}&pageSize=10&sortBy=OrderDate&sortDir=DESC`;
+        const j = await ssReq("GET", path);
+        for (const x of (j.shipments || j.orders || [])) shipstation.push({ order_number: x.orderNumber, customer: (x.shipTo && x.shipTo.name) || "", email: x.customerEmail || "",
+          status: x.orderStatus || (x.voided ? "voided" : "shipped"), tracking: x.trackingNumber || null, carrier: x.carrierCode || null, date: x.shipDate || x.orderDate || null });
+      }
+    } catch (e) { errors.push(`ShipStation: ${e.message}`); }
+  }
+  const list = [...orders.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 25);
+  // a ShipStation hit that is also a Shopify order: look the order up so it shows as a full order
+  if (shipstation.length && !list.length) {
+    for (const s of shipstation.slice(0, 3)) { try { const o = await orderDetail(s.order_number); if (o && o.id) list.push({ store: o.store, name: o.name, created_at: o.created_at, cancelled: !!o.cancelled_at, customer: o.customer || "", email: o.email || "", phone: (o.shipping_address && o.shipping_address.phone) || "", place: o.shipping_address ? [o.shipping_address.city, o.shipping_address.provinceCode].filter(Boolean).join(", ") : "", total: o.total, financial: o.financial_status, fulfillment: o.fulfillment_status, items: (o.items || []).reduce((t, i) => t + (i.quantity || 0), 0), first_item: (o.items[0] || {}).title || "" }); } catch (_) {} }
+  }
+  return { orders: list, customers: [...customers.values()].slice(0, 10), shipstation, errors };
+}
 async function ssCancel(orderId) {
   const o = await ssReq("GET", `/orders/${orderId}`);
   if (!o || !o.orderId) throw new Error(`ShipStation order ${orderId} not found.`);
@@ -2494,4 +2564,4 @@ async function start() {
   console.log(`🧰 Emily tools (${TOOLS.length}): ${TOOLS.map((t) => t.name).join(", ")}`);
   console.log(`🏬 Shopify stores (${STORES.length}): ${STORES.map((s) => s.brand).join(" · ") || "NONE"} · ShipStation: ${shipstationConfigured() ? "keys set" : "off"}`);
 }
-module.exports = { stageAction, claimsKit: () => ({ anthropic, model: CLAUDE_MODEL, storeGraphQL, orderDetail, cancelOrder, refundOrder, issueStoreCredit, findCustomer, prepareReplacement, createReplacementOrder, applyAddressChange, ssV2Track, carrierFromNumber, customerHistory }), STORES, storeToken, storeForPrefix, composeEmail, __test: { applyPolicyPatches: () => applyPolicyPatches(), propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache, prepareReplacement, createReplacementOrder }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };
+module.exports = { findAnything, stageAction, claimsKit: () => ({ anthropic, model: CLAUDE_MODEL, storeGraphQL, orderDetail, cancelOrder, refundOrder, issueStoreCredit, findCustomer, prepareReplacement, createReplacementOrder, applyAddressChange, ssV2Track, carrierFromNumber, customerHistory }), STORES, storeToken, storeForPrefix, composeEmail, __test: { applyPolicyPatches: () => applyPolicyPatches(), propose: (i) => shopifyProposeDiscount(i), forget: () => pendingAct.clear(), oosAlreadyHandled, editOrder, refreshOrderCache, prepareReplacement, createReplacementOrder }, start, decide, onHumanReply, handleTicket, customerHistory, customerProfile, orderDetail, applyOrderAction, shopifyLookupOrder, listActions, applyAction, dismissAction, fillPlaceholders, setTodo, pendingFiles, markFilesSent, scanStuck, listStuck, stuckCounts, setStuckState, emailStuckCustomer, stuckEmailTemplate, stuckOptions, stuckOffer, verifyWatch, carrierFromNumber };

@@ -272,6 +272,13 @@
   .modal .iti{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}.modal .iti input[type=number]{width:64px}.modal .iti .t{flex:1;min-width:0}
   .tagchip{background:rgba(20,30,50,.06);color:var(--muted);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
 
+  .ntfind{margin:6px 0 4px}.ntfind input{flex:1}
+  .ntr-list{margin-top:8px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  .ntr-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:8px 12px 4px}
+  .ntr{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:8px 12px;cursor:pointer;color:var(--ink);font:inherit}
+  .ntr:hover{background:rgba(255,194,26,.12)} .ntr span{font-size:13px}
+  .ntr-m{font-size:12px;color:var(--muted)} .ntr-empty{padding:10px 12px;font-size:13px;color:var(--muted)}
+  .ntcard{margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;background:var(--panel2)} .ntcard ul{margin:6px 0;padding-left:18px}
   .composer{flex:none;border-top:1px solid var(--line);padding:10px 12px;background:var(--panel2)}
   .composer textarea{width:100%;min-height:170px;max-height:46vh;box-sizing:border-box;line-height:1.5;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px;font-size:14px;resize:vertical}
   .crow{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
@@ -659,6 +666,9 @@ async function newTicketModal(){
   const opts=MAILBOXES.map(m=>`<option value="${esc(m.address)}" ${m.address.includes(def)?"selected":""} ${m.connected?"":"disabled"}>${esc(m.brand||m.address)} — ${esc(m.address)}${m.connected?"":" (not connected)"}</option>`).join("");
   const m=document.createElement("div"); m.id="modal"; m.className="modal"; m.onclick=(e)=>{if(e.target===m)closeModal();};
   m.innerHTML=`<div class="box" style="width:min(720px,100%)"><h3>New ticket</h3><div class="sub">Start an email conversation with a customer. The store you pick is the mailbox it's sent from, and replies come back to this ticket.</div>
+    <div class="ntfind"><label>Find the customer or order <span style="font-weight:400">(searches both Shopify stores and ShipStation)</span></label>
+      <div style="display:flex;gap:8px"><input type="text" id="nt-q" placeholder="Name, email, phone, order # (LB12345) or tracking #" onkeydown="if(event.key==='Enter'){event.preventDefault();ntFind();}"><button class="btn sec" id="nt-findbtn" onclick="ntFind()"><i class="ti ti-search"></i> Search</button></div>
+      <div id="nt-res"></div><div id="nt-ord"></div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px">
       <div><label>Store (sends from)</label><select id="nt-box">${opts||'<option value="">No mailbox connected</option>'}</select></div>
       <div><label>Customer email</label><input type="text" id="nt-to" placeholder="customer@example.com"></div>
@@ -673,7 +683,47 @@ async function newTicketModal(){
     <label>Subject</label><input type="text" id="nt-subject" placeholder="About your Larkspur Baby order">
     <label>Message</label><textarea id="nt-text" style="width:100%;box-sizing:border-box;min-height:220px;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:14px;line-height:1.5" placeholder="Write the email, or let Emily draft it above…"></textarea>
     <div class="foot"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" id="nt-send" onclick="ntSend()">Send &amp; create ticket</button></div></div>`;
-  document.body.appendChild(m); setTimeout(()=>$("nt-to").focus(),50);
+  document.body.appendChild(m); setTimeout(()=>$("nt-q").focus(),50);
+}
+let NTF=null;
+async function ntFind(){
+  const q=$("nt-q").value.trim(); if(q.length<2){toast("Type a name, email, phone or order number",true);return;}
+  const b=$("nt-findbtn"); b.disabled=true; $("nt-res").innerHTML='<div class="ntr-empty">Searching Shopify and ShipStation…</div>'; $("nt-ord").innerHTML="";
+  try{ NTF=await api("/api/find?q="+encodeURIComponent(q)); }catch(e){ NTF=null; }
+  b.disabled=false;
+  if(!NTF||NTF.error){ $("nt-res").innerHTML=`<div class="ntr-empty">Search failed${NTF&&NTF.error?": "+esc(NTF.error):""}</div>`; return; }
+  const money=(n)=>"$"+Number(n||0).toFixed(2), day=(d)=>d?new Date(d).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}):"";
+  let h="";
+  if(NTF.orders.length) h+=`<div class="ntr-h">Orders</div>`+NTF.orders.map((o,i)=>`<button type="button" class="ntr" onclick="ntPickOrder(${i})"><b>${esc(o.name)}</b><span>${esc(o.customer||"—")}${o.email?` · ${esc(o.email)}`:""}</span><span class="ntr-m">${day(o.created_at)} · ${money(o.total)} · ${esc(o.items||0)} item${o.items==1?"":"s"} · ${o.cancelled?"Cancelled":esc(String(o.fulfillment||"").toLowerCase().replace(/_/g," "))}${o.place?` · ${esc(o.place)}`:""}</span></button>`).join("");
+  if(NTF.customers.length) h+=`<div class="ntr-h">Customers</div>`+NTF.customers.map((c,i)=>`<button type="button" class="ntr" onclick="ntPickCustomer(${i})"><b>${esc(c.name||c.email||"—")}</b><span>${esc(c.email||"no email")}${c.phone?` · ${esc(c.phone)}`:""}</span><span class="ntr-m">${esc(c.stores.join(" + "))} · ${c.orders_count} order${c.orders_count==1?"":"s"} · ${money(c.spent)} spent</span></button>`).join("");
+  if(NTF.shipstation.length&&!NTF.orders.length) h+=`<div class="ntr-h">ShipStation</div>`+NTF.shipstation.map((x,i)=>`<button type="button" class="ntr" onclick="ntPickSS(${i})"><b>${esc(x.order_number)}</b><span>${esc(x.customer||"")}${x.email?` · ${esc(x.email)}`:""}</span><span class="ntr-m">${esc(x.status||"")}${x.tracking?` · ${esc(x.carrier||"")} ${esc(x.tracking)}`:""}${x.date?` · ${day(x.date)}`:""}</span></button>`).join("");
+  if(!h) h=`<div class="ntr-empty">Nothing found for "${esc(q)}" in Shopify or ShipStation.</div>`;
+  if(NTF.errors&&NTF.errors.length) h+=`<div class="ntr-empty" style="color:#b45309">${NTF.errors.map(esc).join("<br>")}</div>`;
+  $("nt-res").innerHTML=`<div class="ntr-list">${h}</div>`;
+}
+function ntSetStore(storeName){
+  const outlet=/outlet/i.test(storeName||""); const sel=$("nt-box"); if(!sel) return;
+  const opt=[...sel.options].find(o=>!o.disabled&&(outlet?/outlet/.test(o.value):(/larkspurbaby\.com/.test(o.value)&&!/outlet/.test(o.value))));
+  if(opt) sel.value=opt.value;
+}
+function ntFill(email,name,order){ if(email) $("nt-to").value=email; if(name) $("nt-name").value=name; $("nt-order").value=order||""; $("nt-res").innerHTML=""; }
+async function ntPickOrder(i){ const o=NTF.orders[i]; ntSetStore(o.store); ntFill(o.email,o.customer,String(o.name).replace(/^#/,"")); ntShowOrder(o.name); }
+function ntPickCustomer(i){ const c=NTF.customers[i]; ntSetStore(c.stores[0]); ntFill(c.email,c.name,""); $("nt-ord").innerHTML=`<div class="ntcard"><b>${esc(c.name||"")}</b> · ${esc(c.email||"")}${c.phone?` · ${esc(c.phone)}`:""}<div class="ntr-m">${c.orders_count} order${c.orders_count==1?"":"s"} in ${esc(c.stores.join(" + "))}. Search by their email to pick an order.</div></div>`; if(!c.email) toast("This customer has no email on file in Shopify",true); }
+function ntPickSS(i){ const x=NTF.shipstation[i]; ntSetStore(/^LBO/i.test(x.order_number)?"outlet":"lb"); ntFill(x.email,x.customer,x.order_number); ntShowOrder(x.order_number); }
+async function ntShowOrder(name){
+  $("nt-ord").innerHTML='<div class="ntcard ntr-m">Loading order…</div>';
+  let o=null; try{ o=await api("/api/order/"+encodeURIComponent(String(name).replace(/^#/,""))); }catch(e){}
+  if(!o||!o.id){ $("nt-ord").innerHTML=""; return; }
+  const ss=o.shipstation, trk=(o.fulfillments||[]).flatMap(f=>f.tracking||[]);
+  const ship=ss?(ss.shipstation_status||(ss.shipped?"shipped":"")).replace(/_/g," "):"";
+  const a=o.shipping_address||{};
+  $("nt-ord").innerHTML=`<div class="ntcard"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(o.name)} · ${esc(o.store)}</b><a href="${esc(o.admin_url)}" target="_blank" rel="noopener">Open in Shopify</a></div>
+    <div class="ntr-m">${new Date(o.created_at).toLocaleDateString()} · $${Number(o.total).toFixed(2)} · ${esc(String(o.financial_status||"").toLowerCase().replace(/_/g," "))} · ${o.cancelled_at?"cancelled":esc(String(o.fulfillment_status||"").toLowerCase().replace(/_/g," "))}${ship?` · ShipStation: ${esc(ship)}`:""}${Number(o.refunded)?` · refunded $${Number(o.refunded).toFixed(2)}`:""}</div>
+    <ul>${(o.items||[]).map(it=>`<li>${it.current_quantity!=null?it.current_quantity:it.quantity}× ${esc(it.title)}${it.variant?` – ${esc(it.variant)}`:""}</li>`).join("")}</ul>
+    ${a.address1?`<div class="ntr-m">Ships to: ${esc([a.name,a.address1,a.address2,a.city,a.provinceCode||a.province,a.zip].filter(Boolean).join(", "))}</div>`:""}
+    ${trk.length?`<div class="ntr-m">Tracking: ${trk.map(t=>t.url?`<a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.company||"")} ${esc(t.number)}</a>`:esc(t.number)).join(", ")}</div>`:(ss&&ss.tracking_number?`<div class="ntr-m">Tracking: ${esc(ss.carrier||"")} ${esc(ss.tracking_number)}</div>`:"")}
+  </div>`;
+  if(!o.email&&!$("nt-to").value) toast("No email on this order. Add one before sending",true);
 }
 function ntVals(){ return { mailbox:$("nt-box").value, to:$("nt-to").value.trim(), name:$("nt-name").value.trim(), order:$("nt-order").value.trim().replace(/^#/,""), subject:$("nt-subject").value.trim(), text:$("nt-text").value, notes:$("nt-notes").value.trim() }; }
 async function ntDraft(){
