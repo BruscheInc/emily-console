@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.27
+- Emily can now look up returns a customer started (return_lookup) and cancel one herself (return_cancel) — right away, no approval, same rule as the portal's Cancel button: only while the label hasn't been scanned by the carrier. It voids the label, closes the Shopify return, and posts to Slack. If the package is already on its way she says so instead. Before this she had no tool for it, so every "cancel my return" was escalated to a person.
+
 ## 0.0.26
 - New ticket: "Quick emails" buttons — Address verification, Out of stock, Shipping delay, Need more info. Each uses the order you picked: address check shows the address on file and asks why; out of stock lists the order's items to tick and the options to offer (refund, swap, wait, store credit, ship the rest); delay asks why and the new ship date. One click and Emily drafts it.
 - Tickets started this way are tagged (address-verification, out-of-stock, shipping-delay, order-question). Out-of-stock ones show up in the Out of stock view.

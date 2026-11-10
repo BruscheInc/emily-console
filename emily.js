@@ -1769,6 +1769,42 @@ async function customerProfile(email, orderHint) {
 }
 
 /* ---- Returns: stage a return + prepaid label (returns.js does the work on Apply) ---- */
+/* Returns already started (Buzzin's returns portal): look them up, and cancel one the customer no longer wants.
+   Cancelling follows the same rule as the portal's own Cancel button — only while the label hasn't been scanned by the
+   carrier — so Emily does it right away instead of waiting for approval. */
+async function returnFind(input) {
+  const order = String(input.order || "").trim().replace(/^#/, ""), email = String(input.email || "").trim().toLowerCase(), rma = String(input.rma || "").trim();
+  if (!order && !email && !rma) return { error: "Pass the order number, the customer's email, or the RMA." };
+  const bare = /^\d+$/.test(order) ? order : "~";   // a bare number matches either store; "LB…" only matches LB
+  const rows = (await db(`SELECT * FROM hd_returns WHERE ($1<>'' AND upper(replace(order_name,'#','')) IN (upper($1), upper('LB'||$2), upper('LBO'||$2)))
+      OR ($3<>'' AND lower(email)=$3) OR ($4<>'' AND upper(rma)=upper($4)) ORDER BY created_at DESC LIMIT 10`, [order, bare, email, rma])).rows;
+  const R = require("./returns");
+  return rows.map(R.rowToRec);
+}
+async function returnLookup(input) {
+  const recs = await returnFind(input); if (recs.error) return recs;
+  if (!recs.length) return { found: false, note: "No return has been started for this in Buzzin's returns portal." };
+  return { found: true, returns: recs.map((r) => ({ rma: r.rma, order: r.order_name, status: r.status, started: r.created_at, refund_method: r.refund_method,
+    items: (r.items || []).map((i) => `${i.quantity}× ${i.title}${i.variant ? ` (${i.variant})` : ""}${i.reason ? ` — ${i.reason}` : ""}`),
+    tracking: r.tracking_number || null, carrier_status: r.tracking_text || r.tracking_code || null, refunded_amount: r.refunded_amount || null,
+    can_cancel: r.status === "label_created" && ["NY", "UN", undefined, null, ""].includes(r.tracking_code) })) };
+}
+async function returnCancel(input) {
+  const recs = await returnFind(input); if (recs.error) return recs;
+  const open = recs.filter((r) => !["cancelled", "refunded"].includes(r.status));
+  if (!open.length) return { ok: false, note: recs.length ? `Nothing to cancel — the return${recs.length > 1 ? "s are" : " is"} already ${[...new Set(recs.map((r) => r.status))].join(" / ")}.` : "No return has been started for this order in the returns portal." };
+  const R = require("./returns"); const done = [], blocked = [];
+  for (const r of open) {
+    const ok = r.status === "label_created" && ["NY", "UN", undefined, null, ""].includes(r.tracking_code);
+    if (!ok) { blocked.push(`${r.rma} is ${r.status === "label_created" ? "already scanned by the carrier" : r.status.replace(/_/g, " ")}`); continue; }
+    const why = `Cancelled at the customer's request${input.ticket_id ? ` (ticket ${input.ticket_id})` : ""}${input.reason ? ` — ${String(input.reason).slice(0, 200)}` : ""}`;
+    const after = await R.cancel(r, why, "Emily");
+    done.push({ rma: r.rma, items: (r.items || []).map((i) => `${i.quantity}× ${i.title}`), label_voided: !!(after && after.label_voided) });
+    core.slackPost(`↩️❌ Return ${r.rma} (${r.order_name}) cancelled by Emily at the customer's request${input.ticket_id ? ` · ticket ${input.ticket_id}` : ""}`).catch(() => {});
+  }
+  return { ok: done.length > 0, cancelled: done, could_not_cancel: blocked,
+    note: done.length ? "Done — the return is cancelled and the prepaid label is void. Tell the customer it's cancelled and they don't need to send anything back (the old label won't work anymore)." : "Couldn't cancel: the package is already on its way back (or delivered). Tell the customer it's already in transit, so we'll process it when it arrives; escalate if they want something else." };
+}
 async function returnPropose(input) {
   const order = String(input.order || "").trim();
   const items = Array.isArray(input.items) ? input.items.filter((i) => i && (i.title || i.sku)) : [];
@@ -1836,6 +1872,10 @@ const TOOLS = [
     input_schema: { type: "object", properties: { order: { type: "string" }, brand: { type: "string" }, kind: { type: "string" }, value: { type: "number" }, code: { type: "string" }, min_subtotal: { type: "number" }, title: { type: "string" }, ticket_id: { type: "number" } }, required: ["kind"] } },
   { name: "shopify_propose_store_credit", description: "STAGE a NATIVE Shopify store-credit change on the customer's account for Jose's one-click approval (does NOT execute until he clicks Apply). action='credit' (default) ADDS real store credit to the account balance — NOT a code; it applies automatically at checkout when the customer is signed in with that email (Shopify auto-creates the account if needed). Use credit for any approved STORE-CREDIT resolution (Package Protection lost/stolen credit, goodwill credit, non-PP 50% missing-items credit). action='debit' REMOVES store credit from the account — use ONLY to correct an over-credit / duplicate credit (e.g. the same credit was applied twice); a debit is an internal correction, so do NOT email the customer about it. For a credit that's for specific items (defective, damaged, missing, wrong item…) pass order + items (sku/title + quantity) and optional percent — DON'T type the amount: the tool prices the items at what the customer paid INCLUDING sales tax and tells you the exact amount to quote. Pass amount only for a credit not tied to items, or for a debit. Pass the order number (preferred — routes the store and finds the customer) or brand + email; optional reason; ticket_id. For a credit, word your reply as account credit, never a code.",
     input_schema: { type: "object", properties: { action: { type: "string", description: "'credit' (add, default) or 'debit' (remove, to fix an over-credit)" }, order: { type: "string" }, brand: { type: "string" }, email: { type: "string" }, amount: { type: "number", description: "Dollars. Only for credits NOT tied to specific items (e.g. a goodwill amount) or for a debit. For items, pass items instead — the amount is calculated with tax." }, items: { type: "array", description: "Items the credit is for (sku or title from the order + quantity). The tool prices them at what the customer paid INCLUDING sales tax.", items: { type: "object", properties: { sku: { type: "string" }, title: { type: "string" }, quantity: { type: "number" } } } }, percent: { type: "number", description: "Share of the items' value to credit (default 100; 50 for the one-time missing-items credit)." }, reason: { type: "string" }, ticket_id: { type: "number" } } } },
+  { name: "return_lookup", description: "Look up returns the customer already started in our returns portal: RMA, status (label_created = label made but not shipped, in_transit, delivered, refunded, cancelled), items, tracking, refund method, and whether it can still be cancelled. Use whenever a customer mentions a return they started — to cancel it, ask where the refund is, or check its status. Pass the order number (or email / RMA).",
+    input_schema: { type: "object", properties: { order: { type: "string" }, email: { type: "string" }, rma: { type: "string" } } } },
+  { name: "return_cancel", description: "CANCEL a return the customer started, RIGHT AWAY (no approval needed — it's the same as the Cancel button in the returns portal). Use it whenever the customer asks to cancel a return / decided to keep the items. It voids the prepaid label and closes the return in Shopify. Only works while the label hasn't been scanned by the carrier; if the package is already on its way, it says so. Do NOT escalate or leave a to-do for a return cancel — call this. Pass the order number (or rma), ticket_id, and an optional short reason.",
+    input_schema: { type: "object", properties: { order: { type: "string" }, rma: { type: "string" }, ticket_id: { type: "string" }, reason: { type: "string" } } } },
   { name: "return_propose", description: "STAGE a return with a prepaid return label for Jose's one-click approval (nothing happens until it's applied). Use ONLY when the customer can't or won't use the returns portal themselves, or asks us to send them a label. On apply it creates the return in Shopify, buys the ShipStation label, and attaches the label PDF to your reply automatically. Pass the order number, items [{title or sku, quantity, reason}], refund_method ('original' or 'store_credit'), and ticket_id. In the reply, say the label is attached and the refund is issued once the package is delivered back to us — don't quote an amount.",
     input_schema: { type: "object", properties: { order: { type: "string" }, items: { type: "array", items: { type: "object", properties: { title: { type: "string" }, sku: { type: "string" }, quantity: { type: "number" }, reason: { type: "string" } } } }, refund_method: { type: "string" }, ticket_id: { type: "number" } }, required: ["order", "items"] } },
   { name: "customer_history", description: "What we already know about THIS customer across every past ticket: previous conversations (subject, date, outcome), every store credit / replacement / discount already given, and how many goodwill credits they have received. CALL THIS before offering any goodwill credit, replacement, or refund, and whenever a customer says 'again', 'last time', 'second time', or references a previous order or issue. The non-PP 50% missing-items credit is ONE TIME per customer — if goodwill_credits_given is 1 or more, do NOT offer it again; escalate instead.",
@@ -1865,6 +1905,8 @@ async function runTool(name, input) {
     if (name === "shopify_propose_store_credit") return await shopifyProposeStoreCredit(input);
     if (name === "customer_history") return await customerHistory(input.email);
     if (name === "return_propose") return await returnPropose(input);
+    if (name === "return_lookup") return await returnLookup(input);
+    if (name === "return_cancel") return await returnCancel(input);
     if (name === "buzzin_recent_tickets") {
       const d = await db(`SELECT id, subject, brand, status, customer_email, last_message_at,
                                  (last_inbound_at IS NOT NULL AND (last_outbound_at IS NULL OR last_inbound_at > last_outbound_at)) AS customer_waiting
@@ -2013,7 +2055,7 @@ async function draftForTicket(t, force, guidance) {
     `{"category":"cs|spam|business|unclear","intent":"tracking|subscription|sizing_care|returns_info|policy_info|damage|lost|missing_items|cancel_or_address|discount|oos_reply|other",` +
     `"sentiment":"positive|neutral|upset","tags":["up to 3 short lowercase tags"],"escalate":true|false,` +
     `"escalate_reason":"short reason or empty","oos_choice":"replacement|credit|refund|none","portal_redirect":true|false,` +
-    `"todo":["anything this reply PROMISES that no tool you called will actually do — e.g. 'send a manual return label for the 4 XL sleep sacks', 'ship the missing bonnet' — a person does these by hand; empty if none. Returns: send the returns portal link, or if we must make the label for them use return_propose — don't list returns here. For refunds/credits/discounts/cancellations/address changes use the matching tool instead of promising."],` +
+    `"todo":["anything this reply PROMISES that no tool you called will actually do — e.g. 'send a manual return label for the 4 XL sleep sacks', 'ship the missing bonnet' — a person does these by hand; empty if none. Returns: send the returns portal link, or if we must make the label for them use return_propose; to cancel a return they started use return_cancel — don't list returns here. For refunds/credits/discounts/cancellations/address changes use the matching tool instead of promising."],` +
     `"draft":"the full customer-ready reply if category is cs, else empty"}\n` +
     `intent = the ONE thing the customer needs. oos_choice = only when the customer is answering an out-of-stock options email; which option they picked. ` +
     `Escalate=true for refunds/discounts/credits, order edits/cancellations, angry/sensitive cases, or low confidence — EXCEPT a portal_redirect reply (sending the customer to the self-serve portal), which is escalate=false.`;
