@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.30
+- Flows: new split condition "The order that started this flow" (has not shipped yet / has shipped / was cancelled), checked live in Shopify and ShipStation at that step, so it's about that exact order, not any order the person has.
+- Flow emails: new "Order update (transactional)" setting sends to everyone with the order, even people not subscribed to marketing (still skips addresses that bounced or marked us as spam, and skips smart sending). Flow emails can use {{ order_name }} / {{ order_number }}.
+- New flow starter: "Order not shipped after 3 days" (Placed order → wait 3 days → order still not shipped? → email).
+
 ## 0.0.29
 - Removed 7 test returns (LB191530-R1, LB-R1002 to LB-R1007) completely, along with their history and label files.
 

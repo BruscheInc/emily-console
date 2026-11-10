@@ -219,7 +219,7 @@ async function execNode(run, flow, node, p) {
       if (!happened && new Date(w.until) > new Date()) return { stay: true, wait: new Date(w.until), note: "still waiting" };
       return { next: happened ? node.yes : node.no, ctx: { waiting: null }, note: happened ? "it happened" : "timed out" };
     }
-    case "split": { const ok = await SEG().matches(c.condition, p.id, { since: ctx.since }); return { next: ok ? node.yes : node.no, note: ok ? "yes" : "no" }; }
+    case "split": { const r = await condMatches(c.condition, p, ctx); return { next: r.ok ? node.yes : node.no, note: (r.ok ? "yes" : "no") + (r.note ? ` (${r.note})` : "") }; }
     case "ab": { const vs = c.variants || []; const tot = vs.reduce((a, v) => a + (Number(v.weight) || 0), 0) || 1; let r = Math.random() * tot, i = 0; for (; i < vs.length - 1; i++) { r -= Number(vs[i].weight) || 0; if (r < 0) break; } return { next: vs[i] && vs[i].next, note: `path ${String.fromCharCode(65 + i)}` }; }
     case "update_profile": {
       const ops = (c.ops || []).filter((o) => /^[a-z0-9_]{1,40}$/i.test(o.key || ""));
@@ -244,15 +244,16 @@ async function execNode(run, flow, node, p) {
     }
     case "send_email": {
       if (!(await msgAllowed(c.status || "draft"))) return { next: node.next, note: `skipped: message is ${c.status || "draft"}` };
-      if (c.smart_sending !== false && await smartSkip(p.id, "email", S.smart_sending_hours.email)) return { next: node.next, note: "skipped: smart sending" };
+      if (c.transactional && p.email_consent === "stopped") return { next: node.next, note: "skipped: this address bounced or marked us as spam" };
+      if (!c.transactional && c.smart_sending !== false && await smartSkip(p.id, "email", S.smart_sending_hours.email)) return { next: node.next, note: "skipped: smart sending" };
       const tpl = await E().getTemplate(c.template_id); if (!tpl) return { next: node.next, note: "skipped: email template missing" };
       if (c.filter && (c.filter.conditions || []).length && !(await SEG().matches(c.filter, p.id, { since: run.ctx && run.ctx.since }))) return { next: node.next, note: "skipped: didn't match this email's extra filters" };
       let cpn; try { cpn = await couponFor(flow, p, ctx, "email", { ...tpl, subject: c.subject || tpl.subject }, run); } catch (e) { return { next: node.next, note: `skipped: couldn't make a coupon code (${e.message})` }; }
       const tp = ctx.trigger_props || {}; const cartItems = await E().visibleItems(Array.isArray(tp.items) ? tp.items : []);
       if (!cartItems.length && !run.test && E().usesCart(tpl) && /cart|checkout/.test((flow.trigger && flow.trigger.event) || "")) return { next: node.next, note: "skipped: no cart items to show" };
-      const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: cpn && cpn.coupon, coupons: cpn && cpn.coupons, items: cartItems, checkout_url: tp.checkout_url || tp.url, value: tp.value }, { sampleCart: !!run.test });
+      const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: cpn && cpn.coupon, coupons: cpn && cpn.coupons, items: cartItems, checkout_url: tp.checkout_url || tp.url, value: tp.value, order_name: tp.name || "", order_number: String(tp.name || "").replace(/^#/, "") }, { sampleCart: !!run.test });
       r.utm = c.utm !== false; r.campaign_name = r.campaign_name || c.name || flow.name;
-      const row = await SEND().send({ store: flow.store, channel: "email", profile: p, msg: r, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `tpl:${tpl.id}`, test: run.test });
+      const row = await SEND().send({ store: flow.store, channel: "email", profile: p, msg: r, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `tpl:${tpl.id}`, test: run.test, transactional: !!c.transactional });
       return { next: node.next, note: `email ${row.status}${row.reason ? ": " + row.reason : ""}` };
     }
     case "send_sms": {
@@ -325,6 +326,37 @@ async function tick() {
     // Resume paused runs whose flow is running again.
     await db(`UPDATE mk_flow_runs r SET status='active', due_at=GREATEST(r.due_at, now()) FROM mk_flows f WHERE r.flow_id=f.id AND r.status='paused' AND f.status IN ('live','test')`);
   } finally { ticking = false; }
+}
+
+/* ---------------- conditions that need a live look-up ----------------
+   { type:"order", status:"unshipped"|"shipped"|"cancelled" } checks the order that started the flow, right now, in Shopify
+   (and ShipStation). Everything else goes to the segment engine as before. */
+const hasOrderCond = (d) => !!d && (d.conditions || []).some((c) => (c.group ? hasOrderCond(c.group) : c.type === "order"));
+async function orderState(name) {
+  if (!name) return { error: "this person didn't enter the flow from an order" };
+  const o = await require("./emily").orderDetail(name);
+  if (!o || o.error || !o.id) return { error: (o && o.error) || `order ${name} not found` };
+  const fs = String(o.fulfillment_status || "").toUpperCase();
+  const ss = Array.isArray(o.shipstation) ? o.shipstation : [];
+  const cancelled = !!o.cancelled_at;
+  const shipped = !cancelled && (["FULFILLED", "PARTIALLY_FULFILLED", "PARTIALLY_SHIPPED"].includes(fs) || ss.some((x) => x.shipped || x.ship_date || x.tracking_number));
+  return { cancelled, shipped, unshipped: !cancelled && !shipped, status: fs.toLowerCase() };
+}
+async function condMatches(def, p, ctx) {
+  if (!hasOrderCond(def)) return { ok: await SEG().matches(def, p.id, { since: ctx.since }) };
+  let note = "";
+  const one = async (c) => {
+    if (c.group) return all(c.group);
+    if (c.type !== "order") return SEG().matches({ match: "all", conditions: [c] }, p.id, { since: ctx.since });
+    const st = await orderState((ctx.trigger_props || {}).name);
+    if (st.error) { note = st.error; return false; }
+    note = `order ${(ctx.trigger_props || {}).name}: ${st.cancelled ? "cancelled" : st.shipped ? "shipped" : "not shipped"}`;
+    return !!st[c.status || "unshipped"];
+  };
+  const all = async (d) => { const cs = d.conditions || []; if (!cs.length) return true;
+    if (d.match === "any") { for (const c of cs) if (await one(c)) return true; return false; }
+    for (const c of cs) if (!(await one(c))) return false; return true; };
+  return { ok: await all(def), note };
 }
 
 /* ---------------- date triggers (birthdays, baby's age) — once a day ---------------- */
@@ -618,8 +650,14 @@ async function buildWelcome(store, who) {
 }
 
 /* ---------------- starters ---------------- */
-const STARTER_NAMES = { welcome: "Welcome series", abandoned_checkout: "Abandoned checkout", browse: "Browse abandonment", post_purchase: "Post-purchase thank you", size_up: "Size-up reminder", winback: "Win-back" };
+const STARTER_NAMES = { order_not_shipped: "Order not shipped after 3 days", welcome: "Welcome series", abandoned_checkout: "Abandoned checkout", browse: "Browse abandonment", post_purchase: "Post-purchase thank you", size_up: "Size-up reminder", winback: "Win-back" };
 const STARTERS = {
+  order_not_shipped: () => ({ trigger: { type: "event", event: "placed_order" }, reentry: { mode: "always" },
+    graph: { start: "a", nodes: {
+      a: { type: "delay", config: { amount: 3, unit: "days" }, next: "b" },
+      b: { type: "split", config: { name: "Order still not shipped?", condition: { match: "all", conditions: [{ type: "order", status: "unshipped" }] } }, yes: "c", no: "z" },
+      c: { type: "send_email", config: { template_id: null, status: "draft", name: "Your order is on the way soon", transactional: true, smart_sending: false, utm: false }, next: null },
+      z: { type: "end", config: {} } } } }),
   welcome: (store) => ({ trigger: { type: "list" }, graph: { start: "a", nodes: {
     a: { type: "send_email", config: { template_id: null, status: "draft", smart_sending: false }, next: "b" }, b: { type: "delay", config: { amount: 1, unit: "days", until_time: "10:00" }, next: "c" },
     c: { type: "split", config: { condition: { match: "all", conditions: [{ type: "event", event: "placed_order", op: "at_least", value: 1, window: { kind: "since_start" } }] } }, yes: "t", no: "d" },

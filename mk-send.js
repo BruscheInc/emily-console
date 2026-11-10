@@ -79,6 +79,7 @@ async function send({ store, channel, profile, msg, idem, flowId, flowStep, camp
   let status = "sent", reason = null;
   const onTestList = (s.test_list || []).map((x) => String(x).toLowerCase()).includes(String(to || "").toLowerCase());
   if (!to) { status = "skipped"; reason = channel === "email" ? "no email address" : "no phone number"; }
+  else if (transactional && channel === "email" && profile.email_consent === "stopped" && !test) { status = "skipped"; reason = "email bounced or marked as spam"; }
   else if (!transactional && channel === "email" && profile.email_consent !== "subscribed" && !test) { status = "skipped"; reason = `email consent: ${profile.email_consent}`; }
   else if (!transactional && channel === "sms" && profile.sms_consent !== "subscribed" && !test) { status = "skipped"; reason = `text consent: ${profile.sms_consent}`; }
   else if (channel === "sms" && !transactional && inQuietHours(profile.timezone, s.quiet_hours)) { status = "deferred"; reason = "quiet hours"; }

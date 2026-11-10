@@ -19,6 +19,7 @@ function summarize(def, ctx = {}) {
     if (c.type === 'list') return `${c.in === false ? 'Not in' : 'In'} list ${((ctx.lists || []).find((l) => String(l.id) === String(c.list_id)) || {}).name || c.list_id}`;
     if (c.type === 'segment') return `${c.in === false ? 'Not in' : 'In'} segment ${((ctx.segments || []).find((l) => String(l.id) === String(c.segment_id)) || {}).name || c.segment_id}`;
     if (c.type === 'size') return `Last sizes ${c.op === 'none_of' ? 'not' : ''} ${(c.values || []).join(', ')}`;
+    if (c.type === 'order') return `The order ${({ unshipped: 'has not shipped yet', shipped: 'has shipped', cancelled: 'was cancelled' })[c.status || 'unshipped']}`;
     if (c.type === 'buzzin') return `${c.in === false ? 'No' : 'Has'} ${({ open_ticket: 'open ticket', recent_return: `return in ${c.days || 30} days`, open_claim: 'open claim' })[c.what]}`;
     return c.type;
   };
@@ -27,13 +28,14 @@ function summarize(def, ctx = {}) {
 
 /** Draw an editable condition set into `host`, laid out like Klaviyo's condition builder:
     condition cards joined by AND; inside a card, OR alternatives. ctx = { events, lists, segments, since: true when "since starting this flow" makes sense }. */
+const ORDER_DIM = ['order', 'The order that started this flow (checked live in Shopify)'];
 const DIMS = [['event', 'What someone has done (or not done)'], ['field', 'Properties about someone'], ['geo', 'If someone is or is not within a location'], ['list', 'If someone is or is not in a list'], ['segment', 'If someone is or is not in a segment'], ['consent', 'If someone can or cannot receive marketing'], ['size', 'Sizes someone has bought'], ['buzzin', 'Customer service (tickets, returns, claims)']];
 const GEO = new Set(['city', 'region', 'country', 'zip']);
 const PROP_OPTS = () => FIELD_OPTS.filter(([k]) => !GEO.has(k));
 function blank(type, ctx) {
   return ({ event: { type: 'event', event: 'placed_order', op: 'at_least', value: 1, window: { kind: ctx.since ? 'since_start' : 'ever' } }, field: { type: 'field', field: 'orders_count', op: 'gte', value: 1 },
     geo: { type: 'field', field: 'country', op: 'eq', value: 'US' }, consent: { type: 'consent', channel: 'email', state: 'subscribed' }, list: { type: 'list', list_id: ((ctx.lists || [])[0] || {}).id, in: true },
-    segment: { type: 'segment', segment_id: ((ctx.segments || [])[0] || {}).id, in: true }, size: { type: 'size', op: 'any_of', values: ['0-3M'] }, buzzin: { type: 'buzzin', what: 'open_ticket', in: true } })[type];
+    segment: { type: 'segment', segment_id: ((ctx.segments || [])[0] || {}).id, in: true }, order: { type: 'order', status: 'unshipped' }, size: { type: 'size', op: 'any_of', values: ['0-3M'] }, buzzin: { type: 'buzzin', what: 'open_ticket', in: true } })[type];
 }
 const dimOf = (c) => (c.type === 'field' && GEO.has(c.field) ? 'geo' : c.type);
 function editor(host, def, ctx, onChange) {
@@ -59,10 +61,11 @@ function editor(host, def, ctx, onChange) {
     if (d === 'list') return `<div class="kc-l">Person</div><div class="kc-row"><select data-k="in" aria-label="Is or is not">${o([['true', 'is in'], ['false', 'is not in']], String(c.in !== false))}</select></div><select data-k="list_id" aria-label="List">${o((ctx.lists || []).map((l) => [l.id, l.name]), c.list_id)}</select>`;
     if (d === 'segment') return `<div class="kc-l">Person</div><div class="kc-row"><select data-k="in" aria-label="Is or is not">${o([['true', 'is in'], ['false', 'is not in']], String(c.in !== false))}</select></div><select data-k="segment_id" aria-label="Segment">${o((ctx.segments || []).map((l) => [l.id, l.name]), c.segment_id)}</select>`;
     if (d === 'size') return `<div class="kc-l">Sizes bought</div><select data-k="op" aria-label="Rule">${o([['any_of', 'include any of'], ['none_of', "don't include"]], c.op)}</select><div class="kc-sz">${SIZES.map((sz) => `<label><input type="checkbox" data-size="${sz}"${(c.values || []).includes(sz) ? ' checked' : ''}> ${sz}</label>`).join('')}</div>`;
+    if (d === 'order') return `<div class="kc-l">Right now, the order</div><select data-k="status" aria-label="Order status">${o([['unshipped', 'has not shipped yet'], ['shipped', 'has shipped (all or part)'], ['cancelled', 'was cancelled']], c.status || 'unshipped')}</select><div class="kc-l">Checks Shopify and ShipStation at this step. Works when the flow starts from Placed order.</div>`;
     if (d === 'buzzin') return `<div class="kc-l">Person</div><div class="kc-row"><select data-k="in" aria-label="Has or has not">${o([['true', 'has'], ['false', 'has no']], String(c.in !== false))}</select><select data-k="what" aria-label="What">${o([['open_ticket', 'open customer-service ticket'], ['recent_return', 'return in the last…'], ['open_claim', 'open claim']], c.what)}</select>${c.what === 'recent_return' ? `<input data-k="days" type="number" min="1" value="${c.days || 30}" style="width:70px" aria-label="Days"><span>days</span>` : ''}</div>`;
     return '';
   };
-  const alt = (c, path) => `<div class="kc-alt" data-path="${path}"><div class="kc-top"><select data-k="dim" aria-label="Dimension" style="flex:1">${o(DIMS, dimOf(c))}</select><button type="button" class="kc-x" data-rm="${path}" aria-label="Remove condition" title="Remove"><i class="ti ti-trash"></i></button></div>${fields(c)}</div>`;
+  const alt = (c, path) => `<div class="kc-alt" data-path="${path}"><div class="kc-top"><select data-k="dim" aria-label="Dimension" style="flex:1">${o(ctx.since ? [...DIMS, ORDER_DIM] : DIMS, dimOf(c))}</select><button type="button" class="kc-x" data-rm="${path}" aria-label="Remove condition" title="Remove"><i class="ti ti-trash"></i></button></div>${fields(c)}</div>`;
   const draw = () => {
     const cards = def.conditions.map((c, i) => {
       const alts = c.group && c.group.match === 'any' ? c.group.conditions : c.group ? null : [c];
