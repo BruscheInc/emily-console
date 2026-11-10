@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.29
+- Removed 7 test returns (LB191530-R1, LB-R1002 to LB-R1007) completely, along with their history and label files.
+
 ## 0.0.28
 - Emily no longer hands off work she can do herself after the customer answers. When we've offered a return-window exception and the customer replies with refund or store credit, she makes the prepaid label herself (return_propose, past the window) and attaches it, instead of leaving a manual to-do.
 
