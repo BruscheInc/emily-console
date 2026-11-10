@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.28
+- Emily no longer hands off work she can do herself after the customer answers. When we've offered a return-window exception and the customer replies with refund or store credit, she makes the prepaid label herself (return_propose, past the window) and attaches it, instead of leaving a manual to-do.
+
 ## 0.0.27
 - Emily can now look up returns a customer started (return_lookup) and cancel one herself (return_cancel) — right away, no approval, same rule as the portal's Cancel button: only while the label hasn't been scanned by the carrier. It voids the label, closes the Shopify return, and posts to Slack. If the package is already on its way she says so instead. Before this she had no tool for it, so every "cancel my return" was escalated to a person.
 
