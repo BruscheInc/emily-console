@@ -1072,7 +1072,13 @@ async function refundOrder(o, { mode, items, amount, shipping, note, notify, res
   if (left > 0.01) throw new Error(`Could only place $${(target - left).toFixed(2)} of $${target.toFixed(2)} against the original payment.`);
   const input = { orderId: o.id, note: note || null, notify: !!notify, transactions };
   if (mode !== "amount") { input.refundLineItems = (sr.refundLineItems || []).map((x) => ({ lineItemId: x.lineItem.id, quantity: x.quantity, restockType: restock === false ? "NO_RESTOCK" : (x.restockType && x.restockType !== "NO_RESTOCK" ? x.restockType : "RETURN") })); if (sr.shipping && Number(sr.shipping.amountSet.shopMoney.amount) > 0) input.shipping = { fullRefund: true }; }
-  const r = await storeGraphQL(st, `mutation($input:RefundInput!){ refundCreate(input:$input){ refund{ id totalRefundedSet{shopMoney{amount currencyCode}} } userErrors{field message} } }`, { input });
+  // Shopify (API 2026-04+) requires an idempotency key on refunds. Same refund retried the same day = same key, so a retry
+  // after a timeout can never refund twice. Older API versions don't know the directive, so fall back without it.
+  const idemKey = require("crypto").createHash("sha256").update(JSON.stringify(input) + new Date().toISOString().slice(0, 10)).digest("hex").slice(0, 32);
+  const RQ = (d) => `mutation($input:RefundInput!){ refundCreate(input:$input)${d} { refund{ id totalRefundedSet{shopMoney{amount currencyCode}} } userErrors{field message} } }`;
+  let r;
+  try { r = await storeGraphQL(st, RQ(` @idempotent(key: "${idemKey}")`), { input }); }
+  catch (e) { if (!/idempotent/i.test(e.message) || /required/i.test(e.message)) throw e; r = await storeGraphQL(st, RQ(""), { input }); }
   const ue = r.refundCreate.userErrors; if (ue && ue.length) throw new Error(ue.map((x) => x.message).join("; "));
   const done = Number(r.refundCreate.refund.totalRefundedSet.shopMoney.amount);
   return { note: `Refunded $${done.toFixed(2)} on ${o.name}${mode === "items" ? ` (${lineArgs.length} item line${lineArgs.length === 1 ? "" : "s"}${shipping ? " + shipping" : ""})` : mode === "full" ? " (full refund)" : ""}${notify ? " · customer emailed by Shopify" : ""}`, amount: done };
