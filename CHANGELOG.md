@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.33
+- New warehouse address: 1400 S Sherman St, Suite 106, Richardson, TX 75081. Return labels now ship there, Emily gives it for local pickup, and every saved policy, template, form and portal text that had the old Plano address was updated (message history left as is).
+
 ## 0.0.32
 - Fix: refunds failed with "The @idempotent directive is required". Shopify now requires a unique key on every refund (it stops a retried refund from going through twice). Buzzin sends one now.
 

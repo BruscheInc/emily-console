@@ -99,7 +99,7 @@ const DEFAULTS = {
   test_emails: "jimmy@bruscheinc.com",   // test customers: claims are judged with no history (no past claims, returns, tickets or reused-photo checks)   // line items whose title/SKU contains one of these are Package Protection
   return_address: {
     name: "Returns Dept", company_name: "Larkspur Baby", phone: "",
-    address_line1: "701 E Plano Pkwy", address_line2: "Suite 103", city_locality: "Plano", state_province: "TX", postal_code: "75074", country_code: "US",
+    address_line1: "1400 S Sherman St", address_line2: "Suite 106", city_locality: "Richardson", state_province: "TX", postal_code: "75081", country_code: "US",
   },
 };
 const OLD_REASONS = ["I received the wrong item", "Item was damaged", "I didn't have a good experience", "Item didn't fit", "I found something else I like more", "I didn't like the item"];
