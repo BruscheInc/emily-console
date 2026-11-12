@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.31
+- Emily (chat and email): the Holiday collection will not be restocked this year. When a Holiday item is sold out she says it's gone for the season, never promises or hints at a restock or back-in-stock alert, and points shoppers to what's still in stock.
+
 ## 0.0.30
 - Flows: new split condition "The order that started this flow" (has not shipped yet / has shipped / was cancelled), checked live in Shopify and ShipStation at that step, so it's about that exact order, not any order the person has.
 - Flow emails: new "Order update (transactional)" setting sends to everyone with the order, even people not subscribed to marketing (still skips addresses that bounced or marked us as spam, and skips smart sending). Flow emails can use {{ order_name }} / {{ order_number }}.
