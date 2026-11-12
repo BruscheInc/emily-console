@@ -380,12 +380,17 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
   }
   return { labelId: l.label_id, trackingNumber: l.tracking_number, labelUrl: (l.label_download && (l.label_download.pdf || l.label_download.href)) || null, cost: l.shipment_cost ? l.shipment_cost.amount : null, carrier: l.carrier_code };
 }
+// "Label created, USPS awaiting item" / "Pre-Shipment" — ShipStation can report these with an "accepted" code even though
+// USPS doesn't have the package yet. They are NOT the package moving.
+const PRESHIP = /label created|awaiting item|pre-?shipment|shipment information received|electronic (shipping )?(notification|info)|not yet (in system|received)|label (was )?printed/i;
+function isMoving(code, text) { return ["AC", "IT", "AT", "EX"].includes(code) && !PRESHIP.test(String(text || "")); }
+function canCancel(r) { return r.status === "label_created" && !isMoving(r.tracking_code, r.tracking_text) && !r.accepted_at; }
 async function track(labelId) {
   const t = await ss("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`);
   // When the carrier first had the package: the earliest real scan (not "label created"), else ShipStation's ship date.
-  const scans = (t.events || []).filter((e) => e.occurred_at && !["NY", "UN"].includes(e.status_code)).map((e) => new Date(e.occurred_at)).filter((d) => !isNaN(d));
+  const scans = (t.events || []).filter((e) => e.occurred_at && isMoving(e.status_code === "DE" ? "IT" : e.status_code, e.description)).map((e) => new Date(e.occurred_at)).filter((d) => !isNaN(d));
   const first = scans.length ? new Date(Math.min(...scans)) : null;
-  const shipped = !first && t.ship_date && !["NY", "UN"].includes(t.status_code) ? new Date(t.ship_date) : null;
+  const shipped = !first && t.ship_date && isMoving(t.status_code, t.status_description) ? new Date(t.ship_date) : null;
   return { code: t.status_code || "UN", text: t.status_description || "", acceptedAt: (first || shipped) && !isNaN(first || shipped) ? (first || shipped).toISOString() : null };
 }
 // Labels that didn't come from our ShipStation account (Loop returns): track by the tracking number itself.
@@ -533,7 +538,7 @@ async function counts() {
   out.loop = { total: Object.values(L).reduce((a, b) => a + b, 0), open: (L.label_created || 0) + (L.in_transit || 0) + (L.delivered || 0), attention: L.needs_attention || 0, refunded: L.refunded || 0, by: L };
   return out;
 }
-const publicRec = (r, s) => ({ rma: r.rma, status: r.status, label_url: r.status === "cancelled" || r.source === "loop" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${labelToken(r.id)}`, tracking_number: r.tracking_number, tracking_url: r.tracking_url, refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity })) });
+const publicRec = (r, s) => ({ rma: r.rma, status: r.status, label_url: r.status === "cancelled" || r.source === "loop" ? null : `${linkBase(r.store, s)}/returns/label/${r.id}/${labelToken(r.id)}`, tracking_number: r.tracking_number, tracking_url: r.tracking_url, refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity })), carrier_status: r.tracking_text || null, can_cancel: canCancel(r), view_url: `${portalUrl(r.store, s)}?r=${r.id}.${labelToken(r.id)}` });
 // Everything the confirmation page shows (also reachable later from the link in our emails).
 async function publicView(r) {
   const s = await settings();
@@ -551,7 +556,7 @@ async function publicView(r) {
     tracking_number: r.tracking_number, tracking_url: r.tracking_url, label_emailed: r.label_emailed !== false && !r.test_label, test_label: !!r.test_label,
     refund_method: r.refund_method, items: r.items.map((i) => ({ title: i.title, variant: i.variant, quantity: i.quantity, unit_price: i.unit_price, image: i.image || null, reason: i.reason })),
     summary: { subtotal: round2(sub), tax: round2(tax), fee: round2(fee), bonus, bonus_pct: Number(s.store_credit_bonus_pct), total: r.status === "refunded" && r.refunded_amount != null ? Number(r.refunded_amount) : round2(net + bonus), final: r.status === "refunded" },
-    can_cancel: r.status === "label_created" && ["NY", "UN", undefined, null, ""].includes(r.tracking_code),
+    can_cancel: canCancel(r), carrier_status: r.tracking_text || null,
     feedback: r.feedback ? { ease: r.feedback.ease, again: r.feedback.again } : null,
     others: others.map((x) => ({ rma: x.rma, status: x.status, created_at: x.created_at, items: x.items.map((i) => `${i.quantity}× ${i.title}`), view_url: `${portalUrl(x.store, s)}?r=${x.id}.${labelToken(x.id)}` })),
   };
@@ -914,7 +919,7 @@ async function checkOne(rec) {
     else if (s.auto_refund) { try { await refund(rec); } catch (e) { await update(rec.id, { status: "needs_attention" }, "Auto refund failed: " + e.message); } }
     return;
   }
-  const moving = ["AC", "IT", "AT", "EX"].includes(t.code);
+  const moving = isMoving(t.code, t.text);
   if (moving && !rec.accepted_at) rec = await update(rec.id, { accepted_at: t.acceptedAt || new Date().toISOString() }, `Accepted by the carrier${t.acceptedAt ? " on " + new Date(t.acceptedAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }) : ""}`);
   if (moving && rec.status === "label_created") rec = await update(rec.id, { status: "in_transit" }, "On its way back");
   // Handed to USPS but still not delivered back after N days: approve and refund without waiting for it.
@@ -1232,4 +1237,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { acceptAtWarehouse, itemsLog, itemsCsv, putRec, update, trackingUrl, trackNumber, trackerReady, uspsShape, Q: { SUGGEST, RETURN_DETAIL }, findOrder, linkBase, quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { isMoving, PRESHIP, acceptAtWarehouse, itemsLog, itemsCsv, putRec, update, trackingUrl, trackNumber, trackerReady, uspsShape, Q: { SUGGEST, RETURN_DETAIL }, findOrder, linkBase, quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

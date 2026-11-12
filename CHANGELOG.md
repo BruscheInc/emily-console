@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.34
+- Returns portal shows the real USPS status. ShipStation reports "Label created, USPS awaiting item" with an "accepted" code, so Buzzin was marking those returns "On its way" (and stamping a carrier-accepted date) before USPS ever had them. Now only a real USPS scan counts. Returns wrongly marked were moved back to "Label created".
+- Returns portal: each return the customer already started now has a "View or cancel" link, and they can cancel it until USPS scans the package. (Before, the wrong "On its way" status hid the Cancel button.)
+- Emily: a customer who wants to cancel an unshipped order is sent to the self-serve portal ("Edit or cancel my order") right away, with one line offering a fix if there's an easy one. No more waiting on approval. She only stages a cancel for you if the portal can't do it (customer says it didn't work, is upset, or the order is partly shipped).
+
 ## 0.0.33
 - New warehouse address: 1400 S Sherman St, Suite 106, Richardson, TX 75081. Return labels now ship there, Emily gives it for local pickup, and every saved policy, template, form and portal text that had the old Plano address was updated (message history left as is).
 
