@@ -387,11 +387,18 @@ function isMoving(code, text) { return ["AC", "IT", "AT", "EX"].includes(code) &
 function canCancel(r) { return r.status === "label_created" && !isMoving(r.tracking_code, r.tracking_text) && !r.accepted_at; }
 async function track(labelId) {
   const t = await ss("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`);
-  // When the carrier first had the package: the earliest real scan (not "label created"), else ShipStation's ship date.
-  const scans = (t.events || []).filter((e) => e.occurred_at && isMoving(e.status_code === "DE" ? "IT" : e.status_code, e.description)).map((e) => new Date(e.occurred_at)).filter((d) => !isNaN(d));
-  const first = scans.length ? new Date(Math.min(...scans)) : null;
-  const shipped = !first && t.ship_date && isMoving(t.status_code, t.status_description) ? new Date(t.ship_date) : null;
-  return { code: t.status_code || "UN", text: t.status_description || "", acceptedAt: (first || shipped) && !isNaN(first || shipped) ? (first || shipped).toISOString() : null };
+  // ShipStation says "AC / Accepted" the moment a label exists, so its top-level status can't be trusted. Only real carrier
+  // scans count: events that aren't "label created / pre-shipment". No real scan yet = USPS doesn't have the package.
+  const evs = (t.events || []).map((e) => ({ code: e.status_code || "", desc: String(e.description || e.event_description || e.carrier_status_description || ""), at: e.occurred_at ? new Date(e.occurred_at) : null, city: [e.city_locality, e.state_province].filter(Boolean).join(", ") }));
+  const real = evs.filter((e) => e.at && !isNaN(e.at) && e.code && !["NY", "UN"].includes(e.code) && e.desc && !PRESHIP.test(e.desc));
+  const delivered = ["DE", "SP"].includes(t.status_code);
+  if (!real.length && !delivered) {
+    const last = evs.filter((e) => e.desc).sort((a, b) => (b.at || 0) - (a.at || 0))[0];
+    return { code: "NY", text: last && last.desc ? last.desc : "Label created, USPS doesn't have the package yet", acceptedAt: null, events: evs.length };
+  }
+  const latest = real.sort((a, b) => b.at - a.at)[0];
+  const first = real.length ? new Date(Math.min(...real.map((e) => e.at.getTime()))) : null;
+  return { code: t.status_code || "UN", text: latest ? `${latest.desc}${latest.city ? ` (${latest.city})` : ""}` : t.status_description || "", acceptedAt: first ? first.toISOString() : null, events: evs.length };
 }
 // Labels that didn't come from our ShipStation account (Loop returns): track by the tracking number itself.
 // USPS's own tracking API (free — USPS_CLIENT_ID / USPS_CLIENT_SECRET from developers.usps.com) is the main route;
@@ -1237,4 +1244,4 @@ async function init() {
   console.log(`↩️  Returns: portal ${s.portal_live ? "LIVE" : "set up, not live yet"} · tracking every ${mins} min · ${s.test_labels ? "TEST mode (no labels bought)" : "real labels"}${p.length ? `\n   ⚠️  ${p.join("; ")}` : ""}`);
 }
 
-module.exports = { isMoving, PRESHIP, acceptAtWarehouse, itemsLog, itemsCsv, putRec, update, trackingUrl, trackNumber, trackerReady, uspsShape, Q: { SUGGEST, RETURN_DETAIL }, findOrder, linkBase, quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };
+module.exports = { track, isMoving, PRESHIP, acceptAtWarehouse, itemsLog, itemsCsv, putRec, update, trackingUrl, trackNumber, trackerReady, uspsShape, Q: { SUGGEST, RETURN_DETAIL }, findOrder, linkBase, quotePortal, isTestEmail, sendBranded, publicView, viewReturn, customerCancel, saveFeedback, printPdf, isPP, sign, verify, shopFor, gql, rowToRec, DEFAULTS, analytics, resetStats, portalUrl, storeForHost, ssStores, init, settings, saveSettings, setupProblems, STORE_DEFS, lookup, staffLookup, submitPortal, createForTicket, refund, cancel, checkOne, poll, list, counts, getRec, csv, carriers, labelToken, portalRule, httpError, keyForOrderName };

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.35
+- Fix (the real cause): ShipStation reports every return label as "Accepted" the moment it is made. Buzzin now only counts actual USPS scans, shows the latest USPS scan as the status, and re-checked every return marked "On its way". The ones USPS never scanned went back to "Label created", so customers can cancel them.
+
 ## 0.0.34
 - Returns portal shows the real USPS status. ShipStation reports "Label created, USPS awaiting item" with an "accepted" code, so Buzzin was marking those returns "On its way" (and stamping a carrier-accepted date) before USPS ever had them. Now only a real USPS scan counts. Returns wrongly marked were moved back to "Label created".
 - Returns portal: each return the customer already started now has a "View or cancel" link, and they can cancel it until USPS scans the package. (Before, the wrong "On its way" status hid the Cancel button.)
