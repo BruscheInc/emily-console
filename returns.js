@@ -515,11 +515,14 @@ async function putRec(rec, event) {
 async function update(id, patch, event) { const rec = await getRec(id); if (!rec) return null; Object.assign(rec, patch); return putRec(rec, event); }
 // Loop imports live on their own tab: source "loop" shows only them; every other view leaves them out.
 const LOOP_SQL = `COALESCE(data->>'source','') = 'loop'`;
+const IGN_SQL = `(data->>'ignored_at') IS NOT NULL`;   // staff clicked Ignore: hidden from the lists and counts, still tracked
 async function list({ status, store, q, source, limit = 300 } = {}) {
   // A search on the Returns page also finds Loop returns, so nothing seems to be missing.
   const where = [source === "loop" ? LOOP_SQL : source === "all" || q ? "TRUE" : `NOT (${LOOP_SQL})`], args = [];
+  if (status === "ignored") where.push(IGN_SQL);
+  else if (!q) where.push(`NOT ${IGN_SQL}`);
   if (status === "open") where.push(`status IN ('label_created','in_transit','delivered')`);
-  else if (status) { args.push(status); where.push(`status=$${args.length}`); }
+  else if (status && status !== "ignored") { args.push(status); where.push(`status=$${args.length}`); }
   if (store) { args.push(store); where.push(`store=$${args.length}`); }
   if (q) { args.push(`%${q.toLowerCase()}%`); where.push(`(lower(rma) LIKE $${args.length} OR lower(order_name) LIKE $${args.length} OR lower(email) LIKE $${args.length} OR lower(data->>'customer_name') LIKE $${args.length})`); }
   args.push(Math.min(Number(limit) || 300, 1000));
@@ -531,8 +534,8 @@ async function list({ status, store, q, source, limit = 300 } = {}) {
 const STATS_WHERE = `created_at >= $1 AND COALESCE((data->>'test_label')::boolean, false) = false`;
 async function counts() {
   const s = await settings();
-  const by = await db(`SELECT status, count(*)::int n FROM hd_returns WHERE NOT (${LOOP_SQL}) GROUP BY status`);
-  const lp = await db(`SELECT status, count(*)::int n FROM hd_returns WHERE ${LOOP_SQL} GROUP BY status`);
+  const by = await db(`SELECT status, count(*)::int n FROM hd_returns WHERE NOT (${LOOP_SQL}) AND NOT ${IGN_SQL} GROUP BY status`);
+  const lp = await db(`SELECT status, count(*)::int n FROM hd_returns WHERE ${LOOP_SQL} AND NOT ${IGN_SQL} GROUP BY status`);
   const m = await db(`SELECT COALESCE(sum((data->>'refunded_amount')::numeric),0) refunded,
       COALESCE(sum(CASE WHEN status<>'cancelled' THEN (data->>'label_cost')::numeric END),0) labels, COALESCE(sum((data->>'fee_charged')::numeric),0) fees
     FROM hd_returns WHERE ${STATS_WHERE} AND NOT (${LOOP_SQL})`, [s.stats_since]);
@@ -540,6 +543,7 @@ async function counts() {
   for (const x of by.rows) out.by[x.status] = x.n;
   out.open = (out.by.label_created || 0) + (out.by.in_transit || 0) + (out.by.delivered || 0);
   out.attention = out.by.needs_attention || 0;
+  out.ignored = Number((await db(`SELECT count(*)::int n FROM hd_returns WHERE NOT (${LOOP_SQL}) AND ${IGN_SQL}`)).rows[0].n);
   out.unchecked = Number((await db(`SELECT count(*)::int n FROM hd_returns WHERE status <> 'cancelled' AND (data->'warehouse'->>'accepted_at') IS NULL AND (status='delivered' OR data->>'delivered_at' IS NOT NULL) AND COALESCE((data->>'test_label')::boolean,false)=false`)).rows[0].n);
   const L = {}; for (const x of lp.rows) L[x.status] = x.n;
   out.loop = { total: Object.values(L).reduce((a, b) => a + b, 0), open: (L.label_created || 0) + (L.in_transit || 0) + (L.delivered || 0), attention: L.needs_attention || 0, refunded: L.refunded || 0, by: L };

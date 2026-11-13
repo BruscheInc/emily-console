@@ -1569,6 +1569,8 @@ app.post("/api/returns/:id/:act", async (req, res) => {
     else if (act === "accept") await R.acceptAtWarehouse(rec, { who, items: (req.body || {}).items, note: (req.body || {}).note, all: !!(req.body || {}).all });
     else if (act === "track") await R.checkOne(rec);
     else if (act === "cancel") await R.cancel(rec, `Cancelled by ${who}`, who);
+    else if (act === "ignore") { const note = String((req.body || {}).note || "").slice(0, 300); await R.update(rec.id, { ignored_at: new Date().toISOString(), ignored_by: who, ignored_note: note || null }, `Ignored by ${who}${note ? ` — ${note}` : ""}`); }
+    else if (act === "unignore") await R.update(rec.id, { ignored_at: null, ignored_by: null, ignored_note: null }, `Put back on the list by ${who}`);
     else return res.status(400).json({ error: "unknown action" });
     res.json({ ok: true, record: await R.getRec(rec.id) });
   } catch (e) { res.status(400).json({ error: e.message }); }

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.36
+- Returns: "Ignore" button (open a return to see it), like on Shipping. Ignored returns drop out of Open / Needs attention and the counts and sit under a new Ignored tab, with who ignored it and why. "Put back" returns it to the list. Tracking still runs on ignored returns.
+
 ## 0.0.35
 - Fix (the real cause): ShipStation reports every return label as "Accepted" the moment it is made. Buzzin now only counts actual USPS scans, shows the latest USPS scan as the status, and re-checked every return marked "On its way". The ones USPS never scanned went back to "Label created", so customers can cancel them.
 

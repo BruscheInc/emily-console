@@ -1764,7 +1764,7 @@ async function loadReturns(silent){
         ${tile("","All returns",all,"everything")}
       </div>
       <div class="rc-bar">
-        <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("","All",all)}</div>
+        <div class="seg">${seg("open","Open",c.open)}${seg("needs_attention","Needs attention",c.attention)}${seg("refunded","Refunded",c.by.refunded)}${seg("cancelled","Cancelled",c.by.cancelled)}${seg("ignored","Ignored",c0.ignored)}${seg("","All",all)}</div>
         <select onchange="retF().store=this.value;loadReturns()" class="rc-in"><option value="">Both stores</option>${Object.values(d.stores).map(x=>`<option value="${x.key}" ${retF().store===x.key?"selected":""}>${esc(x.name)}</option>`).join("")}</select>
         <input type="text" class="rc-in rc-q" placeholder="Search order, return #, email, name" value="${esc(retF().q)}" onkeydown="if(event.key==='Enter'){retF().q=this.value.trim();loadReturns()}">
         ${retF().q?`<button class="btn sec xs" onclick="retF().q='';loadReturns()">Clear search</button>`:""}
@@ -1778,7 +1778,7 @@ async function loadReturns(silent){
         <td style="width:20%">${esc(r.customer_name||"")}<div class="exc">${esc(r.email||"")}</div></td>
         <td style="width:24%">${n} item${n===1?"":"s"}<div class="exc">${esc(r.items.map(i=>i.title).join(", "))}</div></td>
         <td style="width:12%">${r.refund_method==="store_credit"?"Store credit":"Original payment"}</td>
-        <td style="width:14%"><span class="chip ${RET_CHIP[r.status]||""}">${esc(RET_LABEL[r.status]||r.status)}</span>${r.test_label?' <span class="chip">test</span>':""}${r.exception?` <span class="chip" title="${esc(r.exception)}">✨ exception</span>`:""}</td>
+        <td style="width:14%"><span class="chip ${RET_CHIP[r.status]||""}">${esc(RET_LABEL[r.status]||r.status)}</span>${r.test_label?' <span class="chip">test</span>':""}${r.ignored_at?` <span class="chip" title="${esc((r.ignored_by||"")+(r.ignored_note?": "+r.ignored_note:""))}">ignored</span>`:""}${r.exception?` <span class="chip" title="${esc(r.exception)}">✨ exception</span>`:""}</td>
         <td style="width:12%">${r.status==="refunded"?money(r.refunded_amount):'<span class="exc" style="display:inline">~'+money(r.est_subtotal)+'</span>'}</td></tr>`;
       if(RET_OPEN.has(r.id)){
         const act=!["refunded","cancelled"].includes(r.status);
@@ -1788,14 +1788,15 @@ async function loadReturns(silent){
             ${r.feedback?`<div style="margin-top:8px">Customer feedback: experience <b>${r.feedback.ease||"—"}/5</b> · buy again <b>${r.feedback.again||"—"}/5</b>${r.feedback.note?` — “${esc(r.feedback.note)}”`:""}</div>`:""}
             ${r.warehouse&&r.warehouse.accepted_at?`<div style="margin-top:8px">📦 <b>All items checked in</b> ${fmt(r.warehouse.accepted_at)}${(r.warehouse.lines||[]).some(l=>l.received!==l.expected)?` — <span style="color:#c0392b">${r.warehouse.lines.filter(l=>l.received!==l.expected).map(l=>`${esc(l.title)}: got ${l.received} of ${l.expected}`).join("; ")}</span>`:" — everything received"}${r.warehouse.note?` · “${esc(r.warehouse.note)}”`:""}</div>`:""}
             <div class="exc" style="display:block">Shopify return ${esc(r.shopify_return_name||"")}${r.ticket_id?` · <a href="#" onclick="event.stopPropagation();openTicket(${r.ticket_id});return false" style="color:var(--accent)">ticket ${r.ticket_id}</a>`:""}</div>
-            ${act?`<div class="stk-acts" style="margin-top:10px"><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','track',this)">Check tracking</button>${whAllBtn(r)}<button class="btn xs" onclick="event.stopPropagation();retAct('${r.id}','refund',this,'Refund now, before the package is back?')">Refund now</button><button class="btn sec xs danger" onclick="event.stopPropagation();retAct('${r.id}','cancel',this,'Cancel this return and void the label?')">Cancel return</button></div>`:""}</div>
+            ${act?`<div class="stk-acts" style="margin-top:10px"><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','track',this)">Check tracking</button>${whAllBtn(r)}<button class="btn xs" onclick="event.stopPropagation();retAct('${r.id}','refund',this,'Refund now, before the package is back?')">Refund now</button><button class="btn sec xs danger" onclick="event.stopPropagation();retAct('${r.id}','cancel',this,'Cancel this return and void the label?')">Cancel return</button>${r.ignored_at?"":`<button class="btn sec xs" onclick="event.stopPropagation();retIgnore('${r.id}',this)">Ignore</button>`}</div>`:""}${r.ignored_at?`<div class="stk-acts" style="margin-top:8px"><span class="exc" style="display:inline">Ignored by ${esc(r.ignored_by||"")} ${fmt(r.ignored_at)}${r.ignored_note?` — “${esc(r.ignored_note)}”`:""}</span><button class="btn sec xs" onclick="event.stopPropagation();retAct('${r.id}','unignore',this)">Put back</button></div>`:act?"":`<div class="stk-acts" style="margin-top:8px"><button class="btn sec xs" onclick="event.stopPropagation();retIgnore('${r.id}',this)">Ignore</button></div>`}</div>
           <div><b>History</b>${(r.events||[]).slice().reverse().map(e=>`<div class="exc" style="display:block;white-space:normal">${fmt(e.at)} — ${esc(e.text)}</div>`).join("")}</div></div></td></tr>`;
       }
     }
     w.innerHTML=h+"</tbody></table>";
   }catch(e){ console.error("returns view:",e); w.innerHTML='<div class="empty">Couldn\'t load returns.</div>'; }
 }
-async function retAct(id,act,b,ask){ if(ask&&!confirm(ask))return; b.disabled=true; try{ const r=await api(`/api/returns/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error)throw new Error(r.error); toast(act==="refund"?"Refunded":act==="cancel"?"Return cancelled":"Tracking checked"); }catch(e){ toast(e.message,true); } loadReturns(true); loadCounts(); }
+async function retIgnore(id,b){ const note=window.prompt("Why ignore? (optional)",""); if(note===null) return; b.disabled=true; try{ const r=await api(`/api/returns/${id}/ignore`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({note})}); if(r.error)throw new Error(r.error); toast("Ignored. It's under the Ignored tab"); }catch(e){ toast(e.message,true); } RET_OPEN.delete(id); loadReturns(true); loadCounts(); }
+async function retAct(id,act,b,ask){ if(ask&&!confirm(ask))return; b.disabled=true; try{ const r=await api(`/api/returns/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); if(r.error)throw new Error(r.error); toast(act==="refund"?"Refunded":act==="cancel"?"Return cancelled":act==="unignore"?"Back on the list":"Tracking checked"); }catch(e){ toast(e.message,true); } loadReturns(true); loadCounts(); }
 // Import returns still open in Loop: upload Loop's ASN report(s) → preview → import.
 let LOOP_FILES=[];
 function loopImport(){
