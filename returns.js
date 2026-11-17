@@ -831,7 +831,14 @@ async function createForTicket({ orderName, lines, refundMethod, ticketId, who, 
     const it = l.fulfillmentLineItemId ? items.find((i) => i.fulfillmentLineItemId === l.fulfillmentLineItemId)
       : items.find((i) => (l.sku && i.sku === l.sku) || (l.title && i.title.toLowerCase().includes(String(l.title).toLowerCase())));
     if (!it) throw httpError(400, `"${l.title || l.sku}" isn't returnable on ${order.name}.`);
-    return { fulfillmentLineItemId: it.fulfillmentLineItemId, quantity: l.quantity || 1, reasonId: pickReason(l.reasonId || l.reason).id, note: l.note };
+    // Emily writes reasons in her own words ("no longer needed"). Map common ones to our list; anything that lands on
+    // "Other" carries her words as the note, since "Other" needs one (it was failing the whole return before).
+    const raw = String(l.reasonId || l.reason || "");
+    const alias = /no longer need|don'?t need|not needed|changed? (my|her|his|their) mind|unwanted|loss|miscarriage|gift/i.test(raw) ? "Changed my mind" : null;
+    const r = (alias && rs.find((x) => x.name.toLowerCase() === alias.toLowerCase())) || pickReason(raw);
+    let note = l.note;
+    if (/^other\b/i.test(r.name) && String(note || "").trim().length < 3) note = raw.trim().length >= 3 && !/^(gid:|rr_)/.test(raw) ? raw.trim() : "Requested through customer service";
+    return { fulfillmentLineItemId: it.fulfillmentLineItemId, quantity: l.quantity || 1, reasonId: r.id, note };
   });
   const rec = await create({ key, orderId: order.id, lines: mapped, refundMethod: refundMethod || "original", source: "staff", ticketId, who, staffOverride });
   let file = null;

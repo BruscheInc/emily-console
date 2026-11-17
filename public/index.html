@@ -295,6 +295,7 @@
   .qpanel label{margin:4px 0 0}.qpanel .btn{align-self:flex-start;margin-top:4px}.qopts{display:flex;flex-direction:column;gap:3px}
   .qopt{display:flex;gap:7px;align-items:center;font-weight:400!important;margin:0!important;cursor:pointer}.qopt input{width:auto;margin:0}
   .qnote{margin-top:8px;font-size:13px;color:#8a6100;background:#fff6dd;border:1px solid #f3dd9b;border-radius:8px;padding:8px 10px}
+  .fmtbar{display:flex;gap:2px;align-items:center;margin:0 0 4px}.fmtbar button{border:1px solid transparent;background:none;border-radius:6px;padding:3px 7px;cursor:pointer;color:var(--ink);font-size:15px}.fmtbar button:hover{background:var(--panel2);border-color:var(--line)}.fmthint{margin-left:8px;font-size:11.5px;color:var(--muted)}
   .ntfind{margin:6px 0 4px}.ntfind input{flex:1}
   .ntr-list{margin-top:8px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
   .ntr-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:8px 12px 4px}
@@ -1129,12 +1130,12 @@ function emilyCard(d){
       ${e.escalate?`<span class="chip esc" style="background:rgba(255,120,120,.15);color:#c62828">🛑 Needs your call — ${esc(e.escalate_reason||"review")}</span>`:""}
     </div>
     <div class="ebody">
-    <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;margin-bottom:10px">${esc(e.draft||"").replace(/\{\{\s*(DISCOUNT_)?CODE\s*\}\}/gi,'<mark class="ph">code — created when you approve</mark>')}</div>
+    <textarea id="edraft-raw" hidden>${esc(e.draft||"")}</textarea><div id="edraft" style="white-space:pre-wrap;font-size:14px;line-height:1.5;margin-bottom:10px">${esc(e.draft||"").replace(/\{\{\s*(DISCOUNT_)?CODE\s*\}\}/gi,'<mark class="ph">code — created when you approve</mark>')}</div>
     ${actionsBlock(d)}${todoBlock(d)}${(d.pending_files||[]).length?`<div class="acts-em" style="border-color:#158048"><div class="acts-h" style="color:#158048">Attached to your reply</div>${d.pending_files.map(f=>`<div class="act"><span class="t"><b>📎 ${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(f.name)}</a>`:esc(f.name)}</b><small>goes out with the next reply on this ticket${f.url?" · click to open":""}</small></span></div>`).join("")}</div>`:""}
     </div>
     <div class="efoot">
-      <button class="btn" onclick="emilyDecide(${d.id},'approve')">✅ Approve &amp; send</button>
-      <button class="btn sec" onclick="emilyUseDraft(${JSON.stringify(e.draft||"").replace(/"/g,"&quot;")})">✏️ Edit first</button>
+      <button class="btn" id="eapprove" onclick="emilyApproveOrSend(${d.id})">✅ Approve &amp; send</button>
+      <button class="btn sec" id="eeditbtn" onclick="emilyEditInline(${d.id})">✏️ Edit first</button>
       <button class="btn sec" onclick="emilyRedraftPrompt(${d.id})">🔁 Redraft with notes</button>
       <button class="btn sec" onclick="emilyDecide(${d.id},'skip')">🗑 Skip</button>
       ${(d.emily_actions||[]).some(a=>a.status==="staged")||(e.todo||[]).length?`<span style="margin-left:auto;align-self:center;font-size:12px;color:#8A8794">scroll the draft for proposed actions &amp; to-dos</span>`:""}
@@ -1142,10 +1143,46 @@ function emilyCard(d){
   </div>`;
 }
 function emilyUseDraft(text){ setMode("reply"); const ta=$("composer"); if(!ta)return; ta.value=text; ta.focus(); ta.scrollIntoView({block:"center",behavior:"smooth"}); toast("Draft loaded — edit, then Send reply"); }
+// Edit Emily's draft right inside her card, so the actions she proposed (store credit, return label…) stay
+// right there and still get applied when you send.
+function emilyEditInline(id){
+  const box=$("edraft"); if(!box||$("emilyedit")) return;
+  const raw=$("edraft-raw"); const text=raw?raw.value:box.innerText;
+  let saved=null; try{ saved=localStorage.getItem("bz_edit_"+id); }catch(_){}
+  box.outerHTML=`<div id="eeditwrap">${fmtBar("emilyedit")}<textarea id="emilyedit" style="width:100%;min-height:260px;font:inherit;font-size:14px;line-height:1.5;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);box-sizing:border-box" oninput="try{localStorage.setItem('bz_edit_${id}',this.value)}catch(_){}"></textarea></div>`;
+  const ta=$("emilyedit"); ta.value=saved||text; ta.focus();
+  const b=$("eapprove"); if(b) b.innerHTML="✅ Send edited reply";
+  const eb=$("eeditbtn"); if(eb){ eb.textContent="↩️ Undo edits"; eb.onclick=()=>{ try{localStorage.removeItem("bz_edit_"+id)}catch(_){} openTicket(id); setTimeout(()=>setMode("emily"),300); }; }
+  toast("Edit the reply here. Emily's proposed actions below still apply when you send");
+}
+function emilyApproveOrSend(id){
+  const ta=$("emilyedit");
+  if(ta){ const t=ta.value.trim(); if(!t){ toast("The reply is empty",true); return; } try{localStorage.removeItem("bz_edit_"+id)}catch(_){} return emilyDecide(id,'edit',t); }
+  emilyDecide(id,'approve');
+}
+// Notes for a redraft: a proper box inside Emily's card (not a pop-up), kept if you switch tabs or windows.
 function emilyRedraftPrompt(id){
-  const notes=window.prompt("How should Emily change it? (leave empty for a plain redraft)");
-  if(notes===null) return;
-  emilyDecide(id,'redraft',notes);
+  if($("eredraft")){ $("eredraft-t").focus(); return; }
+  let saved=""; try{ saved=localStorage.getItem("bz_redraft_"+id)||""; }catch(_){}
+  const foot=document.querySelector("#emilycard .efoot"); if(!foot) return;
+  foot.insertAdjacentHTML("beforebegin",`<div id="eredraft" style="margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel)">
+    <div style="font-weight:600;font-size:13px;margin-bottom:6px">How should Emily change it?</div>
+    <textarea id="eredraft-t" placeholder="e.g. Offer store credit instead, mention the restock date, make it shorter…" style="width:100%;min-height:110px;font:inherit;font-size:14px;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--ink);box-sizing:border-box" oninput="try{localStorage.setItem('bz_redraft_${id}',this.value)}catch(_){}"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="btn" onclick="emilyRedraftGo(${id})">🔁 Redraft</button><button class="btn sec" onclick="$('eredraft').remove()">Cancel</button><span style="font-size:12px;color:var(--muted);align-self:center">Leave empty for a plain redraft. Your notes are kept if you switch tabs.</span></div></div>`);
+  const t=$("eredraft-t"); t.value=saved; t.focus();
+}
+function emilyRedraftGo(id){ const t=$("eredraft-t"); const notes=t?t.value:""; try{localStorage.removeItem("bz_redraft_"+id)}catch(_){} emilyDecide(id,'redraft',notes); }
+/* Formatting toolbar for reply boxes: wraps the selected text in **bold**, _italic_, [text](link) or "- " bullets.
+   Buzzin turns these into real bold, italics, links and lists in the email. */
+function fmtBar(taId){ return `<div class="fmtbar"><button type="button" title="Bold" onclick="fmtWrap('${taId}','b')"><i class="ti ti-bold"></i></button><button type="button" title="Italic" onclick="fmtWrap('${taId}','i')"><i class="ti ti-italic"></i></button><button type="button" title="Add link" onclick="fmtWrap('${taId}','a')"><i class="ti ti-link"></i></button><button type="button" title="Bullet list" onclick="fmtWrap('${taId}','ul')"><i class="ti ti-list"></i></button><span class="fmthint">**bold** · _italic_ · [text](link) · - list</span></div>`; }
+function fmtWrap(taId,kind){
+  const ta=$(taId); if(!ta) return; const a=ta.selectionStart, b=ta.selectionEnd, v=ta.value, sel=v.slice(a,b);
+  let ins="", caret=null;
+  if(kind==="b"){ ins=`**${sel||"bold text"}**`; }
+  else if(kind==="i"){ ins=`_${sel||"italic text"}_`; }
+  else if(kind==="a"){ let url=window.prompt("Link address (https://…)", /^https?:\/\//.test(sel)?sel:"https://"); if(!url||url==="https://") return; if(!/^https?:\/\//i.test(url)) url="https://"+url; ins=`[${sel&&!/^https?:\/\//.test(sel)?sel:"link text"}](${url})`; }
+  else if(kind==="ul"){ const lines=(sel||"item").split("\n"); ins=lines.map(l=>/^\s*-\s/.test(l)?l:`- ${l}`).join("\n"); if(a>0&&v[a-1]!=="\n") ins="\n"+ins; }
+  ta.value=v.slice(0,a)+ins+v.slice(b); ta.focus(); const end=a+ins.length; ta.setSelectionRange(caret!=null?caret:end,end); ta.dispatchEvent(new Event("input"));
 }
 // Things Emily proposed alongside the draft (discount code, store credit, address fix, replacement…).
 // Staged ones are ticked by default and get applied when you approve; you can also apply or dismiss each one now.
@@ -2308,7 +2345,7 @@ async function openTicket(id){
             <div class="modetog"><button id="m-reply" class="on" onclick="setMode('reply')">Reply to customer</button><button id="m-note" onclick="setMode('note')">Internal note</button><button id="m-emily" onclick="setMode('emily')" ${emilyPending(d)?"":"disabled title=\"No draft waiting — use Ask Emily\""}>Emily's suggestion${emilyPending(d)?'<span class="dot"></span>':""}</button></div>
             <div id="emilypane" class="hidden">${emilyPending(d)?emilyCard(d):""}</div>
             <div id="replybox">
-            <textarea id="composer" placeholder="Write a reply to ${esc(d.customer.name)}…"></textarea>
+            ${fmtBar("composer")}<textarea id="composer" placeholder="Write a reply to ${esc(d.customer.name)}…"></textarea>
             <div id="attlist" class="attlist">${attChips(id,d.pending_files)}</div>
             <div class="crow"><label class="btn sec xs" id="attbtn" title="Attach an image, label or PDF — it goes out with the next reply" style="cursor:pointer"><i class="ti ti-paperclip"></i> Attach<input type="file" multiple style="display:none" onchange="attachFiles(${id},this)"></label>
             <div class="sub" style="color:var(--muted);font-size:12px;margin-left:8px" id="sendhint">Sends an email to ${esc(d.customer.email||"the customer")} from ${esc(d.brand_address||({lb:"Larkspur Baby",lbo:"Larkspur Baby Outlet"})[d.brand]||d.brand)}.</div><div class="sp" style="flex:1"></div>

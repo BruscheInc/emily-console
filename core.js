@@ -881,7 +881,37 @@ function emitInbound(ticketId, messageId) { for (const fn of inboundListeners) {
  * One path for every outbound email, whoever triggers it: a person in the UI, Emily after approval,
  * or an out-of-stock notice from the warehouse. Gmail when the mailbox is connected; Gorgias as the
  * fallback while history is still being migrated. */
-async function sendReply({ ticketId, text, html: htmlIn, who, via, files = [] }) {
+/* Replies are typed as plain text with light formatting from the composer toolbar:
+   **bold**, _italic_, [link text](https://…), bare https:// links, and "- " bullet lines.
+   richHtml turns that into the email's HTML; plainText is what's stored and sent as the text version. */
+const escH = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const escA = (x) => escH(x).replace(/"/g, "&quot;");
+function richHtml(src) {
+  const toks = []; const keep = (h) => `\u0000${toks.push(h) - 1}\u0001`;
+  let s = String(src || "").replace(/\r\n/g, "\n");
+  s = s.replace(/\[([^\]\n]{1,300})\]\((https?:\/\/[^\s)]+)\)/g, (m, t, u) => keep(`<a href="${escA(u)}" style="color:#1a56db">${escH(t)}</a>`));
+  s = s.replace(/https?:\/\/[^\s<>"'\])]*[^\s<>"'\]).,;:!?]/g, (u) => keep(`<a href="${escA(u)}" style="color:#1a56db">${escH(u)}</a>`));
+  s = escH(s);
+  s = s.replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, "<b>$1</b>");
+  s = s.replace(/(^|[\s(>])_(?=\S)([^_\n]*?\S)_(?=$|[\s).,!?;:<])/gm, "$1<i>$2</i>");
+  const out = []; let list = null;
+  for (const line of s.split("\n")) {
+    const m = line.match(/^\s*(?:[-•]|\*(?!\*))\s+(.*)$/);
+    if (m) { (list = list || []).push(`<li>${m[1]}</li>`); continue; }
+    if (list) { out.push({ ul: `<ul style="margin:4px 0 4px 18px;padding:0">${list.join("")}</ul>` }); list = null; }
+    out.push(line);
+  }
+  if (list) out.push({ ul: `<ul style="margin:4px 0 4px 18px;padding:0">${list.join("")}</ul>` });
+  let html = ""; out.forEach((x, i) => { if (typeof x === "object") html += x.ul; else html += x + (i < out.length - 1 && typeof out[i + 1] !== "object" ? "<br>" : ""); });
+  html = html.replace(/\u0000(\d+)\u0001/g, (m, n) => toks[Number(n)]);
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">${html}</div>`;
+}
+function plainText(src) {
+  return String(src || "").replace(/\[([^\]\n]{1,300})\]\((https?:\/\/[^\s)]+)\)/g, "$1 ($2)").replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, "$1").replace(/(^|[\s(])_(?=\S)([^_\n]*?\S)_(?=$|[\s).,!?;:])/gm, "$1$2");
+}
+async function sendReply({ ticketId, text: rawText, html: htmlIn, who, via, files = [] }) {
+  if (!htmlIn) htmlIn = richHtml(rawText);
+  const text = plainText(rawText);
   const t = (await db(`SELECT * FROM hd_tickets WHERE id=$1`, [ticketId])).rows[0];
   if (!t) throw new Error("ticket not found");
   if (!t.customer_email) throw new Error("no customer email on this ticket");
@@ -1099,7 +1129,7 @@ async function renameStoredText() {
     console.log(`🐝 renamed stored text to Buzzin (${n} rows)`);
   } catch (e) { console.error("rename to Buzzin:", e.message); }
 }
-module.exports = {
+module.exports = { richHtml, plainText,
   renameStoredText, policyText, seedPolicy, setting, policyCache,
   db, pool, migrate, syncGet, syncSet,
   USERS, userFromKey, sessionOf, loadSessions, login, logout, listUsers, createUser, updateUser, checkPassword,

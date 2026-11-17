@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.37
+- Replies: formatting toolbar (bold, italic, link, bullet list) on the reply box and when editing Emily's draft. Customers get real bold text, clickable links and lists; web addresses typed in a reply are clickable too.
+- Emily's draft: "Edit first" now edits the draft right inside her card, so the actions she proposed (store credit, return label, refund…) stay there and are applied when you click "Send edited reply". Edits are kept if you switch tabs.
+- Emily's draft: "Redraft with notes" opens a proper notes box inside her card instead of a small pop-up, and keeps what you typed if you switch tabs.
+- Fix: returns Emily stages could fail with "Tell us a little about why you're returning…" when her reason didn't match our list (e.g. "no longer needed"). Common reasons now map to our list, and anything else is saved under "Other" with her words as the note.
+
 ## 0.0.36
 - Returns: "Ignore" button (open a return to see it), like on Shipping. Ignored returns drop out of Open / Needs attention and the counts and sit under a new Ignored tab, with who ignored it and why. "Put back" returns it to the list. Tracking still runs on ignored returns.
 
