@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.48
+- Reviews has a new **Emails & texts** page for each store (LB / LBO). It shows that store's review flow step by step: the waits, each email (with a preview, subject and Edit email button), and the text. Each step shows sent / opened / clicked. Totals at the top: customers asked, how many left a review, reviews from emails and texts, and reviews written on the website. If a store has no review flow yet, one button creates it.
+- Insights is renamed **Analytics**. The Overview links to Analytics and Emails & texts.
+
 ## 0.0.47
 - Reviews has **LB** and **LBO** tabs at the top of its menu. Every Reviews page (Overview, Moderation, Products, Insights, Groups, Customize, Settings) shows only the selected store. Your choice is remembered, and clicking something from the other store switches the tab for you.
 

@@ -532,6 +532,33 @@ async function reviewFlows(store) {
   return (await db(`SELECT id, store, name, status FROM mk_flows WHERE deleted_at IS NULL AND NOT COALESCE(archived,false) AND ($1::text IS NULL OR store=$1)
     AND (name ILIKE '%review%' OR graph::text LIKE '%review_url%') ORDER BY (status='live') DESC, id DESC`, [store || null]).catch(() => ({ rows: [] }))).rows;
 }
+/** Everything about asking for reviews in one store: its review flows step by step (emails, texts, waits) with results, and what they brought in. */
+async function requestsView({ store, days = 30 }) {
+  const d = Math.max(7, Math.min(365, Number(days) || 30));
+  const out = [];
+  for (const f0 of await reviewFlows(store)) {
+    const f = (await db(`SELECT * FROM mk_flows WHERE id=$1`, [f0.id])).rows[0]; if (!f) continue;
+    const nodes = (f.graph && f.graph.nodes) || {}; const seen = new Set(); const order = [];
+    const walk = (id) => { while (id && nodes[id] && !seen.has(id)) { seen.add(id); order.push(id); const n = nodes[id]; if (n.yes || n.no) { walk(n.no); id = n.yes; } else id = n.next; } };
+    walk(f.graph && f.graph.start); Object.keys(nodes).forEach((k) => { if (!seen.has(k)) order.push(k); });
+    const st = (await db(`SELECT s.flow_step, count(DISTINCT s.id) FILTER (WHERE s.sent_at IS NOT NULL)::int sent, count(DISTINCT s.id) FILTER (WHERE s.status='skipped')::int skipped,
+        count(DISTINCT s.id) FILTER (WHERE e.type='opened')::int opened, count(DISTINCT s.id) FILTER (WHERE e.type='clicked')::int clicked
+      FROM mk_sends s LEFT JOIN mk_send_events e ON e.send_id=s.id AND NOT e.machine WHERE s.flow_id=$1 AND s.created_at > now() - ($2 || ' days')::interval AND NOT COALESCE((s.meta->>'test')::boolean,false) GROUP BY s.flow_step`, [f.id, String(d)]).catch(() => ({ rows: [] }))).rows;
+    const by = Object.fromEntries(st.map((x) => [x.flow_step, x]));
+    const tids = order.map((k) => nodes[k]).filter((n) => n.type === "send_email" && n.config && n.config.template_id).map((n) => Number(n.config.template_id));
+    const tpls = tids.length ? Object.fromEntries((await db(`SELECT id, name, subject, preview, updated_at FROM mk_templates WHERE id = ANY($1)`, [tids])).rows.map((t) => [String(t.id), t])) : {};
+    const runs = (await db(`SELECT count(*) FILTER (WHERE status IN ('active','working','paused'))::int active, count(*) FILTER (WHERE entered_at > now() - ($2 || ' days')::interval AND NOT test)::int entered FROM mk_flow_runs WHERE flow_id=$1`, [f.id, String(d)]).catch(() => ({ rows: [{}] }))).rows[0];
+    out.push({ id: f.id, name: f.name, status: f.status, trigger: f.trigger, runs, steps: order.map((k) => {
+      const n = nodes[k], c = n.config || {}, t = tpls[String(c.template_id)] || null, x = by[k] || {};
+      return { id: k, type: n.type, name: c.name || (t && t.name) || null, status: c.status || null, amount: c.amount, unit: c.unit, until_time: c.until_time, template_id: c.template_id || null, subject: c.subject || (t && t.subject) || null, preview: c.preview || (t && t.preview) || null, body: c.body || null, sent: x.sent || 0, skipped: x.skipped || 0, opened: x.opened || 0, clicked: x.clicked || 0 };
+    }) });
+  }
+  const a = [store, String(d)];
+  const asked = (await db(`SELECT count(*)::int asked, count(*) FILTER (WHERE used_at IS NOT NULL)::int reviewed FROM rv_requests WHERE store=$1 AND NOT test AND sent > 0 AND created_at > now() - ($2 || ' days')::interval`, a)).rows[0];
+  const rv = (await db(`SELECT count(*)::int n, round(avg(rating)::numeric,2)::float avg, count(*) FILTER (WHERE jsonb_array_length(media)>0)::int photos FROM rv_reviews WHERE store=$1 AND source='request' AND created_at > now() - ($2 || ' days')::interval`, a)).rows[0];
+  const site = (await db(`SELECT count(*)::int n FROM rv_reviews WHERE store=$1 AND source='site' AND created_at > now() - ($2 || ' days')::interval`, a)).rows[0];
+  return { days: d, flows: out, totals: { asked: asked.asked, reviewed: asked.reviewed, rate: asked.asked ? Math.round((1000 * asked.reviewed) / asked.asked) / 10 : null, reviews: rv.n, avg: rv.avg, photos: rv.photos, site: site.n } };
+}
 async function groups(store) {
   return (await db(`SELECT g.id, g.store, g.name, cardinality(g.product_ids) products, g.synced_at,
       (SELECT count(*)::int FROM rv_reviews r WHERE r.store=g.store AND r.status='published' AND r.product_id = ANY(g.product_ids)) reviews,
@@ -603,6 +630,7 @@ function routes(app, { guard, actorOf, express }) {
   app.get("/api/reviews-insights", async (req, res) => { if (!guard(req, res)) return; try { res.json(await insights(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get("/api/reviews-groups", async (req, res) => { if (!guard(req, res)) return; try { res.json({ groups: await groups(req.query.store || null) }); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews-groups/sync", async (req, res) => { if (!guard(req, res)) return; try { const out = {}; for (const k of Object.keys(STORES)) out[k] = await syncGroups(k); AGG_CACHE.clear(); res.json({ ok: true, out }); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get("/api/reviews-requests", async (req, res) => { if (!guard(req, res)) return; const s = storeOk(req.query.store); if (!s) return res.status(400).json({ error: "store?" }); try { res.json(await requestsView({ store: s, days: req.query.days })); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get("/api/reviews-flows", async (req, res) => { if (!guard(req, res)) return; res.json({ flows: await reviewFlows(req.query.store || null) }); });
   app.post("/api/reviews-flows", async (req, res) => {
     if (!guard(req, res)) return; const s = storeOk((req.body || {}).store); if (!s) return res.status(400).json({ error: "store?" });

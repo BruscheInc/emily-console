@@ -311,6 +311,10 @@
   .rvmedia{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.rvmedia img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
   .rvreply{margin-top:10px;background:var(--panel2);border-radius:8px;padding:8px 10px}.rvreplybox{margin-top:10px}.rvreplybox textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit;background:var(--panel2);color:var(--ink);box-sizing:border-box}
   .rvtabs{display:flex;gap:4px;margin:2px 10px 10px;padding:3px;background:var(--panel2);border-radius:10px}.rvtabs button{flex:1;border:0;background:none;border-radius:8px;padding:7px 6px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}.rvtabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .rvsteps{display:flex;flex-direction:column;gap:8px}.rvstep{display:flex;gap:14px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--panel)}.rvstep.wait{border-style:dashed;padding:8px 12px;align-items:center;gap:8px;color:var(--muted);font-size:13px;background:none}
+  .rvsthumb{width:180px;height:190px;flex:none;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:#fff;position:relative}.rvsthumb iframe{width:600px;height:733px;border:0;transform:scale(.3);transform-origin:0 0;pointer-events:none}
+  .rvsms{width:180px;flex:none;background:#E9E9EB;border-radius:16px;padding:10px 12px;font-size:13px;line-height:1.4;align-self:flex-start;white-space:pre-wrap}.rvsh2{display:flex;gap:6px;align-items:center;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:4px}
+  .rvsst{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px}
   .rvclick{cursor:pointer}.rvclick:hover{border-color:var(--ink)}.rvhgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px}@media(max-width:1100px){.rvhgrid{grid-template-columns:1fr}}
   .rvtodo{display:flex;gap:12px;align-items:center;padding:10px 6px;border-top:1px solid var(--line);cursor:pointer}.rvtodo:first-of-type{border-top:0}.rvtodo:hover{background:var(--panel2)}.rvtodo img{width:34px;height:34px;object-fit:cover;border-radius:6px}.rvtodo .exc{margin-top:2px}.rvtodo>i{color:var(--muted)}
   .rvdot{width:10px;height:10px;border-radius:50%;flex:none;background:#A1A1AA}.rvtodo.high .rvdot{background:#DC2626}.rvtodo.mid .rvdot{background:#F59E0B}.rvtodo.low .rvdot{background:#60A5FA}.rvtodo.setup .rvdot{background:#E4E4E7;box-shadow:inset 0 0 0 2px #A1A1AA}
@@ -463,7 +467,8 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
     <button class="nav view sub" data-view="rv_home" onclick="setView('rv_home')"><i class="si ti ti-layout-dashboard"></i><span>Overview</span><span class="n" id="v-rv_todo"></span></button>
     <button class="nav view sub" data-view="rv_mod" onclick="setView('rv_mod')"><i class="si ti ti-check"></i><span>Moderation</span><span class="n" id="v-rv_pending"></span></button>
     <button class="nav view sub" data-view="rv_products" onclick="setView('rv_products')"><i class="si ti ti-shopping-bag"></i><span>Products</span></button>
-    <button class="nav view sub" data-view="rv_insights" onclick="setView('rv_insights')"><i class="si ti ti-chart-pie"></i><span>Insights</span></button>
+    <button class="nav view sub" data-view="rv_insights" onclick="setView('rv_insights')"><i class="si ti ti-chart-pie"></i><span>Analytics</span></button>
+    <button class="nav view sub" data-view="rv_requests" onclick="setView('rv_requests')"><i class="si ti ti-mail"></i><span>Emails &amp; texts</span></button>
     <button class="nav view sub" data-view="rv_groups" onclick="setView('rv_groups')"><i class="si ti ti-stack-2"></i><span>Groups</span></button>
     <button class="nav view sub" data-view="rv_design" onclick="setView('rv_design')"><i class="si ti ti-palette"></i><span>Customize</span></button>
     <button class="nav view sub" data-view="rv_setup" onclick="setView('rv_setup')"><i class="si ti ti-settings"></i><span>Settings &amp; website</span></button>
@@ -686,7 +691,7 @@ async function loadCounts(){try{
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={rv_home:"Reviews · overview",rv_design:"Reviews · customize",rv_mod:"Reviews · moderation",rv_products:"Reviews · products",rv_insights:"Reviews · insights",rv_groups:"Reviews · groups",rv_setup:"Reviews · settings & website",orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={rv_home:"Reviews · overview",rv_design:"Reviews · customize",rv_mod:"Reviews · moderation",rv_products:"Reviews · products",rv_insights:"Reviews · analytics",rv_requests:"Reviews · emails & texts",rv_groups:"Reviews · groups",rv_setup:"Reviews · settings & website",orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -889,6 +894,7 @@ const rvSel=(k,label,opts)=>`<label class="rvf"><span>${label}</span><select onc
 async function loadReviews(more){
   rvTabs(); RV.store=RVP.store=RVI.store=RVH.store=RVS;
   if(VIEW==="rv_home") return rvHome();
+  if(VIEW==="rv_requests") return rvRequests();
   if(VIEW==="rv_design") return rvDesign();
   if(VIEW==="rv_setup") return rvSetup();
   if(VIEW==="rv_products") return rvProducts();
@@ -1024,7 +1030,7 @@ async function rvHome(){
      ${r.title?`<div style="font-weight:600;margin-top:2px">${esc(r.title)}</div>`:""}<div class="exc" style="color:var(--ink)">${esc(snip(r.body))}</div>
      <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">${r.status==="pending"?'<span class="opill warn">Waiting for you</span>':r.status==="rejected"?'<span class="opill bad">Rejected</span>':'<span class="opill ok">Published</span>'}${r.reply?'<span class="chip">replied</span>':""}${(r.media||[]).length?`<span class="chip">${r.media.length} photo${r.media.length>1?"s":""}</span>`:""}<span class="chip">${r.source==="request"?"from review email":r.source==="site"?"website":"imported"}</span><span class="chip">${r.store==="lbo"?"Outlet":"Larkspur"}</span></div></div></div>`).join("");
   w.innerHTML=`<div class="rvhome"><div class="rvbar"><b style="font-size:15px">${RVSN[RVS]}</b>
-     <span style="flex:1"></span><button class="btn sec xs" onclick="setView('rv_insights')"><i class="ti ti-chart-pie"></i> Full insights</button><button class="btn sec xs" onclick="rvStudio.open(RVS)"><i class="ti ti-palette"></i> Customize</button></div>
+     <span style="flex:1"></span><button class="btn sec xs" onclick="setView('rv_insights')"><i class="ti ti-chart-pie"></i> Analytics</button><button class="btn sec xs" onclick="setView('rv_requests')"><i class="ti ti-mail"></i> Emails &amp; texts</button><button class="btn sec xs" onclick="rvStudio.open(RVS)"><i class="ti ti-palette"></i> Customize</button></div>
    <div style="padding:6px 22px 30px">
    <div class="rvkpis">${tile("Waiting for you",k.pending.toLocaleString(),k.pending_soon?`${k.pending_soon} auto-publish within 3 days`:"under your auto-publish rating",{view:"rv_mod",f:{status:"pending"}})}
      ${tile("New this week",k.week.toLocaleString(),chg!=null?`${chg>=0?"▲":"▼"} ${Math.abs(chg)}% vs last week`:"",{view:"rv_mod",f:{status:"all",days:"7"}})}
@@ -1043,6 +1049,35 @@ async function rvDesign(){
   w.innerHTML=`<div style="padding:22px;max-width:860px"><h2 style="margin:0 0 6px">Customize how reviews look</h2>
    <p class="exc" style="font-size:14px">Change colors, fonts, sizes, words, layout and which parts show, with a live preview for desktop and mobile using real reviews. Changes save as you go and only reach the website when you click Publish.</p>
    ${[["lb","Larkspur Baby",a],["lbo","Larkspur Baby Outlet",b]].filter(([k])=>k===RVS).map(([k,n,m])=>`<div class="ocard"><div class="och">${n} ${st(m||{})}</div><div class="exc">${m&&m.published_at?`Last published ${fmtDay(m.published_at)}`:"Never customized"}</div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="rvStudio.open('${k}')"><i class="ti ti-palette"></i> Open editor</button>${m&&m.sample&&m.sample.handle?`<a class="btn sec" target="_blank" rel="noopener" href="${esc(m.shop)}/products/${esc(m.sample.handle)}?bz_reviews=1&bz_design=draft"><i class="ti ti-eye"></i> Preview on the site</a>`:""}</div></div>`).join("")}</div>`;
+}
+/* emails & texts: this store's review flows, step by step, with results */
+const RVR={days:30};
+async function rvRequests(){
+  const w=$("stuckwrap"); if(!w.querySelector(".rvreq")) w.innerHTML='<div class="empty">Loading…</div>'; $("showing").textContent="";
+  let d; try{ d=await api(`/api/reviews-requests?store=${RVS}&days=${RVR.days}`); if(d.error) throw new Error(d.error); }catch(e){ w.innerHTML=`<div class="empty">Couldn't load: ${esc(e.message)}</div>`; return; }
+  const t=d.totals, pct=(a,b)=>b?Math.round(100*a/b)+"%":"—";
+  const tile=(l,v,sub)=>`<div class="rvkpi"><div class="exc">${l}</div><b>${v}</b>${sub?`<div class="exc">${sub}</div>`:""}</div>`;
+  const wait=x=>`<div class="rvstep wait"><i class="ti ti-clock"></i> Wait ${x.amount} ${esc(x.unit||"days")}${x.until_time?`, until ${esc(x.until_time)}`:""}</div>`;
+  const pill=s=>`<span class="opill ${s==="live"?"ok":s==="test"?"warn":"mut"}">${esc(s||"draft")}</span>`;
+  const stat=x=>`<div class="rvsst"><span><b>${x.sent.toLocaleString()}</b> sent</span>${x.type==="send_email"?`<span><b>${pct(x.opened,x.sent)}</b> opened</span>`:""}<span><b>${pct(x.clicked,x.sent)}</b> clicked</span>${x.skipped?`<span class="exc">${x.skipped.toLocaleString()} skipped</span>`:""}</div>`;
+  const step=(x,f)=>{
+    if(x.type==="delay") return wait(x);
+    if(x.type==="send_email") return `<div class="rvstep"><div class="rvsthumb">${x.template_id?`<iframe data-tpl="${esc(x.template_id)}" tabindex="-1" title="Email preview"></iframe>`:'<div class="exc" style="padding:20px">No email picked</div>'}</div>
+      <div style="flex:1;min-width:0"><div class="rvsh2"><i class="ti ti-mail"></i> Email ${pill(x.status)}</div><b>${esc(x.name||"Email")}</b><div class="exc">Subject: ${esc(x.subject||"—")}</div>${x.preview?`<div class="exc">${esc(x.preview)}</div>`:""}${stat(x)}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${x.template_id?`<a class="btn sec xs" href="/marketing#templates/${esc(x.template_id)}" target="_blank" rel="noopener"><i class="ti ti-pencil"></i> Edit email</a>`:""}<a class="btn sec xs" href="/marketing#flows/${esc(f.id)}" target="_blank" rel="noopener">Timing &amp; settings</a></div></div></div>`;
+    if(x.type==="send_sms") return `<div class="rvstep"><div class="rvsms">${esc(x.body||"")}</div><div style="flex:1;min-width:0"><div class="rvsh2"><i class="ti ti-message"></i> Text ${pill(x.status)}</div><div class="exc">Only to text subscribers. The store name goes first and "Reply STOP" last.</div>${stat(x)}
+      <div style="margin-top:8px"><a class="btn sec xs" href="/marketing#flows/${esc(f.id)}" target="_blank" rel="noopener"><i class="ti ti-pencil"></i> Edit text</a></div></div></div>`;
+    if(x.type==="end") return "";
+    return `<div class="rvstep wait"><i class="ti ti-git-branch"></i> ${esc(x.type.replace(/_/g," "))}</div>`;
+  };
+  const flows=d.flows.length?d.flows.map(f=>`<div class="ocard"><div class="och">${esc(f.name)} ${pill(f.status)}<span style="margin-left:auto;display:flex;gap:6px"><a class="btn sec xs" href="/marketing#flows/${esc(f.id)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Open flow</a></span></div>
+      <div class="exc" style="margin-bottom:8px">Starts when an order ships. ${(f.runs.entered||0).toLocaleString()} customers entered in this period · ${(f.runs.active||0).toLocaleString()} in it now. Anyone who leaves a review drops out.${f.status!=="live"?' <b>Not live yet:</b> open the flow and click "Review and turn on".':""}</div>
+      <div class="rvsteps">${f.steps.map(x=>step(x,f)).join("")}</div></div>`).join("")
+    :`<div class="ocard"><div class="och">No review emails set up for ${RVSN[RVS]} yet</div><div>One click builds a ready-made flow: an email 14 days after an order ships, a text 5 days later (text subscribers only), then a reminder email. Everything is editable in the email builder and the flow editor.</div><div style="margin-top:12px"><button class="btn" onclick="rvFlow('${RVS}',this)">Create review flow</button></div></div>`;
+  w.innerHTML=`<div class="rvreq"><div class="rvbar"><b style="font-size:15px">${RVSN[RVS]}</b><label class="rvf"><span>Period</span><select onchange="RVR.days=this.value;rvRequests()">${[[7,"Last 7 days"],[30,"Last 30 days"],[90,"Last 90 days"],[365,"Last year"]].map(([v,l])=>`<option value="${v}" ${Number(RVR.days)===v?"selected":""}>${l}</option>`).join("")}</select></label></div>
+   <div style="padding:6px 22px 30px"><div class="rvkpis">${tile("Customers asked",t.asked.toLocaleString(),"orders that got a review email")}${tile("Left a review",t.reviewed.toLocaleString(),t.rate!=null?`${t.rate}% of those asked`:"")}${tile("Reviews from emails & texts",t.reviews.toLocaleString(),t.reviews?`avg ${(t.avg||0).toFixed(2)}★ · ${t.photos} with photos`:"")}${tile("Written on the website",t.site.toLocaleString(),"without being asked")}</div>
+   ${flows}</div></div>`;
+  w.querySelectorAll("iframe[data-tpl]").forEach(async f=>{ try{ const r=await api(`/api/mk/templates/${f.dataset.tpl}/thumb`); if(r.html) f.srcdoc=r.html; }catch(e){} });
 }
 let RVF=[];
 async function rvSetup(){
