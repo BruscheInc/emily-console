@@ -311,7 +311,7 @@
   .rvt{font-weight:700;font-size:15px;margin:8px 0 2px}.rvb{white-space:pre-wrap;line-height:1.55}
   .rvmedia{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.rvmedia img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
   .rvreply{margin-top:10px;background:var(--panel2);border-radius:8px;padding:8px 10px}.rvreplybox{margin-top:10px}.rvreplybox textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit;background:var(--panel2);color:var(--ink);box-sizing:border-box}
-  .rvtabs{display:flex;gap:4px;margin:2px 10px 10px;padding:3px;background:var(--panel2);border-radius:10px}.rvtabs button{flex:1;border:0;background:none;border-radius:8px;padding:7px 6px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}.rvtabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .rvtabs{display:flex;gap:4px;margin:2px 10px 10px;padding:3px;background:var(--panel2);border-radius:10px}.rvtabs button{flex:1;border:0;background:none;border-radius:8px;padding:7px 6px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}.lytabs button.on,.rvtabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
   .rvsteps{display:flex;flex-direction:column;gap:8px}.rvstep{display:flex;gap:14px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--panel)}.rvstep.wait{border-style:dashed;padding:8px 12px;align-items:center;gap:8px;color:var(--muted);font-size:13px;background:none}
   .rvsthumb{width:180px;height:190px;flex:none;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:#fff;position:relative}.rvsthumb iframe{width:600px;height:733px;border:0;transform:scale(.3);transform-origin:0 0;pointer-events:none}
   .rvsms{width:220px;flex:none;background:#E9E9EB;border:0;border-radius:16px;padding:10px 12px;font:inherit;font-size:13px;line-height:1.4;align-self:flex-start;resize:vertical;color:inherit}.rvsh2{display:flex;gap:6px;align-items:center;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:4px}
@@ -431,6 +431,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 <link rel="stylesheet" href="/bz-ui.css?v=__VERSION__">
 <script src="/bz-rail.js?v=__VERSION__" defer></script>
 <script src="/rv-studio.js?v=__VERSION__" defer></script>
+<script src="/ly-admin.js?v=__VERSION__" defer></script>
 </head>
 <body class="bz-hd">
 <div id="keygate" class="keyprompt hidden">
@@ -474,6 +475,19 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
     <button class="nav view sub" data-view="rv_groups" onclick="setView('rv_groups')"><i class="si ti ti-stack-2"></i><span>Groups</span></button>
     <button class="nav view sub" data-view="rv_design" onclick="setView('rv_design')"><i class="si ti ti-palette"></i><span>Customize</span></button>
     <button class="nav view sub" data-view="rv_setup" onclick="setView('rv_setup')"><i class="si ti ti-settings"></i><span>Settings &amp; website</span></button>
+  </div></div>
+  <div class="grp" data-g="rewards"><button class="nav gh" onclick="toggleGrp('rewards')"><i class="i ti ti-gift"></i><span>Rewards</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <div class="rvtabs lytabs" role="tablist" aria-label="Store"><button type="button" data-ls="lb" title="Larkspur Baby" onclick="lySetStore('lb')">LB</button><button type="button" data-ls="lbo" title="Larkspur Baby Outlet" onclick="lySetStore('lbo')">LBO</button></div>
+    <button class="nav view sub" data-view="ly_home" onclick="setView('ly_home')"><i class="si ti ti-layout-dashboard"></i><span>Overview</span></button>
+    <button class="nav view sub" data-view="ly_members" onclick="setView('ly_members')"><i class="si ti ti-users"></i><span>Members</span></button>
+    <button class="nav view sub" data-view="ly_activity" onclick="setView('ly_activity')"><i class="si ti ti-list-details"></i><span>Activity</span></button>
+    <button class="nav view sub" data-view="ly_earn" onclick="setView('ly_earn')"><i class="si ti ti-star"></i><span>Ways to earn</span></button>
+    <button class="nav view sub" data-view="ly_redeem" onclick="setView('ly_redeem')"><i class="si ti ti-gift"></i><span>Rewards</span></button>
+    <button class="nav view sub" data-view="ly_vip" onclick="setView('ly_vip')"><i class="si ti ti-crown"></i><span>VIP tiers</span></button>
+    <button class="nav view sub" data-view="ly_referrals" onclick="setView('ly_referrals')"><i class="si ti ti-heart"></i><span>Referrals</span></button>
+    <button class="nav view sub" data-view="ly_design" onclick="setView('ly_design')"><i class="si ti ti-palette"></i><span>Widget &amp; page</span></button>
+    <button class="nav view sub" data-view="ly_setup" onclick="setView('ly_setup')"><i class="si ti ti-settings"></i><span>Settings</span></button>
   </div></div>
   <div class="grp" data-g="orders"><button class="nav gh" onclick="toggleGrp('orders')"><i class="i ti ti-shopping-bag"></i><span>Orders</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
@@ -663,7 +677,7 @@ document.addEventListener("keydown",(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLo
 document.addEventListener("click",(e)=>{ const m=$("acctMenu"); if(m&&!m.classList.contains("hidden")&&!e.target.closest(".acct")) m.classList.add("hidden"); });
 function setTab(t){TAB=t;OFFSET=0;document.querySelectorAll(".tab[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));loadList();}
 /* ---- app rail modules: each rail icon shows one part of Buzzin in the panel ---- */
-const MODS={home:[],tickets:["inbox","mail"],orders:["orders"],reviews:["reviews"],ship:["ship"],returns:["returns"],marketing:["mk_aud","mk_build","mk_res"],content:["content"],analytics:["analytics"]};
+const MODS={home:[],tickets:["inbox","mail"],orders:["orders"],reviews:["reviews"],rewards:["rewards"],ship:["ship"],returns:["returns"],marketing:["mk_aud","mk_build","mk_res"],content:["content"],analytics:["analytics"]};
 const MOD_TITLES={home:"Home",tickets:"Tickets",orders:"Orders",reviews:"Reviews",ship:"Shipping",returns:"Returns & claims",marketing:"Marketing",content:"Content",analytics:"Reports"};
 function modOf(v){ if(v==="home") return "home"; const b=document.querySelector(`.side .nav.view[data-view="${v}"]`); const g=b&&b.closest(".grp"); const gid=g&&g.dataset.g; for(const m in MODS) if(MODS[m].includes(gid)) return m; return "tickets"; }
 function showMod(m){
@@ -698,7 +712,7 @@ async function loadCounts(){try{
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={rv_home:"Reviews · overview",rv_design:"Reviews · customize",rv_mod:"Reviews · moderation",rv_products:"Reviews · products",rv_insights:"Reviews · analytics",rv_requests:"Reviews · flows: emails & texts",rv_groups:"Reviews · groups",rv_setup:"Reviews · settings & website",orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={ly_home:"Rewards · overview",ly_members:"Rewards · members",ly_activity:"Rewards · activity",ly_earn:"Rewards · ways to earn",ly_redeem:"Rewards · rewards",ly_vip:"Rewards · VIP tiers",ly_referrals:"Rewards · referrals",ly_design:"Rewards · widget & page",ly_setup:"Rewards · settings",rv_home:"Reviews · overview",rv_design:"Reviews · customize",rv_mod:"Reviews · moderation",rv_products:"Reviews · products",rv_insights:"Reviews · analytics",rv_requests:"Reviews · flows: emails & texts",rv_groups:"Reviews · groups",rv_setup:"Reviews · settings & website",orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -1210,13 +1224,14 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="7" class="empty">Loading…</td></tr>';_listSig="";SEL.clear();syncBulk();}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
-  const isStuck=/^orders_/.test(VIEW)||/^rv_/.test(VIEW)||VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="pickup"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
+  const isStuck=/^orders_/.test(VIEW)||/^rv_/.test(VIEW)||/^ly_/.test(VIEW)||VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="pickup"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
   if(/^orders_/.test(VIEW)){ if(!silent) loadOrders(); return; }
   if(/^rv_/.test(VIEW)){ if(!silent) loadReviews(); return; }
+  if(/^ly_/.test(VIEW)){ if(!silent) lyLoad(); return; }
   if(VIEW==="home") return loadHome(silent);
   if(VIEW==="activity") return loadActivity(silent);
   if(VIEW==="emily_replies") return loadReplies(silent);

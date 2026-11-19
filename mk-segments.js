@@ -28,7 +28,7 @@ const NUM_FIELDS = new Set(["orders_count", "total_spent"]);
 const EVENTS = { placed_order: "Placed order", started_checkout: "Started checkout", added_to_cart: "Added to cart", viewed_product: "Viewed product", active_on_site: "Active on site",
   submitted_form: "Signed up through a form", joined_list: "Joined a list", entered_segment: "Entered a segment", received_email: "Got an email", opened_email: "Opened an email",
   clicked_email: "Clicked an email", received_sms: "Got a text", clicked_sms: "Clicked a text", unsubscribed: "Unsubscribed", fulfilled_order: "Order shipped", delivered_order: "Order delivered",
-  return_refunded: "Return refunded", claim_approved: "Claim approved", ticket_closed: "Ticket closed", price_drop: "Price dropped on something they viewed", back_in_stock: "Back in stock", left_review: "Left a review" };
+  return_refunded: "Return refunded", claim_approved: "Claim approved", ticket_closed: "Ticket closed", price_drop: "Price dropped on something they viewed", back_in_stock: "Back in stock", left_review: "Left a review", loyalty_joined: "Joined rewards", loyalty_points_earned: "Earned reward points", loyalty_reward_redeemed: "Redeemed a reward", loyalty_tier_changed: "Changed VIP tier", loyalty_points_expiring: "Reward points expiring soon", loyalty_referral_reward: "Got a referral reward" };
 
 /** Compile a definition to a SQL boolean expression. `args` collects bind values; ctx.since is the flow-start time. */
 function compile(def, args, ctx = {}, depth = 0) {

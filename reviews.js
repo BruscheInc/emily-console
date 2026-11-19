@@ -258,7 +258,7 @@ async function submit(store, b, { via = "site" } = {}) {
   if (reqRow) await db(`UPDATE rv_requests SET used_at=COALESCE(used_at, now()) WHERE token=$1`, [reqRow.token]);
   if (status === "published") { AGG_CACHE.clear(); queueMetafield(store, b.product_id); }
   if (email) { try { await require("./mk-core").upsertProfile(store, { email, first_name: String(name || "").split(" ")[0] || null }, "reviews"); } catch (_) {} }
-  if (email) { try { await require("./mk-core").track(store, "left_review", { email, props: { rating, product_id: String(b.product_id || ""), product: clean(b.product_title, 200) }, source: "reviews" }); } catch (_) {} }
+  if (email) { try { await require("./mk-core").track(store, "left_review", { email, props: { rating, product_id: String(b.product_id || ""), product: clean(b.product_title, 200), review_id: id, media: media.length, order: orderName || null }, source: "reviews" }); } catch (_) {} }
   if (rating <= 2) core.slackPost && core.slackPost(`⭐ ${rating}-star review on ${STORES[store].name}: ${clean(b.product_title, 120)} — “${title || body.slice(0, 120)}” (${name}). Open Buzzin → Reviews.`).catch(() => {});
   return { ok: true, id, status };
 }

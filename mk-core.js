@@ -611,6 +611,7 @@ async function track(store, type, { profileId, email, phone, at, value, props, s
     [pid, store, type, at || null, value == null ? null : Number(value), JSON.stringify(props || {}), source || null, extId || null]);
   if (pid && /^(opened|clicked|active_on_site|viewed_product|added_to_cart|submitted_form)/.test(type)) await db(`UPDATE mk_profiles SET last_engaged_at=GREATEST(last_engaged_at, COALESCE($2, now())) WHERE id=$1`, [pid, at || null]);
   try { require("./mk-flows").onEvent && require("./mk-flows").onEvent(store, type, pid, props || {}); } catch (_) {}
+  if (r.rows[0] && pid && /^(placed_order|refunded_order|cancelled_order|left_review)$/.test(type)) require("./loyalty").onEvent(store, type, pid, props || {}, value, extId).catch((e) => console.error("rewards:", e.message));   // points (only when the program is on)
   return r.rows[0] ? r.rows[0].id : null;
 }
 

@@ -3,6 +3,20 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.52
+- New **Rewards** section (loyalty program), built in Buzzin and **off** until "Launch program" is clicked. LB and LBO are set up separately.
+  - **Overview:** members, points earned/spent/outstanding, rewards redeemed, sales from members, referrals, members by tier.
+  - **Members:** search and filter. Each member shows balance, tier, VIP spend and full points history. Staff can add or remove points, give a reward, set a tier, add a birthday, enroll, block, and leave notes.
+  - **Ways to earn:** join, orders (points per $1, optional wait for returns, limits), reviews (+ photos), birthday, anniversary, Instagram/Facebook/TikTok/X/Pinterest, custom.
+  - **Rewards:** $ off, % off, convert points to $ off, free shipping, free product. Each one makes a single-use Shopify code with an expiry, minimum order, collections and per-member limits.
+  - **VIP tiers:** by spend over the last 12 months or lifetime. Each tier has a points multiplier, a bonus on reaching it, perks, and can turn rules on/off or change amounts. Tiers are kept for 12 months.
+  - **Referrals:** each member gets a link. Friends get a first-order gift and the member gets points or a code when the friend buys.
+  - **Activity:** every points change and every reward redeemed.
+  - **Widget & page:** customize the floating rewards panel and the rewards page (colors, launcher, all wording, page sections, FAQ, custom CSS) with a live preview for signed-out, not-joined and member views, then publish.
+  - **Settings:** launch/pause, name, point name, what counts toward points, expiry, VIP rules, discount combining, blocked tags, and the theme snippet that securely tells the widget who's signed in.
+- Points follow orders, refunds, cancellations and reviews automatically. Balances copy to marketing profiles (`{{ loyalty_points }}`, `{{ loyalty_tier }}`…), and rewards events (joined, earned, redeemed, tier changed, points expiring, referral reward) can start flows.
+- Reviews now report photos and the order to marketing, so review points can include photo bonuses.
+
 ## 0.0.51
 - Buzzin now runs on **Central time** unless changed in **Settings → Time zone**. The server, the database's "today", flows, Emily's notes, emails and every staff page use it, whatever time zone the computer or phone is set to (the server itself runs on UTC, which is why some times were 6 hours ahead).
 
