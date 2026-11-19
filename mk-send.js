@@ -41,7 +41,7 @@ async function senders() { return (await core.setting("mk_senders", null)) || {}
 
 function inQuietHours(tz, quiet) {
   try {
-    const hm = new Intl.DateTimeFormat("en-US", { timeZone: tz || "America/Chicago", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+    const hm = new Intl.DateTimeFormat("en-US", { timeZone: tz || bzTZ(), hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
     const cur = hm.replace(/^24/, "00"), s = quiet.start, e = quiet.end;
     return s > e ? (cur >= s || cur < e) : (cur >= s && cur < e);
   } catch (_) { return false; }

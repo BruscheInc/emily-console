@@ -180,7 +180,7 @@ function tzParts(tz, d = new Date()) {
 function delayUntil(cfg, tz, base = new Date()) {
   const unit = { minutes: 60e3, hours: 3600e3, days: 864e5, weeks: 7 * 864e5 }[cfg.unit] || 864e5;
   let t = new Date(base.getTime() + (Number(cfg.amount) || 0) * unit);
-  const zone = tz || "America/Chicago";
+  const zone = tz || bzTZ();
   if (cfg.until_time) {
     const [hh, mm] = String(cfg.until_time).split(":").map(Number);
     for (let i = 0; i < 9; i++) {
@@ -212,7 +212,7 @@ async function execNode(run, flow, node, p) {
   const msgAllowed = async (st) => st === "live" || (st === "test" && (run.test || (await onTestList(p))));
   switch (node.type) {
     case "end": return { next: null, note: "end" };
-    case "delay": { const until = delayUntil(c, c.tz === "store" ? "America/Chicago" : p.timezone); return { next: node.next, wait: until, note: `wait until ${until.toISOString()}` }; }
+    case "delay": { const until = delayUntil(c, c.tz === "store" ? bzTZ() : p.timezone); return { next: node.next, wait: until, note: `wait until ${until.toISOString()}` }; }
     case "wait_for": {
       const w = ctx.waiting && ctx.waiting.node === run.node_id ? ctx.waiting : null;
       if (!w) { const until = delayUntil({ amount: c.within_amount || 1, unit: c.within_unit || "days" }, p.timezone); return { stay: true, wait: until, ctx: { waiting: { node: run.node_id, event: c.event, since: new Date().toISOString(), until: until.toISOString() } }, note: `waiting for ${c.event}` }; }
@@ -368,7 +368,7 @@ async function dateTriggers() {
     const t = f.trigger || {}; if (t.type !== "date" || !t.field) continue;
     const key = String(t.field).replace(/^props\./, "").replace(/[^a-z0-9_]/gi, "");
     const col = ["created_at", "first_order_at", "last_order_at"].includes(key) ? `p.${key}` : `NULLIF(p.props->>'${key}','')::date`;
-    const yearly = t.yearly ? `to_char((${col})::date + ($2 || ' days')::interval, 'MM-DD') = to_char(now() AT TIME ZONE 'America/Chicago', 'MM-DD')` : `((${col})::date + ($2 || ' days')::interval)::date = (now() AT TIME ZONE 'America/Chicago')::date`;
+    const yearly = t.yearly ? `to_char((${col})::date + ($2 || ' days')::interval, 'MM-DD') = to_char(now() AT TIME ZONE '${bzTZ()}', 'MM-DD')` : `((${col})::date + ($2 || ' days')::interval)::date = (now() AT TIME ZONE '${bzTZ()}')::date`;
     let rows = [];
     try { rows = (await db(`SELECT p.id FROM mk_profiles p WHERE $1::text IS NOT NULL AND ${yearly} LIMIT 20000`, [f.store, Number(t.offset_days) || 0])).rows; } catch (e) { console.error(`date trigger ${f.id}:`, e.message); continue; }
     for (const r of rows) await enroll(f, r.id, { trigger: "date", reason: `date: ${t.field}${t.offset_days ? ` + ${t.offset_days} days` : ""}` });
@@ -708,7 +708,7 @@ async function simulate(flowId, profileId) {
     const n = f.graph.nodes[id]; if (!n) break;
     const c = n.config || {};
     let note = "", next = n.next;
-    if (n.type === "delay") { t = delayUntil(c, c.tz === "store" ? "America/Chicago" : p.timezone, t); note = `waits until ${t.toLocaleString("en-US", { timeZone: p.timezone || "America/Chicago" })}`; }
+    if (n.type === "delay") { t = delayUntil(c, c.tz === "store" ? bzTZ() : p.timezone, t); note = `waits until ${t.toLocaleString("en-US", { timeZone: p.timezone || bzTZ() })}`; }
     else if (n.type === "split") { const ok = await SEG().matches(c.condition, p.id, { since }); next = ok ? n.yes : n.no; note = ok ? "yes (as of today)" : "no (as of today)"; }
     else if (n.type === "wait_for") { next = n.no; note = "assumes it doesn't happen"; }
     else if (n.type === "ab") { next = (c.variants || [])[0] && c.variants[0].next; note = "path A shown"; }
@@ -763,7 +763,7 @@ async function init() {
   await migrate();
   setInterval(() => tick().catch((e) => console.error("flows:", e.message)), 30 * 1000);
   setInterval(() => pollCheckouts().catch(() => {}), 15 * 60 * 1000);
-  const daily = async () => { const today = new Date().toISOString().slice(0, 10); const s = await core.syncGet("mk_date_triggers").catch(() => null); if (s && s.cursor === today) return; await dateTriggers(); await core.syncSet("mk_date_triggers", today, {}); };
+  const daily = async () => { const today = bzDay(); const s = await core.syncGet("mk_date_triggers").catch(() => null); if (s && s.cursor === today) return; await dateTriggers(); await core.syncSet("mk_date_triggers", today, {}); };
   setInterval(() => { const h = new Date().getUTCHours(); if (h >= 14) daily().catch((e) => console.error("date triggers:", e.message)); }, 30 * 60 * 1000);
   // One-time (Jose asked): a clean abandoned cart flow built from the imported Klaviyo one, with email and text. Left as a draft to review and turn on.
   if (!(await core.syncGet("mk_abandoned_cart_flow_v1").catch(() => null))) {

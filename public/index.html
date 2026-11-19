@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script src="/tz.js"></script>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#F4F5F7" />
@@ -574,6 +575,11 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
       <h2 style="flex:1;margin:0;font-size:19px">Settings</h2>
       <button class="link" onclick="closeSettings()">✕ Close</button>
+    </div>
+    <div id="tzSec">
+    <h4 style="margin:18px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#8A8794">Time zone</h4>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="tzSel" style="padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:inherit;font:inherit"></select><button class="btn xs" onclick="saveTZ()">Save</button><span id="tzNow" style="color:#6E6B76;font-size:13px"></span></div>
+    <div style="color:#6E6B76;font-size:12.5px;margin-top:6px">Every date and time in Buzzin (tickets, orders, reviews, marketing, reports, and the times Emily and the flows use) follows this, whatever your computer or phone is set to.</div>
     </div>
     <div id="usersSec">
     <h4 style="margin:18px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#8A8794">Users</h4>
@@ -1277,7 +1283,7 @@ async function bulkStatus(status,b){
 
 /* ---------- settings: mailbox connection + history import ---------- */
 let _impT=null;
-function openSettings(){ $("settings").classList.remove("hidden"); loadUsers(); loadMailboxes(); loadImport(); loadEmilyAuto(); loadEmilyPolicies(); loadEmilyActivity(); _impT=setInterval(loadImport,4000); }
+function openSettings(){ $("settings").classList.remove("hidden"); loadTZ(); loadUsers(); loadMailboxes(); loadImport(); loadEmilyAuto(); loadEmilyPolicies(); loadEmilyActivity(); _impT=setInterval(loadImport,4000); }
 const INTENTS=[["tracking","Where is my order / tracking"],["subscription","Newsletter sign-up or status"],["sizing_care","Sizing, fabric, care questions"],["returns_info","How do I return (link + policy)"],["policy_info","Shipping, discount and policy questions"],["damage","Damaged item"],["lost","Lost / not received"],["missing_items","Missing items"],["cancel_or_address","Cancel or address change"],["discount","Asking for a discount"],["oos_reply","Reply to an out-of-stock email"]];
 async function loadEmilyAuto(){
   try{
@@ -1342,6 +1348,9 @@ async function loadEmilyActivity(){
       <div style="font-size:12px;color:#8A8794;margin:12px 0 2px">Drafts you changed before sending</div>${ed||'<div style="font-size:12.5px;color:#8A8794">None yet.</div>'}`;
   }catch(e){ $("emilyact").innerHTML="Couldn't load activity."; }
 }
+const TZS=[["America/Chicago","Central (Dallas, Chicago)"],["America/New_York","Eastern (New York)"],["America/Denver","Mountain (Denver)"],["America/Phoenix","Arizona (no daylight saving)"],["America/Los_Angeles","Pacific (Los Angeles)"],["America/Anchorage","Alaska"],["Pacific/Honolulu","Hawaii"],["America/Mexico_City","Mexico City"],["Europe/London","London"],["Asia/Manila","Manila"],["UTC","UTC"]];
+async function loadTZ(){ try{ const d=await api("/api/account-timezone"); const opts=TZS.some(([z])=>z===d.tz)?TZS:[[d.tz,d.tz],...TZS]; $("tzSel").innerHTML=opts.map(([z,l])=>`<option value="${esc(z)}" ${z===d.tz?"selected":""}>${esc(l)}${z===d.default?" · default":""}</option>`).join(""); $("tzNow").textContent="Now: "+d.now; }catch(e){} }
+async function saveTZ(){ try{ const r=await api("/api/account-timezone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tz:$("tzSel").value})}); if(r.error) throw new Error(r.error); toast("Time zone saved. Reloading…"); setTimeout(()=>location.reload(),700); }catch(e){ toast(e.message,true); } }
 function closeSettings(){ $("settings").classList.add("hidden"); clearInterval(_impT); loadList(); loadCounts(); }
 async function loadMailboxes(){
   try{

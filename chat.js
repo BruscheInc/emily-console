@@ -229,7 +229,7 @@ Reply with ONLY JSON, no code fences: {"reply":"<plain text, no HTML or markdown
  * Read-only: status, items, tracking and what the customer can do next. Nothing private beyond that
  * (no email, street address or payment). The check is the billing ZIP (shipping ZIP if the order has no billing address). */
 const zip5 = (z) => String(z || "").replace(/[^0-9A-Za-z]/g, "").slice(0, 5).toUpperCase();
-const fmtD = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" }) : null);
+const fmtD = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: bzTZ() }) : null);
 async function orderSummary(key, orderId) {
   const CL = require("./claims"), c = await CL._t.loadOrder(key, orderId), st = await CL._t.orderState(c), m = CL._t.menuFor(c, st), s = c.s;
   const a = c.o.shippingAddress || {};
@@ -237,7 +237,7 @@ async function orderSummary(key, orderId) {
   const shipped = (st.ship || []).map((x) => ({ carrier: x.carrier, number: x.number, url: x.url || null, status: x.status, last_update: fmtD(x.last_update_at), delivered: !!x.delivered, delivered_on: fmtD(x.delivered_at), shipped_on: fmtD(x.shipped_at) }));
   const returnUntil = st.delivered_at && !c.ex.has("return_window") ? new Date(Date.parse(st.delivered_at) + s.window_days[key] * 86400e3).toISOString() : null;
   const can = [];
-  if (m.edit && m.edit.ok) can.push(m.edit.changes_ok && m.edit.until ? `Change a size or the address until ${new Date(m.edit.until).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })} CT, or cancel before it ships` : "Cancel before it ships");
+  if (m.edit && m.edit.ok) can.push(m.edit.changes_ok && m.edit.until ? `Change a size or the address until ${new Date(m.edit.until).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: bzTZ() })} CT, or cancel before it ships` : "Cancel before it ships");
   if (m.return && m.return.ok) can.push(returnUntil ? `Start a return until ${fmtD(returnUntil)}` : "Start a return");
   if (m.defective && m.defective.ok) can.push("Report a defective item");
   if (m.pp && m.pp.ok) can.push("File a Package Protection claim");

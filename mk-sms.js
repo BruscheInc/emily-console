@@ -150,7 +150,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
       const cart = /checkout_url|CheckoutURL|line_items|event\./.test(String(b.body || "")) ? await E().sampleCart(s, tp.profile) : {};
       if (cart.items && !cart.checkout_url) cart.checkout_url = `${String((await E().brand(s)).shop_url || "").replace(/\/$/, "")}/cart`;
       const body = await compose(s, b, tp.profile, { ...cart, ...(tp.coupon ? { coupon: tp.coupon } : {}) });
-      const row = await require("./mk-send").send({ store: s, channel: "sms", profile: { id: null, phone: to, sms_consent: "subscribed", timezone: "America/Chicago" }, msg: { body }, test: true, idem: `smstest:${to}:${Date.now()}` });
+      const row = await require("./mk-send").send({ store: s, channel: "sms", profile: { id: null, phone: to, sms_consent: "subscribed", timezone: bzTZ() }, msg: { body }, test: true, idem: `smstest:${to}:${Date.now()}` });
       res.json({ status: row.status, reason: row.reason }); } catch (e) { fail(res, e); }
   });
   app.get("/api/mk/sms/inbound", async (req, res) => { if (!guard(req, res)) return; try { const s = store(req.query.store); res.json({ messages: (await db(`SELECT i.*, p.first_name, p.last_name, p.email FROM mk_sms_inbound i LEFT JOIN mk_profiles p ON p.id=i.profile_id ${s ? "WHERE i.store=$1" : ""} ORDER BY i.id DESC LIMIT 100`, s ? [s] : [])).rows }); } catch (e) { fail(res, e); } });

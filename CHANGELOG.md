@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.51
+- Buzzin now runs on **Central time** unless changed in **Settings → Time zone**. The server, the database's "today", flows, Emily's notes, emails and every staff page use it, whatever time zone the computer or phone is set to (the server itself runs on UTC, which is why some times were 6 hours ahead).
+
 ## 0.0.50
 - Built the review request flow for LB and LBO (draft): email 14 days after an order ships, text 5 days later, reminder email 4 days after that. Nothing sends until it's turned on in Reviews → Flows: emails & texts.
 

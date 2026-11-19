@@ -24,8 +24,8 @@ const EX = () => require("./exceptions");
 
 const round2 = (n) => Math.round((Number(n) + 1e-9) * 100) / 100;
 function httpError(status, message) { const e = new Error(message); e.status = status; return e; }
-const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
-const fmtWhen = (d) => new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" });
+const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: bzTZ() });
+const fmtWhen = (d) => new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: bzTZ() });
 const usd = (n) => "$" + Number(n || 0).toFixed(2);
 
 const TYPE_LABEL = { defective: "defective item claim", pp: "shipping claim", other: "message", not_delivered: "not-delivered report", edit: "order edit", cancel: "order cancellation" };

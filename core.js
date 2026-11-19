@@ -13,6 +13,17 @@ const https = require("https");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 
+/* ---------------- Account time zone ----------------
+ * Buzzin runs on Central time unless changed in Settings. Every date the server prints, every "today",
+ * and every date the database works out uses it (the server itself runs on UTC). */
+const TZ_DEFAULT = "America/Chicago";
+function validTZ(z) { if (!z || typeof z !== "string" || !/^[A-Za-z_]+(\/[A-Za-z0-9_+\-]+)*$/.test(z)) return false; try { new Intl.DateTimeFormat("en-US", { timeZone: z }); return true; } catch (_) { return false; } }
+if (!validTZ(process.env.TZ) || /^(UTC|Etc\/UTC|GMT)$/i.test(process.env.TZ || "")) process.env.TZ = TZ_DEFAULT;
+globalThis.bzTZ = () => (validTZ(process.env.TZ) ? process.env.TZ : TZ_DEFAULT);
+/** "YYYY-MM-DD" for a moment, in the account time zone (not UTC). */
+globalThis.bzDay = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: bzTZ(), year: "numeric", month: "2-digit", day: "2-digit" }).format(d ? new Date(d) : new Date());
+function setAccountTZ(z) { if (!validTZ(z)) throw new Error("That isn't a time zone."); process.env.TZ = z; return z; }
+
 const KEY = process.env.CONSOLE_KEY || "";
 const G_DOMAIN = process.env.GORGIAS_DOMAIN || "";
 const G_AUTH = "Basic " + Buffer.from(`${process.env.GORGIAS_EMAIL}:${process.env.GORGIAS_API_KEY}`).toString("base64");
@@ -102,7 +113,7 @@ const pool = DB_URL ? new Pool({ connectionString: DB_URL, ssl: DB_SSL ? { rejec
 async function db(q, params) {
   if (!pool) throw new Error("DATABASE_URL not set");
   const c = await pool.connect();
-  try { return await c.query(q, params); } finally { c.release(); }
+  try { const z = bzTZ(); if (c._bzTZ !== z) { await c.query(`SET TIME ZONE '${z}'`); c._bzTZ = z; } return await c.query(q, params); } finally { c.release(); }
 }
 async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS hd_tickets (
@@ -1129,7 +1140,7 @@ async function renameStoredText() {
     console.log(`🐝 renamed stored text to Buzzin (${n} rows)`);
   } catch (e) { console.error("rename to Buzzin:", e.message); }
 }
-module.exports = { richHtml, plainText,
+module.exports = { setAccountTZ, validTZ, TZ_DEFAULT, richHtml, plainText,
   renameStoredText, policyText, seedPolicy, setting, policyCache,
   db, pool, migrate, syncGet, syncSet,
   USERS, userFromKey, sessionOf, loadSessions, login, logout, listUsers, createUser, updateUser, checkPassword,

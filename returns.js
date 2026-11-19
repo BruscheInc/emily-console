@@ -617,7 +617,7 @@ async function printPdf(id, tok) {
   text(def.name, 11, bold); text("RETURN PACKING SLIP", 9, font, 8);
   pg.drawLine({ start: { x: L, y }, end: { x: W - L, y }, thickness: 0.8, color: rgb(0.75, 0.75, 0.75) }); y -= 10;
   text("Return", 8); text(r.rma, 20, bold, 8);
-  text(`Order ${r.order_name}`, 10, bold); text(`${r.customer_name || ""}`, 9); text(`Started ${new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })}`, 9, font, 12);
+  text(`Order ${r.order_name}`, 10, bold); text(`${r.customer_name || ""}`, 9); text(`Started ${new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: bzTZ() })}`, 9, font, 12);
   text("Items in this package", 9, bold, 6);
   for (const i of r.items) { text(`${i.quantity} x ${i.title}${i.variant ? ` (${i.variant})` : ""}`, 9, font, 2); text(`Reason: ${i.reason || "-"}`, 8, font, 7); if (y < 70) break; }
   y = Math.min(y, 44);
@@ -938,7 +938,7 @@ async function checkOne(rec) {
     return;
   }
   const moving = isMoving(t.code, t.text);
-  if (moving && !rec.accepted_at) rec = await update(rec.id, { accepted_at: t.acceptedAt || new Date().toISOString() }, `Accepted by the carrier${t.acceptedAt ? " on " + new Date(t.acceptedAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }) : ""}`);
+  if (moving && !rec.accepted_at) rec = await update(rec.id, { accepted_at: t.acceptedAt || new Date().toISOString() }, `Accepted by the carrier${t.acceptedAt ? " on " + new Date(t.acceptedAt).toLocaleDateString("en-US", { timeZone: bzTZ(), month: "short", day: "numeric" }) : ""}`);
   if (moving && rec.status === "label_created") rec = await update(rec.id, { status: "in_transit" }, "On its way back");
   // Handed to USPS but still not delivered back after N days: approve and refund without waiting for it.
   if (rec.accepted_at && ["label_created", "in_transit"].includes(rec.status) && s.transit_refund_days > 0) {
@@ -1072,7 +1072,7 @@ async function itemsLog({ state = "all", store = "", q = "", from = "", to = "" 
 }
 function itemsCsv(rows) {
   const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-  const d = (v) => v ? new Date(v).toLocaleString("en-US", { timeZone: "America/Chicago" }) : "";
+  const d = (v) => v ? new Date(v).toLocaleString("en-US", { timeZone: bzTZ() }) : "";
   const head = ["SKU", "Product", "Variant", "Qty returned", "Qty received", "Status", "Return #", "Order", "Store", "Source", "Customer", "Reason", "Return started", "Shipped back", "Delivered back", "Accepted at warehouse", "Accepted by", "Warehouse note", "Refunded", "Tracking"];
   const label = { coming: "Coming back", arrived: "Delivered — not checked in", accepted: "Accepted", other: "Other" };
   return [head.map(q).join(","), ...rows.map((r) => [r.sku, r.title, r.variant, r.qty, r.received ?? "", label[r.state] || r.state, r.rma, r.order_name, r.store.toUpperCase(), r.source, r.customer, r.reason, d(r.started_at), d(r.shipped_at), d(r.delivered_at), d(r.accepted_at), r.accepted_by || "", r.note || "", d(r.refunded_at), r.tracking_number].map(q).join(","))].join("\n");
@@ -1084,7 +1084,7 @@ function csv(rows) {
 }
 
 /* ---------------- analytics (Buzzin → Return analytics) ---------------- */
-const TZ = "America/Chicago";
+const TZ = bzTZ();
 const ORDERS_COUNT = `query OrdersCount($q: String!) { ordersCount(query: $q, limit: null) { count precision } }`;
 const ordersCache = new Map();   // "key|from|to" -> { at, n }
 async function ordersInRange(key, fromIso, toIso) {

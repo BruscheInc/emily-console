@@ -21,7 +21,7 @@ const SEG = () => require("./mk-segments");
 const E = () => require("./mk-email");
 const SEND = () => require("./mk-send");
 
-const DEFAULT_TZ = "America/Chicago";
+const DEFAULT_TZ = bzTZ();
 const TEST_METRICS = { open: "opened", click: "clicked" };
 
 async function migrate() {

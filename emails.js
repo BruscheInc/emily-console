@@ -259,7 +259,7 @@ const firstOf = (name) => String(name || "").split(" ")[0] || "there";
 const RES_LABEL = { replacement: "Replacement (no charge)", store_credit: "Store credit", refund: "Refund to original payment" };
 const SUB = { not_arrived: "my package hasn't arrived", delivered_missing: "marked delivered but not received", damaged: "my package arrived damaged" };
 function returnVars(view, def) {
-  const deadline = new Date(view.dropoff_by).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Chicago" });
+  const deadline = new Date(view.dropoff_by).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: bzTZ() });
   return { store: def.name, support: def.support, order: String(view.order_name || "").replace(/^#/, ""), rma: view.rma, first: firstOf(view.customer_name), deadline, dropoff: view.dropoff_days, refund: view.refund_method === "store_credit" ? "store credit" : "refund" };
 }
 function claimVars(c, def, extra = {}) {

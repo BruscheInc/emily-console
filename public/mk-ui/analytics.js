@@ -6,7 +6,7 @@
 });
 // Period: {days: 7|30|90|365|'today'} or {from:'YYYY-MM-DD', to:'YYYY-MM-DD'} (Central time)
 let PER = (() => { try { const v = JSON.parse(localStorage.getItem('mk_an_period') || 'null'); if (v) return v; const d = Number(localStorage.getItem('mk_an_days')); return { days: d || 30 }; } catch (e) { return { days: 30 }; } })();
-const ctYmd = (t) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+const ctYmd = (t) => new Date(t).toLocaleDateString('en-CA', { timeZone: (window.BZ_TZ || 'America/Chicago') });
 const shortD = (s) => new Date(s + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 // first and last day (YYYY-MM-DD) the period covers
 const perRange = (p) => p.from ? [p.from, p.to] : p.days === 'today' ? [ctYmd(Date.now()), ctYmd(Date.now())] : [ctYmd(Date.now() - (Number(p.days) - 1) * 864e5), ctYmd(Date.now())];

@@ -1192,7 +1192,7 @@ async function scanStuck() {
             const ds = String(f.displayStatus || "").toUpperCase();
             const delivered = !!f.deliveredAt || ds === "DELIVERED" || ds === "PICKED_UP";
             const voided = ds === "CANCELED" || ds === "LABEL_VOIDED";
-            if (delivered || voided) { const why = delivered ? `delivered (${f.deliveredAt ? new Date(f.deliveredAt).toISOString().slice(0, 10) : ds})` : `label ${ds.toLowerCase().replace("_", " ")}`; await closeWatch(f.id, "never_scanned", why, ds, { delivered_at: f.deliveredAt }); await closeWatch(f.id, "undelivered", why, ds, { delivered_at: f.deliveredAt }); continue; }
+            if (delivered || voided) { const why = delivered ? `delivered (${f.deliveredAt ? bzDay(f.deliveredAt) : ds})` : `label ${ds.toLowerCase().replace("_", " ")}`; await closeWatch(f.id, "never_scanned", why, ds, { delivered_at: f.deliveredAt }); await closeWatch(f.id, "undelivered", why, ds, { delivered_at: f.deliveredAt }); continue; }
             const moved = !!f.inTransitAt || !NO_MOVEMENT.has(ds);
             if (moved) await closeWatch(f.id, "never_scanned", `moved on its own (${ds})`, ds);
             else if (new Date(f.createdAt).getTime() <= stuckCut) { await upsertWatch("never_scanned", st, n, f, t); never++; }
@@ -1333,13 +1333,13 @@ async function verifyWatch() {
     if (cs) {
       const lastAt = cs.last_event && cs.last_event.at ? new Date(cs.last_event.at) : null;
       const quietDays = lastAt ? Math.floor((Date.now() - lastAt.getTime()) / 864e5) : null;
-      const status = cs.delivered ? `Delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}`
-                   : cs.accepted_only ? `Accepted by carrier${lastAt ? " " + lastAt.toISOString().slice(0, 10) : ""} — no movement since${quietDays != null ? ` (${quietDays} d)` : ""}`
+      const status = cs.delivered ? `Delivered${cs.delivered_at ? " " + bzDay(cs.delivered_at) : ""}`
+                   : cs.accepted_only ? `Accepted by carrier${lastAt ? " " + bzDay(lastAt) : ""} — no movement since${quietDays != null ? ` (${quietDays} d)` : ""}`
                    : cs.not_in_system ? "Not in carrier's system yet"
                    : `${cs.description || cs.code}${quietDays != null && quietDays >= 3 ? ` — no scan for ${quietDays} d` : ""}`;
       await db(`UPDATE hd_stuck SET carrier_status=$2, carrier_status_at=$3, carrier_checked_at=now(), carrier_note=$4, shopify_trackable=COALESCE(shopify_trackable,$5) WHERE id=$1`,
         [r.id, status, cs.last_event ? cs.last_event.at : (cs.delivered_at || null), [note, cs.last_event ? `${cs.last_event.desc}${cs.last_event.where ? " · " + cs.last_event.where : ""}` : null].filter(Boolean).join(" "), trackable]);
-      if (cs.delivered) { delivered++; await closeWatch(r.id, "never_scanned", `carrier says delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}`, "DELIVERED", { delivered_at: cs.delivered_at }); await closeWatch(r.id, "undelivered", `carrier says delivered${cs.delivered_at ? " " + new Date(cs.delivered_at).toISOString().slice(0, 10) : ""}`, "DELIVERED", { delivered_at: cs.delivered_at }); }
+      if (cs.delivered) { delivered++; await closeWatch(r.id, "never_scanned", `carrier says delivered${cs.delivered_at ? " " + bzDay(cs.delivered_at) : ""}`, "DELIVERED", { delivered_at: cs.delivered_at }); await closeWatch(r.id, "undelivered", `carrier says delivered${cs.delivered_at ? " " + bzDay(cs.delivered_at) : ""}`, "DELIVERED", { delivered_at: cs.delivered_at }); }
       else if (cs.moving) await closeWatch(r.id, "never_scanned", `carrier shows movement (${cs.description || cs.code})`, "IN_TRANSIT");
     } else {
       await db(`UPDATE hd_stuck SET carrier_note=$2, shopify_trackable=COALESCE(shopify_trackable,$3), carrier_checked_at=CASE WHEN $4 THEN carrier_checked_at ELSE now() END WHERE id=$1`, [r.id, note, trackable, !!SS_V2_KEY]);
@@ -2245,7 +2245,7 @@ async function autoSend(t, r, opts = {}) {
 function fmtAge(iso) {
   if (!iso) return "unknown";
   const tms = new Date(iso).getTime();
-  const opened = new Date(iso).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const opened = new Date(iso).toLocaleString("en-US", { timeZone: bzTZ(), month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const m = Math.floor((Date.now() - tms) / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
   return `${opened} CT · ⏱ ${d >= 1 ? `${d}d ${h % 24}h ago` : h >= 1 ? `${h}h ${m % 60}m ago` : `${m}m ago`}`;
 }

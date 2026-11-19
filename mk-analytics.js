@@ -122,13 +122,13 @@ async function overview({ store, days = 30, from, to }) {
   const rev = (await db(`${credited} SELECT count(*)::int orders, COALESCE(sum(value),0)::float total, count(*) FILTER (WHERE ktype IS NOT NULL)::int m_orders, COALESCE(sum(value) FILTER (WHERE ktype IS NOT NULL),0)::float marketing,
       COALESCE(sum(value) FILTER (WHERE ktype='clicked_email'),0)::float email, COALESCE(sum(value) FILTER (WHERE ktype='clicked_sms'),0)::float sms,
       COALESCE(sum(value) FILTER (WHERE kp->>'flow_id' IS NOT NULL),0)::float flows, COALESCE(sum(value) FILTER (WHERE kp->>'campaign_id' IS NOT NULL),0)::float campaigns FROM cr`, c)).rows[0];
-  const daily = (await db(`${credited} SELECT to_char(date_trunc('day', at AT TIME ZONE 'America/Chicago'),'YYYY-MM-DD') d, COALESCE(sum(value),0)::float total, COALESCE(sum(value) FILTER (WHERE ktype IS NOT NULL),0)::float marketing, count(*)::int orders FROM cr GROUP BY 1 ORDER BY 1`, c)).rows;
+  const daily = (await db(`${credited} SELECT to_char(date_trunc('day', at AT TIME ZONE '${bzTZ()}'),'YYYY-MM-DD') d, COALESCE(sum(value),0)::float total, COALESCE(sum(value) FILTER (WHERE ktype IS NOT NULL),0)::float marketing, count(*)::int orders FROM cr GROUP BY 1 ORDER BY 1`, c)).rows;
   const top = (await db(`${credited} SELECT CASE WHEN kp->>'campaign_id' IS NOT NULL THEN 'campaign' ELSE 'flow' END kind, COALESCE(kp->>'campaign_id', kp->>'flow_id') id, count(*)::int orders, sum(value)::float revenue FROM cr WHERE ktype IS NOT NULL AND (kp->>'campaign_id' IS NOT NULL OR kp->>'flow_id' IS NOT NULL) GROUP BY 1,2 ORDER BY revenue DESC LIMIT 15`, c)).rows;
   for (const t of top) t.name = (await db(t.kind === "campaign" ? `SELECT name FROM mk_campaigns WHERE id=$1` : `SELECT name FROM mk_flows WHERE id=$1`, [Number(t.id)])).rows.map((x) => x.name)[0] || `#${t.id}`;
 
   // list growth (consent changes per day)
   const d = [F]; const sw4 = store ? ` AND p.store=$${d.push(store) && d.length}` : "";
-  const growth = (await db(`SELECT to_char(date_trunc('day', l.at AT TIME ZONE 'America/Chicago'),'YYYY-MM-DD') d, l.channel,
+  const growth = (await db(`SELECT to_char(date_trunc('day', l.at AT TIME ZONE '${bzTZ()}'),'YYYY-MM-DD') d, l.channel,
       count(*) FILTER (WHERE l.state='subscribed' AND COALESCE(l.previous,'') <> 'subscribed')::int gained, count(*) FILTER (WHERE l.state IN ('unsubscribed','stopped') AND l.previous='subscribed')::int lost
     FROM mk_consent_log l JOIN mk_profiles p ON p.id=l.profile_id WHERE l.at >= $1::timestamptz AND l.at < '${T}'::timestamptz${sw4} GROUP BY 1,2 ORDER BY 1`, d)).rows;
   const totals = (await db(`SELECT count(*) FILTER (WHERE email_consent='subscribed')::int email, count(*) FILTER (WHERE sms_consent='subscribed')::int sms FROM mk_profiles p WHERE true${store ? " AND p.store=$1" : ""}`, store ? [store] : [])).rows[0];
@@ -198,7 +198,7 @@ async function init() { await migrate(); }
 /** A metric period from a request: days=7|30|…, days=today, or from=YYYY-MM-DD&to=YYYY-MM-DD (Central time, whole days).
     Returns { from, to } as timestamps and a cache key. */
 async function period(q = {}) {
-  const tz = "America/Chicago";
+  const tz = bzTZ();
   if (q.from && /^\d{4}-\d{2}-\d{2}$/.test(String(q.from))) {
     const to = /^\d{4}-\d{2}-\d{2}$/.test(String(q.to || "")) ? String(q.to) : String(q.from);
     const r = (await db(`SELECT ($1::date::timestamp AT TIME ZONE '${tz}') f, (($2::date + 1)::timestamp AT TIME ZONE '${tz}') t`, [String(q.from), to])).rows[0];

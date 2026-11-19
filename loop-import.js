@@ -51,7 +51,7 @@ async function parseXlsx(buf) {
 // Loop exports dates without a time zone (UTC). ExcelJS reads them as UTC dates already.
 const asDate = (v) => { if (!v) return null; const d = v instanceof Date ? v : new Date(v); return isNaN(d) ? null : d; };
 const days = (a, b = new Date()) => (b.getTime() - a.getTime()) / 86400e3;
-const fmtDay = (d) => d ? d.toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" }) : "";
+const fmtDay = (d) => d ? d.toLocaleDateString("en-US", { timeZone: bzTZ(), month: "short", day: "numeric", year: "numeric" }) : "";
 
 function storeFor(fileName, orderName) {
   const f = String(fileName || "").toUpperCase(), n = String(orderName || "").replace(/^#/, "").toUpperCase();

@@ -163,7 +163,7 @@ async function setHidden(id, hidden, note, who) {
 
 /* fill {{tags}} for one order — and the reverse, so a saved default stays generic */
 function vars(x) {
-  return { store: x.store_name, order: x.order_name, first_name: x.first_name || "there", order_date: new Date(x.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/Chicago" }),
+  return { store: x.store_name, order: x.order_name, first_name: x.first_name || "there", order_date: new Date(x.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: bzTZ() }),
     location: x.location ? `${x.location.name}\n${x.location.address}` : (x.pickup_title || "Our pickup location"), items: x.items.map((i) => `• ${i.name}${i.qty > 1 ? ` × ${i.qty}` : ""}`).join("\n"), days: String(x.days) };
 }
 const fill = (t, x) => { const v = vars(x); return String(t || "").replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (k in v ? v[k] : m)); };
