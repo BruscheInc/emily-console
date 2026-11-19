@@ -429,6 +429,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .whok{font-size:11.5px;color:#1e7a4c;background:#e8f6ee;border-radius:6px;padding:2px 7px;white-space:nowrap}.whok.short{color:#b03a2e;background:#fdecea}
 </style>
 <link rel="stylesheet" href="/bz-ui.css?v=__VERSION__">
+<link rel="stylesheet" href="/bz-mobile.css?v=__VERSION__">
 <script src="/bz-rail.js?v=__VERSION__" defer></script>
 <script src="/rv-studio.js?v=__VERSION__" defer></script>
 <script src="/ly-admin.js?v=__VERSION__" defer></script>
@@ -563,7 +564,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 <div class="mainarea">
   <div class="listcol" id="listcol">
     <div class="listhead">
-      <div class="lh1"><h1 id="viewtitle">LBO Tickets</h1><span class="showing" id="showing"></span><span class="sp"></span><button class="btn newt" onclick="newTicketModal()" title="Start a new email conversation with a customer">+ New ticket</button><button class="btn sec" onclick="loadList(true);loadCounts()" title="Refresh"><i class="ti ti-refresh"></i> Refresh</button></div>
+      <div class="lh1"><button class="mnav m-only" type="button" aria-label="Menu" onclick="event.stopPropagation();document.body.classList.add('pane-open')"><i class="ti ti-menu-2"></i></button><h1 id="viewtitle">LBO Tickets</h1><span class="showing" id="showing"></span><span class="sp"></span><button class="btn newt" onclick="newTicketModal()" title="Start a new email conversation with a customer">+ New ticket</button><button class="btn sec" onclick="loadList(true);loadCounts()" title="Refresh"><i class="ti ti-refresh"></i> Refresh</button></div>
       <div class="lh2">
         <div class="seg">
           <button class="tab on" data-tab="pending" onclick="setTab('pending')">Pending<span class="n" id="n-pending"></span></button>
@@ -2611,7 +2612,7 @@ function rail(d){
     <div class="ordfind"><input id="ordq" placeholder="Order # (e.g. LBO10399)" onkeydown="if(event.key==='Enter')loadOrder(this.value)"><button class="btn sec xs" onclick="loadOrder($('ordq').value)">Look up</button></div>
     <div id="orderpanel"></div>`;
   const tags=(d.tags&&d.tags.length)?`<div class="ordwrap">${d.tags.map(t=>`<span class="tagchip">${esc(t)}</span>`).join("")}</div>`:'<span class="v" style="color:var(--muted)">none</span>';
-  return `<aside class="rail">
+  return `<aside class="rail"><div class="railclose m-only"><span>Customer &amp; orders</span><button type="button" onclick="document.body.classList.remove('rail-open')">Done</button></div>
     <h4>Customer</h4>
     <div class="railcard">
       ${kv("Name",esc(d.customer.name))}
@@ -2653,6 +2654,7 @@ async function openTicket(id){
         ${d.emily?`<span class="chip ${d.emily}">Emily: ${d.emily}</span>`:""}
         ${(()=>{const JT=["automated","newsletter","social","vendor","automated-notification","solicitation","press-pitch","tiktok-notification","okendo","spam","not-cs","emily-skip","emily-skip-manual"]; const isJunk=(d.tags||[]).some(t=>JT.includes(t))&&!(d.tags||[]).includes("human");
           return isJunk?`<span class="chip skip" title="Filtered out of Tickets as ${esc((d.tags||[]).filter(t=>JT.includes(t)).join(", "))}">not a customer</span><button class="btn sec" onclick="markHuman(${id},true)" title="Move this into the Tickets view and let Emily handle it">This is a customer</button>`:`<button class="btn sec" onclick="markHuman(${id},false)" title="Hide from Tickets — it's a notification, newsletter or vendor email">Not a customer</button>`;})()}
+        <button class="btn sec m-only" onclick="document.body.classList.add('rail-open')"><i class="ti ti-user"></i> Customer &amp; orders</button>
         <button class="btn ghost" onclick="askEmily(${id})">Ask Emily</button>
         <button class="btn sec" onclick="setStatus(${id},'${d.status==="closed"?"open":"closed"}')">${d.status==="closed"?"Reopen":"Close"}</button>
       </div>
@@ -2699,7 +2701,7 @@ async function attachFiles(id,input){
   if(lab) lab.style.opacity=1; refreshAttachments(id);
 }
 async function removeAttachment(id,fid){ try{ await api(`/api/ticket/${id}/attach/${fid}/remove`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); }catch(e){} refreshAttachments(id); }
-function closeThread(){document.body.classList.remove("viewing");CUR=null;loadList();}
+function closeThread(){document.body.classList.remove("viewing","rail-open");CUR=null;loadList();}
 function setMode(m){MODE=m;$("m-reply").classList.toggle("on",m==="reply");$("m-note").classList.toggle("on",m==="note");$("m-emily").classList.toggle("on",m==="emily");
   $("emilypane").classList.toggle("hidden",m!=="emily");$("replybox").classList.toggle("hidden",m==="emily");
   $("sendBtn").textContent=m==="reply"?"Send reply":"Add note";$("composer").placeholder=m==="reply"?"Write a reply…":"Internal note (not sent to customer)…";

@@ -28,3 +28,35 @@ body.has-rail:has(#keygate:not(.hidden)),body.has-rail:has(#gate:not(.hidden)){p
 
 .bz-rail .rlogo{flex-direction:column;align-items:center;gap:6px;text-decoration:none}
 .bz-rail .rver{font-size:10.5px;font-weight:700;color:var(--bz-rail-ink);letter-spacing:.02em}
+
+/* More sheet: only used on phones */
+.bz-rail .rmore-b,.bz-rail .rsheet[hidden]{display:none}
+/* ---- Phones: the rail becomes a tab bar along the bottom ---- */
+@media (max-width:760px){
+  body.has-rail{padding-left:0;padding-bottom:calc(60px + env(safe-area-inset-bottom,0px))}
+  .bz-rail{top:auto;right:0;bottom:0;width:auto;height:calc(60px + env(safe-area-inset-bottom,0px));flex-direction:row;padding:0 0 env(safe-area-inset-bottom,0px);border-top:1px solid rgba(255,255,255,.06)}
+  .bz-rail .rlogo,.bz-rail .rfoot{display:none}
+  .bz-rail .rmods{flex-direction:row;overflow:visible;gap:0}
+  .bz-rail .rmods .ri{display:none;flex:1;padding:8px 0 6px;gap:3px;font-size:10.5px}
+  .bz-rail .rmods .ri[data-m=home],.bz-rail .rmods .ri[data-m=tickets],.bz-rail .rmods .ri[data-m=orders],.bz-rail .rmods .ri[data-m=reviews],.bz-rail .rmods .rmore-b{display:flex}
+  .bz-rail .ri span{display:block!important}
+  .bz-rail .ri .ti{font-size:22px}
+  .bz-rail .rmore-b{background:none;border:0;color:var(--bz-rail-ink);font:inherit;font-size:10.5px;font-weight:600;cursor:pointer;position:relative;align-items:center;flex-direction:column}
+  .bz-rail .rmore-b.on{color:#fff}
+  .bz-rail .ri.on{background:none}
+  .bz-rail .ri.on:before{left:28%;right:28%;top:0;bottom:auto;width:auto;height:3px;border-radius:0 0 3px 3px}
+  .bz-rail .rb{top:3px;left:calc(50% + 6px)}
+  .bz-rail .rsheet{position:fixed;inset:0;z-index:90;display:block}
+  .bz-rail .rsheet[hidden]{display:none}
+  .bz-rail .rsheet-bg{position:absolute;inset:0;background:rgba(23,22,31,.45)}
+  .bz-rail .rsheet-p{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:18px 18px 0 0;padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 40px rgba(0,0,0,.2);animation:bzUp .18s ease-out}
+  @keyframes bzUp{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
+  .bz-rail .rsheet-h{display:flex;align-items:center;gap:8px;margin-bottom:12px;color:#17161F}.bz-rail .rsheet-h b{font-size:17px}.bz-rail .rsheet-h small{color:#8A8894;font-weight:600}
+  .bz-rail .rsheet-x{margin-left:auto;width:36px;height:36px;border-radius:50%;border:0;background:#F1F2F5;font-size:18px;display:grid;place-items:center;cursor:pointer}
+  .bz-rail .rsheet-g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .bz-rail .rs{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 4px;border-radius:14px;background:#F5F6F8;color:#17161F;text-decoration:none;font-size:13px;font-weight:600}
+  .bz-rail .rs .ti{font-size:24px}.bz-rail .rs.on{background:#FFF4D1}
+  .bz-rail .rs .rb{top:6px;left:calc(50% + 8px);box-shadow:0 0 0 2px #F5F6F8}
+  .bz-rail .rsheet-f{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid #ECEDF1;font-size:14px;color:#4B4858}
+  .bz-rail .rsheet-f a{color:#B42318;text-decoration:none;font-weight:600;display:flex;align-items:center;gap:6px}
+}

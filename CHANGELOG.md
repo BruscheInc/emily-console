@@ -3,6 +3,17 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.61
+- **Buzzin works on phones.** On a phone-sized screen:
+  - The dark side bar becomes a tab bar along the bottom: Home, Tickets, Orders, Reviews and More. More opens every other part of Buzzin (Rewards, Shipping, Returns, Marketing, Content, Reports, Settings) and Sign out.
+  - Every page has a menu button (☰) top-left that opens that section's pages (for example LB/LBO, Moderation, Flows and Customize in Reviews).
+  - Ticket lists are easy-to-read cards: name, time, subject, the start of the message, status and order number.
+  - In a ticket, "Customer & orders" opens the customer, order lookup and history panel, which wasn't reachable on a phone before. The reply box is smaller so you can see the conversation.
+  - Filters scroll sideways instead of filling the screen. Wide tables scroll sideways. Settings and pop-ups fill the screen.
+  - Typing in a field no longer zooms the page on iPhone.
+  - Marketing's menu slides in from the left without covering the page.
+- Computers look the same as before.
+
 ## 0.0.60
 - **Photo check for reviews.** Buzzin looks at every review photo and hides the ones with no baby, kid or adult in them (just the clothes laid out, packaging, a label, a screenshot). The review itself still shows; only that photo is hidden. Hidden photos also drop out of the photo strip and the "with photos" counts.
 - Photos Buzzin isn't sure about (dark, blurry, only a hand) stay hidden and wait in Moderation → Media → "Photos to look at", with Show / Hide under each photo. "Hidden photos" lists everything that was hidden, so you can bring any back. Your choice always wins over the automatic check.
