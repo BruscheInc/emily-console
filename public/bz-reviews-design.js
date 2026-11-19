@@ -17,7 +17,7 @@ window.BZR_DEFAULT_DESIGN = {
     placement: "before_related", stars_placement: "under_title",
   },
   stars: { size_title: 17, size_summary: 15, size_review: 13, shape: "star", outline: true },
-  photos: { strip_count: 12, strip_size: 100, strip_radius: 12, review_size: 64, radius: 0 },
+  photos: { strip_count: 12, strip_size: 100, image_radius: 12, review_size: 64 },
   show: {
     title_stars: true, title_count: true, heading: false, average: true, histogram: true, recommend: true, photo_strip: true,
     summary: true, topics: true, tab: true, filters: true, write: true, sort: true, count: true,

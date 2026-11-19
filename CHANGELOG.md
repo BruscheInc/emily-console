@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.59
+- **Every review photo has the same rounded corners.** The photo strip, photos on each review, the enlarged photo view and the photo previews in the write-a-review form all use one setting (12px, matching the theme's product cards). Change it in Reviews → Customize → Photos → All photos → Photo corners.
+
 ## 0.0.58
 - **Rounded photo strip.** The customer photos under "would recommend this product" now have rounded corners (12px) to match the theme's product cards. Change it in Reviews → Customize → Photos → Photo strip → Corners.
 
