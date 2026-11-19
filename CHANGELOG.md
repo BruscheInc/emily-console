@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.58
+- **Rounded photo strip.** The customer photos under "would recommend this product" now have rounded corners (12px) to match the theme's product cards. Change it in Reviews → Customize → Photos → Photo strip → Corners.
+
 ## 0.0.57
 - **Choose which reviews each product shows.** Reviews → Customize → Review list → "Which reviews": this style in every color (the default), only that exact product, or every review in the store. The star rating under the product name follows the same choice.
 - The theme's Buzzin reviews section and star block each get their own "Which reviews to show" setting, so one page can be set differently from the rest.
