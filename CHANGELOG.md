@@ -3,6 +3,18 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.43
+- Reviews on the site, redesigned to put the review first (photos small):
+  - Top: average, star bars with counts, % recommend and a strip of customer photos.
+  - "Reviews Summary" written from the reviews, and "Customers Talked About" topics you can tap to filter.
+  - Each review: a side panel with the reviewer (initials, Verified Buyer), the product reviewed, "I recommend this product" and size, next to the stars, title, review, small photos, our reply and "Was this helpful?" votes.
+  - Filters (rating, with photos, search), sort, show more. Compact layout on phones.
+- Reviews in Buzzin, rebuilt:
+  - Moderation with filters for status, rating, sentiment, store, date, photos, source and sort, plus search, select-all with bulk Publish/Reject, collapse/expand, and each card showing product, customer, answers, auto-publish date and Publish / Reject / Reply / View product.
+  - Products: every reviewed product with average, count, photos, low ratings and waiting reviews. Click to read them.
+  - Insights: totals, average, growth vs the period before, reviews per month, rating breakdown, review-email results, most-reviewed products and low-rated products.
+  - Groups: which products share reviews, with a sync button.
+
 ## 0.0.42
 - Reviews section: no mention of other companies in the screens.
 

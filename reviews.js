@@ -40,6 +40,7 @@ async function migrate() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(), published_at TIMESTAMPTZ, decided_by TEXT, updated_at TIMESTAMPTZ DEFAULT now(), raw JSONB)`);
   await db(`CREATE INDEX IF NOT EXISTS rv_reviews_prod ON rv_reviews (store, product_id, status)`);
   await db(`CREATE INDEX IF NOT EXISTS rv_reviews_list ON rv_reviews (store, status, created_at DESC)`);
+  await db(`CREATE TABLE IF NOT EXISTS rv_summaries (scope TEXT PRIMARY KEY, store TEXT, summary TEXT, topics JSONB, count INT, updated_at TIMESTAMPTZ DEFAULT now())`);
   await db(`CREATE TABLE IF NOT EXISTS rv_groups (id TEXT PRIMARY KEY, store TEXT NOT NULL, name TEXT, collection_id TEXT, product_ids TEXT[] NOT NULL DEFAULT '{}', synced_at TIMESTAMPTZ)`);
   await db(`CREATE TABLE IF NOT EXISTS rv_requests (token TEXT PRIMARY KEY, store TEXT, order_name TEXT, email TEXT, name TEXT, items JSONB, created_at TIMESTAMPTZ DEFAULT now(), used_at TIMESTAMPTZ)`);
   await db(`ALTER TABLE rv_requests ADD COLUMN IF NOT EXISTS order_id TEXT, ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS sent INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS last_sent_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS test BOOLEAN DEFAULT false`);
@@ -131,7 +132,7 @@ function pubReview(r) {
   return { id: r.id, rating: r.rating, title: r.title, body: r.body, name: r.reviewer_name || "Customer", verified: !!r.verified, recommended: r.recommended,
     date: r.created_at, product: r.product_title, product_handle: r.product_handle, product_image: r.product_image, variant: r.variant_title,
     media: (r.media || []).map((m) => ({ type: m.type, url: m.large || m.url, thumb: m.thumb || m.url, alt: m.alt || null })),
-    reply: r.reply || null, reply_at: r.reply_at || null, helpful: r.helpful || 0 };
+    reply: r.reply || null, reply_at: r.reply_at || null, helpful: r.helpful || 0, unhelpful: r.unhelpful || 0, answers: r.answers || null };
 }
 async function aggregate(store, ids) {
   const key = `${store}:${ids.slice().sort().join(",")}`;
@@ -154,12 +155,41 @@ async function productReviews(store, productId, { sort = "media", rating, media,
   per = Math.max(1, Math.min(30, Number(per) || 10)); page = Math.max(1, Number(page) || 1);
   const rows = (await db(`SELECT * FROM rv_reviews WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
   const filtered = (await db(`SELECT count(*)::int n FROM rv_reviews WHERE ${where.join(" AND ")}`, args)).rows[0].n;
-  return { summary: await aggregate(store, ids), total: filtered, reviews: rows.slice(0, per).map(pubReview), more: rows.length > per, page };
+  let photos;
+  if (page === 1) photos = (await db(`SELECT id, media FROM rv_reviews WHERE store=$1 AND status='published' AND product_id = ANY($2) AND jsonb_array_length(media) > 0 ORDER BY created_at DESC LIMIT 14`, [store, ids])).rows
+    .map((r) => { const m = (r.media || []).find((x) => x.type !== "video"); return m ? { review: r.id, thumb: m.thumb || m.url, url: m.large || m.url } : null; }).filter(Boolean).slice(0, 12);
+  return { summary: await aggregate(store, ids), total: filtered, reviews: rows.slice(0, per).map(pubReview), more: rows.length > per, page, photos };
 }
 async function starsFor(store, productIds) {
   const out = {};
   for (const id of productIds.slice(0, 80)) { const a = await aggregate(store, await scopeFor(store, id)); out[id] = { average: a.average, count: a.count }; }
   return out;
+}
+
+/* ---------------- "Reviews summary" + "Customers talked about" (written by Claude from the reviews) ----------------
+   One summary per review group / product, refreshed when the review count grows 10% or after 30 days. */
+const SUMMARY_BUSY = new Set();
+async function summaryFor(store, productId) {
+  const ids = (await scopeFor(store, productId)).sort();
+  const scope = `${store}:` + crypto.createHash("md5").update(ids.join(",")).digest("hex");
+  const row = (await db(`SELECT * FROM rv_summaries WHERE scope=$1`, [scope])).rows[0];
+  const n = (await aggregate(store, ids)).count;
+  const stale = !row || (n >= 5 && (n > row.count * 1.1 || Date.now() - new Date(row.updated_at) > 30 * 864e5));
+  if (stale && n >= 5 && !SUMMARY_BUSY.has(scope) && SUMMARY_BUSY.size < 3) { SUMMARY_BUSY.add(scope); makeSummary(store, ids, scope, n).catch((e) => console.error("review summary:", e.message)).finally(() => SUMMARY_BUSY.delete(scope)); }
+  return row && row.summary ? { summary: row.summary, topics: row.topics || [] } : null;
+}
+async function makeSummary(store, ids, scope, n) {
+  const kit = require("./emily").claimsKit(); if (!kit || !kit.anthropic) return;
+  const rows = (await db(`(SELECT rating, title, body FROM rv_reviews WHERE store=$1 AND status='published' AND product_id = ANY($2) ORDER BY created_at DESC LIMIT 140)
+    UNION ALL (SELECT rating, title, body FROM rv_reviews WHERE store=$1 AND status='published' AND product_id = ANY($2) AND rating <= 3 ORDER BY created_at DESC LIMIT 30)`, [store, ids])).rows;
+  const text = rows.map((r) => `${r.rating}★ ${r.title || ""}: ${String(r.body || "").slice(0, 400)}`).join("\n");
+  const resp = await kit.anthropic.messages.create({ model: kit.model, max_tokens: 500, messages: [{ role: "user", content:
+    `These are customer reviews of a baby/kids clothing product line. Write a short, honest summary for shoppers (2-3 sentences, plain words, starts with "Customers say"), including the most common complaint if there is a real one. Then list 3 to 6 topics customers talk about most, each 1-2 words (e.g. Softness, Fit, Print, Quality, Zipper, Sizing).\nAnswer ONLY as JSON: {"summary": "...", "topics": ["..."]}\n\nReviews:\n${text}` }] });
+  const out = (resp.content || []).map((c) => c.text || "").join("");
+  const j = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1));
+  if (!j.summary) return;
+  await db(`INSERT INTO rv_summaries (scope, store, summary, topics, count, updated_at) VALUES ($1,$2,$3,$4,$5,now()) ON CONFLICT (scope) DO UPDATE SET summary=EXCLUDED.summary, topics=EXCLUDED.topics, count=EXCLUDED.count, updated_at=now()`,
+    [scope, store, String(j.summary).slice(0, 900), JSON.stringify((j.topics || []).slice(0, 6).map((t) => String(t).slice(0, 24))), n]);
 }
 
 /* ---------------- Shopify product metafields (reviews.rating / reviews.rating_count) ----------------
@@ -335,18 +365,67 @@ input[type=text],textarea{width:100%;box-sizing:border-box;border:1px solid #DBD
 }
 
 /* ---------------- staff ---------------- */
-async function list({ store, status, rating, q, source, page = 1 }) {
+function listWhere({ store, status, rating, q, source, sentiment, product, days, media }) {
   const args = [], where = [];
   if (store) { args.push(store); where.push(`store=$${args.length}`); }
   if (status && status !== "all") { args.push(status); where.push(`status=$${args.length}`); }
-  if (rating) { args.push(Number(rating)); where.push(`rating=$${args.length}`); }
-  if (source) { args.push(source); where.push(`source=$${args.length}`); }
+  if (rating) { const rs = String(rating).split(",").map(Number).filter((x) => x >= 1 && x <= 5); if (rs.length) { args.push(rs); where.push(`rating = ANY($${args.length})`); } }
+  if (sentiment === "positive") where.push(`rating >= 4`); else if (sentiment === "neutral") where.push(`rating = 3`); else if (sentiment === "negative") where.push(`rating <= 2`);
+  if (source) { args.push(source === "imported" ? "okendo" : source); where.push(`source=$${args.length}`); }
+  if (product) { args.push(String(product)); where.push(`product_id=$${args.length}`); }
+  if (days && Number(days) > 0) { args.push(String(Number(days))); where.push(`created_at > now() - ($${args.length} || ' days')::interval`); }
+  if (media === "1") where.push(`jsonb_array_length(media) > 0`); else if (media === "0") where.push(`jsonb_array_length(media) = 0`);
   if (q) { args.push(`%${String(q).slice(0, 80)}%`); where.push(`(title ILIKE $${args.length} OR body ILIKE $${args.length} OR reviewer_name ILIKE $${args.length} OR email ILIKE $${args.length} OR product_title ILIKE $${args.length} OR order_name ILIKE $${args.length})`); }
-  const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const per = 30; page = Math.max(1, Number(page) || 1);
-  const rows = (await db(`SELECT id, store, source, product_id, product_handle, product_title, product_image, variant_title, rating, title, body, reviewer_name, verified, recommended, email, order_name, media, answers, status, reply, reply_by, reply_at, created_at, published_at, decided_by FROM rv_reviews ${w} ORDER BY created_at DESC LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
+  return { args, w: where.length ? `WHERE ${where.join(" AND ")}` : "" };
+}
+async function list(f) {
+  const { args, w } = listWhere(f);
+  const per = Math.min(100, Number(f.per) || 25), page = Math.max(1, Number(f.page) || 1);
+  const order = { oldest: "created_at ASC", highest: "rating DESC, created_at DESC", lowest: "rating ASC, created_at DESC", helpful: "helpful DESC, created_at DESC" }[f.sort] || "created_at DESC";
+  const rows = (await db(`SELECT id, store, source, product_id, product_handle, product_title, product_image, variant_title, rating, title, body, reviewer_name, verified, recommended, email, order_name, media, answers, status, reply, reply_by, reply_at, helpful, unhelpful, created_at, published_at, decided_by FROM rv_reviews ${w} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
+  const total = (await db(`SELECT count(*)::int n FROM rv_reviews ${w}`, args)).rows[0].n;
   const counts = (await db(`SELECT store, status, count(*)::int n, avg(rating)::float avg FROM rv_reviews GROUP BY store, status`)).rows;
-  return { reviews: rows.slice(0, per), more: rows.length > per, page, counts };
+  return { reviews: rows.slice(0, per), more: rows.length > per, page, total, counts };
+}
+async function bulk(ids, action, who) {
+  let n = 0; for (const id of (ids || []).slice(0, 500)) { try { await decide(String(id), action, who); n++; } catch (_) {} } return { ok: true, done: n };
+}
+async function products({ store, q, sort, page = 1 }) {
+  const args = [], where = [`status='published'`];
+  if (store) { args.push(store); where.push(`store=$${args.length}`); }
+  if (q) { args.push(`%${String(q).slice(0, 80)}%`); where.push(`product_title ILIKE $${args.length}`); }
+  const order = { count: "n DESC", rating: "avg DESC, n DESC", lowest: "avg ASC, n DESC", recent: "last DESC" }[sort] || "n DESC";
+  const per = 50; page = Math.max(1, Number(page) || 1);
+  const rows = (await db(`SELECT store, product_id, max(product_title) title, max(product_image) image, max(product_handle) handle, count(*)::int n, round(avg(rating)::numeric, 2)::float avg,
+      count(*) FILTER (WHERE jsonb_array_length(media)>0)::int media, count(*) FILTER (WHERE rating<=2)::int low, max(created_at) last
+    FROM rv_reviews WHERE ${where.join(" AND ")} AND product_id IS NOT NULL GROUP BY store, product_id ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
+  const pend = (await db(`SELECT store, product_id, count(*)::int n FROM rv_reviews WHERE status='pending' GROUP BY store, product_id`)).rows;
+  const pm = new Map(pend.map((r) => [`${r.store}:${r.product_id}`, r.n]));
+  return { products: rows.slice(0, per).map((r) => ({ ...r, pending: pm.get(`${r.store}:${r.product_id}`) || 0 })), more: rows.length > per, page };
+}
+async function insights({ store, days = 90 }) {
+  const a = [store || null]; const sw = `($1::text IS NULL OR store=$1)`;
+  const d = Math.max(7, Math.min(730, Number(days) || 90));
+  const k = (await db(`SELECT count(*) FILTER (WHERE status='published')::int published, round(avg(rating) FILTER (WHERE status='published')::numeric, 2)::float avg,
+      count(*) FILTER (WHERE status='pending')::int pending, count(*) FILTER (WHERE status='rejected')::int rejected,
+      count(*) FILTER (WHERE created_at > now() - interval '${d} days')::int recent, round(avg(rating) FILTER (WHERE created_at > now() - interval '${d} days')::numeric, 2)::float recent_avg,
+      count(*) FILTER (WHERE created_at > now() - interval '${2 * d} days' AND created_at <= now() - interval '${d} days')::int prev,
+      count(*) FILTER (WHERE status='published' AND jsonb_array_length(media)>0)::int media, count(*) FILTER (WHERE status='published' AND verified)::int verified,
+      count(*) FILTER (WHERE reply IS NOT NULL)::int replied, count(*) FILTER (WHERE recommended)::int rec, count(*) FILTER (WHERE recommended IS NOT NULL)::int recn
+    FROM rv_reviews WHERE ${sw}`, a)).rows[0];
+  const months = (await db(`SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') m, count(*)::int n, round(avg(rating)::numeric, 2)::float avg FROM rv_reviews WHERE ${sw} AND created_at > now() - interval '12 months' GROUP BY 1 ORDER BY 1`, a)).rows;
+  const dist = (await db(`SELECT rating, count(*)::int n FROM rv_reviews WHERE ${sw} AND status='published' GROUP BY rating`, a)).rows;
+  const sources = (await db(`SELECT source, count(*)::int n FROM rv_reviews WHERE ${sw} AND created_at > now() - interval '${d} days' GROUP BY source`, a)).rows;
+  const top = (await db(`SELECT store, product_id, max(product_title) title, max(product_image) image, count(*)::int n, round(avg(rating)::numeric,2)::float avg FROM rv_reviews WHERE ${sw} AND status='published' AND created_at > now() - interval '${d} days' AND product_id IS NOT NULL GROUP BY store, product_id HAVING count(*) >= 2 ORDER BY count(*) DESC LIMIT 8`, a)).rows;
+  const low = (await db(`SELECT store, product_id, max(product_title) title, max(product_image) image, count(*)::int n, round(avg(rating)::numeric,2)::float avg, count(*) FILTER (WHERE rating<=2)::int lown FROM rv_reviews WHERE ${sw} AND status IN ('published','pending') AND product_id IS NOT NULL GROUP BY store, product_id HAVING count(*) FILTER (WHERE rating<=2) > 0 ORDER BY count(*) FILTER (WHERE rating<=2) DESC, avg ASC LIMIT 8`, a)).rows;
+  const req = (await db(`SELECT count(*)::int orders, count(*) FILTER (WHERE sent>0)::int emailed, count(*) FILTER (WHERE used_at IS NOT NULL)::int reviewed, COALESCE(sum(sent),0)::int emails FROM rv_requests WHERE NOT test AND ($1::text IS NULL OR store=$1) AND created_at > now() - interval '${d} days'`, a)).rows[0];
+  return { days: d, kpis: { ...k, recommend_pct: k.recn ? Math.round((100 * k.rec) / k.recn) : null }, months, distribution: dist, sources, top, low, requests: req };
+}
+async function groups(store) {
+  return (await db(`SELECT g.id, g.store, g.name, cardinality(g.product_ids) products, g.synced_at,
+      (SELECT count(*)::int FROM rv_reviews r WHERE r.store=g.store AND r.status='published' AND r.product_id = ANY(g.product_ids)) reviews,
+      (SELECT round(avg(rating)::numeric,2)::float FROM rv_reviews r WHERE r.store=g.store AND r.status='published' AND r.product_id = ANY(g.product_ids)) avg
+    FROM rv_groups g WHERE ($1::text IS NULL OR g.store=$1) ORDER BY reviews DESC`, [store || null])).rows;
 }
 async function decide(id, action, who, text) {
   const r = (await db(`SELECT * FROM rv_reviews WHERE id=$1`, [id])).rows[0]; if (!r) throw Object.assign(new Error("review not found"), { status: 404 });
@@ -394,11 +473,20 @@ function routes(app, { guard, actorOf, express }) {
     const s = storeOk(req.params.store); if (!s) return res.status(404).send("Not found");
     try { const h = await writePage(s, String(req.query.t || ""), req.query.p, req.query.r); if (!h) return res.redirect(302, STORES[s].shop); res.setHeader("Cache-Control", "no-store"); res.type("html").send(h); } catch (e) { res.status(500).send("Something went wrong."); }
   });
-  app.post("/rv/:store/helpful/:id", async (req, res) => { cors(res); try { await db(`UPDATE rv_reviews SET helpful=helpful+1 WHERE id=$1 AND status='published'`, [req.params.id]); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } });
+  app.post("/rv/:store/helpful/:id", async (req, res) => { cors(res); try { const col = req.query.no ? "unhelpful" : "helpful"; await db(`UPDATE rv_reviews SET ${col}=${col}+1 WHERE id=$1 AND status='published'`, [req.params.id]); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } });
+  app.get("/rv/:store/summary/:pid", async (req, res) => {
+    cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
+    try { res.setHeader("Cache-Control", "public, max-age=600"); res.json((await summaryFor(s, String(req.params.pid).replace(/\D/g, ""))) || {}); } catch (e) { res.json({}); }
+  });
 
   // staff
   app.get("/api/reviews", async (req, res) => { if (!guard(req, res)) return; try { res.json(await list(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews/:id/:action", async (req, res) => { if (!guard(req, res)) return; try { res.json(await decide(req.params.id, req.params.action, actorOf(req), (req.body || {}).text)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
+  app.post("/api/reviews-bulk", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!["publish", "reject"].includes(b.action)) return res.status(400).json({ error: "publish or reject" }); res.json(await bulk(b.ids, b.action, actorOf(req))); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get("/api/reviews-products", async (req, res) => { if (!guard(req, res)) return; try { res.json(await products(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get("/api/reviews-insights", async (req, res) => { if (!guard(req, res)) return; try { res.json(await insights(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get("/api/reviews-groups", async (req, res) => { if (!guard(req, res)) return; try { res.json({ groups: await groups(req.query.store || null) }); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post("/api/reviews-groups/sync", async (req, res) => { if (!guard(req, res)) return; try { const out = {}; for (const k of Object.keys(STORES)) out[k] = await syncGroups(k); AGG_CACHE.clear(); res.json({ ok: true, out }); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; res.json(await settings()); });
   app.post("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const patch = {}; if (b.auto_publish_min) patch.auto_publish_min = Math.max(1, Math.min(5, Number(b.auto_publish_min))); if (b.live) patch.live = { lb: !!b.live.lb, lbo: !!b.live.lbo }; if (b.requests) patch.requests = { lb: !!b.requests.lb, lbo: !!b.requests.lbo }; res.json(await saveSettings(patch)); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews-test-request", async (req, res) => {

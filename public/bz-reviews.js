@@ -47,7 +47,7 @@
 .bzr-modal textarea{min-height:120px;resize:vertical}.bzr-pick{display:flex;gap:6px}.bzr-pick button{border:0;background:none;padding:0;cursor:pointer}\
 .bzr-err{color:#b42318;font-size:13px;margin-top:10px}.bzr-ok{text-align:center;padding:24px 6px}.bzr-thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.bzr-thumbs img{width:60px;height:60px;object-fit:cover;border-radius:6px}\
 .bzr-lb{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2147483001;display:flex;align-items:center;justify-content:center;cursor:zoom-out}.bzr-lb img{max-width:94vw;max-height:90vh;border-radius:6px}\
-.bzr-hide{display:none!important}";
+.bzr-hide{display:none!important}.bzr{color:#2C3E50}.bzr-top{display:grid;grid-template-columns:minmax(260px,1fr) minmax(0,1.5fr);gap:22px 48px;align-items:start;margin-bottom:24px}@media(max-width:760px){.bzr-top{grid-template-columns:1fr}}.bzr-avgline{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:12px}.bzr-avgline b{font-size:18px}.bzr-avgline span{margin-left:8px}.bzr .bzr-hist{max-width:none;gap:4px;margin:0}.bzr .bzr-hr{gap:12px}.bzr-hn{width:10px;font-size:13px;text-decoration:none!important}.bzr-hs{width:14px;font-size:15px;color:#242F3F;text-decoration:none!important}.bzr .bzr-bar{height:4px}.bzr-hc{width:40px;font-size:13px;color:#2C3E50!important}.bzr-tr .bzr-rec{font-size:14px;color:#2C3E50;margin-bottom:12px}.bzr-tr .bzr-rec b{font-size:17px;margin:0}.bzr-strip{display:flex;gap:4px;overflow:hidden}.bzr-strip button{flex:0 0 auto;border:0;padding:0;background:none;cursor:zoom-in}.bzr-strip img{width:100px;height:100px;object-fit:cover;display:block}@media(max-width:760px){.bzr-strip{overflow-x:auto}.bzr-strip img{width:84px;height:84px}}.bzr-ai{margin:6px 0 26px}.bzr-h5{font-weight:700;font-size:15px;margin:14px 0 8px}.bzr-ai p{font-size:14.5px;line-height:1.6;margin:0}.bzr-topics,.bzr-chips{display:flex;gap:8px;flex-wrap:wrap}.bzr-chip{border:1px solid #2C3E50;background:#fff;color:#2C3E50;border-radius:8px;padding:6px 13px;font:inherit;font-size:13.5px;cursor:pointer}.bzr-chip.on{background:#242F3F;color:#fff;border-color:#242F3F}.bzr-tabs{border-bottom:1px solid #E5E5EB;margin-bottom:16px}.bzr-tabs span{display:inline-block;font-weight:700;font-size:15px;padding:0 0 8px;border-bottom:2px solid #2C3E50;margin-bottom:-1px}.bzr .bzr-tools{margin:0 0 14px}.bzr .bzr-btn{border-radius:8px;padding:10px 18px;font-size:14px}.bzr-fpanel{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;background:#F7F7F8;border-radius:10px;padding:14px 16px;margin-bottom:14px}.bzr-fpanel label{display:block;font-size:12.5px;font-weight:700;margin-bottom:6px}.bzr-fpanel input{width:100%;border:1px solid #DBDDE4;border-radius:8px;padding:8px 10px;font:inherit;font-size:14px}.bzr-meta{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:8px 0 12px;border-bottom:1px solid #E5E5EB}.bzr-sort{font-weight:700;display:flex;align-items:center;gap:8px}.bzr-sort select{border:0;font:inherit;font-weight:400;background:transparent;color:#2C3E50;cursor:pointer}.bzr-clear{border:0;background:none;color:#0E7A82;font:inherit;font-size:13px;cursor:pointer;text-decoration:underline;margin-left:6px}.bzr .bzr-list{gap:0}.bzr-row{display:grid;grid-template-columns:262px minmax(0,1fr);gap:22px;padding:20px 0;border-bottom:1px solid #E5E5EB}@media(max-width:760px){.bzr-row{grid-template-columns:1fr;gap:12px}}.bzr-who{border:1px solid #E5E5EB;border-radius:4px;padding:14px;font-size:13px;align-self:start}.bzr-id{display:flex;gap:12px;align-items:center}.bzr-av{width:42px;height:42px;border-radius:50%;background:#242F3F;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none}.bzr-id b{font-size:14px}.bzr-ver{font-weight:700;font-size:13px}.bzr-ver span{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#242F3F;color:#fff;font-size:9px;margin-left:3px}.bzr-rv{margin-top:12px}.bzr-rvp{display:flex;gap:10px;align-items:center;margin-top:4px}.bzr-rvp img{width:40px;height:40px;object-fit:cover}.bzr-recy{margin-top:12px}.bzr-attr{display:flex;justify-content:space-between;gap:10px;margin-top:8px}.bzr-attr span{text-align:right}.bzr-rh{display:flex;justify-content:space-between;align-items:center}.bzr .bzr-date{font-size:13px;color:#2C3E50}.bzr-main h4{margin:10px 0 6px;font-size:16px;font-weight:600}.bzr-main .bzr-body{font-size:14px;line-height:1.55}.bzr .bzr-media img{width:64px;height:64px}.bzr-help{text-align:right;font-size:13px;margin-top:12px}.bzr-help button{border:0;background:none;font:inherit;font-size:13px;cursor:pointer;margin-left:10px;color:#2C3E50;display:inline-flex;align-items:center;gap:4px}.bzr-help svg,.bzr-recy svg{vertical-align:-2px}.bzr .bzr-ver{color:#2C3E50}@media(max-width:760px){.bzr-who{border:0;padding:0}.bzr-av{width:34px;height:34px;font-size:12px}.bzr-rv,.bzr-recy{display:none}.bzr-attr{display:inline-flex;gap:4px;margin:6px 12px 0 0;font-size:12px}.bzr-row{gap:8px;padding:16px 0}}";
   var st = document.createElement("style"); st.textContent = css + (active ? "[data-oke-widget],[data-oke-star-rating]{display:none!important}" : ""); document.head.appendChild(st);
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
@@ -80,53 +80,74 @@
     }).catch(function () {});
   }
 
-  /* ---------- the review section ---------- */
+  /* ---------- the review section (review first, photos small) ---------- */
+  function ago(d) {
+    var t = (Date.now() - new Date(d)) / 1000; if (!(t >= 0)) return fmtDate(d);
+    if (t < 3600) return Math.max(1, Math.round(t / 60)) + " minutes ago"; if (t < 86400) { var h = Math.round(t / 3600); return h + " hour" + (h === 1 ? "" : "s") + " ago"; }
+    if (t < 86400 * 30) { var dd = Math.round(t / 86400); return dd + " day" + (dd === 1 ? "" : "s") + " ago"; } return fmtDate(d);
+  }
+  function kfmt(n) { return n >= 1000 ? (Math.round(n / 100) / 10) + "k" : String(n); }
+  function initials(n) { return String(n || "?").replace(/[^A-Za-z .]/g, "").split(/[\s.]+/).filter(Boolean).slice(0, 2).map(function (x) { return x[0].toUpperCase(); }).join("") || "★"; }
   function mountWidget(host, pid) {
     var root = document.createElement("div"); root.className = "bzr"; root.id = "bz-reviews"; host.parentNode.insertBefore(root, host);
-    var S = { sort: "media", rating: "", media: "", page: 1, list: [], summary: null, total: 0, more: false };
+    var S = { sort: "media", rating: "", media: "", q: "", page: 1, list: [], summary: null, total: 0, more: false, photos: [], ai: null, filters: false };
+    get("/summary/" + pid).then(function (j) { if (j && j.summary) { S.ai = j; render(); } }).catch(function () {});
     function load(reset) {
       if (reset) { S.page = 1; S.list = []; }
-      return get("/product/" + pid + "?sort=" + S.sort + "&rating=" + S.rating + "&media=" + S.media + "&page=" + S.page).then(function (j) {
-        S.summary = j.summary; S.total = j.total; S.more = j.more; S.list = S.list.concat(j.reviews || []); render();
+      return get("/product/" + pid + "?sort=" + S.sort + "&rating=" + S.rating + "&media=" + S.media + "&q=" + encodeURIComponent(S.q) + "&page=" + S.page).then(function (j) {
+        S.summary = j.summary; S.total = j.total; S.more = j.more; if (j.photos) S.photos = j.photos; S.list = S.list.concat(j.reviews || []); render();
       }).catch(function () { if (!S.summary) root.innerHTML = ""; });
     }
     function render() {
-      var a = S.summary || { count: 0, average: 0, histogram: {} };
-      var h = "";
+      var a = S.summary || { count: 0, average: 0, histogram: {} }, h = "";
       if (a.count) {
-        h += '<div class="bzr-sum"><div><div class="bzr-avg">' + a.average.toFixed(1) + ' out of 5.0</div><div>' + stars(a.average, 20) + '<span class="bzr-based">(Based on ' + a.count + " review" + (a.count === 1 ? "" : "s") + ")</span></div><div class=\"bzr-hist\">";
-        for (var i = 5; i >= 1; i--) { var n = a.histogram[i] || 0; h += '<button type="button" class="bzr-hr' + (String(S.rating) === String(i) ? " on" : "") + '" data-r="' + i + '"><span>' + i + " Star" + (i === 1 ? "" : "s") + '</span><span class="bzr-bar"><i style="width:' + (a.count ? Math.round((100 * n) / a.count) : 0) + '%"></i></span><span>(' + n + ")</span></button>"; }
-        h += "</div></div><div>" + (a.recommend_pct != null ? '<div class="bzr-rec"><b>' + a.recommend_pct + "%</b>would recommend this product</div>" : "") + "</div></div>";
+        h += '<div class="bzr-top"><div class="bzr-tl"><div class="bzr-avgline"><b>' + a.average.toFixed(1) + "</b>" + stars(a.average, 15) + "<span>Based on " + a.count.toLocaleString() + " review" + (a.count === 1 ? "" : "s") + '</span></div><div class="bzr-hist">';
+        for (var i = 5; i >= 1; i--) { var n = a.histogram[i] || 0; h += '<button type="button" class="bzr-hr' + (String(S.rating) === String(i) ? " on" : "") + '" data-r="' + i + '" aria-label="Show ' + i + '-star reviews"><span class="bzr-hn">' + i + '</span><span class="bzr-hs">★</span><span class="bzr-bar"><i style="width:' + Math.max(n ? 2 : 0, Math.round((100 * n) / a.count)) + '%"></i></span><span class="bzr-hc">' + kfmt(n) + "</span></button>"; }
+        h += '</div></div><div class="bzr-tr">' + (a.recommend_pct != null ? '<div class="bzr-rec"><b>' + a.recommend_pct + "%</b> would recommend this product</div>" : "") +
+          (S.photos && S.photos.length ? '<div class="bzr-strip">' + S.photos.map(function (p) { return '<button type="button" data-img="' + esc(p.url) + '"><img loading="lazy" src="' + esc(p.thumb) + '" alt="Customer photo"></button>'; }).join("") + "</div>" : "") + "</div></div>";
+        if (S.ai) h += '<div class="bzr-ai"><div class="bzr-h5">Reviews Summary <span aria-hidden="true">✧</span></div><p>' + esc(S.ai.summary) + "</p>" +
+          (S.ai.topics && S.ai.topics.length ? '<div class="bzr-h5">Customers Talked About</div><div class="bzr-topics">' + S.ai.topics.map(function (t) { return '<button type="button" class="bzr-chip' + (S.q.toLowerCase() === String(t).toLowerCase() ? " on" : "") + '" data-topic="' + esc(t) + '">' + esc(t) + "</button>"; }).join("") + "</div>" : "") + "</div>";
       }
-      h += '<div class="bzr-tools"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="bzr-count">' + (a.count ? S.total + " review" + (S.total === 1 ? "" : "s") + (S.rating ? " with " + S.rating + " star" + (S.rating === "1" ? "" : "s") : "") : "No reviews yet") + "</span>" +
-        (a.with_media ? '<button type="button" class="bzr-pill' + (S.media ? " on" : "") + '" data-m="1">Photos &amp; Videos</button>' : "") + (S.rating ? '<button type="button" class="bzr-pill on" data-clear="1">' + S.rating + " stars ✕</button>" : "") + "</div>" +
-        '<div style="display:flex;gap:8px;align-items:center">' + (a.count ? '<select class="bzr-sel" aria-label="Sort reviews"><option value="media">Most helpful</option><option value="newest">Newest</option><option value="highest">Highest rating</option><option value="lowest">Lowest rating</option></select>' : "") +
-        '<button type="button" class="bzr-btn" data-write="1">✎ Write a Review</button></div></div>';
-      if (S.list.length) {
-        h += '<div class="bzr-list">' + S.list.map(card).join("") + "</div>";
-        if (S.more) h += '<button type="button" class="bzr-btn bzr-loadmore" data-more="1">Load more</button>';
-      } else if (a.count) h += '<div class="bzr-empty">No reviews match.</div>';
-      else h += '<div class="bzr-empty">Be the first to review this product.</div>';
+      h += '<div class="bzr-tabs"><span class="on">Reviews (' + a.count.toLocaleString() + ")</span></div>";
+      h += '<div class="bzr-tools"><button type="button" class="bzr-btn" data-filters="1">☰ Filters' + ((S.rating || S.media || S.q) ? " •" : "") + '</button><button type="button" class="bzr-btn" data-write="1">✎ Write a Review</button></div>';
+      if (S.filters) h += '<div class="bzr-fpanel"><div><label>Rating</label><div class="bzr-chips">' + ["", "5", "4", "3", "2", "1"].map(function (r) { return '<button type="button" class="bzr-chip' + (String(S.rating) === r ? " on" : "") + '" data-fr="' + r + '">' + (r ? r + " ★" : "All") + "</button>"; }).join("") + "</div></div>" +
+        '<div><label>Show</label><div class="bzr-chips"><button type="button" class="bzr-chip' + (!S.media ? " on" : "") + '" data-fm="">All reviews</button><button type="button" class="bzr-chip' + (S.media ? " on" : "") + '" data-fm="1">With photos</button></div></div>' +
+        '<div><label for="bzr-q">Search reviews</label><input id="bzr-q" type="search" placeholder="e.g. soft, zipper, size" value="' + esc(S.q) + '"></div></div>';
+      h += '<div class="bzr-meta"><span>' + S.total.toLocaleString() + " review" + (S.total === 1 ? "" : "s") + ((S.rating || S.media || S.q) ? ' <button type="button" class="bzr-clear" data-clear="1">Clear filters</button>' : "") + '</span>' +
+        (a.count ? '<label class="bzr-sort">Sort <select aria-label="Sort reviews"><option value="newest">Most Recent</option><option value="media">Most Helpful</option><option value="highest">Highest Rating</option><option value="lowest">Lowest Rating</option></select></label>' : "") + "</div>";
+      if (S.list.length) { h += '<div class="bzr-list">' + S.list.map(row).join("") + "</div>"; if (S.more) h += '<button type="button" class="bzr-btn bzr-loadmore" data-more="1">Show more reviews</button>'; }
+      else h += '<div class="bzr-empty">' + (a.count ? "No reviews match." : "Be the first to review this product.") + "</div>";
       root.innerHTML = h;
-      var sel = root.querySelector(".bzr-sel"); if (sel) { sel.value = S.sort; sel.onchange = function () { S.sort = sel.value; load(true); }; }
+      var sel = root.querySelector(".bzr-sort select"); if (sel) { sel.value = S.sort; sel.onchange = function () { S.sort = sel.value; load(true); }; }
+      var qi = root.querySelector("#bzr-q"); if (qi) qi.onkeydown = function (e) { if (e.key === "Enter") { S.q = qi.value.trim(); load(true); } };
     }
-    function card(r, i) {
-      var long = (r.body || "").length > 420;
-      return '<div class="bzr-card">' + stars(r.rating, 17) + (r.title ? "<h4>" + esc(r.title) + "</h4>" : '<div style="height:8px"></div>') +
+    function row(r) {
+      var long = (r.body || "").length > 600;
+      var attrs = []; if (r.variant) attrs.push(["Size Purchased", r.variant]);
+      if (r.answers) Object.keys(r.answers).slice(0, 3).forEach(function (k) { attrs.push([k, r.answers[k]]); });
+      return '<div class="bzr-row"><aside class="bzr-who"><div class="bzr-id"><span class="bzr-av">' + esc(initials(r.name)) + "</span><div><b>" + esc(r.name) + "</b>" + (r.verified ? '<div class="bzr-ver">Verified Buyer <span aria-hidden="true">✓</span></div>' : "") + "</div></div>" +
+        (r.product ? '<div class="bzr-rv"><b>Reviewing</b><div class="bzr-rvp">' + (r.product_image ? '<img loading="lazy" src="' + esc(r.product_image) + '" alt="">' : "") + "<span>" + esc(r.product) + "</span></div></div>" : "") +
+        (r.recommended ? '<div class="bzr-recy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3a4 4 0 0 0 4-4V6a2 2 0 0 1 4 0v5h3a2 2 0 0 1 2 2l-1 5a2 3 0 0 1-2 2h-7a3 3 0 0 1-3-3"/></svg> I recommend this product</div>' : "") +
+        attrs.map(function (x) { return '<div class="bzr-attr"><b>' + esc(x[0]) + ":</b><span>" + esc(x[1]) + "</span></div>"; }).join("") + "</aside>" +
+        '<div class="bzr-main"><div class="bzr-rh">' + stars(r.rating, 13) + '<span class="bzr-date">' + ago(r.date) + "</span></div>" + (r.title ? "<h4>" + esc(r.title) + "</h4>" : "") +
         '<div class="bzr-body' + (long ? " clip" : "") + '">' + esc(r.body) + "</div>" + (long ? '<button type="button" class="bzr-more">Read more</button>' : "") +
         (r.media && r.media.length ? '<div class="bzr-media">' + r.media.filter(function (m) { return m.type !== "video"; }).map(function (m) { return '<button type="button" data-img="' + esc(m.url) + '"><img loading="lazy" src="' + esc(m.thumb) + '" alt="' + esc(m.alt || "Customer photo") + '"></button>'; }).join("") + "</div>" : "") +
-        (r.product ? '<div class="bzr-prod">' + (r.product_image ? '<img loading="lazy" src="' + esc(r.product_image) + '" alt="">' : "") + "<div>Reviewing<b>" + esc(r.product) + "</b>" + (r.variant ? esc(r.variant) : "") + "</div></div>" : "") +
-        (r.reply ? '<div class="bzr-reply"><b>Reply from ' + esc(C.brand || "us") + "</b>" + esc(r.reply) + "</div>" : "") +
-        '<div class="bzr-foot"><div><b>' + esc(r.name) + "</b>" + (r.verified ? '<span class="bzr-ver">Verified Buyer</span>' : "") + '</div><span class="bzr-date">' + fmtDate(r.date) + "</span></div></div>";
+        (r.reply ? '<div class="bzr-reply"><b>Response from ' + esc(C.brand || "us") + "</b>" + esc(r.reply) + "</div>" : "") +
+        '<div class="bzr-help">Was this helpful? <button type="button" data-help="' + esc(r.id) + '" aria-label="Helpful"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3a4 4 0 0 0 4-4V6a2 2 0 0 1 4 0v5h3a2 2 0 0 1 2 2l-1 5a2 3 0 0 1-2 2h-7a3 3 0 0 1-3-3"/></svg><span>' + (r.helpful || 0) + '</span></button><button type="button" data-unhelp="' + esc(r.id) + '" aria-label="Not helpful"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:rotate(180deg)"><path d="M7 11v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3a4 4 0 0 0 4-4V6a2 2 0 0 1 4 0v5h3a2 2 0 0 1 2 2l-1 5a2 3 0 0 1-2 2h-7a3 3 0 0 1-3-3"/></svg><span>' + (r.unhelpful || 0) + "</span></button></div></div></div>";
     }
+    var voted = {};
     root.addEventListener("click", function (e) {
       var t = e.target.closest("button"); if (!t) return;
       if (t.dataset.r) { S.rating = String(S.rating) === t.dataset.r ? "" : t.dataset.r; load(true); }
-      else if (t.dataset.clear) { S.rating = ""; load(true); }
-      else if (t.dataset.m) { S.media = S.media ? "" : "1"; load(true); }
+      else if (t.dataset.fr != null && t.hasAttribute("data-fr")) { S.rating = t.dataset.fr; load(true); }
+      else if (t.hasAttribute("data-fm")) { S.media = t.dataset.fm; load(true); }
+      else if (t.dataset.topic) { S.q = S.q.toLowerCase() === t.dataset.topic.toLowerCase() ? "" : t.dataset.topic; load(true); }
+      else if (t.dataset.clear) { S.rating = ""; S.media = ""; S.q = ""; load(true); }
+      else if (t.dataset.filters) { S.filters = !S.filters; render(); }
       else if (t.dataset.more) { t.disabled = true; S.page++; load(false); }
       else if (t.dataset.write) openForm(pid);
       else if (t.dataset.img) lightbox(t.dataset.img);
+      else if (t.dataset.help || t.dataset.unhelp) { var id = t.dataset.help || t.dataset.unhelp; if (voted[id]) return; voted[id] = 1; var sp = t.querySelector("span"); sp.textContent = Number(sp.textContent) + 1; fetch(API + "/helpful/" + id + (t.dataset.unhelp ? "?no=1" : ""), { method: "POST" }).catch(function () {}); }
       else if (t.classList.contains("bzr-more")) { var b = t.previousElementSibling; b.classList.remove("clip"); t.remove(); }
     });
     load(true);

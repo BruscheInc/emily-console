@@ -296,12 +296,26 @@
   .qopt{display:flex;gap:7px;align-items:center;font-weight:400!important;margin:0!important;cursor:pointer}.qopt input{width:auto;margin:0}
   .qnote{margin-top:8px;font-size:13px;color:#8a6100;background:#fff6dd;border:1px solid #f3dd9b;border-radius:8px;padding:8px 10px}
   .fmtbar{display:flex;gap:2px;align-items:center;margin:0 0 4px}.fmtbar button{border:1px solid transparent;background:none;border-radius:6px;padding:3px 7px;cursor:pointer;color:var(--ink);font-size:15px}.fmtbar button:hover{background:var(--panel2);border-color:var(--line)}.fmthint{margin-left:8px;font-size:11.5px;color:var(--muted)}
-  .rvlist{display:flex;flex-direction:column;gap:12px;padding:14px 22px 30px}.rvcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:13.5px}
-  .rvtop{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.rvst{color:#f5a623;font-size:17px;letter-spacing:1px}.rvst .off{color:#d5d8e0}
-  .rvt{font-weight:700;font-size:15px;margin:8px 0 2px}.rvb{white-space:pre-wrap;line-height:1.5}
+  .rvbar{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;padding:14px 22px 8px;border-bottom:1px solid var(--line)}.rvf{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .rvf select{font:inherit;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:120px}.rvsearch{margin-left:auto;min-width:220px}
+  .rvbar2{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 22px}.rvck{display:flex;gap:6px;align-items:center;font-size:13px}#rvbulk{display:flex;gap:6px;align-items:center;font-size:13px}
+  .rvlist{display:flex;flex-direction:column;gap:12px;padding:4px 22px 30px}
+  .rvcard{display:grid;grid-template-columns:250px minmax(0,1fr) 88px;background:var(--panel);border:1px solid var(--line);border-radius:12px;font-size:13.5px;overflow:hidden}
+  @media(max-width:900px){.rvcard{grid-template-columns:1fr}.rvrail{flex-direction:row!important;border-left:0!important;border-top:1px solid var(--line)}}
+  .rvside{border-right:1px solid var(--line);padding:14px;background:var(--panel2);position:relative}.rvpick{position:absolute;top:10px;right:10px}.rvprod{display:flex;gap:10px;align-items:flex-start;padding-right:20px}.rvprod img{width:54px;height:54px;object-fit:cover;border-radius:6px}
+  .rvsh{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:12px 0 4px}.rvmain{padding:14px 16px}
+  .rvrail{display:flex;flex-direction:column;gap:2px;border-left:1px solid var(--line);padding:8px 6px}.rvact{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;border-radius:8px;padding:8px 4px;cursor:pointer;color:var(--muted);font:inherit;font-size:11px;text-decoration:none}.rvact i{font-size:20px}.rvact:hover{background:var(--panel2);color:var(--ink)}.rvact.ok:hover{color:#1d7a46}.rvact.bad:hover{color:#b42318}
+  .rvlist.collapsed .rvb,.rvlist.collapsed .rvmedia,.rvlist.collapsed .rvside .rvsh,.rvlist.collapsed .rvside .rvsh~*{display:none}
+  .rvhold{font-size:12px;color:#8a6100;margin-top:6px}.rvtop{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.rvst{color:#f5a623;font-size:17px;letter-spacing:1px}.rvst .off{color:#d5d8e0}
+  .rvt{font-weight:700;font-size:15px;margin:8px 0 2px}.rvb{white-space:pre-wrap;line-height:1.55}
   .rvmedia{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.rvmedia img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
-  .rvmeta{display:flex;gap:10px;align-items:center;margin-top:10px}.rvmeta img{width:40px;height:40px;object-fit:cover;border-radius:6px}
-  .rvreply{margin-top:10px;background:var(--panel2);border-radius:8px;padding:8px 10px}.rvacts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}.rvreplybox{margin-top:10px}
+  .rvreply{margin-top:10px;background:var(--panel2);border-radius:8px;padding:8px 10px}.rvreplybox{margin-top:10px}.rvreplybox textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit;background:var(--panel2);color:var(--ink);box-sizing:border-box}
+  .rvkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:10px 0 14px}.rvkpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}.rvkpi b{display:block;font-size:24px;margin:4px 0 2px}
+  .rvgrid2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px}@media(max-width:1000px){.rvgrid2{grid-template-columns:1fr}}
+  .rvchart{display:flex;align-items:flex-end;gap:6px;height:200px;padding-top:16px}.rvbarc{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;position:relative;font-size:10.5px;color:var(--muted)}.rvbarv{width:100%;max-width:38px;background:#242F3F;border-radius:4px 4px 0 0;min-height:2px}.rvbarc span{margin-top:4px}.rvbarc em{position:absolute;top:-2px;font-style:normal;font-size:10px}
+  .rvdist{display:flex;gap:10px;align-items:center;margin:8px 0;font-size:13px}.rvdist .bar{flex:1;height:8px;background:var(--panel2);border-radius:6px;overflow:hidden}.rvdist .bar i{display:block;height:100%;background:#f5a623}.rvdist span:first-child{width:28px}.rvdist span:last-child{width:60px;text-align:right}
+  .rvfun{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.rvfun div{background:var(--panel2);border-radius:10px;padding:10px}.rvfun b{display:block;font-size:20px}.rvfun span{font-size:12px;color:var(--muted)}
+  .rvplist{display:flex;gap:10px;align-items:center;padding:7px 4px;border-top:1px solid var(--line);cursor:pointer;font-size:13px}.rvplist:first-of-type{border-top:0}.rvplist:hover{background:var(--panel2)}.rvplist img{width:34px;height:34px;object-fit:cover;border-radius:6px}.rvplist span{flex:1}
   .ntfind{margin:6px 0 4px}.ntfind input{flex:1}
   .ntr-list{margin-top:8px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
   .ntr-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:8px 12px 4px}
@@ -438,11 +452,11 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
   </div></div>
   <div class="grp" data-g="reviews"><button class="nav gh" onclick="toggleGrp('reviews')"><i class="i ti ti-star"></i><span>Reviews</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
-    <button class="nav view sub" data-view="rv_pending" onclick="setView('rv_pending')"><i class="si ti ti-clock"></i><span>Waiting for you</span><span class="n" id="v-rv_pending"></span></button>
-    <button class="nav view sub" data-view="rv_published" onclick="setView('rv_published')"><i class="si ti ti-star"></i><span>Published</span></button>
-    <button class="nav view sub" data-view="rv_rejected" onclick="setView('rv_rejected')"><i class="si ti ti-x"></i><span>Rejected</span></button>
-    <button class="nav view sub" data-view="rv_all" onclick="setView('rv_all')"><i class="si ti ti-stack-2"></i><span>All reviews</span></button>
-    <button class="nav view sub" data-view="rv_setup" onclick="setView('rv_setup')"><i class="si ti ti-settings"></i><span>On the website</span></button>
+    <button class="nav view sub" data-view="rv_mod" onclick="setView('rv_mod')"><i class="si ti ti-check"></i><span>Moderation</span><span class="n" id="v-rv_pending"></span></button>
+    <button class="nav view sub" data-view="rv_products" onclick="setView('rv_products')"><i class="si ti ti-shopping-bag"></i><span>Products</span></button>
+    <button class="nav view sub" data-view="rv_insights" onclick="setView('rv_insights')"><i class="si ti ti-chart-pie"></i><span>Insights</span></button>
+    <button class="nav view sub" data-view="rv_groups" onclick="setView('rv_groups')"><i class="si ti ti-stack-2"></i><span>Groups</span></button>
+    <button class="nav view sub" data-view="rv_setup" onclick="setView('rv_setup')"><i class="si ti ti-settings"></i><span>Settings &amp; website</span></button>
   </div></div>
   <div class="grp" data-g="orders"><button class="nav gh" onclick="toggleGrp('orders')"><i class="i ti ti-shopping-bag"></i><span>Orders</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
@@ -662,7 +676,7 @@ async function loadCounts(){try{
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={rv_pending:"Reviews · waiting for you",rv_published:"Reviews · published",rv_rejected:"Reviews · rejected",rv_all:"Reviews · all",rv_setup:"Reviews · on the website",orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={rv_mod:"Reviews · moderation",rv_products:"Reviews · products",rv_insights:"Reviews · insights",rv_groups:"Reviews · groups",rv_setup:"Reviews · settings & website",orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -852,42 +866,119 @@ async function ntSend(){
   }catch(e){toast("Couldn't send",true);b.disabled=false;b.textContent="Send & create ticket";}
 }
 
-/* ---- Reviews ---- */
-const RV={store:"",q:"",rating:"",page:1,rows:[],more:false};
+/* ---- Reviews: moderation, products, insights, groups, settings ---- */
+const RV={store:"",status:"pending",rating:"",sentiment:"",days:"",media:"",source:"",q:"",product:"",product_title:"",sort:"newest",page:1,rows:[],more:false,total:0,sel:new Set(),collapsed:false};
 function rvStars(n){ return `<span class="rvst" title="${n} stars">${"★".repeat(n)}<span class="off">${"★".repeat(5-n)}</span></span>`; }
+const rvSel=(k,label,opts)=>`<label class="rvf"><span>${label}</span><select onchange="RV.${k}=this.value;loadReviews()">${opts.map(([v,l])=>`<option value="${v}" ${String(RV[k])===String(v)?"selected":""}>${l}</option>`).join("")}</select></label>`;
 async function loadReviews(more){
-  const w=$("stuckwrap");
   if(VIEW==="rv_setup") return rvSetup();
-  const status=VIEW==="rv_pending"?"pending":VIEW==="rv_published"?"published":VIEW==="rv_rejected"?"rejected":"all";
-  if(!more){ RV.page=1; RV.rows=[]; w.innerHTML=rvHead()+'<div class="empty">Loading reviews…</div>'; } else RV.page++;
+  if(VIEW==="rv_products") return rvProducts();
+  if(VIEW==="rv_insights") return rvInsights();
+  if(VIEW==="rv_groups") return rvGroups();
+  const w=$("stuckwrap");
+  if(!more){ RV.page=1; RV.rows=[]; RV.sel.clear(); w.innerHTML=rvModHead()+'<div class="empty">Loading reviews…</div>'; } else RV.page++;
   try{
-    const d=await api(`/api/reviews?status=${status}&store=${RV.store}&rating=${RV.rating}&q=${encodeURIComponent(RV.q)}&page=${RV.page}`);
-    if(d.error) throw new Error(d.error);
-    RV.rows=RV.rows.concat(d.reviews); RV.more=d.more;
+    const qs=new URLSearchParams({status:RV.status,store:RV.store,rating:RV.rating,sentiment:RV.sentiment,days:RV.days,media:RV.media,source:RV.source,q:RV.q,product:RV.product,sort:RV.sort,page:RV.page,per:25});
+    const d=await api(`/api/reviews?${qs}`); if(d.error) throw new Error(d.error);
+    RV.rows=RV.rows.concat(d.reviews); RV.more=d.more; RV.total=d.total;
     const pend=d.counts.filter(c=>c.status==="pending").reduce((t,c)=>t+c.n,0); const b=$("v-rv_pending"); if(b) b.textContent=pend||"";
     const pub=(st)=>{ const c=d.counts.find(x=>x.store===st&&x.status==="published"); return c?`${c.n.toLocaleString()} published · ${c.avg.toFixed(2)}★`:"none yet"; };
     $("showing").textContent=`Larkspur Baby: ${pub("lb")} · Outlet: ${pub("lbo")}`;
-    w.innerHTML=rvHead()+(RV.rows.length?`<div class="rvlist">${RV.rows.map(rvCard).join("")}</div>`:`<div class="empty">${status==="pending"?"Nothing waiting. Reviews under "+"4 stars wait here; they publish on their own after 14 days unless you reject them.":"No reviews here."}</div>`)+(RV.more?`<div style="text-align:center;padding:14px"><button class="btn sec" onclick="this.disabled=true;loadReviews(true)">Load more</button></div>`:"");
-  }catch(e){ w.innerHTML=rvHead()+`<div class="empty">Couldn't load reviews: ${esc(e.message)}</div>`; }
+    w.innerHTML=rvModHead()+(RV.rows.length?`<div class="rvlist ${RV.collapsed?"collapsed":""}">${RV.rows.map(rvCard).join("")}</div>`:`<div class="empty">${RV.status==="pending"?"You've reached the end of your moderation queue. Reviews under your auto-publish rating wait here and publish on their own after 14 days unless you reject them.":"No reviews match these filters."}</div>`)+(RV.more?`<div style="text-align:center;padding:14px"><button class="btn sec" onclick="this.disabled=true;loadReviews(true)">Load more</button></div>`:"");
+    rvBulkBar();
+  }catch(e){ w.innerHTML=rvModHead()+`<div class="empty">Couldn't load reviews: ${esc(e.message)}</div>`; }
 }
-function rvHead(){ return `<div class="stuckhead ordhead"><div class="ordsearch"><i class="ti ti-search"></i><input value="${esc(RV.q)}" placeholder="Search reviews, names, emails, products…" onkeydown="if(event.key==='Enter'){RV.q=this.value.trim();loadReviews();}"></div>
-  <div class="seg">${[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]].map(([k,l])=>`<button class="tab ${RV.store===k?"on":""}" onclick="RV.store='${k}';loadReviews()">${l}</button>`).join("")}</div>
-  <div class="seg">${[["","Any rating"],["5","5★"],["4","4★"],["3","3★"],["2","2★"],["1","1★"]].map(([k,l])=>`<button class="tab ${RV.rating===k?"on":""}" onclick="RV.rating='${k}';loadReviews()">${l}</button>`).join("")}</div></div>`; }
+function rvModHead(){
+  return `<div class="rvbar">
+    ${rvSel("status","Status",[["pending","Pending"],["published","Published"],["rejected","Rejected"],["all","All"]])}
+    ${rvSel("rating","Rating",[["","Any"],["5","5 stars"],["4","4 stars"],["3","3 stars"],["2","2 stars"],["1","1 star"],["1,2","1–2 stars"]])}
+    ${rvSel("sentiment","Sentiment",[["","Any"],["positive","Positive"],["neutral","Neutral"],["negative","Negative"]])}
+    ${rvSel("store","Store",[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]])}
+    ${rvSel("days","Date submitted",[["","All time"],["1","Last 24 hours"],["7","Last 7 days"],["30","Last 30 days"],["90","Last 90 days"],["365","Last year"]])}
+    ${rvSel("media","Media",[["","Any"],["1","With photos"],["0","No photos"]])}
+    ${rvSel("source","Source",[["","Any"],["request","Review request email"],["site","Website"],["imported","Imported"]])}
+    ${rvSel("sort","Sort",[["newest","Newest"],["oldest","Oldest"],["highest","Highest rating"],["lowest","Lowest rating"],["helpful","Most helpful"]])}
+    <div class="ordsearch rvsearch"><i class="ti ti-search"></i><input value="${esc(RV.q)}" placeholder="Search reviews" onkeydown="if(event.key==='Enter'){RV.q=this.value.trim();loadReviews();}"></div></div>
+  <div class="rvbar2">${RV.product?`<span class="chip">Product: ${esc(RV.product_title||RV.product)} <a href="javascript:void 0" onclick="RV.product='';RV.product_title='';loadReviews()">✕</a></span>`:""}
+    <span class="exc">${RV.total!=null?RV.total.toLocaleString()+" review"+(RV.total===1?"":"s"):""}</span>
+    <label class="rvck"><input type="checkbox" onchange="rvSelAll(this.checked)"> Select all shown</label>
+    <button class="btn sec xs" onclick="RV.collapsed=!RV.collapsed;document.querySelector('.rvlist')&&document.querySelector('.rvlist').classList.toggle('collapsed',RV.collapsed)">${RV.collapsed?"Expand all":"Collapse all"}</button>
+    <span id="rvbulk"></span></div>`;
+}
+function rvSelAll(on){ RV.sel.clear(); if(on) RV.rows.forEach(r=>RV.sel.add(r.id)); document.querySelectorAll(".rvpick").forEach(c=>c.checked=on); rvBulkBar(); }
+function rvPick(id,on){ on?RV.sel.add(id):RV.sel.delete(id); rvBulkBar(); }
+function rvBulkBar(){ const b=$("rvbulk"); if(!b) return; const n=RV.sel.size; b.innerHTML=n?`<b>${n} selected</b> <button class="btn xs" onclick="rvBulk('publish')">Publish</button> <button class="btn sec xs" onclick="rvBulk('reject')">Reject</button>`:""; }
+async function rvBulk(action){ const ids=[...RV.sel]; if(!ids.length) return; if(!confirm(`${action==="publish"?"Publish":"Reject"} ${ids.length} review${ids.length===1?"":"s"}?`)) return; try{ const r=await api("/api/reviews-bulk",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids,action})}); if(r.error) throw new Error(r.error); toast(`${action==="publish"?"Published":"Rejected"} ${r.done}`); loadReviews(); }catch(e){ toast(e.message,true); } }
 function rvCard(r){
   const held=r.status==="pending"?Math.max(0,14-Math.floor((Date.now()-new Date(r.created_at))/864e5)):null;
-  return `<div class="rvcard" id="rv-${esc(r.id)}"><div class="rvtop">${rvStars(r.rating)}<span class="opill ${r.status==="published"?"ok":r.status==="pending"?"warn":"mut"}">${esc(r.status)}</span>${r.source==="okendo"?'<span class="chip">imported</span>':""}<span class="exc" style="margin-left:auto">${esc(r.store==="lbo"?"Outlet":"Larkspur")} · ${fmtDay(r.created_at)}</span></div>
+  const sent=r.rating>=4?"positive":r.rating===3?"neutral":"negative";
+  return `<div class="rvcard ${esc(r.status)}" id="rv-${esc(r.id)}">
+   <aside class="rvside"><input type="checkbox" class="rvpick" ${RV.sel.has(r.id)?"checked":""} onchange="rvPick('${esc(r.id)}',this.checked)" aria-label="Select review">
+    <div class="rvprod">${r.product_image?`<img src="${esc(r.product_image)}" alt="">`:""}<div><a href="javascript:void 0" onclick="RV.product='${esc(r.product_id||"")}';RV.product_title=${esc(JSON.stringify(r.product_title||""))};RV.status='all';loadReviews()"><b>${esc(r.product_title||"")}</b></a>${r.variant_title?`<div class="exc">${esc(r.variant_title)}</div>`:""}</div></div>
+    <div class="rvsh">Customer</div><div class="rvcust"><b>${esc(r.reviewer_name||"Customer")}</b>${r.verified?' <span class="opill ok">Buyer</span>':""}${r.email?`<div class="exc">${esc(r.email)}</div>`:""}${r.order_name?`<div class="exc">${esc(r.order_name)}</div>`:""}
+    ${r.recommended===false?'<div class="exc" style="color:#b42318">Does not recommend this product</div>':r.recommended?'<div class="exc" style="color:#1d7a46">Recommends this product</div>':""}</div>
+    ${r.answers?`<div class="rvsh">Answers</div>${Object.entries(r.answers).map(([k,v])=>`<div class="exc">${esc(k)}: <b>${esc(v)}</b></div>`).join("")}`:""}
+   </aside>
+   <div class="rvmain"><div class="rvtop">${rvStars(r.rating)}<span class="opill ${sent==="positive"?"ok":sent==="neutral"?"warn":"bad"}">${sent}</span>${r.source==="okendo"?'<span class="chip">imported</span>':r.source==="request"?'<span class="chip">from review email</span>':r.source==="site"?'<span class="chip">website</span>':""}<span class="exc" style="margin-left:auto">${esc(r.store==="lbo"?"Outlet":"Larkspur")} · ${fmtDay(r.created_at)}</span></div>
+    ${held!=null?`<div class="rvhold">⏱ Auto-publishes ${new Date(new Date(r.created_at).getTime()+14*864e5).toLocaleDateString(undefined,{month:"short",day:"numeric"})} unless you reject it</div>`:""}
     ${r.title?`<div class="rvt">${esc(r.title)}</div>`:""}<div class="rvb">${esc(r.body||"")}</div>
     ${(r.media||[]).length?`<div class="rvmedia">${r.media.map(m=>`<a href="${esc(m.large||m.url)}" target="_blank" rel="noopener"><img src="${esc(m.thumb||m.url)}" alt="" loading="lazy"></a>`).join("")}</div>`:""}
-    <div class="rvmeta">${r.product_image?`<img src="${esc(r.product_image)}" alt="">`:""}<div><b>${esc(r.product_title||"")}</b>${r.variant_title?` · ${esc(r.variant_title)}`:""}<div class="exc">${esc(r.reviewer_name||"")}${r.verified?' · <span style="color:#1d7a46">Verified buyer</span>':""}${r.email?` · ${esc(r.email)}`:""}${r.order_name?` · ${esc(r.order_name)}`:""}${r.recommended===false?" · doesn't recommend":""}</div></div></div>
-    ${r.answers?`<div class="exc" style="margin-top:6px">${Object.entries(r.answers).map(([k,v])=>`${esc(k)}: <b>${esc(v)}</b>`).join(" · ")}</div>`:""}
-    ${r.reply?`<div class="rvreply"><b>Your reply</b> <span class="exc">${esc(r.reply_by||"")}</span><div>${esc(r.reply)}</div></div>`:""}
-    <div class="rvacts">${r.status!=="published"?`<button class="btn xs" onclick="rvDo('${esc(r.id)}','publish',this)">Publish</button>`:""}${r.status!=="rejected"?`<button class="btn sec xs" onclick="rvDo('${esc(r.id)}','reject',this)">Reject</button>`:""}<button class="btn sec xs" onclick="rvReply('${esc(r.id)}')">${r.reply?"Edit reply":"Reply"}</button>${held!=null?`<span class="exc">Publishes on its own in ${held} day${held===1?"":"s"} unless you reject it.</span>`:""}${r.decided_by&&r.status!=="pending"?`<span class="exc">by ${esc(r.decided_by)}</span>`:""}</div></div>`;
+    ${r.reply?`<div class="rvreply"><b>Your public reply</b> <span class="exc">${esc(r.reply_by||"")}</span><div>${esc(r.reply)}</div></div>`:""}
+    <div class="exc" style="margin-top:8px">${r.helpful||r.unhelpful?`👍 ${r.helpful||0} · 👎 ${r.unhelpful||0} · `:""}${r.decided_by&&r.status!=="pending"?`${esc(r.status)} by ${esc(r.decided_by)}`:esc(r.status)}</div></div>
+   <div class="rvrail">${r.status!=="published"?`<button class="rvact ok" title="Publish" onclick="rvDo('${esc(r.id)}','publish',this)"><i class="ti ti-check"></i><span>Publish</span></button>`:""}${r.status!=="rejected"?`<button class="rvact bad" title="Reject" onclick="rvDo('${esc(r.id)}','reject',this)"><i class="ti ti-x"></i><span>Reject</span></button>`:""}<button class="rvact" title="Reply" onclick="rvReply('${esc(r.id)}')"><i class="ti ti-message"></i><span>Reply</span></button>${r.product_handle?`<a class="rvact" title="View on site" href="${r.store==="lbo"?"https://larkspurbabyoutlet.com":"https://larkspurbaby.com"}/products/${esc(r.product_handle)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i><span>Product</span></a>`:""}</div></div>`;
 }
-async function rvDo(id,act,b,text){ if(b) b.disabled=true; try{ const r=await api(`/api/reviews/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text||""})}); if(r.error) throw new Error(r.error); toast(act==="publish"?"Published":act==="reject"?"Rejected — hidden from the site":"Reply saved"); loadReviews(); }catch(e){ toast(e.message,true); if(b) b.disabled=false; } }
+async function rvDo(id,act,b,text){ if(b) b.disabled=true; try{ const r=await api(`/api/reviews/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text||""})}); if(r.error) throw new Error(r.error); toast(act==="publish"?"Published":act==="reject"?"Rejected. Hidden from the site":"Reply saved");
+    const c=$("rv-"+id); if(c&&(act==="publish"||act==="reject")&&RV.status!=="all"&&RV.status!==(act==="publish"?"published":"rejected")){ c.style.opacity=".35"; setTimeout(()=>c.remove(),350); } else loadReviews(); }catch(e){ toast(e.message,true); if(b) b.disabled=false; } }
 function rvReply(id){
   const c=$("rv-"+id); if(!c||c.querySelector(".rvreplybox")) return; const r=RV.rows.find(x=>x.id===id)||{};
-  c.insertAdjacentHTML("beforeend",`<div class="rvreplybox"><textarea placeholder="Your public reply. Shown under the review on the site." style="width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit;background:var(--panel2);color:var(--ink)">${esc(r.reply||"")}</textarea><div style="display:flex;gap:8px;margin-top:6px"><button class="btn xs" onclick="rvDo('${esc(id)}','reply',this,this.closest('.rvreplybox').querySelector('textarea').value)">Save reply</button><button class="btn sec xs" onclick="this.closest('.rvreplybox').remove()">Cancel</button></div></div>`);
+  c.querySelector(".rvmain").insertAdjacentHTML("beforeend",`<div class="rvreplybox"><textarea placeholder="Your public reply. It shows under the review on the site.">${esc(r.reply||"")}</textarea><div style="display:flex;gap:8px;margin-top:6px"><button class="btn xs" onclick="rvDo('${esc(id)}','reply',this,this.closest('.rvreplybox').querySelector('textarea').value)">Save reply</button><button class="btn sec xs" onclick="this.closest('.rvreplybox').remove()">Cancel</button>${r.reply?`<button class="btn sec xs" onclick="rvDo('${esc(id)}','reply',this,'')">Remove reply</button>`:""}</div></div>`);
+  c.querySelector(".rvreplybox textarea").focus();
 }
+/* products */
+const RVP={store:"",q:"",sort:"count",page:1,rows:[],more:false};
+async function rvProducts(more){
+  const w=$("stuckwrap"); if(!more){ RVP.page=1; RVP.rows=[]; w.innerHTML='<div class="empty">Loading products…</div>'; } else RVP.page++;
+  const d=await api(`/api/reviews-products?store=${RVP.store}&q=${encodeURIComponent(RVP.q)}&sort=${RVP.sort}&page=${RVP.page}`); RVP.rows=RVP.rows.concat(d.products||[]); RVP.more=d.more;
+  $("showing").textContent="";
+  w.innerHTML=`<div class="rvbar"><div class="ordsearch rvsearch"><i class="ti ti-search"></i><input value="${esc(RVP.q)}" placeholder="Search products" onkeydown="if(event.key==='Enter'){RVP.q=this.value.trim();rvProducts();}"></div>
+   <label class="rvf"><span>Store</span><select onchange="RVP.store=this.value;rvProducts()">${[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]].map(([v,l])=>`<option value="${v}" ${RVP.store===v?"selected":""}>${l}</option>`).join("")}</select></label>
+   <label class="rvf"><span>Sort</span><select onchange="RVP.sort=this.value;rvProducts()">${[["count","Most reviews"],["rating","Highest rating"],["lowest","Lowest rating"],["recent","Latest review"]].map(([v,l])=>`<option value="${v}" ${RVP.sort===v?"selected":""}>${l}</option>`).join("")}</select></label></div>
+   <table class="tickets ordtbl"><thead><tr><th>Product</th><th>Store</th><th class="r">Average rating</th><th class="r">Published reviews</th><th class="r">With photos</th><th class="r">1–2★</th><th class="r">Waiting</th><th>Latest</th></tr></thead><tbody>${RVP.rows.map(p=>`<tr onclick="RV.product='${esc(p.product_id)}';RV.product_title=${esc(JSON.stringify(p.title||""))};RV.status='all';RV.store='${esc(p.store)}';setView('rv_mod')"><td><div style="display:flex;gap:10px;align-items:center">${p.image?`<img src="${esc(p.image)}" style="width:36px;height:36px;object-fit:cover;border-radius:6px" alt="">`:""}<b>${esc(p.title||"")}</b></div></td><td>${p.store==="lbo"?"Outlet":"Larkspur"}</td><td class="r">${rvStars(Math.round(p.avg))} ${p.avg.toFixed(2)}</td><td class="r">${p.n.toLocaleString()}</td><td class="r">${p.media}</td><td class="r">${p.low||""}</td><td class="r">${p.pending?`<span class="opill warn">${p.pending}</span>`:""}</td><td>${fmtDay(p.last)}</td></tr>`).join("")}</tbody></table>
+   ${RVP.more?`<div style="text-align:center;padding:14px"><button class="btn sec" onclick="this.disabled=true;rvProducts(true)">Load more</button></div>`:""}`;
+}
+/* insights */
+const RVI={store:"",days:90};
+async function rvInsights(){
+  const w=$("stuckwrap"); w.innerHTML='<div class="empty">Loading insights…</div>'; $("showing").textContent="";
+  const d=await api(`/api/reviews-insights?store=${RVI.store}&days=${RVI.days}`); if(d.error){ w.innerHTML=`<div class="empty">${esc(d.error)}</div>`; return; }
+  const k=d.kpis, chg=k.prev?Math.round(100*(k.recent-k.prev)/k.prev):null;
+  const tile=(l,v,sub)=>`<div class="rvkpi"><div class="exc">${l}</div><b>${v}</b>${sub?`<div class="exc">${sub}</div>`:""}</div>`;
+  const mx=Math.max(1,...d.months.map(m=>m.n));
+  const bars=d.months.map(m=>`<div class="rvbarc" title="${m.m}: ${m.n} reviews, ${m.avg}★"><div class="rvbarv" style="height:${Math.round(100*m.n/mx)}%"></div><span>${m.m.slice(5)}/${m.m.slice(2,4)}</span><em>${m.n}</em></div>`).join("");
+  const tot=d.distribution.reduce((t,x)=>t+x.n,0)||1;
+  const dist=[5,4,3,2,1].map(r=>{ const n=(d.distribution.find(x=>x.rating===r)||{}).n||0; return `<div class="rvdist"><span>${r}★</span><div class="bar"><i style="width:${(100*n/tot).toFixed(1)}%"></i></div><span>${n.toLocaleString()}</span></div>`; }).join("");
+  const plist=(rows,low)=>rows.length?rows.map(p=>`<div class="rvplist" onclick="RV.product='${esc(p.product_id)}';RV.product_title=${esc(JSON.stringify(p.title||""))};RV.status='all';RV.store='${esc(p.store)}';RV.sentiment='${low?"negative":""}';setView('rv_mod')">${p.image?`<img src="${esc(p.image)}" alt="">`:""}<span>${esc(p.title||"")}</span><b>${low?`${p.lown} low · `:""}${p.n} · ${p.avg}★</b></div>`).join(""):'<div class="exc">Nothing yet.</div>';
+  const R=d.requests; const src=Object.fromEntries(d.sources.map(x=>[x.source,x.n]));
+  w.innerHTML=`<div class="rvbar"><label class="rvf"><span>Store</span><select onchange="RVI.store=this.value;rvInsights()">${[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]].map(([v,l])=>`<option value="${v}" ${RVI.store===v?"selected":""}>${l}</option>`).join("")}</select></label>
+   <label class="rvf"><span>Period</span><select onchange="RVI.days=this.value;rvInsights()">${[[30,"Last 30 days"],[90,"Last 90 days"],[180,"Last 6 months"],[365,"Last year"]].map(([v,l])=>`<option value="${v}" ${Number(RVI.days)===v?"selected":""}>${l}</option>`).join("")}</select></label></div>
+  <div style="padding:6px 22px 30px">
+   <div class="rvkpis">${tile("Published reviews",k.published.toLocaleString(),`${k.verified.toLocaleString()} verified buyers`)}${tile("Average rating",`${(k.avg||0).toFixed(2)}★`,k.recommend_pct!=null?`${k.recommend_pct}% would recommend`:"")}${tile(`New in last ${d.days} days`,k.recent.toLocaleString(),chg!=null?`${chg>=0?"▲":"▼"} ${Math.abs(chg)}% vs the period before · avg ${(k.recent_avg||0).toFixed(2)}★`:"")}${tile("With photos",k.media.toLocaleString(),k.published?`${Math.round(100*k.media/k.published)}% of reviews`:"")}${tile("Waiting for you",k.pending,`${k.rejected} rejected · ${k.replied} replied`)}</div>
+   <div class="rvgrid2"><div class="ocard"><div class="och">Reviews per month</div><div class="rvchart">${bars||'<div class="exc">No reviews in the last 12 months.</div>'}</div></div>
+    <div class="ocard"><div class="och">Rating breakdown</div>${dist}</div></div>
+   <div class="rvgrid2"><div class="ocard"><div class="och">Review request emails · last ${d.days} days</div>
+     <div class="rvfun"><div><b>${R.orders.toLocaleString()}</b><span>orders queued</span></div><div><b>${R.emailed.toLocaleString()}</b><span>customers emailed</span></div><div><b>${R.emails.toLocaleString()}</b><span>emails incl. reminders</span></div><div><b>${R.reviewed.toLocaleString()}</b><span>left a review${R.emailed?` (${Math.round(100*R.reviewed/R.emailed)}%)`:""}</span></div></div>
+     <div class="exc" style="margin-top:10px">Where new reviews came from: ${["request","site","okendo"].map(x=>`${x==="okendo"?"imported":x==="request"?"review emails":"website"} ${src[x]||0}`).join(" · ")}</div></div>
+    <div class="ocard"><div class="och">Most reviewed · last ${d.days} days</div>${plist(d.top)}</div></div>
+   <div class="ocard"><div class="och">Products with low ratings</div><div class="exc" style="margin-bottom:8px">Products with the most 1–2 star reviews. Click to read them.</div>${plist(d.low,true)}</div></div>`;
+}
+/* groups */
+async function rvGroups(){
+  const w=$("stuckwrap"); w.innerHTML='<div class="empty">Loading groups…</div>'; $("showing").textContent="";
+  const d=await api("/api/reviews-groups");
+  w.innerHTML=`<div style="padding:18px 22px 4px"><div class="exc" style="font-size:14px">A product page shows the reviews of every product in its group, so a new color starts with the reviews of the others. Groups come from your Shopify collections named "Okendo …" (and "Sleep Bag Walkers"); add a product to one of those collections to put it in the group. Synced daily.</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvGroupSync(this)">Sync groups now</button></div></div>
+  <table class="tickets ordtbl" style="margin-top:10px"><thead><tr><th>Group</th><th>Store</th><th class="r">Products</th><th class="r">Reviews</th><th class="r">Average</th><th>Synced</th></tr></thead><tbody>${(d.groups||[]).map(g=>`<tr><td><b>${esc(g.name)}</b></td><td>${g.store==="lbo"?"Outlet":"Larkspur"}</td><td class="r">${g.products}</td><td class="r">${(g.reviews||0).toLocaleString()}</td><td class="r">${g.avg?g.avg.toFixed(2)+"★":"—"}</td><td>${fmtDay(g.synced_at)}</td></tr>`).join("")}</tbody></table>`;
+}
+async function rvGroupSync(b){ b.disabled=true; b.textContent="Syncing…"; try{ const r=await api("/api/reviews-groups/sync",{method:"POST"}); if(r.error) throw new Error(r.error); toast("Groups synced"); rvGroups(); }catch(e){ toast(e.message,true); b.disabled=false; } }
 async function rvSetup(){
   const w=$("stuckwrap"); let st={}; try{ st=await api("/api/reviews-settings"); }catch(e){}
   const live=st.live||{};
