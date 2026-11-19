@@ -1111,8 +1111,10 @@ async function rvFlowStatus(id,status){
   if(status==="live"&&!confirm("Turn this review flow on? Customers start getting the steps marked \"Send\" from their next shipped order.")) return;
   try{ const r=await api(`/api/mk/flows/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})}); if(r.error) throw new Error(r.error); toast(status==="live"?"Flow is on":"Flow paused"); rvRequests(); }catch(e){ toast(e.message,true); }
 }
+async function rvBackupStatus(){ try{ const d=await api(`/api/reviews-backup?store=${RVS}&format=status`); const el=$("rvBkSt"); if(!el) return; el.innerHTML=`Photos kept for good: <b>${d.kept.toLocaleString()} of ${d.total.toLocaleString()}</b>${d.failed?` · ${d.failed} couldn't be copied (their original links are kept)`:""}${d.kept<d.total?' · copying in the background':''}${(d.snapshots||[]).length?`<br>Daily copies: ${d.snapshots.slice(0,5).map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${fmtDay(x.created_at)}</a>`).join(" · ")}`:""}`; }catch(e){} }
 let RVF=[];
 async function rvSetup(){
+  setTimeout(rvBackupStatus,300);
   const w=$("stuckwrap"); let st={}; try{ st=await api("/api/reviews-settings"); RVF=(await api("/api/reviews-flows")).flows||[]; }catch(e){}
   const live=st.live||{};
   w.innerHTML=`<div style="padding:22px;max-width:860px">
@@ -1121,6 +1123,9 @@ async function rvSetup(){
   ${[["lb","Larkspur Baby","https://larkspurbaby.com"],["lbo","Larkspur Baby Outlet","https://larkspurbabyoutlet.com"]].filter(([k])=>k===RVS).map(([k,n,u])=>`<div class="ocard"><div class="och">${n} ${live[k]?'<span class="opill ok">Buzzin reviews are live</span>':'<span class="opill warn">Not live yet</span>'}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><a class="btn sec" href="${u}/collections/all?bz_reviews=1" target="_blank" rel="noopener"><i class="ti ti-eye"></i> Preview on the site</a><span class="exc">Open any product page from there. The preview stays on for that browser tab; add ?bz_reviews=0 to turn it off.</span></div>
     <div style="margin-top:12px">${live[k]?`<button class="btn sec" onclick="rvLive('${k}',false)">Turn off</button>`:`<button class="btn" onclick="rvLive('${k}',true)">Go live</button>`}</div></div>`).join("")}
+  <div class="ocard" id="rvBackup"><div class="och">Backup</div><div>A full copy of ${RVSN[RVS]}'s reviews: every review with its rating, text, name, date, replies and photo links. Buzzin also saves a copy of all reviews every day (the last 14 are kept).</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><a class="btn xs" href="/api/reviews-backup?store=${RVS}&format=csv&key=${encodeURIComponent(KEY)}"><i class="ti ti-download"></i> Spreadsheet (CSV)</a><a class="btn sec xs" href="/api/reviews-backup?store=${RVS}&format=json&key=${encodeURIComponent(KEY)}"><i class="ti ti-download"></i> Full data (JSON)</a><a class="btn sec xs" href="/api/reviews-backup?store=${RVS}&format=photos&key=${encodeURIComponent(KEY)}"><i class="ti ti-photo"></i> All photos (ZIP)</a></div>
+    <div class="exc" id="rvBkSt" style="margin-top:10px">Checking photos…</div></div>
   <div class="ocard"><div class="och">Publishing</div><div>Reviews with <select id="rvmin">${[5,4,3,2,1].map(v=>`<option value="${v}" ${Number(st.auto_publish_min||4)===v?"selected":""}>${v}★ or more</option>`).join("")}</select> publish right away. Lower ones wait in "Waiting for you" and publish on their own after 14 days unless you reject them (the FTC rule against hiding bad reviews).</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvSaveMin()">Save</button></div></div>
   <div class="ocard"><div class="och">Imported reviews</div><div>All existing published reviews were imported into Buzzin. New ones from the old system are picked up every 3 hours until a store goes live.</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvSync(this)">Check for new reviews now</button></div></div></div>`;
 }

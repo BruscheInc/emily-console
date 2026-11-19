@@ -304,6 +304,7 @@
         if (t) { var a2 = document.createElement("div"); (t.closest(".product__title") || t).insertAdjacentElement("afterend", a2); done.add(a2); mountStars(a2, pid0); }
       }
     }
+    document.addEventListener("shopify:section:load", function () { setTimeout(scan, 50); });   // theme editor: a section was added or moved
     scan(); if (!studio) { setTimeout(scan, 1500); setTimeout(function () { scan(); fallback(); }, 2500); }
   }
   // Customize editor: the design arrives by message and redraws in place.

@@ -3,6 +3,11 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.56
+- **Reviews backup.** Reviews → Settings & website → Backup lets you download every review for the store as a spreadsheet (CSV), as full data (JSON), and all review photos (ZIP, sorted by product). Buzzin also saves a full copy of all reviews every day and keeps the last 14.
+- **Review photos kept for good.** Imported photos were still loading from the old review app's servers. Buzzin now copies each one into the store's Shopify Files (or Buzzin's own storage if Shopify won't take it) and keeps the original link too, so photos stay up after the old app is cancelled. This runs in the background until every photo is copied.
+- The reviews widget picks up sections added or moved in Shopify's theme editor right away.
+
 ## 0.0.55
 - Reviews → Customize → Layout → **Where it shows**: put the review section above "You might also like", right under the product details, or at the bottom of the page, and the stars under the product name, under the price, or off. A `<div data-bz-reviews></div>` (or `data-bz-stars`) Custom Liquid block in the theme places them anywhere else.
 

@@ -639,6 +639,25 @@ function routes(app, { guard, actorOf, express }) {
     if (!guard(req, res)) return; const s = storeOk((req.body || {}).store); if (!s) return res.status(400).json({ error: "store?" });
     try { const f = await require("./mk-flows").create(s, `Review request · ${STORES[s].name}`, actorOf(req), "review_request"); res.json({ id: f.id }); } catch (e) { res.status(500).json({ error: e.message }); }
   });
+  app.get("/api/reviews-backup", async (req, res) => {
+    if (!guard(req, res)) return; const s = req.query.store ? storeOk(req.query.store) : null; const fmt = String(req.query.format || "csv");
+    const stamp = bzDay(); const base = `buzzin-reviews-${s || "all"}-${stamp}`;
+    try {
+      if (fmt === "status") return res.json({ ...(await mediaStatus(s)), snapshots: (await db(`SELECT id, name, created_at, length(data)::int size FROM hd_files WHERE created_by='review-backup' AND name LIKE 'reviews-backup-%.json' ORDER BY created_at DESC LIMIT 14`)).rows.map((x) => ({ ...x, url: core.fileUrl(PUBLIC_URL(), x.id) })) });
+      if (fmt === "photos") {
+        const rows = await backupRows(s); const files = [];
+        for (const r of rows) (r.media || []).forEach((m, i) => { if (m.type === "video") return; const u = m.large || m.url; const ext = (/\.(png|webp|gif|jpe?g)(\?|$)/i.exec(m.orig_url || u) || [, "jpg"])[1].toLowerCase(); files.push({ name: `${r.store}/${(r.product_handle || r.product_id || "product").replace(/[^a-z0-9-]/gi, "-").slice(0, 60)}/${r.id}-${i + 1}.${ext}`, get: () => fetchBytes(u).catch(() => (m.orig_url ? fetchBytes(m.orig_url) : null)) }); });
+        res.setHeader("Content-Type", "application/zip"); res.setHeader("Content-Disposition", `attachment; filename="${base}-photos.zip"`);
+        return streamZip(res, files);
+      }
+      const rows = await backupRows(s);
+      if (fmt === "json") { res.setHeader("Content-Disposition", `attachment; filename="${base}.json"`); return res.json({ exported_at: new Date().toISOString(), store: s || "all", count: rows.length, reviews: rows.map(({ raw, ...r }) => r) }); }
+      const lines = [CSV_COLS.join(",")];
+      for (const r of rows) lines.push(CSV_COLS.map((k) => csvCell(k === "photos" ? (r.media || []).map((m) => m.large || m.url).join(" ") : k === "original_photo_links" ? (r.media || []).map((m) => m.orig_url || m.url).join(" ") : r[k])).join(","));
+      res.setHeader("Content-Type", "text/csv; charset=utf-8"); res.setHeader("Content-Disposition", `attachment; filename="${base}.csv"`); res.send("\ufeff" + lines.join("\r\n"));
+    } catch (e) { if (!res.headersSent) res.status(500).json({ error: e.message }); else res.end(); }
+  });
+  app.post("/api/reviews-backup/keep-photos", async (req, res) => { if (!guard(req, res)) return; try { res.json({ ...(await keepMedia({ batch: 40 })), status: await mediaStatus() }); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get("/api/reviews-overview", async (req, res) => { if (!guard(req, res)) return; try { res.json(await overview(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get("/api/reviews-design", async (req, res) => {
     if (!guard(req, res)) return; const s = storeOk(req.query.store); if (!s) return res.status(400).json({ error: "store?" });
@@ -671,7 +690,99 @@ function routes(app, { guard, actorOf, express }) {
 }
 
 /* ---------------- background ---------------- */
+/* ---------------- backup: review photos kept for good, and downloadable copies ----------------
+ * Imported reviews pointed at the old review app's servers for their photos. Each photo is copied into the store's
+ * Shopify Files (Shopify's image servers, resizable), or into Buzzin's own storage if Shopify won't take it.
+ * The original link is kept on the review too (orig_url). */
+const isKept = (m) => !!(m && m.kept);
+function thumbOf(u, w) { return /cdn\.shopify\.com/.test(u) ? u + (u.includes("?") ? "&" : "?") + "width=" + w : u; }
+async function toShopifyFiles(store, srcs) {
+  const R = require("./returns"); const st = R.shopFor(store);
+  const r = await R.gql(st, `mutation($f:[FileCreateInput!]!){ fileCreate(files:$f){ files{ id fileStatus } userErrors{ field message } } }`, { f: srcs.map((u) => ({ originalSource: u, contentType: "IMAGE", alt: "Customer review photo" })) });
+  const out = r.fileCreate; if (out.userErrors && out.userErrors.length) throw new Error(out.userErrors.map((e) => e.message).join("; "));
+  const ids = out.files.map((f) => f.id); const urls = new Array(ids.length).fill(null);
+  for (let i = 0; i < 30 && urls.some((u, k) => !u && ids[k]); i++) {
+    await new Promise((res) => setTimeout(res, 1500));
+    const q = await R.gql(st, `query($ids:[ID!]!){ nodes(ids:$ids){ ... on MediaImage { id fileStatus image { url } } } }`, { ids });
+    (q.nodes || []).forEach((n, k) => { if (n && n.fileStatus === "READY" && n.image) urls[k] = n.image.url; if (n && n.fileStatus === "FAILED") ids[k] = null; });
+  }
+  return urls;
+}
+async function toBuzzinFile(u) {
+  const r = await fetch(u); if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const ct = String(r.headers.get("content-type") || "image/jpeg").split(";")[0]; if (!/^image\//.test(ct)) throw new Error("not an image");
+  const buf = Buffer.from(await r.arrayBuffer()); const f = await core.saveFile({ name: `review-photo-${Date.now()}`, contentType: ct, buffer: buf, by: "review-backup" });
+  return core.fileUrl(PUBLIC_URL(), f.file_id);
+}
+let MEDIA_BUSY = false;
+async function keepMedia({ batch = 25 } = {}) {
+  if (MEDIA_BUSY) return { busy: true }; MEDIA_BUSY = true;
+  let done = 0, failed = 0;
+  try {
+    const rows = (await db(`SELECT id, store, media FROM rv_reviews WHERE jsonb_array_length(media) > 0 AND EXISTS (SELECT 1 FROM jsonb_array_elements(media) m WHERE NOT COALESCE((m->>'kept')::boolean,false) AND COALESCE((m->>'tries')::int,0) < 3) ORDER BY created_at DESC LIMIT $1`, [batch])).rows;
+    for (const row of rows) {
+      const media = row.media.map((m) => ({ ...m }));
+      const todo = media.map((m, i) => ({ m, i })).filter(({ m }) => !isKept(m) && (m.tries || 0) < 3 && m.type !== "video");
+      for (const m of media) if (m.type === "video" && !m.kept) { m.kept = true; m.note = "video left on the original link"; }
+      let urls = [];
+      try { urls = await toShopifyFiles(row.store, todo.map(({ m }) => m.large || m.url)); } catch (e) { urls = todo.map(() => null); if (!keepMedia.warned) { keepMedia.warned = 1; console.log(`⭐ review photos: Shopify Files not available (${e.message}); keeping them in Buzzin instead`); } }
+      for (let k = 0; k < todo.length; k++) {
+        const m = todo[k].m; const src = m.large || m.url;
+        let u = urls[k];
+        if (!u) { try { u = await toBuzzinFile(src); } catch (e) { m.tries = (m.tries || 0) + 1; m.last_error = String(e.message).slice(0, 120); failed++; continue; } }
+        Object.assign(m, { orig_url: m.orig_url || m.url, orig_large: m.orig_large || m.large || null, orig_thumb: m.orig_thumb || m.thumb || null, url: u, large: u, thumb: thumbOf(u, 400), kept: true, kept_at: new Date().toISOString() });
+        done++;
+      }
+      await db(`UPDATE rv_reviews SET media=$2 WHERE id=$1`, [row.id, JSON.stringify(media)]);
+    }
+    if (done || failed) { AGG_CACHE.clear(); }
+    return { done, failed, rows: rows.length };
+  } finally { MEDIA_BUSY = false; }
+}
+async function mediaStatus(store) {
+  const r = (await db(`SELECT count(*) FILTER (WHERE COALESCE((m->>'kept')::boolean,false))::int kept, count(*)::int total,
+      count(*) FILTER (WHERE NOT COALESCE((m->>'kept')::boolean,false) AND COALESCE((m->>'tries')::int,0) >= 3)::int failed
+    FROM rv_reviews r, jsonb_array_elements(r.media) m WHERE ($1::text IS NULL OR r.store=$1)`, [store || null])).rows[0];
+  return r;
+}
+const CSV_COLS = ["id", "store", "source", "status", "rating", "title", "body", "reviewer_name", "email", "verified", "recommended", "product_id", "product_handle", "product_title", "variant_title", "order_name", "created_at", "published_at", "reply", "reply_at", "helpful", "unhelpful", "photos", "original_photo_links", "answers", "ext_id"];
+function csvCell(v) { if (v == null) return ""; if (v instanceof Date) v = v.toISOString(); const s = typeof v === "object" ? JSON.stringify(v) : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+async function backupRows(store) {
+  return (await db(`SELECT * FROM rv_reviews WHERE ($1::text IS NULL OR store=$1) ORDER BY store, created_at`, [store || null])).rows;
+}
+// A plain ZIP (stored, no compression: photos are already compressed), streamed so it never sits in memory.
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+async function streamZip(res, files) {   // files: [{ name, get: async () => Buffer }]
+  const central = []; let off = 0;
+  const w = (b) => new Promise((ok) => (res.write(b) ? ok() : res.once("drain", ok)));
+  for (const f of files) {
+    let data; try { data = await f.get(); } catch (e) { continue; } if (!data) continue;
+    const name = Buffer.from(f.name, "utf8"); const crc = crc32(data);
+    const h = Buffer.alloc(30); h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(0x0800, 6); h.writeUInt16LE(0, 8); h.writeUInt32LE(0, 10); h.writeUInt32LE(crc, 14); h.writeUInt32LE(data.length, 18); h.writeUInt32LE(data.length, 22); h.writeUInt16LE(name.length, 26); h.writeUInt16LE(0, 28);
+    await w(h); await w(name); await w(data);
+    central.push({ name, crc, size: data.length, off }); off += 30 + name.length + data.length;
+  }
+  let cd = 0;
+  for (const c of central) { const h = Buffer.alloc(46); h.writeUInt32LE(0x02014b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(20, 6); h.writeUInt16LE(0x0800, 8); h.writeUInt16LE(0, 10); h.writeUInt32LE(0, 12); h.writeUInt32LE(c.crc, 16); h.writeUInt32LE(c.size, 20); h.writeUInt32LE(c.size, 24); h.writeUInt16LE(c.name.length, 28); h.writeUInt32LE(0, 30); h.writeUInt32LE(0, 34); h.writeUInt32LE(0, 38); h.writeUInt32LE(c.off, 42); await w(h); await w(c.name); cd += 46 + c.name.length; }
+  const e = Buffer.alloc(22); e.writeUInt32LE(0x06054b50, 0); e.writeUInt16LE(central.length, 8); e.writeUInt16LE(central.length, 10); e.writeUInt32LE(cd, 12); e.writeUInt32LE(off, 16); await w(e);
+  res.end();
+}
+async function fetchBytes(u) {
+  const m = String(u).match(/\/file\/([a-f0-9]{32})\//); if (m) { const f = await core.getFile(m[1]); return f && f.buffer; }
+  const r = await fetch(u); if (!r.ok) throw new Error(`HTTP ${r.status}`); return Buffer.from(await r.arrayBuffer());
+}
+
 async function startJobs(syncGet, syncSet) {
+  // Keep every review photo for good (copied off the old app's servers), a batch at a time until all are done.
+  const mediaLoop = async () => { try { const r = await keepMedia({ batch: 25 }); if (r.rows) { const st = await mediaStatus(); console.log(`⭐ review photos kept: +${r.done}${r.failed ? `, ${r.failed} failed` : ""} · ${st.kept}/${st.total} done`); setTimeout(mediaLoop, 5000); } else setTimeout(mediaLoop, 6 * 3600e3); } catch (e) { console.error("review photos:", e.message); setTimeout(mediaLoop, 600e3); } };
+  setTimeout(mediaLoop, 60e3);
+  // A full copy of every review, saved in Buzzin once a day (the last 14 are kept).
+  const snap = async () => { try { const k = "reviews_snapshot_" + bzDay(); if (await syncGet(k)) return; const rows = (await backupRows(null)).map(({ raw, ...r }) => r);
+      const f = await core.saveFile({ name: `reviews-backup-${bzDay()}.json`, contentType: "application/json", buffer: Buffer.from(JSON.stringify({ exported_at: new Date().toISOString(), count: rows.length, reviews: rows })), by: "review-backup" });
+      await db(`DELETE FROM hd_files WHERE created_by='review-backup' AND name LIKE 'reviews-backup-%.json' AND id NOT IN (SELECT id FROM hd_files WHERE created_by='review-backup' AND name LIKE 'reviews-backup-%.json' ORDER BY created_at DESC LIMIT 14)`).catch(() => {});
+      await syncSet(k, f.file_id); console.log(`⭐ reviews backup saved: ${rows.length} reviews`); } catch (e) { console.error("reviews backup:", e.message); } };
+  setTimeout(snap, 120e3); setInterval(snap, 6 * 3600e3);
   // Build the review request flow (emails after 14 days + text + reminder) for each store, as a draft. Nothing sends until it's turned on.
   if (!(await syncGet("reviews_flows_v1"))) {
     for (const s of Object.keys(STORES)) {
