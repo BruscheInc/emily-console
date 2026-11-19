@@ -3,6 +3,12 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.60
+- **Photo check for reviews.** Buzzin looks at every review photo and hides the ones with no baby, kid or adult in them (just the clothes laid out, packaging, a label, a screenshot). The review itself still shows; only that photo is hidden. Hidden photos also drop out of the photo strip and the "with photos" counts.
+- Photos Buzzin isn't sure about (dark, blurry, only a hand) stay hidden and wait in Moderation → Media → "Photos to look at", with Show / Hide under each photo. "Hidden photos" lists everything that was hidden, so you can bring any back. Your choice always wins over the automatic check.
+- New photos from customers are checked before they show. The existing photos are checked in the background.
+- Turn it on or off in Reviews → Settings & website → Photo check. The Overview to-do list shows how many photos need a look.
+
 ## 0.0.59
 - **Every review photo has the same rounded corners.** The photo strip, photos on each review, the enlarged photo view and the photo previews in the write-a-review form all use one setting (12px, matching the theme's product cards). Change it in Reviews → Customize → Photos → All photos → Photo corners.
 

@@ -20,7 +20,7 @@ const STORES = { lb: { name: "Larkspur Baby", okendo: "ac2ed04b-f605-4570-9c56-9
                  lbo: { name: "Larkspur Baby Outlet", okendo: "b6b28336-b4e9-4c3e-9fc6-c70ab41914ee", shop: "https://larkspurbabyoutlet.com" } };
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
 const HOLD_DAYS = 14;
-const DEFAULTS = { auto_publish_min: 4, live: { lb: false, lbo: false }, requests: { lb: false, lbo: false }, wait_days: 14, reminder_days: 7, reminders: 2 };
+const DEFAULTS = { auto_publish_min: 4, photo_filter: true, live: { lb: false, lbo: false }, requests: { lb: false, lbo: false }, wait_days: 14, reminder_days: 7, reminders: 2 };
 
 async function settings() { const s = await core.setting("reviews_settings", null); return { ...DEFAULTS, ...(s || {}), live: { ...DEFAULTS.live, ...((s && s.live) || {}) }, requests: { ...DEFAULTS.requests, ...((s && s.requests) || {}) } }; }
 /* ---- design (Customize): per store, a draft the editor autosaves and the live copy the store shows ---- */
@@ -60,6 +60,10 @@ async function migrate() {
   await db(`ALTER TABLE rv_requests ADD COLUMN IF NOT EXISTS order_id TEXT, ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS sent INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS last_sent_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS test BOOLEAN DEFAULT false`);
   await db(`CREATE UNIQUE INDEX IF NOT EXISTS rv_requests_order ON rv_requests (store, order_id) WHERE NOT test`);
   await db(`ALTER TABLE rv_requests ADD COLUMN IF NOT EXISTS via_flow BOOLEAN NOT NULL DEFAULT false`);
+  // Photo check: per photo (by position) "ok" | "hidden" (no person) | "unsure" (needs a look) | "pending" (not checked yet, new upload)
+  // | "shown" / "hidden_manual" (your decision) | "err1".."err2" (check failed, retried). media_ok = photos customers can see.
+  await db(`ALTER TABLE rv_reviews ADD COLUMN IF NOT EXISTS media_check JSONB NOT NULL DEFAULT '{}', ADD COLUMN IF NOT EXISTS media_why JSONB NOT NULL DEFAULT '{}'`);
+  await db(`ALTER TABLE rv_reviews ADD COLUMN IF NOT EXISTS media_ok INT GENERATED ALWAYS AS (jsonb_array_length(media) - jsonb_array_length(jsonb_path_query_array(media_check, '$.* ? (@ == "hidden" || @ == "unsure" || @ == "pending" || @ == "hidden_manual")'))) STORED`);
 }
 
 /* ---------------- Okendo copy ---------------- */
@@ -148,17 +152,22 @@ async function publishHeld() {
 
 /* ---------------- public data for the store ---------------- */
 const AGG_CACHE = new Map();
+/* ---------------- photo check: hide review photos with no baby, kid or adult in them ---------------- */
+const HIDE_STATES = new Set(["hidden", "unsure", "pending", "hidden_manual"]);
+let PHOTO_FILTER = true; // refreshed from settings by the photo-check loop and when settings are saved
+const MEDIA_N = () => (PHOTO_FILTER ? "media_ok" : "jsonb_array_length(media)");
+const photoVisible = (r, i) => !PHOTO_FILTER || !HIDE_STATES.has(((r && r.media_check) || {})[String(i)]);
 function pubReview(r) {
   return { id: r.id, rating: r.rating, title: r.title, body: r.body, name: r.reviewer_name || "Customer", verified: !!r.verified, recommended: r.recommended,
     date: r.created_at, product: r.product_title, product_handle: r.product_handle, product_image: r.product_image, variant: r.variant_title,
-    media: (r.media || []).map((m) => ({ type: m.type, url: m.large || m.url, thumb: m.thumb || m.url, alt: m.alt || null })),
+    media: (r.media || []).map((m, i) => (photoVisible(r, i) ? { type: m.type, url: m.large || m.url, thumb: m.thumb || m.url, alt: m.alt || null } : null)).filter(Boolean),
     reply: r.reply || null, reply_at: r.reply_at || null, helpful: r.helpful || 0, unhelpful: r.unhelpful || 0, answers: r.answers || null };
 }
 async function aggregate(store, ids) {
   const key = ids ? `${store}:${ids.slice().sort().join(",")}` : `${store}:ALL`;
   const c = AGG_CACHE.get(key); if (c && Date.now() - c.at < 5 * 60e3) return c.v;
   const a = (await db(`SELECT count(*)::int n, COALESCE(avg(rating),0)::float avg, count(*) FILTER (WHERE recommended)::int rec, count(*) FILTER (WHERE recommended IS NOT NULL)::int recn,
-      count(*) FILTER (WHERE jsonb_array_length(media)>0)::int media,
+      count(*) FILTER (WHERE ${MEDIA_N()}>0)::int media,
       count(*) FILTER (WHERE rating=5)::int s5, count(*) FILTER (WHERE rating=4)::int s4, count(*) FILTER (WHERE rating=3)::int s3, count(*) FILTER (WHERE rating=2)::int s2, count(*) FILTER (WHERE rating=1)::int s1
     FROM rv_reviews WHERE store=$1 AND status='published' AND ($2::text[] IS NULL OR product_id = ANY($2))`, [store, ids])).rows[0];
   const v = { count: a.n, average: Math.round(a.avg * 10) / 10, recommend_pct: a.recn ? Math.round((100 * a.rec) / a.recn) : null, with_media: a.media, histogram: { 5: a.s5, 4: a.s4, 3: a.s3, 2: a.s2, 1: a.s1 } };
@@ -169,15 +178,15 @@ async function productReviews(store, productId, { sort = "media", rating, media,
   const ids = await scopeFor(store, productId, SCOPES.includes(scope) ? scope : "group");
   const args = [store, ids]; const where = [`store=$1`, `status='published'`, `($2::text[] IS NULL OR product_id = ANY($2))`];
   if (rating && Number(rating) >= 1 && Number(rating) <= 5) { args.push(Number(rating)); where.push(`rating=$${args.length}`); }
-  if (media === "1" || media === true) where.push(`jsonb_array_length(media) > 0`);
+  if (media === "1" || media === true) where.push(`${MEDIA_N()} > 0`);
   if (q && String(q).trim()) { args.push(`%${String(q).trim().slice(0, 80)}%`); where.push(`(title ILIKE $${args.length} OR body ILIKE $${args.length})`); }
-  const order = { newest: "created_at DESC", oldest: "created_at ASC", highest: "rating DESC, created_at DESC", lowest: "rating ASC, created_at DESC", helpful: "helpful DESC, created_at DESC", media: "(jsonb_array_length(media) > 0) DESC, rating DESC, created_at DESC" }[sort] || "(jsonb_array_length(media) > 0) DESC, rating DESC, created_at DESC";
+  const order = { newest: "created_at DESC", oldest: "created_at ASC", highest: "rating DESC, created_at DESC", lowest: "rating ASC, created_at DESC", helpful: "helpful DESC, created_at DESC", media: `(${MEDIA_N()} > 0) DESC, rating DESC, created_at DESC` }[sort] || `(${MEDIA_N()} > 0) DESC, rating DESC, created_at DESC`;
   per = Math.max(1, Math.min(30, Number(per) || 10)); page = Math.max(1, Number(page) || 1);
   const rows = (await db(`SELECT * FROM rv_reviews WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
   const filtered = (await db(`SELECT count(*)::int n FROM rv_reviews WHERE ${where.join(" AND ")}`, args)).rows[0].n;
   let photos;
-  if (page === 1) photos = (await db(`SELECT id, media FROM rv_reviews WHERE store=$1 AND status='published' AND ($2::text[] IS NULL OR product_id = ANY($2)) AND jsonb_array_length(media) > 0 ORDER BY created_at DESC LIMIT 14`, [store, ids])).rows
-    .map((r) => { const m = (r.media || []).find((x) => x.type !== "video"); return m ? { review: r.id, thumb: m.thumb || m.url, url: m.large || m.url } : null; }).filter(Boolean).slice(0, 12);
+  if (page === 1) photos = (await db(`SELECT id, media, media_check FROM rv_reviews WHERE store=$1 AND status='published' AND ($2::text[] IS NULL OR product_id = ANY($2)) AND ${MEDIA_N()} > 0 ORDER BY created_at DESC LIMIT 14`, [store, ids])).rows
+    .map((r) => { const m = (r.media || []).find((x, i) => x.type !== "video" && photoVisible(r, i)); return m ? { review: r.id, thumb: m.thumb || m.url, url: m.large || m.url } : null; }).filter(Boolean).slice(0, 12);
   return { summary: await aggregate(store, ids), total: filtered, reviews: rows.slice(0, per).map(pubReview), more: rows.length > per, page, photos };
 }
 async function starsFor(store, productIds, mode) {
@@ -260,6 +269,7 @@ async function submit(store, b, { via = "site" } = {}) {
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
     [id, store, via === "email" ? "request" : "site", String(b.product_id || "") || null, clean(b.product_handle, 200) || null, clean(b.product_title, 200) || null, clean(b.product_image, 600) || null, clean(b.variant, 120) || null,
       rating, title || null, body, name, verified, b.recommended == null ? (rating >= 4) : !!b.recommended, email || null, orderName, JSON.stringify(media), answers ? JSON.stringify(answers) : null, status, status === "published" ? new Date() : null]);
+  if (media.length && s.photo_filter !== false) await db(`UPDATE rv_reviews SET media_check=$2 WHERE id=$1`, [id, JSON.stringify(Object.fromEntries(media.map((_, i) => [String(i), "pending"])))]);
   if (reqRow) await db(`UPDATE rv_requests SET used_at=COALESCE(used_at, now()) WHERE token=$1`, [reqRow.token]);
   if (status === "published") { AGG_CACHE.clear(); queueMetafield(store, b.product_id); }
   if (email) { try { await require("./mk-core").upsertProfile(store, { email, first_name: String(name || "").split(" ")[0] || null }, "reviews"); } catch (_) {} }
@@ -450,6 +460,8 @@ function listWhere({ store, status, rating, q, source, sentiment, product, days,
   if (days && Number(days) > 0) { args.push(String(Number(days))); where.push(`created_at > now() - ($${args.length} || ' days')::interval`); }
   if (replied === "no") where.push(`reply IS NULL`); else if (replied === "yes") where.push(`reply IS NOT NULL`);
   if (media === "1") where.push(`jsonb_array_length(media) > 0`); else if (media === "0") where.push(`jsonb_array_length(media) = 0`);
+  else if (media === "check") where.push(`jsonb_path_exists(media_check, '$.* ? (@ == "unsure")')`);
+  else if (media === "hidden") where.push(`jsonb_path_exists(media_check, '$.* ? (@ == "hidden" || @ == "hidden_manual")')`);
   if (q) { args.push(`%${String(q).slice(0, 80)}%`); where.push(`(title ILIKE $${args.length} OR body ILIKE $${args.length} OR reviewer_name ILIKE $${args.length} OR email ILIKE $${args.length} OR product_title ILIKE $${args.length} OR order_name ILIKE $${args.length})`); }
   return { args, w: where.length ? `WHERE ${where.join(" AND ")}` : "" };
 }
@@ -457,7 +469,7 @@ async function list(f) {
   const { args, w } = listWhere(f);
   const per = Math.min(100, Number(f.per) || 25), page = Math.max(1, Number(f.page) || 1);
   const order = { oldest: "created_at ASC", highest: "rating DESC, created_at DESC", lowest: "rating ASC, created_at DESC", helpful: "helpful DESC, created_at DESC" }[f.sort] || "created_at DESC";
-  const rows = (await db(`SELECT id, store, source, product_id, product_handle, product_title, product_image, variant_title, rating, title, body, reviewer_name, verified, recommended, email, order_name, media, answers, status, reply, reply_by, reply_at, helpful, unhelpful, created_at, published_at, decided_by , (SELECT p.id FROM mk_profiles p WHERE p.store=rv_reviews.store AND lower(p.email)=lower(rv_reviews.email) LIMIT 1) profile_id FROM rv_reviews ${w} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
+  const rows = (await db(`SELECT id, store, source, product_id, product_handle, product_title, product_image, variant_title, rating, title, body, reviewer_name, verified, recommended, email, order_name, media, media_check, media_why, answers, status, reply, reply_by, reply_at, helpful, unhelpful, created_at, published_at, decided_by , (SELECT p.id FROM mk_profiles p WHERE p.store=rv_reviews.store AND lower(p.email)=lower(rv_reviews.email) LIMIT 1) profile_id FROM rv_reviews ${w} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
   const total = (await db(`SELECT count(*)::int n FROM rv_reviews ${w}`, args)).rows[0].n;
   const counts = (await db(`SELECT store, status, count(*)::int n, avg(rating)::float avg FROM rv_reviews GROUP BY store, status`)).rows;
   return { reviews: rows.slice(0, per), more: rows.length > per, page, total, counts };
@@ -521,6 +533,8 @@ async function overview({ store }) {
   const stores = store ? [store] : Object.keys(STORES);
   const todo = [];
   if (k.pending) todo.push({ key: "pending", level: k.pending_soon ? "high" : "mid", n: k.pending, title: `Approve or reject ${k.pending} waiting review${k.pending === 1 ? "" : "s"}`, detail: k.pending_soon ? `${k.pending_soon} will publish on ${k.pending_soon === 1 ? "its" : "their"} own in the next 3 days if you do nothing.` : `Reviews under ${set.auto_publish_min}★ wait here. They publish on their own after ${HOLD_DAYS} days.`, go: { view: "rv_mod", f: { status: "pending" } } });
+  const pc = await photoCheckStatus(store).catch(() => null);
+  if (pc && pc.unsure) todo.push({ key: "photos", level: "mid", n: pc.unsure, title: `Look at ${pc.unsure} review photo${pc.unsure === 1 ? "" : "s"}`, detail: "Buzzin couldn't tell if a baby, kid or adult is in these. They stay hidden until you show or hide them.", go: { view: "rv_mod", f: { status: "all", media: "check" } } });
   if (k.low_unreplied) todo.push({ key: "low", level: "high", n: k.low_unreplied, title: `Reply to ${k.low_unreplied} low rating${k.low_unreplied === 1 ? "" : "s"}`, detail: "1–2★ reviews from the last 60 days with no reply yet. A public reply shows other shoppers you care.", go: { view: "rv_mod", f: { status: "all", rating: "1,2", replied: "no", days: "60" } } });
   if (k.mid_unreplied) todo.push({ key: "mid", level: "low", n: k.mid_unreplied, title: `Look at ${k.mid_unreplied} 3★ review${k.mid_unreplied === 1 ? "" : "s"}`, detail: "Middle ratings from the last 30 days often point at a fixable problem (sizing, fabric, shipping).", go: { view: "rv_mod", f: { status: "all", rating: "3", replied: "no", days: "30" } } });
   for (const p of dropping) todo.push({ key: "drop:" + p.product_id, level: "mid", title: `${p.title || "A product"} is averaging ${p.avg}★`, detail: `${p.n} reviews in the last 60 days. Read them to see what customers are unhappy about.`, image: p.image, go: { view: "rv_mod", f: { status: "all", product: p.product_id, product_title: p.title || "", store: p.store, sort: "lowest" } } });
@@ -632,6 +646,8 @@ function routes(app, { guard, actorOf, express }) {
 
   // staff
   app.get("/api/reviews", async (req, res) => { if (!guard(req, res)) return; try { res.json(await list(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post("/api/reviews/:id/photo", async (req, res) => { if (!guard(req, res)) return; try { res.json(await photoDecide(req.params.id, (req.body || {}).i, (req.body || {}).action)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
+  app.get("/api/reviews-photo-check", async (req, res) => { if (!guard(req, res)) return; try { res.json(await photoCheckStatus()); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews/:id/:action", async (req, res) => { if (!guard(req, res)) return; try { res.json(await decide(req.params.id, req.params.action, actorOf(req), (req.body || {}).text)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
   app.post("/api/reviews-bulk", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; if (!["publish", "reject"].includes(b.action)) return res.status(400).json({ error: "publish or reject" }); res.json(await bulk(b.ids, b.action, actorOf(req))); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get("/api/reviews-products", async (req, res) => { if (!guard(req, res)) return; try { res.json(await products(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
@@ -683,7 +699,7 @@ function routes(app, { guard, actorOf, express }) {
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
   app.get("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; res.json(await settings()); });
-  app.post("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const patch = {}; if (b.auto_publish_min) patch.auto_publish_min = Math.max(1, Math.min(5, Number(b.auto_publish_min))); if (b.live) patch.live = { lb: !!b.live.lb, lbo: !!b.live.lbo }; if (b.requests) patch.requests = { lb: !!b.requests.lb, lbo: !!b.requests.lbo }; res.json(await saveSettings(patch)); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const patch = {}; if (b.auto_publish_min) patch.auto_publish_min = Math.max(1, Math.min(5, Number(b.auto_publish_min))); if (b.photo_filter != null) { patch.photo_filter = !!b.photo_filter; PHOTO_FILTER = patch.photo_filter; AGG_CACHE.clear(); } if (b.live) patch.live = { lb: !!b.live.lb, lbo: !!b.live.lbo }; if (b.requests) patch.requests = { lb: !!b.requests.lb, lbo: !!b.requests.lbo }; res.json(await saveSettings(patch)); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews-test-request", async (req, res) => {
     if (!guard(req, res)) return;
     try { const to = String((req.body || {}).to || "").trim(); if (!/@/.test(to)) return res.status(400).json({ error: "Which email should the test go to?" }); res.json(await testRequest(storeOk((req.body || {}).store) || "lb", to)); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -720,6 +736,55 @@ async function toBuzzinFile(u) {
   return core.fileUrl(PUBLIC_URL(), f.file_id);
 }
 let MEDIA_BUSY = false;
+async function photoDecide(id, i, action) {
+  i = Number(i); if (!Number.isInteger(i) || i < 0) throw Object.assign(new Error("Pick a photo."), { status: 400 });
+  const v = action === "show" ? "shown" : action === "hide" ? "hidden_manual" : null; if (!v) throw Object.assign(new Error("Unknown action."), { status: 400 });
+  const r = (await db(`UPDATE rv_reviews SET media_check = jsonb_set(media_check, ARRAY[$2::text], to_jsonb($3::text), true) WHERE id=$1 AND jsonb_array_length(media) > $4 RETURNING product_id, store, media_check`, [String(id), String(i), v, i])).rows[0];
+  if (!r) throw Object.assign(new Error("Review not found."), { status: 404 });
+  AGG_CACHE.clear(); return { ok: true, media_check: r.media_check };
+}
+async function photoCheckStatus(store) {
+  return (await db(`SELECT count(*) FILTER (WHERE v IN ('ok','shown'))::int ok, count(*) FILTER (WHERE v IN ('hidden','hidden_manual'))::int hidden, count(*) FILTER (WHERE v='unsure')::int unsure,
+      count(*) FILTER (WHERE v IS NULL OR v IN ('pending','err1','err2'))::int waiting, count(*)::int total
+    FROM (SELECT r.media_check->>(i - 1)::text v FROM rv_reviews r, jsonb_array_elements(r.media) WITH ORDINALITY e(m, i) WHERE COALESCE(e.m->>'type','image') <> 'video' AND ($1::text IS NULL OR r.store=$1)) x`, [store || null])).rows[0];
+}
+const PHOTO_PROMPT = `This photo was uploaded with a customer review of baby and kids clothing. Is a real person (a baby, a child, or an adult) visible in it?
+Answer "yes" if a real person is clearly in the photo, even partly (for example a baby wearing the clothes, a face, a body in the outfit).
+Answer "no" if there is no person: only the clothing or fabric laid out, packaging, a box, a label, a pet, a room, a screenshot or text.
+Answer "unsure" if you can't tell: very dark or blurry, only a hand or fingertips holding the item, a doll, a drawing, or a person on a screen.
+Reply with JSON only: {"person":"yes"|"no"|"unsure","why":"a few words"}`;
+let PHOTO_BUSY = false;
+async function checkPhotos({ batch = 6 } = {}) {
+  if (PHOTO_BUSY) return { busy: true }; PHOTO_BUSY = true;
+  let done = 0;
+  try {
+    PHOTO_FILTER = (await settings()).photo_filter !== false;
+    if (!PHOTO_FILTER) return { off: true, rows: 0 };
+    const kit = require("./emily").claimsKit(); if (!kit || !kit.anthropic) return { rows: 0, nokey: true };
+    const rows = (await db(`SELECT r.id, r.media, r.media_check FROM rv_reviews r WHERE jsonb_array_length(r.media) > 0 AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.media) WITH ORDINALITY e(m, i)
+        WHERE COALESCE(e.m->>'type','image') <> 'video' AND COALESCE(r.media_check->>(i - 1)::text, 'new') IN ('new','pending','err1','err2'))
+      ORDER BY (r.media_check::text LIKE '%pending%') DESC, r.created_at DESC LIMIT $1`, [batch])).rows;
+    await Promise.all(rows.map(async (row) => {
+      for (let i = 0; i < row.media.length; i++) {
+        const m = row.media[i]; const cur = (row.media_check || {})[String(i)];
+        if (m.type === "video" || (cur && !["pending", "err1", "err2"].includes(cur))) continue;
+        let v, why = null;
+        try {
+          const resp = await kit.anthropic.messages.create({ model: kit.model, max_tokens: 80, messages: [{ role: "user", content: [
+            { type: "image", source: { type: "url", url: m.thumb || m.large || m.url } }, { type: "text", text: PHOTO_PROMPT }] }] });
+          const out = (resp.content || []).map((c) => c.text || "").join("");
+          const j = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1));
+          v = j.person === "yes" ? "ok" : j.person === "no" ? "hidden" : "unsure"; why = String(j.why || "").slice(0, 80) || null;
+        } catch (e) { v = cur === "err2" ? "unsure" : cur === "err1" ? "err2" : "err1"; why = "Couldn't check: " + String(e.message).slice(0, 60); }
+        await db(`UPDATE rv_reviews SET media_check = jsonb_set(media_check, ARRAY[$2::text], to_jsonb($3::text), true), media_why = jsonb_set(media_why, ARRAY[$2::text], to_jsonb($4::text), true)
+          WHERE id=$1 AND COALESCE(media_check->>$2, 'new') NOT IN ('shown','hidden_manual')`, [row.id, String(i), v, why || ""]);
+        done++;
+      }
+    }));
+    if (done) AGG_CACHE.clear();
+    return { done, rows: rows.length };
+  } finally { PHOTO_BUSY = false; }
+}
 async function keepMedia({ batch = 25 } = {}) {
   if (MEDIA_BUSY) return { busy: true }; MEDIA_BUSY = true;
   let done = 0, failed = 0;
@@ -780,6 +845,8 @@ async function fetchBytes(u) {
 
 async function startJobs(syncGet, syncSet) {
   // Keep every review photo for good (copied off the old app's servers), a batch at a time until all are done.
+  const photoLoop = async () => { try { const r = await checkPhotos({ batch: 6 }); if (r.rows) { if (!photoLoop.n || ++photoLoop.n % 20 === 0) { photoLoop.n = photoLoop.n || 1; const st = await photoCheckStatus(); console.log(`⭐ photo check: ${st.ok} ok · ${st.hidden} hidden · ${st.unsure} to look at · ${st.waiting} left`); } setTimeout(photoLoop, 1500); } else setTimeout(photoLoop, 60e3); } catch (e) { console.error("photo check:", e.message); setTimeout(photoLoop, 300e3); } };
+  setTimeout(photoLoop, 20e3);
   const mediaLoop = async () => { try { const r = await keepMedia({ batch: 25 }); if (r.rows) { const st = await mediaStatus(); console.log(`⭐ review photos kept: +${r.done}${r.failed ? `, ${r.failed} failed` : ""} · ${st.kept}/${st.total} done`); setTimeout(mediaLoop, 5000); } else setTimeout(mediaLoop, 6 * 3600e3); } catch (e) { console.error("review photos:", e.message); setTimeout(mediaLoop, 600e3); } };
   setTimeout(mediaLoop, 60e3);
   // A full copy of every review, saved in Buzzin once a day (the last 14 are kept).

@@ -309,7 +309,7 @@
   .rvlist.collapsed .rvb,.rvlist.collapsed .rvmedia,.rvlist.collapsed .rvside .rvsh,.rvlist.collapsed .rvside .rvsh~*{display:none}
   .rvhold{font-size:12px;color:#8a6100;margin-top:6px}.rvtop{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.rvst{color:#f5a623;font-size:17px;letter-spacing:1px}.rvst .off{color:#d5d8e0}
   .rvt{font-weight:700;font-size:15px;margin:8px 0 2px}.rvb{white-space:pre-wrap;line-height:1.55}
-  .rvmedia{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.rvmedia img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+  .rvmedia{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.rvph{display:flex;flex-direction:column;gap:4px;width:96px}.rvph.off img{opacity:.45}.rvph img{width:96px!important;height:96px!important}.rvphs{font-size:11px;line-height:1.2;color:var(--mute,#667)}.rvphs.ok{color:#1d7a46}.rvphs.bad{color:#b42318}.rvphs.warn{color:#b54708;font-weight:700}.rvphb .btn{width:100%}.rvmedia img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
   .rvreply{margin-top:10px;background:var(--panel2);border-radius:8px;padding:8px 10px}.rvreplybox{margin-top:10px}.rvreplybox textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit;background:var(--panel2);color:var(--ink);box-sizing:border-box}
   .rvtabs{display:flex;gap:4px;margin:2px 10px 10px;padding:3px;background:var(--panel2);border-radius:10px}.rvtabs button{flex:1;border:0;background:none;border-radius:8px;padding:7px 6px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}.lytabs button.on,.rvtabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
   .rvsteps{display:flex;flex-direction:column;gap:8px}.rvstep{display:flex;gap:14px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--panel)}.rvstep.wait{border-style:dashed;padding:8px 12px;align-items:center;gap:8px;color:var(--muted);font-size:13px;background:none}
@@ -941,7 +941,7 @@ function rvModHead(){
     ${rvSel("sentiment","Sentiment",[["","Any"],["positive","Positive"],["neutral","Neutral"],["negative","Negative"]])}
     ${rvSel("days","Date submitted",[["","All time"],["1","Last 24 hours"],["7","Last 7 days"],["30","Last 30 days"],["90","Last 90 days"],["365","Last year"]])}
     ${rvSel("replied","Reply",[["","Any"],["no","No reply yet"],["yes","Replied"]])}
-    ${rvSel("media","Media",[["","Any"],["1","With photos"],["0","No photos"]])}
+    ${rvSel("media","Media",[["","Any"],["1","With photos"],["0","No photos"],["check","Photos to look at"],["hidden","Hidden photos"]])}
     ${rvSel("source","Source",[["","Any"],["request","Review request email"],["site","Website"],["imported","Imported"]])}
     ${rvSel("sort","Sort",[["newest","Newest"],["oldest","Oldest"],["highest","Highest rating"],["lowest","Lowest rating"],["helpful","Most helpful"]])}
     <div class="ordsearch rvsearch"><i class="ti ti-search"></i><input value="${esc(RV.q)}" placeholder="Search reviews" onkeydown="if(event.key==='Enter'){RV.q=this.value.trim();loadReviews();}"></div></div>
@@ -968,11 +968,28 @@ function rvCard(r){
    <div class="rvmain"><div class="rvtop">${rvStars(r.rating)}<span class="opill ${sent==="positive"?"ok":sent==="neutral"?"warn":"bad"}">${sent}</span>${r.source==="okendo"?'<span class="chip">imported</span>':r.source==="request"?'<span class="chip">from review email</span>':r.source==="site"?'<span class="chip">website</span>':""}<span class="exc" style="margin-left:auto">${esc(r.store==="lbo"?"Outlet":"Larkspur")} · ${fmtDay(r.created_at)}</span></div>
     ${held!=null?`<div class="rvhold">⏱ Auto-publishes ${new Date(new Date(r.created_at).getTime()+14*864e5).toLocaleDateString(undefined,{month:"short",day:"numeric"})} unless you reject it</div>`:""}
     ${r.title?`<div class="rvt">${esc(r.title)}</div>`:""}<div class="rvb">${esc(r.body||"")}</div>
-    ${(r.media||[]).length?`<div class="rvmedia">${r.media.map(m=>`<a href="${esc(m.large||m.url)}" target="_blank" rel="noopener"><img src="${esc(m.thumb||m.url)}" alt="" loading="lazy"></a>`).join("")}</div>`:""}
+    ${(r.media||[]).length?`<div class="rvmedia">${r.media.map((m,i)=>rvPhoto(r,m,i)).join("")}</div>`:""}
     ${r.reply?`<div class="rvreply"><b>Your public reply</b> <span class="exc">${esc(r.reply_by||"")}</span><div>${esc(r.reply)}</div></div>`:""}
     <div class="exc" style="margin-top:8px">${r.helpful||r.unhelpful?`👍 ${r.helpful||0} · 👎 ${r.unhelpful||0} · `:""}${r.decided_by&&r.status!=="pending"?`${esc(r.status)} by ${esc(r.decided_by)}`:esc(r.status)}</div></div>
    <div class="rvrail">${r.status!=="published"?`<button class="rvact ok" title="Publish" onclick="rvDo('${esc(r.id)}','publish',this)"><i class="ti ti-check"></i><span>Publish</span></button>`:""}${r.status!=="rejected"?`<button class="rvact bad" title="Reject" onclick="rvDo('${esc(r.id)}','reject',this)"><i class="ti ti-x"></i><span>Reject</span></button>`:""}<button class="rvact" title="Reply" onclick="rvReply('${esc(r.id)}')"><i class="ti ti-message"></i><span>Reply</span></button>${r.product_handle?`<a class="rvact" title="View on site" href="${r.store==="lbo"?"https://larkspurbabyoutlet.com":"https://larkspurbaby.com"}/products/${esc(r.product_handle)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i><span>Product</span></a>`:""}</div></div>`;
 }
+// Photo check: each photo shows whether customers can see it, with Show / Hide.
+const RVPH={ok:["ok","Person in photo"],shown:["ok","Shown by you"],hidden:["bad","Hidden: no person"],hidden_manual:["bad","Hidden by you"],unsure:["warn","Look at this"],pending:["","Checking…"],err1:["","Checking…"],err2:["","Checking…"]};
+function rvPhoto(r,m,i){
+  const v=(r.media_check||{})[i], why=(r.media_why||{})[i]||"", st=RVPH[v]||(m.type==="video"?null:["","Not checked yet"]);
+  const off=["hidden","hidden_manual","unsure","pending"].includes(v);
+  return `<div class="rvph ${off?"off":""}"><a href="${esc(m.large||m.url)}" target="_blank" rel="noopener"><img src="${esc(m.thumb||m.url)}" alt="" loading="lazy"></a>
+    ${st?`<div class="rvphs ${st[0]}" title="${esc(why)}">${esc(st[1])}</div>`:""}
+    ${m.type==="video"?"":`<div class="rvphb">${off?`<button class="btn xs" onclick="rvPhotoDo('${esc(r.id)}',${i},'show')">Show</button>`:`<button class="btn sec xs" onclick="rvPhotoDo('${esc(r.id)}',${i},'hide')">Hide</button>`}</div>`}</div>`;
+}
+async function rvPhotoDo(id,i,action){ try{ const j=await api(`/api/reviews/${id}/photo`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({i,action})}); if(j.error) throw new Error(j.error);
+  const r=RV.rows.find(x=>x.id===id); if(r){ r.media_check=j.media_check; const c=$("rv-"+id); if(c) c.outerHTML=rvCard(r); } toast(action==="show"?"Photo shown on the site":"Photo hidden"); }catch(e){ toast(e.message,true); } }
+async function rvSavePhotoFilter(on){ try{ await api("/api/reviews-settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({photo_filter:on})}); toast(on?"Photo check on":"Photo check off. All photos show."); rvPhotoCard(); }catch(e){ toast(e.message,true); } }
+async function rvPhotoCard(){ const el=$("rvphotocard"); if(!el) return; let st={},pc={}; try{ [st,pc]=await Promise.all([api("/api/reviews-settings"),api("/api/reviews-photo-check")]); }catch(e){}
+  const on=st.photo_filter!==false;
+  el.innerHTML=`<div class="och">Photo check</div><label class="rvck" style="font-weight:600"><input type="checkbox" ${on?"checked":""} onchange="rvSavePhotoFilter(this.checked)"> Hide review photos with no baby, kid or adult in them</label>
+   <div class="exc" style="margin-top:6px">The review still shows; only the photo is hidden. Photos Buzzin isn't sure about stay hidden and wait in Moderation (Media → Photos to look at). New photos are checked before they show.</div>
+   ${pc.total?`<div style="margin-top:8px">${(pc.ok||0).toLocaleString()} showing · ${(pc.hidden||0).toLocaleString()} hidden · <a href="javascript:void 0" onclick="rvGo({view:'rv_mod',f:{status:'all',media:'check'}})">${(pc.unsure||0).toLocaleString()} to look at</a>${pc.waiting?` · ${pc.waiting.toLocaleString()} still being checked`:""}</div>`:""}`; }
 async function rvDo(id,act,b,text){ if(b) b.disabled=true; try{ const r=await api(`/api/reviews/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text||""})}); if(r.error) throw new Error(r.error); toast(act==="publish"?"Published":act==="reject"?"Rejected. Hidden from the site":"Reply saved");
     const c=$("rv-"+id); if(c&&(act==="publish"||act==="reject")&&RV.status!=="all"&&RV.status!==(act==="publish"?"published":"rejected")){ c.style.opacity=".35"; setTimeout(()=>c.remove(),350); } else loadReviews(); }catch(e){ toast(e.message,true); if(b) b.disabled=false; } }
 function rvReply(id){
@@ -1114,7 +1131,7 @@ async function rvFlowStatus(id,status){
 async function rvBackupStatus(){ try{ const d=await api(`/api/reviews-backup?store=${RVS}&format=status`); const el=$("rvBkSt"); if(!el) return; el.innerHTML=`Photos kept for good: <b>${d.kept.toLocaleString()} of ${d.total.toLocaleString()}</b>${d.failed?` · ${d.failed} couldn't be copied (their original links are kept)`:""}${d.kept<d.total?' · copying in the background':''}${(d.snapshots||[]).length?`<br>Daily copies: ${d.snapshots.slice(0,5).map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${fmtDay(x.created_at)}</a>`).join(" · ")}`:""}`; }catch(e){} }
 let RVF=[];
 async function rvSetup(){
-  setTimeout(rvBackupStatus,300);
+  setTimeout(rvBackupStatus,300); setTimeout(rvPhotoCard,300);
   const w=$("stuckwrap"); let st={}; try{ st=await api("/api/reviews-settings"); RVF=(await api("/api/reviews-flows")).flows||[]; }catch(e){}
   const live=st.live||{};
   w.innerHTML=`<div style="padding:22px;max-width:860px">
@@ -1126,6 +1143,7 @@ async function rvSetup(){
   <div class="ocard" id="rvBackup"><div class="och">Backup</div><div>A full copy of ${RVSN[RVS]}'s reviews: every review with its rating, text, name, date, replies and photo links. Buzzin also saves a copy of all reviews every day (the last 14 are kept).</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><a class="btn xs" href="/api/reviews-backup?store=${RVS}&format=csv&key=${encodeURIComponent(KEY)}"><i class="ti ti-download"></i> Spreadsheet (CSV)</a><a class="btn sec xs" href="/api/reviews-backup?store=${RVS}&format=json&key=${encodeURIComponent(KEY)}"><i class="ti ti-download"></i> Full data (JSON)</a><a class="btn sec xs" href="/api/reviews-backup?store=${RVS}&format=photos&key=${encodeURIComponent(KEY)}"><i class="ti ti-photo"></i> All photos (ZIP)</a></div>
     <div class="exc" id="rvBkSt" style="margin-top:10px">Checking photos…</div></div>
+  <div class="ocard" id="rvphotocard"><div class="och">Photo check</div><div class="exc">Loading…</div></div>
   <div class="ocard"><div class="och">Publishing</div><div>Reviews with <select id="rvmin">${[5,4,3,2,1].map(v=>`<option value="${v}" ${Number(st.auto_publish_min||4)===v?"selected":""}>${v}★ or more</option>`).join("")}</select> publish right away. Lower ones wait in "Waiting for you" and publish on their own after 14 days unless you reject them (the FTC rule against hiding bad reviews).</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvSaveMin()">Save</button></div></div>
   <div class="ocard"><div class="och">Imported reviews</div><div>All existing published reviews were imported into Buzzin. New ones from the old system are picked up every 3 hours until a store goes live.</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvSync(this)">Check for new reviews now</button></div></div></div>`;
 }
