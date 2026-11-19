@@ -86,7 +86,8 @@ async function list(store, { archived = false } = {}) {
 }
 async function get(id) { return (await db(`SELECT * FROM mk_flows WHERE id=$1`, [Number(id)])).rows[0] || null; }
 async function create(store, name, who, starter) {
-  const g = starter && STARTERS[starter] ? STARTERS[starter](store) : { trigger: { type: "list" }, graph: { start: "n1", nodes: { n1: { type: "end", config: {} } } } };
+  const tpls = starter === "review_request" ? await E().reviewRequestTemplates(store, who).catch((e) => { console.error("review emails:", e.message); return []; }) : [];
+  const g = starter && STARTERS[starter] ? STARTERS[starter](store, tpls) : { trigger: { type: "list" }, graph: { start: "n1", nodes: { n1: { type: "end", config: {} } } } };
   const f = (await db(`INSERT INTO mk_flows (store, name, trigger, graph, source, updated_by, entry_filter, exit_filter, reentry) VALUES ($1,$2,$3,$4,'buzzin',$5,$6,$7,$8) RETURNING *`,
     [store, name || (starter && STARTER_NAMES[starter]) || "New flow", JSON.stringify(g.trigger), JSON.stringify(g.graph), who || null, g.entry_filter ? JSON.stringify(g.entry_filter) : null, g.exit_filter ? JSON.stringify(g.exit_filter) : null, JSON.stringify(g.reentry || { mode: "once" })])).rows[0];
   await db(`INSERT INTO mk_flow_versions (flow_id, version, graph, by_user) VALUES ($1,1,$2,$3)`, [f.id, JSON.stringify(f.graph), who || null]);
@@ -251,7 +252,7 @@ async function execNode(run, flow, node, p) {
       let cpn; try { cpn = await couponFor(flow, p, ctx, "email", { ...tpl, subject: c.subject || tpl.subject }, run); } catch (e) { return { next: node.next, note: `skipped: couldn't make a coupon code (${e.message})` }; }
       const tp = ctx.trigger_props || {}; const cartItems = await E().visibleItems(Array.isArray(tp.items) ? tp.items : []);
       if (!cartItems.length && !run.test && E().usesCart(tpl) && /cart|checkout/.test((flow.trigger && flow.trigger.event) || "")) return { next: node.next, note: "skipped: no cart items to show" };
-      const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: cpn && cpn.coupon, coupons: cpn && cpn.coupons, items: cartItems, checkout_url: tp.checkout_url || tp.url, value: tp.value, order_name: tp.name || "", order_number: String(tp.name || "").replace(/^#/, "") }, { sampleCart: !!run.test });
+      const r = await E().render(flow.store, { ...tpl, subject: c.subject || tpl.subject, preview: c.preview || tpl.preview }, p, { coupon: cpn && cpn.coupon, coupons: cpn && cpn.coupons, items: cartItems, checkout_url: tp.checkout_url || tp.url, value: tp.value, order_name: tp.name || "", order_number: String(tp.name || "").replace(/^#/, ""), review_order: Array.isArray(tp.items) && tp.items.length ? { name: tp.name, order_id: tp.order_id, items: tp.items } : null }, { sampleCart: !!run.test });
       r.utm = c.utm !== false; r.campaign_name = r.campaign_name || c.name || flow.name;
       const row = await SEND().send({ store: flow.store, channel: "email", profile: p, msg: r, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `tpl:${tpl.id}`, test: run.test, transactional: !!c.transactional });
       return { next: node.next, note: `email ${row.status}${row.reason ? ": " + row.reason : ""}` };
@@ -262,7 +263,9 @@ async function execNode(run, flow, node, p) {
       if (c.filter && (c.filter.conditions || []).length && !(await SEG().matches(c.filter, p.id, { since: run.ctx && run.ctx.since }))) return { next: node.next, note: "skipped: didn't match this text's extra filters" };
       const SMS = require("./mk-sms");
       let cpn; try { cpn = await couponFor(flow, p, ctx, "sms", { body: c.body }, run); } catch (e) { return { next: node.next, note: `skipped: couldn't make a coupon code (${e.message})` }; }
-      const body = await SMS.compose(flow.store, c, p, { coupon: cpn && cpn.coupon, checkout_url: ctx.trigger_props && ctx.trigger_props.checkout_url });
+      const tps = ctx.trigger_props || {};
+      let rv = {}; if (/review_url|review_first_product/.test(c.body || "")) { try { rv = await require("./reviews").reviewContext(flow.store, p, Array.isArray(tps.items) && tps.items.length ? { name: tps.name, order_id: tps.order_id, items: tps.items } : null, { test: !!run.test }); } catch (e) { return { next: node.next, note: `skipped: couldn't make the review link (${e.message})` }; } }
+      const body = await SMS.compose(flow.store, c, p, { coupon: cpn && cpn.coupon, checkout_url: tps.checkout_url, review_url: rv.review_url, review_first_product: rv.review_first_product });
       const row = await SEND().send({ store: flow.store, channel: "sms", profile: p, msg: { body, media: c.media || null, utm: c.utm !== false, campaign_name: c.name || flow.name }, idem: `flow:${flow.id}:${run.id}:${run.node_id}`, flowId: flow.id, flowStep: run.node_id, messageId: `sms:${flow.id}:${run.node_id}`, test: run.test });
       if (row.status === "deferred") return { stay: true, wait: new Date(Date.now() + 30 * 60e3), note: "quiet hours — trying again in 30 minutes" };
       return { next: node.next, note: `text ${row.status}${row.reason ? ": " + row.reason : ""}` };
@@ -650,8 +653,20 @@ async function buildWelcome(store, who) {
 }
 
 /* ---------------- starters ---------------- */
-const STARTER_NAMES = { order_not_shipped: "Order not shipped after 3 days", welcome: "Welcome series", abandoned_checkout: "Abandoned checkout", browse: "Browse abandonment", post_purchase: "Post-purchase thank you", size_up: "Size-up reminder", winback: "Win-back" };
+const STARTER_NAMES = { review_request: "Review request (email + text)", order_not_shipped: "Order not shipped after 3 days", welcome: "Welcome series", abandoned_checkout: "Abandoned checkout", browse: "Browse abandonment", post_purchase: "Post-purchase thank you", size_up: "Size-up reminder", winback: "Win-back" };
+const NOT_UNSUB = { match: "all", conditions: [{ type: "field", field: "email_consent", op: "ne", value: "unsubscribed" }] };
 const STARTERS = {
+  // 14 days after an order ships: email with stars → 5 days later a text (only to text subscribers) → 4 days later a reminder email.
+  // Anyone who leaves a review leaves the flow. Emails go to every buyer who hasn't unsubscribed (like an order update), texts only to subscribers.
+  review_request: (store, tpl = []) => ({ trigger: { type: "event", event: "fulfilled_order" }, reentry: { mode: "always" },
+    exit_filter: { match: "all", conditions: [{ type: "event", event: "left_review", op: "at_least", value: 1, window: { kind: "since_start" } }] },
+    graph: { start: "a", nodes: {
+      a: { type: "delay", config: { amount: 14, unit: "days", until_time: "10:00" }, next: "b" },
+      b: { type: "send_email", config: { template_id: tpl[0] || null, name: "Review request", status: "draft", transactional: true, smart_sending: false, utm: true, filter: NOT_UNSUB }, next: "c" },
+      c: { type: "delay", config: { amount: 5, unit: "days", until_time: "11:00" }, next: "d" },
+      d: { type: "send_sms", config: { body: "How is {{ review_first_product }} working out? Tap a star to leave a quick review: {{ review_url }}", status: "draft", add_opt_out: true, smart_sending: true }, next: "e" },
+      e: { type: "delay", config: { amount: 4, unit: "days", until_time: "10:00" }, next: "f" },
+      f: { type: "send_email", config: { template_id: tpl[1] || null, name: "Review request reminder", status: "draft", transactional: true, smart_sending: false, utm: true, filter: NOT_UNSUB }, next: null } } } }),
   order_not_shipped: () => ({ trigger: { type: "event", event: "placed_order" }, reentry: { mode: "always" },
     graph: { start: "a", nodes: {
       a: { type: "delay", config: { amount: 3, unit: "days" }, next: "b" },

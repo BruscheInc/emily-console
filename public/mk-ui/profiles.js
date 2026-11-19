@@ -129,6 +129,7 @@ async function renderList(el) {
 /* ---------- profile page ---------- */
 let TAB = 'details';
 const EV = {
+  left_review: (e) => `Left a ${e.props && e.props.rating ? e.props.rating + '★ ' : ''}review${e.props && e.props.product ? ` on "${e.props.product}"` : ''}`,
   placed_order: (e) => `Placed order for "${money(e.value)}"`, fulfilled_order: (e) => `Fulfilled order${e.props && e.props.name ? ` ${e.props.name}` : ''}`, delivered_order: () => 'Delivered shipment', 
   viewed_product: (e) => `Viewed product${e.props && (e.props.name || e.props.title) ? ` "${e.props.name || e.props.title}"` : ''}`, viewed_page: () => 'Active on site',
   added_to_cart: (e) => { const it = e.props && Array.isArray(e.props.items) ? e.props.items : []; return `Added to cart${it.length ? ` · ${it.length} item${it.length === 1 ? '' : 's'}` : e.props && (e.props.name || e.props.title) ? ` "${e.props.name || e.props.title}"` : ''}`; }, started_checkout: (e) => `Checkout started${e.props && Array.isArray(e.props.items) && e.props.items.length ? ` · ${e.props.items.length} item${e.props.items.length === 1 ? '' : 's'}` : ''}`,
@@ -159,7 +160,7 @@ async function renderProfile(el, id) {
   const meta = [p.email, phoneF(p.phone), loc(p)].filter(Boolean).map(esc).join(' • ');
   el.innerHTML = CSS + `<div class="kq"><div class="kq-top"><div style="flex:1;min-width:0"><h1 class="kq-crumb"><a href="#profiles">All profiles</a><span class="sl">/</span>${esc(nm)}</h1><div class="kq-meta">${meta || '&nbsp;'}</div></div>
       <button class="btn" id="qact">Profile actions ${I('chevron-down')}</button></div>
-    <div class="kq-tabs" role="tablist">${[['details', 'Details'], ['metrics', 'Metrics and insights'], ['lists', 'Lists and segments'], ['tickets', 'Tickets'], ['messages', 'Messages']].map(([k, l]) => `<button role="tab" data-t="${k}" class="${TAB === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="kq-tabs" role="tablist">${[['details', 'Details'], ['metrics', 'Metrics and insights'], ['lists', 'Lists and segments'], ['tickets', 'Tickets'], ['reviews', `Reviews${(p.reviews || []).length ? ' (' + p.reviews.length + ')' : ''}`], ['messages', 'Messages']].map(([k, l]) => `<button role="tab" data-t="${k}" class="${TAB === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="kq-cols"><div id="qleft"></div><div id="qright"></div></div></div>`;
   const reload = async () => { p = await api('/api/mk/profiles/' + id); renderProfile(el, id); };
   el.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => { TAB = b.dataset.t; renderProfile(el, id); });
@@ -169,6 +170,7 @@ async function renderProfile(el, id) {
   else if (TAB === 'metrics') metrics(L, p);
   else if (TAB === 'lists') listsTab(L, p, reload);
   else if (TAB === 'tickets') ticketsTab(L, p);
+  else if (TAB === 'reviews') reviewsTab(L, p);
   else messagesTab(L, p);
   rightTimeline($('qright'), p);
 }
@@ -291,6 +293,13 @@ function listsTab(L, p, reload) {
 }
 
 /* Tickets tab (Buzzin's customer-service history, where Klaviyo has Objects) */
+function reviewsTab(L, p) {
+  const st = (s) => '★★★★★'.slice(0, s) + '<span style="opacity:.25">' + '★★★★★'.slice(s) + '</span>';
+  const lbl = { published: 'Published', pending: 'Waiting', rejected: 'Rejected' };
+  L.innerHTML = `<div class="kq-card"><div class="ch"><h2>Reviews</h2></div>${(p.reviews || []).length
+    ? `<table><thead><tr><th>Product</th><th>Rating</th><th>Review</th><th>Status</th><th>Date</th></tr></thead><tbody>${p.reviews.map((r) => `<tr><td>${esc(r.product_title || '—')}</td><td style="color:#1F2A44;white-space:nowrap">${st(r.rating)}</td><td><b>${esc(r.title || '')}</b> ${esc(String(r.body || '').slice(0, 160))}${String(r.body || '').length > 160 ? '…' : ''}</td><td>${lbl[r.status] || esc(r.status)}${r.reply ? ' · replied' : ''}</td><td style="white-space:nowrap">${new Date(r.created_at).toLocaleDateString()}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="kq-empty"><b>No reviews</b>${p.email ? 'No reviews from ' + esc(p.email) + ' yet.' : 'This profile has no email.'}</div>`}</div>`;
+}
 function ticketsTab(L, p) {
   L.innerHTML = `<div class="kq-card"><div class="ch"><h2>Customer service</h2></div>${(p.tickets || []).length
     ? `<table><thead><tr><th>Ticket</th><th>Status</th><th>Last message</th></tr></thead><tbody>${p.tickets.map((t) => `<tr><td><a class="lk" href="/#t/${t.id}" target="_blank" rel="noopener">${esc(t.subject || 'Ticket ' + t.id)}</a></td><td><span class="used">${esc(t.status)}</span></td><td>${shortD(t.last_message_at)}</td></tr>`).join('')}</tbody></table>`

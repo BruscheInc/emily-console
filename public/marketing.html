@@ -195,7 +195,7 @@ async function renderProfiles(el, openId) {
   await load();
   if (openId) openProfile(openId);
 }
-const EVENT_LABEL = { placed_order: 'Placed order', viewed_product: 'Viewed product', added_to_cart: 'Added to cart', started_checkout: 'Started checkout', submitted_form: 'Signed up', opened_email: 'Opened email', clicked_email: 'Clicked email', received_email: 'Got email', received_sms: 'Got text', clicked_sms: 'Clicked text' };
+const EVENT_LABEL = { placed_order: 'Placed order', viewed_product: 'Viewed product', added_to_cart: 'Added to cart', started_checkout: 'Started checkout', submitted_form: 'Signed up', left_review: 'Left a review', opened_email: 'Opened email', clicked_email: 'Clicked email', received_email: 'Got email', received_sms: 'Got text', clicked_sms: 'Clicked text' };
 async function openProfile(id) {
   document.querySelectorAll('.drawer').forEach((d) => d.remove());
   const p = await api('/api/mk/profiles/' + id);

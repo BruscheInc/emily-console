@@ -397,6 +397,8 @@ async function withUniversal(doc) {
   return d;
 }
 /** Does this email show cart/checkout data? (Then previews and tests fill in a sample cart.) */
+/** Does this email ask for reviews (the Review request block, or {{ review_url }} / review_items in its text)? */
+function usesReview(tpl) { return /review_request|review_url|review_items|rate_[1-5]/.test(JSON.stringify((tpl && (tpl.doc || tpl.blocks)) || "") + ((tpl && tpl.subject) || "")); }
 function usesCart(tpl) {
   const s = JSON.stringify((tpl && (tpl.doc || tpl.blocks)) || "");
   return /line_items|event\.Items|event\.extra|checkout_url|CheckoutURL|\\?"feed\\?":\\?"cart|\\?"source\\?":\\?"cart/.test(s);
@@ -446,6 +448,7 @@ ${out.body}
 
 /** Blocks → { subject, preview, html, text }. A footer with unsubscribe is always added if the template has none. */
 async function render(store, tpl, profile, extra = {}, opts = {}) {
+  if (usesReview(tpl) && !extra.review_items) { try { extra = { ...extra, ...(await require("./reviews").reviewContext(store, profile, extra.review_order, { preview: !!opts.editor || !profile || !profile.id })) }; } catch (e) { console.error("review links:", e.message); } }
   if (tpl && tpl.doc) return renderDocument(store, tpl, profile, extra, opts);
   const b = await brand(store);
   const ctx = await contextFor(store, profile, extra);
@@ -542,6 +545,27 @@ const STARTERS = {
     { type: "products", props: { count: 3, per_row: 3 } }, { type: "button", props: { label: "Shop the next size" } }, { type: "footer" }] },
   blank: { name: "Blank", subject: "", preview: "", blocks: [{ type: "logo" }, { type: "text", props: { html: "<p></p>" } }, { type: "footer" }] },
 };
+
+/** The two emails of the "Review request" flow starter: built in the email editor's format so every part can be changed. */
+async function reviewRequestTemplates(store, who) {
+  const b = await brand(store); const bb = { ...b, logo_abs: absUrl(b.logo) }; const c = b.colors || {};
+  const make = (heading, lead) => {
+    const doc = MKDoc.newDoc(bb);
+    const sec = (blocks, styles) => { const x = MKDoc.newSection(1); x.rows[0].columns[0].blocks = blocks; if (styles) x.data.styles = styles; doc.body.sections.push(x); };
+    const text = (html, st) => { const x = MKDoc.newBlock("text", bb); x.data.content = html; Object.assign(x.data.styles, st || {}); return x; };
+    const logo = MKDoc.newBlock("image", bb); logo.data.properties = { src: bb.logo_abs || "", alt_text: b.name || "", href: b.shop_url || "" }; logo.data.styles = { align: "center", width: Number(b.logo_width) || 120, block_padding_top: 24, block_padding_bottom: 8 };
+    sec([logo]);
+    sec([text(`<h2 style="text-align:left">${heading}</h2><p>${lead}</p><p><strong>Get started below by giving your products a star rating.</strong></p>`, { block_padding_left: 32, block_padding_right: 32 })]);
+    const rr = MKDoc.newBlock("review_request", bb); Object.assign(rr.data.styles, { block_padding_left: 32, block_padding_right: 32 }); sec([rr]);
+    sec([text(`<p style="text-align:center;font-size:12px">{{ store_name }} · {{ store_address }}<br><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>`, { color: c.muted || "#77737F", block_padding_top: 18, block_padding_bottom: 24 })]);
+    return doc;
+  };
+  const t1 = await saveTemplate({ store, name: "Review request", subject: "{{ first_name|default:\"Hi\" }}, how did your little one like it?", preview: "Tap a star to rate your order",
+    doc: make("Hi {{ first_name|default:\"there\" }}!", "We wanted to check in and see how you're enjoying your latest purchase. If you have a moment, it would be great if you could share your thoughts with us and fellow parents.") }, who);
+  const t2 = await saveTemplate({ store, name: "Review request reminder", subject: "A quick reminder from {{ store_name }}", preview: "We'd love to hear what you think",
+    doc: make("Hi {{ first_name|default:\"there\" }}!", "Just a quick reminder: we'd love to hear what you think of your order. Your review helps other parents pick the right size and fabric.") }, who);
+  return [t1.id, t2.id];
+}
 
 /** Klaviyo templates → editable HTML templates (once; re-runnable). */
 async function importKlaviyoTemplates(store = "lb", opts = {}) {
@@ -854,4 +878,4 @@ async function init() {
   }
 }
 
-module.exports = { syncFlowNames, visibleItems, hiddenWords, usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };
+module.exports = { reviewRequestTemplates, usesReview, syncFlowNames, visibleItems, hiddenWords, usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };

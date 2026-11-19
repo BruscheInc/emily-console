@@ -586,7 +586,8 @@ async function profile(id) {
       FROM mk_sends s LEFT JOIN mk_flows fl ON fl.id=s.flow_id LEFT JOIN mk_campaigns c ON c.id=s.campaign_id WHERE s.profile_id=$1 ORDER BY s.id DESC LIMIT 200`, [p.id]).catch(() => ({ rows: [] }))).rows;
   const metrics = (await db(`SELECT type, count(*)::int AS all_n, count(*) FILTER (WHERE at > now() - interval '30 days')::int AS n30,
       COALESCE(sum(value),0)::float AS all_v, COALESCE(sum(value) FILTER (WHERE at > now() - interval '30 days'),0)::float AS v30 FROM mk_events WHERE profile_id=$1 GROUP BY type`, [p.id]).catch(() => ({ rows: [] }))).rows;
-  return { ...p, consent, events, lists, segments, tickets, coupons, sends, metrics };
+  const reviews = p.email ? (await db(`SELECT id, store, rating, title, body, product_title, product_handle, product_image, status, source, reply, created_at FROM rv_reviews WHERE lower(email)=$1 AND store=$2 ORDER BY created_at DESC LIMIT 50`, [p.email, p.store]).catch(() => ({ rows: [] }))).rows : [];
+  return { ...p, consent, events, lists, segments, tickets, coupons, sends, metrics, reviews };
 }
 
 async function listCounts0() {

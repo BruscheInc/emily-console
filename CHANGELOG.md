@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.46
+- Reviews opens on a new **Overview** page: a to-do list (waiting reviews, low ratings with no reply, products slipping, setup steps), the latest reviews, and key numbers. Every item clicks through to the right filtered list.
+- New **Customize** editor for how reviews look on the website, with live desktop and mobile previews using real reviews. It covers colors, fonts, sizes, layout, buttons and chips, stars, photos, show/hide for every part, all wording, review list behavior, mobile-only settings and custom CSS. You can click any part of the preview to jump to its settings. It autosaves, has undo/redo, a "Preview on website" link for the draft, and a Publish button.
+- Review request emails and texts now run as a **Marketing flow** ("Review request (email + text)" starter). It sends an email 14 days after shipping, a text 5 days later, then a reminder. Anyone who leaves a review drops out. Both emails are built in the email builder.
+- New **Review request** block in the email builder: each product from the order, with stars to tap that open the review page with that rating picked. `{{ review_url }}` works in any text, button or SMS.
+- Reviews are linked to marketing profiles. Every reviewer gets a profile, profiles have a Reviews tab, "Left a review" shows in the activity feed and in segments and flows, and moderation links each reviewer's email to their profile.
+- Moderation has a new "Reply: no reply yet" filter.
+
 ## 0.0.45
 - Reviews: the "Reviews Summary" no longer stays hidden for 10 minutes when it's still being written the first time.
 

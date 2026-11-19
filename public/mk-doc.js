@@ -57,6 +57,7 @@
       case 'coupon': return Object.assign(P(9, 18, 9, 18), { background_color: '', border_color: c.primary || '#242F3F', border_style: 'dashed', border_width: 2, border_radius: 6, color: c.primary || '#242F3F', font_family: f.body || 'Helvetica, Arial, sans-serif', font_size: 24, font_weight: '700', letter_spacing: 2, text_align: 'center', inner_padding_top: 14, inner_padding_bottom: 14, inner_padding_left: 24, inner_padding_right: 24, header_font_size: 14, header_padding_bottom: 8 });
       case 'table': return Object.assign(P(9, 18, 9, 18), { cell_padding_top: 8, cell_padding_bottom: 8, cell_padding_left: 10, cell_padding_right: 10, cell_horizontal_border_color: '#E5E5E5', cell_horizontal_border_style: 'solid', cell_horizontal_border_width: 1, cell_vertical_border_style: 'none', cell_vertical_border_width: 0, cell_vertical_border_color: '#E5E5E5', cell_vertical_align: 'middle', header_background_color: '#F5F5F5', header_font_weight: '700', table_font_size: 14, table_text_align: 'left', block_border_style: 'none', block_border_width: 0 });
       case 'review': return Object.assign(P(18, 18, 18, 18), { layout: 'centered-review-first', star_color: '#F5B400', empty_star_color: '#DDDDDD', star_size: 'medium', star_rating_shape: 'star', quote_font_size: 18, quote_font_style: 'italic', quote_line_height: 1.5, author_font_size: 14, author_font_weight: '700', verified_badge_style: 'badge-and-text', verified_font_size: 12, verified_color: '#2E7D32', text_area_bg_color: '#F6F5F2' });
+      case 'review_request': return Object.assign(P(9, 18, 9, 18), { layout: 'image-left', star_color: c.primary || '#242F3F', star_size: 30, star_spacing: 6, image_size: 84, image_radius: 8, title_font_size: 16, title_color: c.text || '#222222', muted_color: c.muted || '#77737F', font_family: f.body || 'Helvetica, Arial, sans-serif', divider_color: '#ECEAE5', button_background_color: c.primary || '#242F3F', button_color: c.button_text || '#FFFFFF', button_radius: num((b.button || {}).radius, 6) });
       case 'split': return Object.assign(P(9, 18, 9, 18), { column_widths: '50,50', padding_in_between: 18, mobile_stack_order: 'ltr' });
       case 'html': return P(0, 0, 0, 0);
       case 'countdown': return Object.assign(P(9, 18, 9, 18), { color: c.text || '#222222', font_size: 22, font_weight: '700', text_align: 'center' });
@@ -518,6 +519,29 @@ ${sections}${empty}
       const bw = bord(st, 'block_');
       return `${R.ed && rep ? `<div class="bz-reptag">&#8635; Rows repeat for each <b>${esc(rep.alias)}</b> in ${esc(rep.path)}</div>` : ''}${T(`width="100%" class="bz-tbl" style="${bw ? `border:${bw};` : ''}border-collapse:collapse"`)}${html}</table>`;
     },
+    review_request(blk, st, R, sc) {
+      const p = (blk.data || {}).properties || {};
+      let items = R.env.repeat ? R.env.repeat('review_items', sc) : [];
+      if (!items.length && R.ed) items = [{ title: 'Bamboo Zip Romper', variant: '3-6M', image: '', star_urls: ['#', '#', '#', '#', '#'], url: '#' }, { title: 'Knit Beanie', variant: '0-3M', image: '', star_urls: ['#', '#', '#', '#', '#'], url: '#' }];
+      if (!items.length) return '';
+      const ch = { star: '★', heart: '♥', circle: '●' }[st.star_shape] || '★';
+      const sz = num(st.star_size, 30), gap = num(st.star_spacing, 6), isz = num(st.image_size, 84);
+      const ff = `font-family:${q(st.font_family || 'Helvetica, Arial, sans-serif')}`;
+      const center = st.layout === 'stacked';
+      const starRow = (it) => (it.star_urls || []).slice(0, 5).map((u, i) => `<a href="${esc(u)}" target="_blank" title="${i + 1} star${i ? 's' : ''}" style="text-decoration:none;color:${col(st.star_color) || '#242F3F'};font-size:${sz}px;line-height:1;display:inline-block;padding:0 ${Math.floor(gap / 2)}px">${ch}</a>`).join('');
+      const one = (it, i) => {
+        const img = p.show_image !== false && it.image ? `<img src="${esc(it.image)}" width="${isz}" height="${isz}" alt="" style="display:block;width:${isz}px;height:${isz}px;object-fit:cover;border-radius:${num(st.image_radius, 8)}px;border:0${center ? ';margin:0 auto 10px' : ''}">` : '';
+        const title = `<div style="${ff};font-size:${num(st.title_font_size, 16)}px;font-weight:700;line-height:1.3;color:${col(st.title_color) || '#222'}">${p.link_title !== false && it.product_url ? `<a href="${esc(it.product_url)}" target="_blank" style="color:inherit;text-decoration:none">${esc(it.title || '')}</a>` : esc(it.title || '')}</div>`;
+        const variant = p.show_variant !== false && it.variant ? `<div style="${ff};font-size:13px;color:${col(st.muted_color) || '#777'}">${esc(it.variant)}</div>` : '';
+        const prompt = p.prompt !== '' ? `<div style="${ff};font-size:13px;color:${col(st.muted_color) || '#777'};margin:10px 0 6px">${txt(R, p.prompt == null ? 'How many stars?' : p.prompt, sc)}</div>` : '<div style="height:8px"></div>';
+        const button = p.show_button ? `<div style="margin-top:12px">${T(center ? 'align="center"' : '')}<tr>${btnHtml(R, txt(R, p.button_text || 'Write a review', sc), esc(it.url || ''), { background_color: st.button_background_color, color: st.button_color, border_radius: st.button_radius, font_family: st.font_family, font_size: 14, font_weight: '700', inner_padding_top: 10, inner_padding_bottom: 10, inner_padding_left: 18, inner_padding_right: 18 })}</tr></table></div>` : '';
+        const body = `${title}${variant}${prompt}<div style="${center ? 'text-align:center;' : ''}white-space:nowrap">${starRow(it)}</div>${button}`;
+        const line = i && p.dividers !== false ? `border-top:1px solid ${col(st.divider_color) || '#ECEAE5'};` : '';
+        if (center || !img) return `<tr><td style="padding:16px 0;${line}${center ? 'text-align:center' : ''}">${img}${body}</td></tr>`;
+        return `<tr><td style="padding:16px 0;${line}">${T('width="100%"')}<tr><td width="${isz + 14}" valign="top" style="width:${isz + 14}px">${img}</td><td valign="top">${body}</td></tr></table></td></tr>`;
+      };
+      return `${T('width="100%"')}${items.slice(0, num(p.max_items, 8)).map(one).join('')}</table>`;
+    },
     review(blk, st, R, sc) {
       const p = (blk.data || {}).properties || {};
       const quote = txt(R, p.quote || '', sc); if (!quote && !R.ed) return '';
@@ -601,7 +625,7 @@ ${sections}${empty}
     text: { name: 'Text', icon: 'align-left' }, image: { name: 'Image', icon: 'photo' }, split: { name: 'Split', icon: 'layout-columns' }, button: { name: 'Button', icon: 'click' },
     header: { name: 'Header/link bar', icon: 'layout-navbar' }, drop_shadow: { name: 'Drop shadow', icon: 'shadow' }, horizontal_rule: { name: 'Divider', icon: 'separator-horizontal' },
     social: { name: 'Social links', icon: 'share' }, spacer: { name: 'Spacer', icon: 'spacing-vertical' }, product: { name: 'Product', icon: 'shopping-bag' }, coupon: { name: 'Coupon', icon: 'discount' },
-    table: { name: 'Table', icon: 'table' }, review: { name: 'Review quote', icon: 'star' }, video: { name: 'Video', icon: 'player-play' }, html: { name: 'HTML', icon: 'code' }, countdown: { name: 'Countdown', icon: 'clock' },
+    table: { name: 'Table', icon: 'table' }, review: { name: 'Review quote', icon: 'star' }, review_request: { name: 'Review request', icon: 'star' }, video: { name: 'Video', icon: 'player-play' }, html: { name: 'HTML', icon: 'code' }, countdown: { name: 'Countdown', icon: 'clock' },
   };
   function newBlock(type, b) {
     b = b || {}; const id = rid(), D = { show_on: 'all' };
@@ -617,6 +641,7 @@ ${sections}${empty}
       case 'coupon': blk.data.content = '{{ coupon }}'; blk.data.properties = { header_enabled: true, header: 'Use code', href: '' }; break;
       case 'table': blk.data.properties = { dynamic: false, num_columns: 2, show_headers: true }; blk.subblocks = [['table_header', 'Size'], ['table_header', 'Fits'], ['table_text', '<p>0–3M</p>'], ['table_text', '<p>6–12 lb</p>'], ['table_text', '<p>3–6M</p>'], ['table_text', '<p>12–17 lb</p>']].map(([t, c]) => ({ id: rid(), type: t, content: c, show_on: 'all' })); break;
       case 'review': blk.data.properties = { quote: 'So soft — my baby sleeps better in these.', author: 'Jessica R.', stars: 5, verified: true, show_rating: true, show_reviewer_name: true, show_verified_badge: true, show_product_name: false, product_name: '' }; break;
+      case 'review_request': blk.data.properties = { prompt: 'How many stars?', show_image: true, show_variant: true, show_button: false, button_text: 'Write a review', dividers: true, link_title: true, max_items: 8 }; break;
       case 'split': blk.subblocks = [{ id: rid(), type: 'table_image', src: '', alt_text: '', href: '', show_on: 'all' }, { id: rid(), type: 'table_text', content: '<h2>A heading</h2><p>A few words about it.</p>', show_on: 'all' }]; break;
       case 'html': blk.data.content = '<p style="margin:0;font-family:Helvetica,Arial,sans-serif">Custom HTML</p>'; break;
       case 'spacer': case 'drop_shadow': case 'horizontal_rule': break;

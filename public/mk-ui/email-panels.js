@@ -86,7 +86,7 @@ window.MKE_drawPanel = function drawPanel() {
 };
 
 /* ---------- Add content ---------- */
-const TILES = ['text', 'image', 'split', 'button', 'header', 'drop_shadow', 'horizontal_rule', 'social', 'spacer', 'product', 'coupon', 'table', 'review', 'video', 'html', 'countdown'];
+const TILES = ['text', 'image', 'split', 'button', 'header', 'drop_shadow', 'horizontal_rule', 'social', 'spacer', 'product', 'coupon', 'table', 'review', 'review_request', 'video', 'html', 'countdown'];
 function prebuilt(S) {
   const b = S.brand || {}, c = b.colors || {};
   const sec = (blocks, styles) => { const s = D.newSection(1); s.rows[0].columns[0].blocks = blocks; if (styles) s.data.styles = styles; return s; };
@@ -101,6 +101,7 @@ function prebuilt(S) {
     ['Two columns', 'Two images with a line and a button each', () => { const s = D.newSection(2); s.rows[0].columns.forEach((col, i) => { col.blocks = [nb('image', (x) => { x.data.styles.fill_column = true; x.data.styles.block_padding_left = 9; x.data.styles.block_padding_right = 9; }), txt(`<h3 style="text-align:center">Pick ${i + 1}</h3>`), nb('button', (x) => { x.data.content = 'Shop'; })]; }); return [s]; }],
     ['Product grid', 'Headline and three products', () => [sec([txt('<h2 style="text-align:center">Shop the collection</h2>'), nb('product', (x) => { x.data.properties.dynamic = true; x.data.properties.feed = 'bestsellers'; })])]],
     ['Discount', 'Headline, code box and button', () => [sec([txt('<h2 style="text-align:center">A little gift for you</h2><p style="text-align:center">15% off your order — this week only.</p>'), nb('coupon'), nb('button', (x) => { x.data.content = 'Use my code'; })])]],
+    ['Review request', 'Each product they bought with stars to tap', () => [sec([txt('<h2 style="text-align:center">How did your little one like it?</h2><p style="text-align:center">Tap a star to rate each item. It takes less than a minute.</p>'), nb('review_request')])]],
     ['Review', 'One customer quote with stars', () => [sec([nb('review')], { content_color_type: 'section', content_color: c.ground || '#FFFFFF' })]],
     ['Footer', 'Social icons, address and unsubscribe', () => [sec([nb('social'), txt(`<p style="text-align:center;font-size:12px">{{ store_name }} · {{ store_address }}<br><a href="{{ unsubscribe_url }}">Unsubscribe</a> · <a href="{{ preferences_url }}">Email preferences</a></p>`, { color: c.muted || '#777777', font_size: 12 })], { content_color_type: 'section', content_color: c.ground || '#FFFFFF', inner_padding_top: 12, inner_padding_bottom: 12 })]],
   ];
@@ -474,6 +475,20 @@ const PANELS = {
     <div class="kp-sec"><h4>Header row</h4>${F.lab('Background', F.color(st, 'header_background_color', { ph: def.header_background_color, noSw: true }))}${F.lab('Text color', F.color(st, 'header_font_color', { ph: 'Default', noSw: true }))}<div class="kp-4" style="margin-top:8px">${F.num(st, 'header_font_size', { ph: def.table_font_size, pre: 'Size' })}${F.weight(st, 'header_font_weight')}</div></div>
     <div class="kp-sec"><h4>Lines</h4>${F.lab('Between rows', F.border(st, 'cell_horizontal_'))}${F.lab('Between columns', F.border(st, 'cell_vertical_'))}</div>
     ${F.opt('Table border', bord(st, 'block_'), { add: () => { st.block_border_style = 'solid'; st.block_border_width = 1; st.block_border_color = '#E5E5E5'; }, remove: () => { st.block_border_width = 0; } }, () => F.border(st, 'block_'))}`;
+  },
+  review_request(blk, st, def) {
+    const p = blk.data.properties = blk.data.properties || {};
+    return `<div class="kp-sec"><h4>Review request</h4><div class="kp-hint" style="margin-top:0">Shows each product from the order with five stars. Tapping a star opens the review page with that rating picked. In a flow it uses the order that started the flow; previews and tests use a recent real order. Use <code>{{ review_url }}</code> in any button or text for the same page.</div>
+      ${F.lab('Line above the stars', F.text(p, 'prompt', { ph: 'How many stars?' }))}
+      ${F.row('Product photo', F.tog(p, 'show_image', { def: true }))}${F.row('Size / variant', F.tog(p, 'show_variant', { def: true }))}${F.row('Product name links to the product', F.tog(p, 'link_title', { def: true }))}${F.row('Lines between products', F.tog(p, 'dividers', { def: true }))}
+      ${F.row('“Write a review” button', F.tog(p, 'show_button', { redraw: true }))}${p.show_button ? F.lab('Button text', F.text(p, 'button_text', { ph: 'Write a review' })) : ''}
+      ${F.lab('Most products to show', F.num(p, 'max_items', { ph: 8 }))}</div>
+    <div class="kp-sec"><h4>Layout</h4>${F.sel(st, 'layout', [['image-left', 'Photo on the left'], ['stacked', 'Centered, photo on top']], { def: def.layout })}
+      <div class="kp-4" style="margin-top:8px">${F.num(st, 'image_size', { ph: def.image_size, pre: 'Photo' })}${F.num(st, 'image_radius', { ph: def.image_radius, pre: 'Corners' })}</div></div>
+    <div class="kp-sec"><h4>Stars</h4>${F.sel(st, 'star_shape', [['star', '★ Stars'], ['heart', '♥ Hearts'], ['circle', '● Dots']], { def: 'star' })}
+      <div class="kp-4" style="margin-top:8px">${F.num(st, 'star_size', { ph: def.star_size, pre: 'Size' })}${F.num(st, 'star_spacing', { ph: def.star_spacing, pre: 'Gap' })}</div>${F.lab('Star color', F.color(st, 'star_color', { ph: def.star_color, noSw: true }))}</div>
+    <div class="kp-sec"><h4>Text</h4>${F.lab('Font', F.font(st, 'font_family'))}<div class="kp-4" style="margin-top:8px">${F.num(st, 'title_font_size', { ph: def.title_font_size, pre: 'Name size' })}</div>${F.lab('Product name color', F.color(st, 'title_color', { ph: def.title_color, noSw: true }))}${F.lab('Light text color', F.color(st, 'muted_color', { ph: def.muted_color, noSw: true }))}${F.lab('Line color', F.color(st, 'divider_color', { ph: def.divider_color, noSw: true }))}</div>
+    ${p.show_button ? `<div class="kp-sec"><h4>Button</h4>${F.lab('Background', F.color(st, 'button_background_color', { ph: def.button_background_color, noSw: true }))}${F.lab('Text', F.color(st, 'button_color', { ph: def.button_color, noSw: true }))}${F.num(st, 'button_radius', { ph: def.button_radius, pre: 'Corners' })}</div>` : ''}`;
   },
   review(blk, st, def) {
     const p = blk.data.properties = blk.data.properties || {};

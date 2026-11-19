@@ -23,6 +23,20 @@ const HOLD_DAYS = 14;
 const DEFAULTS = { auto_publish_min: 4, live: { lb: false, lbo: false }, requests: { lb: false, lbo: false }, wait_days: 14, reminder_days: 7, reminders: 2 };
 
 async function settings() { const s = await core.setting("reviews_settings", null); return { ...DEFAULTS, ...(s || {}), live: { ...DEFAULTS.live, ...((s && s.live) || {}) }, requests: { ...DEFAULTS.requests, ...((s && s.requests) || {}) } }; }
+/* ---- design (Customize): per store, a draft the editor autosaves and the live copy the store shows ---- */
+async function designs() { return (await core.setting("reviews_design", null)) || {}; }
+async function saveDesign(store, patch) {
+  const all = await designs(); const cur = all[store] || {};
+  all[store] = { ...cur, ...patch, updated_at: new Date().toISOString() };
+  await db(`INSERT INTO emily_settings (key, value) VALUES ('reviews_design', $1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify(all)]);
+  return all[store];
+}
+function cleanDesign(d) { const j = JSON.stringify(d || {}); if (j.length > 60000) throw Object.assign(new Error("Design is too large."), { status: 400 }); return JSON.parse(j); }
+async function sampleProduct(store) {
+  return (await db(`SELECT product_id id, max(product_title) title, max(product_handle) handle, count(*)::int n FROM rv_reviews WHERE store=$1 AND status='published' AND product_id IS NOT NULL
+    GROUP BY product_id ORDER BY count(*) FILTER (WHERE jsonb_array_length(media)>0) DESC, count(*) DESC LIMIT 1`, [store])).rows[0] || null;
+}
+
 async function saveSettings(patch) {
   const cur = await settings(); const next = { ...cur, ...patch, live: { ...cur.live, ...((patch && patch.live) || {}) }, requests: { ...cur.requests, ...((patch && patch.requests) || {}) } };
   await db(`INSERT INTO emily_settings (key, value) VALUES ('reviews_settings', $1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify(next)]);
@@ -45,6 +59,7 @@ async function migrate() {
   await db(`CREATE TABLE IF NOT EXISTS rv_requests (token TEXT PRIMARY KEY, store TEXT, order_name TEXT, email TEXT, name TEXT, items JSONB, created_at TIMESTAMPTZ DEFAULT now(), used_at TIMESTAMPTZ)`);
   await db(`ALTER TABLE rv_requests ADD COLUMN IF NOT EXISTS order_id TEXT, ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS sent INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS last_sent_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS test BOOLEAN DEFAULT false`);
   await db(`CREATE UNIQUE INDEX IF NOT EXISTS rv_requests_order ON rv_requests (store, order_id) WHERE NOT test`);
+  await db(`ALTER TABLE rv_requests ADD COLUMN IF NOT EXISTS via_flow BOOLEAN NOT NULL DEFAULT false`);
 }
 
 /* ---------------- Okendo copy ---------------- */
@@ -242,6 +257,7 @@ async function submit(store, b, { via = "site" } = {}) {
       rating, title || null, body, name, verified, b.recommended == null ? (rating >= 4) : !!b.recommended, email || null, orderName, JSON.stringify(media), answers ? JSON.stringify(answers) : null, status, status === "published" ? new Date() : null]);
   if (reqRow) await db(`UPDATE rv_requests SET used_at=COALESCE(used_at, now()) WHERE token=$1`, [reqRow.token]);
   if (status === "published") { AGG_CACHE.clear(); queueMetafield(store, b.product_id); }
+  if (email) { try { await require("./mk-core").upsertProfile(store, { email, first_name: String(name || "").split(" ")[0] || null }, "reviews"); } catch (_) {} }
   if (email) { try { await require("./mk-core").track(store, "left_review", { email, props: { rating, product_id: String(b.product_id || ""), product: clean(b.product_title, 200) }, source: "reviews" }); } catch (_) {} }
   if (rating <= 2) core.slackPost && core.slackPost(`⭐ ${rating}-star review on ${STORES[store].name}: ${clean(b.product_title, 120)} — “${title || body.slice(0, 120)}” (${name}). Open Buzzin → Reviews.`).catch(() => {});
   return { ok: true, id, status };
@@ -254,6 +270,55 @@ async function submit(store, b, { via = "site" } = {}) {
 const STAR_PATH = "M12 2.6l2.9 6.2 6.7.7-5 4.6 1.4 6.7L12 17.4l-6 3.4 1.4-6.7-5-4.6 6.7-.7z";
 const writeBase = (store) => { try { const d = require("./returns").STORE_DEFS[store]; if (d && d.host) return `https://${d.host}`; } catch (_) {} return PUBLIC_URL(); };
 const SKIP_ITEM = /package protection|shipping protection|gift card|route|insurance/i;
+
+/* ---- review links for marketing emails and texts (the Review request block, {{ review_url }}) ---- */
+function reviewItems(items) {
+  const seen = new Set(), out = [];
+  for (const it of items || []) {
+    const pid = String((it && (it.product_id || (it.product && it.product.id))) || "").replace(/\D/g, "");
+    if (!pid || seen.has(pid) || SKIP_ITEM.test((it && it.title) || "")) continue; seen.add(pid);
+    out.push({ product_id: pid, title: it.title || it.product_title || "", variant: it.variant || it.variant_title || null, image: it.image || it.image_url || null, handle: it.handle || null });
+  }
+  return out.slice(0, 8);
+}
+/** One review page per order: reuse its token, or make one. `test` rows never count as real requests. */
+async function tokenForOrder(store, { order_id, order_name, email, name, items, test }) {
+  const key = String(order_id || order_name || "").slice(0, 80); if (!key || !email) return null;
+  const its = reviewItems(items); if (!its.length) return null;
+  const em = String(email).toLowerCase();
+  const old = (await db(`SELECT token FROM rv_requests WHERE store=$1 AND (order_id=$2 OR order_name=$3) AND test=$4 AND lower(email)=$5 ORDER BY created_at LIMIT 1`, [store, key, order_name || key, !!test, em])).rows[0];
+  if (old) return old.token;
+  const token = crypto.randomBytes(12).toString("hex");
+  await db(`INSERT INTO rv_requests (token, store, order_id, order_name, email, name, items, fulfilled_at, test, sent, last_sent_at, via_flow) VALUES ($1,$2,$3,$4,$5,$6,$7,now(),$8,1,now(),true) ON CONFLICT DO NOTHING`,
+    [token, store, test ? `test-${key}-${Date.now()}` : key, order_name || null, em, name || null, JSON.stringify(its), !!test]);
+  return (await db(`SELECT token FROM rv_requests WHERE token=$1`, [token])).rows[0] ? token : null;
+}
+/** What an email or text needs to ask for reviews: review_url (the order's review page) and review_items (each product with 5 star links).
+ *  `order` comes from the flow's trigger (an order or shipment). Previews and tests use the person's (or the store's) latest order. */
+async function reviewContext(store, profile, order, { test = false, preview = false } = {}) {
+  if (!STORES[store]) return {};
+  let o = order && Array.isArray(order.items) && order.items.length ? order : null;
+  if (!o) {
+    const q = `SELECT props FROM mk_events WHERE store=$1 AND type IN ('fulfilled_order','placed_order') AND jsonb_array_length(COALESCE(props->'items','[]'::jsonb)) > 0`;
+    let r = profile && profile.id ? (await db(`${q} AND profile_id=$2 ORDER BY at DESC LIMIT 1`, [store, profile.id]).catch(() => ({ rows: [] }))).rows[0] : null;
+    if (r) { o = { ...(r.props || {}) }; }   // their own latest order: a real request
+    else r = (await db(`${q} ORDER BY at DESC LIMIT 1`, [store]).catch(() => ({ rows: [] }))).rows[0];
+    if (!r) { const x = (await db(`SELECT product_id, max(product_title) title, max(product_image) image FROM rv_reviews WHERE store=$1 AND status='published' GROUP BY product_id ORDER BY count(*) DESC LIMIT 2`, [store])).rows; r = { props: { name: "#1001", items: x.map((y) => ({ product_id: y.product_id, title: y.title, image: y.image })) } }; }
+    if (!o) { o = { ...(r.props || {}), sample: true }; test = true; }
+  }
+  const items = reviewItems(o.items); if (!items.length) return { review_items: [], review_url: STORES[store].shop };
+  let token = null;
+  if (!preview && profile && profile.email) token = await tokenForOrder(store, { order_id: o.order_id, order_name: o.name, email: profile.email, name: [profile.first_name, profile.last_name].filter(Boolean).join(" "), items: o.items, test }).catch(() => null);
+  const base = `${writeBase(store)}/rv/${store}/write?t=${token || "preview"}`;
+  return {
+    review_url: base,
+    review_items: items.map((it) => {
+      const u = `${base}&p=${it.product_id}`;
+      return { ...it, url: u, review_url: u, product_url: it.handle ? `${STORES[store].shop}/products/${it.handle}` : STORES[store].shop, star_urls: [1, 2, 3, 4, 5].map((n) => `${u}&r=${n}`), rate_1: `${u}&r=1`, rate_2: `${u}&r=2`, rate_3: `${u}&r=3`, rate_4: `${u}&r=4`, rate_5: `${u}&r=5` };
+    }),
+    review_first_product: items[0].title,
+  };
+}
 async function collectOrders(store, s) {
   const em = require("./emily"); const st = em.storeForPrefix(store === "lbo" ? "LBO" : "LB"); if (!st) return [];
   const from = new Date(Date.now() - (s.wait_days + 25) * 864e5).toISOString().slice(0, 10), to = new Date(Date.now() - (s.wait_days - 1) * 864e5).toISOString().slice(0, 10);
@@ -314,12 +379,13 @@ async function runRequests() {
         items.push({ product_id: String(li.product.legacyResourceId), handle: li.product.handle, title: li.title, variant: li.variantTitle, image: li.product.featuredMedia && li.product.featuredMedia.preview && li.product.featuredMedia.preview.image ? li.product.featuredMedia.preview.image.url : null }); }
       if (!items.length) continue;
       const name = [o.customer && o.customer.firstName || (o.shippingAddress && o.shippingAddress.firstName), (o.customer && o.customer.lastName || (o.shippingAddress && o.shippingAddress.lastName) || "").slice(0, 1)].filter(Boolean).join(" ") + ((o.customer && o.customer.lastName) ? "." : "");
+      if ((await db(`SELECT 1 FROM rv_requests WHERE store=$1 AND order_name=$2 AND NOT test LIMIT 1`, [store, o.name])).rows[0]) continue;   // a marketing flow already asked
       const r = await db(`INSERT INTO rv_requests (token, store, order_id, order_name, email, name, items, fulfilled_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING token`,
         [crypto.randomBytes(12).toString("hex"), store, String(o.legacyResourceId), o.name, String(o.email).toLowerCase(), name, JSON.stringify(items.slice(0, 8)), shipped]);
       if (r.rowCount) made++;
     }
     // 2) send what's due: first email, then reminders every reminder_days while nothing was reviewed
-    const due = (await db(`SELECT * FROM rv_requests WHERE store=$1 AND NOT test AND used_at IS NULL AND sent <= $2
+    const due = (await db(`SELECT * FROM rv_requests WHERE store=$1 AND NOT test AND NOT via_flow AND used_at IS NULL AND sent <= $2
         AND (last_sent_at IS NULL OR last_sent_at < now() - ($3 || ' days')::interval) AND created_at > now() - interval '60 days' ORDER BY created_at LIMIT 400`, [store, s.reminders, String(s.reminder_days)])).rows;
     for (const q of due) {
       const reviewed = (await db(`SELECT 1 FROM rv_reviews WHERE lower(email)=$1 AND product_id = ANY($2) AND created_at > $3 LIMIT 1`, [q.email, q.items.map((i) => i.product_id), q.created_at])).rows[0];
@@ -365,7 +431,7 @@ input[type=text],textarea{width:100%;box-sizing:border-box;border:1px solid #DBD
 }
 
 /* ---------------- staff ---------------- */
-function listWhere({ store, status, rating, q, source, sentiment, product, days, media }) {
+function listWhere({ store, status, rating, q, source, sentiment, product, days, media, replied }) {
   const args = [], where = [];
   if (store) { args.push(store); where.push(`store=$${args.length}`); }
   if (status && status !== "all") { args.push(status); where.push(`status=$${args.length}`); }
@@ -374,6 +440,7 @@ function listWhere({ store, status, rating, q, source, sentiment, product, days,
   if (source) { args.push(source === "imported" ? "okendo" : source); where.push(`source=$${args.length}`); }
   if (product) { args.push(String(product)); where.push(`product_id=$${args.length}`); }
   if (days && Number(days) > 0) { args.push(String(Number(days))); where.push(`created_at > now() - ($${args.length} || ' days')::interval`); }
+  if (replied === "no") where.push(`reply IS NULL`); else if (replied === "yes") where.push(`reply IS NOT NULL`);
   if (media === "1") where.push(`jsonb_array_length(media) > 0`); else if (media === "0") where.push(`jsonb_array_length(media) = 0`);
   if (q) { args.push(`%${String(q).slice(0, 80)}%`); where.push(`(title ILIKE $${args.length} OR body ILIKE $${args.length} OR reviewer_name ILIKE $${args.length} OR email ILIKE $${args.length} OR product_title ILIKE $${args.length} OR order_name ILIKE $${args.length})`); }
   return { args, w: where.length ? `WHERE ${where.join(" AND ")}` : "" };
@@ -382,7 +449,7 @@ async function list(f) {
   const { args, w } = listWhere(f);
   const per = Math.min(100, Number(f.per) || 25), page = Math.max(1, Number(f.page) || 1);
   const order = { oldest: "created_at ASC", highest: "rating DESC, created_at DESC", lowest: "rating ASC, created_at DESC", helpful: "helpful DESC, created_at DESC" }[f.sort] || "created_at DESC";
-  const rows = (await db(`SELECT id, store, source, product_id, product_handle, product_title, product_image, variant_title, rating, title, body, reviewer_name, verified, recommended, email, order_name, media, answers, status, reply, reply_by, reply_at, helpful, unhelpful, created_at, published_at, decided_by FROM rv_reviews ${w} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
+  const rows = (await db(`SELECT id, store, source, product_id, product_handle, product_title, product_image, variant_title, rating, title, body, reviewer_name, verified, recommended, email, order_name, media, answers, status, reply, reply_by, reply_at, helpful, unhelpful, created_at, published_at, decided_by , (SELECT p.id FROM mk_profiles p WHERE p.store=rv_reviews.store AND lower(p.email)=lower(rv_reviews.email) LIMIT 1) profile_id FROM rv_reviews ${w} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
   const total = (await db(`SELECT count(*)::int n FROM rv_reviews ${w}`, args)).rows[0].n;
   const counts = (await db(`SELECT store, status, count(*)::int n, avg(rating)::float avg FROM rv_reviews GROUP BY store, status`)).rows;
   return { reviews: rows.slice(0, per), more: rows.length > per, page, total, counts };
@@ -421,6 +488,50 @@ async function insights({ store, days = 90 }) {
   const req = (await db(`SELECT count(*)::int orders, count(*) FILTER (WHERE sent>0)::int emailed, count(*) FILTER (WHERE used_at IS NOT NULL)::int reviewed, COALESCE(sum(sent),0)::int emails FROM rv_requests WHERE NOT test AND ($1::text IS NULL OR store=$1) AND created_at > now() - interval '${d} days'`, a)).rows[0];
   return { days: d, kpis: { ...k, recommend_pct: k.recn ? Math.round((100 * k.rec) / k.recn) : null }, months, distribution: dist, sources, top, low, requests: req };
 }
+/** The Reviews landing page: what needs doing, what just came in, and the headline numbers. */
+async function overview({ store }) {
+  const a = [store || null]; const sw = `($1::text IS NULL OR store=$1)`;
+  const set = await settings();
+  const k = (await db(`SELECT count(*) FILTER (WHERE status='published')::int published, round(avg(rating) FILTER (WHERE status='published')::numeric, 2)::float avg,
+      count(*) FILTER (WHERE status='pending')::int pending,
+      count(*) FILTER (WHERE status='pending' AND created_at < now() - interval '${HOLD_DAYS - 3} days')::int pending_soon,
+      count(*) FILTER (WHERE created_at > now() - interval '7 days')::int week, count(*) FILTER (WHERE created_at > now() - interval '14 days' AND created_at <= now() - interval '7 days')::int prev_week,
+      round(avg(rating) FILTER (WHERE created_at > now() - interval '30 days')::numeric, 2)::float avg30, count(*) FILTER (WHERE created_at > now() - interval '30 days')::int n30,
+      count(*) FILTER (WHERE rating<=2 AND status<>'rejected' AND reply IS NULL AND created_at > now() - interval '60 days')::int low_unreplied,
+      count(*) FILTER (WHERE rating=3 AND status<>'rejected' AND reply IS NULL AND created_at > now() - interval '30 days')::int mid_unreplied,
+      count(*) FILTER (WHERE status='published' AND jsonb_array_length(media)>0 AND created_at > now() - interval '7 days')::int photos_week
+    FROM rv_reviews WHERE ${sw}`, a)).rows[0];
+  const recent = (await db(`SELECT id, store, source, product_id, product_title, product_image, rating, title, body, reviewer_name, verified, status, reply, media, created_at FROM rv_reviews
+    WHERE ${sw} AND source <> 'okendo' ORDER BY created_at DESC LIMIT 12`, a)).rows;
+  const recentAll = recent.length >= 4 ? recent : (await db(`SELECT id, store, source, product_id, product_title, product_image, rating, title, body, reviewer_name, verified, status, reply, media, created_at FROM rv_reviews
+    WHERE ${sw} ORDER BY created_at DESC LIMIT 12`, a)).rows;
+  const dropping = (await db(`SELECT store, product_id, max(product_title) title, max(product_image) image, count(*)::int n, round(avg(rating)::numeric,2)::float avg FROM rv_reviews
+    WHERE ${sw} AND status IN ('published','pending') AND created_at > now() - interval '60 days' AND product_id IS NOT NULL GROUP BY store, product_id HAVING count(*) >= 3 AND avg(rating) < 4 ORDER BY avg(rating) LIMIT 5`, a)).rows;
+  const req = (await db(`SELECT count(*) FILTER (WHERE sent>0 AND last_sent_at > now() - interval '7 days')::int sent_week, count(*) FILTER (WHERE used_at > now() - interval '7 days')::int used_week FROM rv_requests WHERE NOT test AND ${sw}`, a).catch(() => ({ rows: [{}] }))).rows[0];
+  const g = (await db(`SELECT max(synced_at) last FROM rv_groups WHERE ${sw}`, a)).rows[0];
+  const d = await designs(); const flows = await reviewFlows(store);
+  const stores = store ? [store] : Object.keys(STORES);
+  const todo = [];
+  if (k.pending) todo.push({ key: "pending", level: k.pending_soon ? "high" : "mid", n: k.pending, title: `Approve or reject ${k.pending} waiting review${k.pending === 1 ? "" : "s"}`, detail: k.pending_soon ? `${k.pending_soon} will publish on ${k.pending_soon === 1 ? "its" : "their"} own in the next 3 days if you do nothing.` : `Reviews under ${set.auto_publish_min}★ wait here. They publish on their own after ${HOLD_DAYS} days.`, go: { view: "rv_mod", f: { status: "pending" } } });
+  if (k.low_unreplied) todo.push({ key: "low", level: "high", n: k.low_unreplied, title: `Reply to ${k.low_unreplied} low rating${k.low_unreplied === 1 ? "" : "s"}`, detail: "1–2★ reviews from the last 60 days with no reply yet. A public reply shows other shoppers you care.", go: { view: "rv_mod", f: { status: "all", rating: "1,2", replied: "no", days: "60" } } });
+  if (k.mid_unreplied) todo.push({ key: "mid", level: "low", n: k.mid_unreplied, title: `Look at ${k.mid_unreplied} 3★ review${k.mid_unreplied === 1 ? "" : "s"}`, detail: "Middle ratings from the last 30 days often point at a fixable problem (sizing, fabric, shipping).", go: { view: "rv_mod", f: { status: "all", rating: "3", replied: "no", days: "30" } } });
+  for (const p of dropping) todo.push({ key: "drop:" + p.product_id, level: "mid", title: `${p.title || "A product"} is averaging ${p.avg}★`, detail: `${p.n} reviews in the last 60 days. Read them to see what customers are unhappy about.`, image: p.image, go: { view: "rv_mod", f: { status: "all", product: p.product_id, product_title: p.title || "", store: p.store, sort: "lowest" } } });
+  for (const s of stores) {
+    if (!set.live[s]) todo.push({ key: "live:" + s, level: "setup", title: `Turn on reviews for ${STORES[s].name}`, detail: "Preview it on your site, then click Go live. The old review app stays until you do.", go: { view: "rv_setup" } });
+    const fl = flows.filter((f) => f.store === s);
+    if (!fl.some((f) => f.status === "live") && !set.requests[s]) todo.push({ key: "req:" + s, level: "setup", title: fl.length ? `Turn on the review request flow for ${STORES[s].name}` : `Set up review request emails and texts for ${STORES[s].name}`, detail: fl.length ? "It's built but not live yet. Open it in Marketing → Flows." : "A ready-made flow: email 14 days after shipping, a text, then a reminder. Fully editable.", go: fl.length ? { href: `/marketing#flows/${fl[0].id}` } : { flow: s } });
+    const ds = d[s] || {};
+    if (!ds.live) todo.push({ key: "design:" + s, level: "setup", title: `Customize how reviews look on ${STORES[s].name}`, detail: "Colors, fonts, words and which parts show, for desktop and mobile.", go: { customize: s } });
+    else if (ds.draft && ds.draft_at && (!ds.published_at || ds.draft_at > ds.published_at)) todo.push({ key: "designpub:" + s, level: "mid", title: `Publish your design changes for ${STORES[s].name}`, detail: "You have saved changes that aren't on the website yet.", go: { customize: s } });
+  }
+  if (!g.last || Date.now() - new Date(g.last).getTime() > 3 * 864e5) todo.push({ key: "groups", level: "low", title: "Product groups haven't synced in a while", detail: "Groups share reviews between colors of the same product.", go: { view: "rv_groups" } });
+  return { kpis: k, recent: recentAll, todo, requests: req, live: set.live, request_on: set.requests, flows };
+}
+/** Marketing flows that ask for reviews (made from the "Review request" starter, or anything named like it). */
+async function reviewFlows(store) {
+  return (await db(`SELECT id, store, name, status FROM mk_flows WHERE deleted_at IS NULL AND NOT COALESCE(archived,false) AND ($1::text IS NULL OR store=$1)
+    AND (name ILIKE '%review%' OR graph::text LIKE '%review_url%') ORDER BY (status='live') DESC, id DESC`, [store || null]).catch(() => ({ rows: [] }))).rows;
+}
 async function groups(store) {
   return (await db(`SELECT g.id, g.store, g.name, cardinality(g.product_ids) products, g.synced_at,
       (SELECT count(*)::int FROM rv_reviews r WHERE r.store=g.store AND r.status='published' AND r.product_id = ANY(g.product_ids)) reviews,
@@ -447,7 +558,12 @@ function routes(app, { guard, actorOf, express }) {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).end();
     const set = await settings();
     res.setHeader("Cache-Control", "public, max-age=300");
-    res.type("application/javascript").send(`window.BZR=${JSON.stringify({ store: s, origin: PUBLIC_URL(), live: !!set.live[s], brand: STORES[s].name })};\n` + fs.readFileSync(path.join(__dirname, "public", "bz-reviews.js"), "utf8"));
+    const ds = (await designs())[s] || {};
+    res.type("application/javascript").send(fs.readFileSync(path.join(__dirname, "public", "bz-reviews-design.js"), "utf8") + `\nwindow.BZR=${JSON.stringify({ store: s, origin: PUBLIC_URL(), live: !!set.live[s], brand: STORES[s].name, design: ds.live || null })};\n` + fs.readFileSync(path.join(__dirname, "public", "bz-reviews.js"), "utf8"));
+  });
+  app.get("/rv/:store/design", async (req, res) => {
+    cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
+    const ds = (await designs())[s] || {}; res.setHeader("Cache-Control", "no-store"); res.json({ design: (req.query.draft === "1" ? ds.draft || ds.live : ds.live) || null });
   });
   app.get("/rv/:store/product/:pid", async (req, res) => {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({ error: "unknown store" });
@@ -487,6 +603,30 @@ function routes(app, { guard, actorOf, express }) {
   app.get("/api/reviews-insights", async (req, res) => { if (!guard(req, res)) return; try { res.json(await insights(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get("/api/reviews-groups", async (req, res) => { if (!guard(req, res)) return; try { res.json({ groups: await groups(req.query.store || null) }); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews-groups/sync", async (req, res) => { if (!guard(req, res)) return; try { const out = {}; for (const k of Object.keys(STORES)) out[k] = await syncGroups(k); AGG_CACHE.clear(); res.json({ ok: true, out }); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get("/api/reviews-flows", async (req, res) => { if (!guard(req, res)) return; res.json({ flows: await reviewFlows(req.query.store || null) }); });
+  app.post("/api/reviews-flows", async (req, res) => {
+    if (!guard(req, res)) return; const s = storeOk((req.body || {}).store); if (!s) return res.status(400).json({ error: "store?" });
+    try { const f = await require("./mk-flows").create(s, `Review request · ${STORES[s].name}`, actorOf(req), "review_request"); res.json({ id: f.id }); } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.get("/api/reviews-overview", async (req, res) => { if (!guard(req, res)) return; try { res.json(await overview(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get("/api/reviews-design", async (req, res) => {
+    if (!guard(req, res)) return; const s = storeOk(req.query.store); if (!s) return res.status(400).json({ error: "store?" });
+    try { const ds = (await designs())[s] || {}; res.json({ store: s, brand: STORES[s].name, shop: STORES[s].shop, draft: ds.draft || ds.live || null, live: ds.live || null, published_at: ds.published_at || null, draft_at: ds.draft_at || null, sample: await sampleProduct(s), origin: PUBLIC_URL() }); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.put("/api/reviews-design", async (req, res) => {
+    if (!guard(req, res)) return; const b = req.body || {}; const s = storeOk(b.store); if (!s) return res.status(400).json({ error: "store?" });
+    try { const r = await saveDesign(s, { draft: cleanDesign(b.design), draft_at: new Date().toISOString() }); res.json({ ok: true, draft_at: r.draft_at }); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
+  app.post("/api/reviews-design/publish", async (req, res) => {
+    if (!guard(req, res)) return; const b = req.body || {}; const s = storeOk(b.store); if (!s) return res.status(400).json({ error: "store?" });
+    try {
+      const design = cleanDesign(b.design || ((await designs())[s] || {}).draft || {});
+      const now = new Date().toISOString(); const r = await saveDesign(s, { draft: design, live: design, published_at: now, draft_at: now });
+      await core.audit({ kind: "reviews-design", detail: `Published review design for ${STORES[s].name}`, who: actorOf(req), target: s }).catch(() => {});
+      res.json({ ok: true, published_at: r.published_at });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
   app.get("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; res.json(await settings()); });
   app.post("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const patch = {}; if (b.auto_publish_min) patch.auto_publish_min = Math.max(1, Math.min(5, Number(b.auto_publish_min))); if (b.live) patch.live = { lb: !!b.live.lb, lbo: !!b.live.lbo }; if (b.requests) patch.requests = { lb: !!b.requests.lb, lbo: !!b.requests.lbo }; res.json(await saveSettings(patch)); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews-test-request", async (req, res) => {
@@ -522,4 +662,4 @@ async function startJobs(syncGet, syncSet) {
   setInterval(() => runRequests().catch((e) => console.error("review requests:", e.message)), 6 * 3600e3); setTimeout(() => runRequests().catch((e) => console.error("review requests:", e.message)), 5 * 60e3);
 }
 
-module.exports = { runRequests, testRequest, writePage, migrate, routes, startJobs, importOkendo, syncGroups, productReviews, starsFor, submit, list, decide, settings, saveSettings, STORES };
+module.exports = { reviewContext, tokenForOrder, runRequests, testRequest, writePage, migrate, routes, startJobs, importOkendo, syncGroups, productReviews, starsFor, submit, list, decide, settings, saveSettings, STORES };
