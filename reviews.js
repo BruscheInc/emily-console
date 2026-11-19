@@ -669,6 +669,19 @@ function routes(app, { guard, actorOf, express }) {
 
 /* ---------------- background ---------------- */
 async function startJobs(syncGet, syncSet) {
+  // Build the review request flow (emails after 14 days + text + reminder) for each store, as a draft. Nothing sends until it's turned on.
+  if (!(await syncGet("reviews_flows_v1"))) {
+    for (const s of Object.keys(STORES)) {
+      try {
+        const have = await reviewFlows(s);
+        if (have.length) { console.log(`⭐ REVIEW FLOW ${s}: already there (#${have[0].id})`); continue; }
+        const f = await require("./mk-flows").create(s, `Review request · ${STORES[s].name}`, "buzzin", "review_request");
+        const n = Object.values(f.graph.nodes || {}).filter((x) => x.type === "send_email" && x.config && x.config.template_id).length;
+        console.log(`⭐ REVIEW FLOW ${s}: built #${f.id} (draft) with ${n} emails`);
+      } catch (e) { console.error(`⭐ review flow ${s}:`, e.message); }
+    }
+    await syncSet("reviews_flows_v1", new Date().toISOString());
+  }
   // First full copy of Okendo (both stores) + review groups, once.
   if (!(await syncGet("reviews_okendo_v1"))) {
     for (const s of Object.keys(STORES)) {

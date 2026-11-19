@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.50
+- Built the review request flow for LB and LBO (draft): email 14 days after an order ships, text 5 days later, reminder email 4 days after that. Nothing sends until it's turned on in Reviews → Flows: emails & texts.
+
 ## 0.0.49
 - Review flows now live in the Reviews menu on the left (**Flows: emails & texts**), per store, not in Settings. From there you can change each wait and send time, choose which emails and texts send, edit the text message, turn the flow on or pause it, and open each email in the email builder. The full flow editor is one click away.
 
