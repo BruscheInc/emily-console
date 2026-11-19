@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.49
+- Review flows now live in the Reviews menu on the left (**Flows: emails & texts**), per store, not in Settings. From there you can change each wait and send time, choose which emails and texts send, edit the text message, turn the flow on or pause it, and open each email in the email builder. The full flow editor is one click away.
+
 ## 0.0.48
 - Reviews has a new **Emails & texts** page for each store (LB / LBO). It shows that store's review flow step by step: the waits, each email (with a preview, subject and Edit email button), and the text. Each step shows sent / opened / clicked. Totals at the top: customers asked, how many left a review, reviews from emails and texts, and reviews written on the website. If a store has no review flow yet, one button creates it.
 - Insights is renamed **Analytics**. The Overview links to Analytics and Emails & texts.
