@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.53
+- Review requests never ask about **Package Protection (PP)**, matched by name or product handle. Orders with only PP (or nothing else reviewable) now skip the review email and text entirely instead of sending an empty one. No review section shows on the PP product page.
+
 ## 0.0.52
 - New **Rewards** section (loyalty program), built in Buzzin and **off** until "Launch program" is clicked. LB and LBO are set up separately.
   - **Overview:** members, points earned/spent/outstanding, rewards redeemed, sales from members, referrals, members by tier.

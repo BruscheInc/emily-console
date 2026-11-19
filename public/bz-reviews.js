@@ -17,6 +17,7 @@
   var active = studio || !!C.live || preview || draft;
   var forced = document.querySelector("[data-bz-reviews],[data-bz-stars]");
   if (!active && !forced) return;
+  if (/\/products\/[^/?#]*(protection|insurance|gift-card)/i.test(location.pathname)) return;   // no reviews on Package Protection (PP) and similar
 
   /* ---------- design ---------- */
   var DEF = window.BZR_DEFAULT_DESIGN || {};

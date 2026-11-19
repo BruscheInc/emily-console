@@ -269,14 +269,17 @@ async function submit(store, b, { via = "site" } = {}) {
    Goes to every buyer except people who unsubscribed or bounced. Off per store until Okendo's sequence is paused. */
 const STAR_PATH = "M12 2.6l2.9 6.2 6.7.7-5 4.6 1.4 6.7L12 17.4l-6 3.4 1.4-6.7-5-4.6 6.7-.7z";
 const writeBase = (store) => { try { const d = require("./returns").STORE_DEFS[store]; if (d && d.host) return `https://${d.host}`; } catch (_) {} return PUBLIC_URL(); };
-const SKIP_ITEM = /package protection|shipping protection|gift card|route|insurance/i;
+// Never asked for reviews: Package Protection (PP) and other non-products. Matched on the name and on the product's handle.
+const SKIP_ITEM = /package protection|shipping protection|order protection|\bPP\b|gift card|route|insurance/i;
+const SKIP_HANDLE = /protection|insurance|gift-card|^route/i;
+const skipItem = (it) => !!it && (SKIP_ITEM.test(it.title || it.product_title || "") || SKIP_HANDLE.test(it.handle || ""));
 
 /* ---- review links for marketing emails and texts (the Review request block, {{ review_url }}) ---- */
 function reviewItems(items) {
   const seen = new Set(), out = [];
   for (const it of items || []) {
     const pid = String((it && (it.product_id || (it.product && it.product.id))) || "").replace(/\D/g, "");
-    if (!pid || seen.has(pid) || SKIP_ITEM.test((it && it.title) || "")) continue; seen.add(pid);
+    if (!pid || seen.has(pid) || skipItem(it)) continue; seen.add(pid);
     out.push({ product_id: pid, title: it.title || it.product_title || "", variant: it.variant || it.variant_title || null, image: it.image || it.image_url || null, handle: it.handle || null });
   }
   return out.slice(0, 8);
@@ -303,7 +306,7 @@ async function reviewContext(store, profile, order, { test = false, preview = fa
     let r = profile && profile.id ? (await db(`${q} AND profile_id=$2 ORDER BY at DESC LIMIT 1`, [store, profile.id]).catch(() => ({ rows: [] }))).rows[0] : null;
     if (r) { o = { ...(r.props || {}) }; }   // their own latest order: a real request
     else r = (await db(`${q} ORDER BY at DESC LIMIT 1`, [store]).catch(() => ({ rows: [] }))).rows[0];
-    if (!r) { const x = (await db(`SELECT product_id, max(product_title) title, max(product_image) image FROM rv_reviews WHERE store=$1 AND status='published' GROUP BY product_id ORDER BY count(*) DESC LIMIT 2`, [store])).rows; r = { props: { name: "#1001", items: x.map((y) => ({ product_id: y.product_id, title: y.title, image: y.image })) } }; }
+    if (!r) { const x = (await db(`SELECT product_id, max(product_title) title, max(product_image) image, max(product_handle) handle FROM rv_reviews WHERE store=$1 AND status='published' GROUP BY product_id ORDER BY count(*) DESC LIMIT 6`, [store])).rows.filter((y) => !skipItem(y)).slice(0, 2); r = { props: { name: "#1001", items: x.map((y) => ({ product_id: y.product_id, title: y.title, image: y.image })) } }; }
     if (!o) { o = { ...(r.props || {}), sample: true }; test = true; }
   }
   const items = reviewItems(o.items); if (!items.length) return { review_items: [], review_url: STORES[store].shop };
@@ -375,7 +378,7 @@ async function runRequests() {
       const shipped = (o.fulfillments || []).map((f) => f.createdAt).filter(Boolean).sort()[0]; if (!shipped) continue;
       if (Date.now() - new Date(shipped) < s.wait_days * 864e5) continue;
       const seen = new Set(); const items = [];
-      for (const li of o.lineItems.nodes) { if (!li.product || SKIP_ITEM.test(li.title) || seen.has(li.product.legacyResourceId)) continue; seen.add(li.product.legacyResourceId);
+      for (const li of o.lineItems.nodes) { if (!li.product || skipItem({ title: li.title, handle: li.product.handle }) || seen.has(li.product.legacyResourceId)) continue; seen.add(li.product.legacyResourceId);
         items.push({ product_id: String(li.product.legacyResourceId), handle: li.product.handle, title: li.title, variant: li.variantTitle, image: li.product.featuredMedia && li.product.featuredMedia.preview && li.product.featuredMedia.preview.image ? li.product.featuredMedia.preview.image.url : null }); }
       if (!items.length) continue;
       const name = [o.customer && o.customer.firstName || (o.shippingAddress && o.shippingAddress.firstName), (o.customer && o.customer.lastName || (o.shippingAddress && o.shippingAddress.lastName) || "").slice(0, 1)].filter(Boolean).join(" ") + ((o.customer && o.customer.lastName) ? "." : "");
@@ -403,10 +406,10 @@ async function runRequests() {
 /** Staff test: a real request for the newest shipped order, sent to the person clicking. */
 async function testRequest(store, to) {
   const s = await settings(); const orders = await collectOrders(store, { ...s, wait_days: 1 });
-  const o = orders.reverse().find((x) => x.email && !x.cancelledAt && x.lineItems.nodes.some((li) => li.product && !SKIP_ITEM.test(li.title)));
+  const o = orders.reverse().find((x) => x.email && !x.cancelledAt && x.lineItems.nodes.some((li) => li.product && !skipItem({ title: li.title, handle: li.product.handle })));
   if (!o) throw new Error("no recent shipped order found to use as the example");
   const items = []; const seen = new Set();
-  for (const li of o.lineItems.nodes) { if (!li.product || SKIP_ITEM.test(li.title) || seen.has(li.product.legacyResourceId)) continue; seen.add(li.product.legacyResourceId); items.push({ product_id: String(li.product.legacyResourceId), handle: li.product.handle, title: li.title, variant: li.variantTitle, image: li.product.featuredMedia && li.product.featuredMedia.preview && li.product.featuredMedia.preview.image ? li.product.featuredMedia.preview.image.url : null }); }
+  for (const li of o.lineItems.nodes) { if (!li.product || skipItem({ title: li.title, handle: li.product.handle }) || seen.has(li.product.legacyResourceId)) continue; seen.add(li.product.legacyResourceId); items.push({ product_id: String(li.product.legacyResourceId), handle: li.product.handle, title: li.title, variant: li.variantTitle, image: li.product.featuredMedia && li.product.featuredMedia.preview && li.product.featuredMedia.preview.image ? li.product.featuredMedia.preview.image.url : null }); }
   const token = crypto.randomBytes(12).toString("hex");
   await db(`INSERT INTO rv_requests (token, store, order_id, order_name, email, name, items, test) VALUES ($1,$2,$3,$4,$5,$6,$7,true)`, [token, store, `test-${Date.now()}`, o.name, to, "Test", JSON.stringify(items.slice(0, 8))]);
   const r = await sendRequest(store, { token, items: items.slice(0, 8), name: "Test", email: to }, 1, { test: true, to });
@@ -703,4 +706,4 @@ async function startJobs(syncGet, syncSet) {
   setInterval(() => runRequests().catch((e) => console.error("review requests:", e.message)), 6 * 3600e3); setTimeout(() => runRequests().catch((e) => console.error("review requests:", e.message)), 5 * 60e3);
 }
 
-module.exports = { reviewContext, tokenForOrder, runRequests, testRequest, writePage, migrate, routes, startJobs, importOkendo, syncGroups, productReviews, starsFor, submit, list, decide, settings, saveSettings, STORES };
+module.exports = { reviewItems, skipItem, reviewContext, tokenForOrder, runRequests, testRequest, writePage, migrate, routes, startJobs, importOkendo, syncGroups, productReviews, starsFor, submit, list, decide, settings, saveSettings, STORES };
