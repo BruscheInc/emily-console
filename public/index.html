@@ -296,6 +296,12 @@
   .qopt{display:flex;gap:7px;align-items:center;font-weight:400!important;margin:0!important;cursor:pointer}.qopt input{width:auto;margin:0}
   .qnote{margin-top:8px;font-size:13px;color:#8a6100;background:#fff6dd;border:1px solid #f3dd9b;border-radius:8px;padding:8px 10px}
   .fmtbar{display:flex;gap:2px;align-items:center;margin:0 0 4px}.fmtbar button{border:1px solid transparent;background:none;border-radius:6px;padding:3px 7px;cursor:pointer;color:var(--ink);font-size:15px}.fmtbar button:hover{background:var(--panel2);border-color:var(--line)}.fmthint{margin-left:8px;font-size:11.5px;color:var(--muted)}
+  .rvlist{display:flex;flex-direction:column;gap:12px;padding:14px 22px 30px}.rvcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:13.5px}
+  .rvtop{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.rvst{color:#f5a623;font-size:17px;letter-spacing:1px}.rvst .off{color:#d5d8e0}
+  .rvt{font-weight:700;font-size:15px;margin:8px 0 2px}.rvb{white-space:pre-wrap;line-height:1.5}
+  .rvmedia{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.rvmedia img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+  .rvmeta{display:flex;gap:10px;align-items:center;margin-top:10px}.rvmeta img{width:40px;height:40px;object-fit:cover;border-radius:6px}
+  .rvreply{margin-top:10px;background:var(--panel2);border-radius:8px;padding:8px 10px}.rvacts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}.rvreplybox{margin-top:10px}
   .ntfind{margin:6px 0 4px}.ntfind input{flex:1}
   .ntr-list{margin-top:8px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
   .ntr-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:8px 12px 4px}
@@ -429,6 +435,14 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
     <button class="nav view sub" data-view="lbo_tickets" onclick="setView('lbo_tickets')"><i class="si ti ti-tag"></i><span>LBO tickets</span><span class="n" id="v-lbo_tickets"></span></button>
     <button class="nav view sub" data-view="lb_tickets" onclick="setView('lb_tickets')"><i class="si ti ti-tag"></i><span>LB tickets</span><span class="n" id="v-lb_tickets"></span></button>
     <button class="nav view sub" data-view="oos" onclick="setView('oos')"><i class="si ti ti-package-off"></i><span>Out of stock</span><span class="n" id="v-oos"></span></button>
+  </div></div>
+  <div class="grp" data-g="reviews"><button class="nav gh" onclick="toggleGrp('reviews')"><i class="i ti ti-star"></i><span>Reviews</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
+  <div class="gb">
+    <button class="nav view sub" data-view="rv_pending" onclick="setView('rv_pending')"><i class="si ti ti-clock"></i><span>Waiting for you</span><span class="n" id="v-rv_pending"></span></button>
+    <button class="nav view sub" data-view="rv_published" onclick="setView('rv_published')"><i class="si ti ti-star"></i><span>Published</span></button>
+    <button class="nav view sub" data-view="rv_rejected" onclick="setView('rv_rejected')"><i class="si ti ti-x"></i><span>Rejected</span></button>
+    <button class="nav view sub" data-view="rv_all" onclick="setView('rv_all')"><i class="si ti ti-stack-2"></i><span>All reviews</span></button>
+    <button class="nav view sub" data-view="rv_setup" onclick="setView('rv_setup')"><i class="si ti ti-settings"></i><span>On the website</span></button>
   </div></div>
   <div class="grp" data-g="orders"><button class="nav gh" onclick="toggleGrp('orders')"><i class="i ti ti-shopping-bag"></i><span>Orders</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
@@ -613,8 +627,8 @@ document.addEventListener("keydown",(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLo
 document.addEventListener("click",(e)=>{ const m=$("acctMenu"); if(m&&!m.classList.contains("hidden")&&!e.target.closest(".acct")) m.classList.add("hidden"); });
 function setTab(t){TAB=t;OFFSET=0;document.querySelectorAll(".tab[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));loadList();}
 /* ---- app rail modules: each rail icon shows one part of Buzzin in the panel ---- */
-const MODS={home:[],tickets:["inbox","mail"],orders:["orders"],ship:["ship"],returns:["returns"],marketing:["mk_aud","mk_build","mk_res"],content:["content"],analytics:["analytics"]};
-const MOD_TITLES={home:"Home",tickets:"Tickets",orders:"Orders",ship:"Shipping",returns:"Returns & claims",marketing:"Marketing",content:"Content",analytics:"Reports"};
+const MODS={home:[],tickets:["inbox","mail"],orders:["orders"],reviews:["reviews"],ship:["ship"],returns:["returns"],marketing:["mk_aud","mk_build","mk_res"],content:["content"],analytics:["analytics"]};
+const MOD_TITLES={home:"Home",tickets:"Tickets",orders:"Orders",reviews:"Reviews",ship:"Shipping",returns:"Returns & claims",marketing:"Marketing",content:"Content",analytics:"Reports"};
 function modOf(v){ if(v==="home") return "home"; const b=document.querySelector(`.side .nav.view[data-view="${v}"]`); const g=b&&b.closest(".grp"); const gid=g&&g.dataset.g; for(const m in MODS) if(MODS[m].includes(gid)) return m; return "tickets"; }
 function showMod(m){
   document.body.dataset.mod=m; if(window.bzRail) bzRail.set(m);
@@ -648,7 +662,7 @@ async function loadCounts(){try{
   groupTotals(); HOME_C=c; if(VIEW==="home"&&!document.body.classList.contains("viewing")) renderHome();
 }catch(e){}}
 const PAGE=20; let OFFSET=0, TOTAL=0;
-const VIEW_TITLES={orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
+const VIEW_TITLES={rv_pending:"Reviews · waiting for you",rv_published:"Reviews · published",rv_rejected:"Reviews · rejected",rv_all:"Reviews · all",rv_setup:"Reviews · on the website",orders_all:"Orders · all stores",orders_lb:"Orders · Larkspur Baby",orders_lbo:"Orders · Larkspur Baby Outlet",home:"Home",lbo_tickets:"LBO Tickets",lb_tickets:"LB Tickets",oos:"Out of stock",stuck:"Never scanned",undelivered:"Not delivered 15+ days",pickup:"Local pickup",returns:"Returns",loop_returns:"Loop returns",returns_items:"Returned items",returns_analytics:"Return analytics",claims:"Claims",activity:"Activity log",emily_replies:"Emily's replies",lbo:"Outlet · all mail",lb:"Larkspur · all mail",all:"Everything",attention:"Needs attention"};
 function page(d){const n=OFFSET+d*PAGE; if(n<0||n>=TOTAL)return; OFFSET=n; loadList(true);}
 function oosChips(t){
   const c=t.oos; if(!c) return "";
@@ -838,6 +852,57 @@ async function ntSend(){
   }catch(e){toast("Couldn't send",true);b.disabled=false;b.textContent="Send & create ticket";}
 }
 
+/* ---- Reviews (Buzzin's own, replacing Okendo) ---- */
+const RV={store:"",q:"",rating:"",page:1,rows:[],more:false};
+function rvStars(n){ return `<span class="rvst" title="${n} stars">${"★".repeat(n)}<span class="off">${"★".repeat(5-n)}</span></span>`; }
+async function loadReviews(more){
+  const w=$("stuckwrap");
+  if(VIEW==="rv_setup") return rvSetup();
+  const status=VIEW==="rv_pending"?"pending":VIEW==="rv_published"?"published":VIEW==="rv_rejected"?"rejected":"all";
+  if(!more){ RV.page=1; RV.rows=[]; w.innerHTML=rvHead()+'<div class="empty">Loading reviews…</div>'; } else RV.page++;
+  try{
+    const d=await api(`/api/reviews?status=${status}&store=${RV.store}&rating=${RV.rating}&q=${encodeURIComponent(RV.q)}&page=${RV.page}`);
+    if(d.error) throw new Error(d.error);
+    RV.rows=RV.rows.concat(d.reviews); RV.more=d.more;
+    const pend=d.counts.filter(c=>c.status==="pending").reduce((t,c)=>t+c.n,0); const b=$("v-rv_pending"); if(b) b.textContent=pend||"";
+    const pub=(st)=>{ const c=d.counts.find(x=>x.store===st&&x.status==="published"); return c?`${c.n.toLocaleString()} published · ${c.avg.toFixed(2)}★`:"none yet"; };
+    $("showing").textContent=`Larkspur Baby: ${pub("lb")} · Outlet: ${pub("lbo")}`;
+    w.innerHTML=rvHead()+(RV.rows.length?`<div class="rvlist">${RV.rows.map(rvCard).join("")}</div>`:`<div class="empty">${status==="pending"?"Nothing waiting. Reviews under "+"4 stars wait here; they publish on their own after 14 days unless you reject them.":"No reviews here."}</div>`)+(RV.more?`<div style="text-align:center;padding:14px"><button class="btn sec" onclick="this.disabled=true;loadReviews(true)">Load more</button></div>`:"");
+  }catch(e){ w.innerHTML=rvHead()+`<div class="empty">Couldn't load reviews: ${esc(e.message)}</div>`; }
+}
+function rvHead(){ return `<div class="stuckhead ordhead"><div class="ordsearch"><i class="ti ti-search"></i><input value="${esc(RV.q)}" placeholder="Search reviews, names, emails, products…" onkeydown="if(event.key==='Enter'){RV.q=this.value.trim();loadReviews();}"></div>
+  <div class="seg">${[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]].map(([k,l])=>`<button class="tab ${RV.store===k?"on":""}" onclick="RV.store='${k}';loadReviews()">${l}</button>`).join("")}</div>
+  <div class="seg">${[["","Any rating"],["5","5★"],["4","4★"],["3","3★"],["2","2★"],["1","1★"]].map(([k,l])=>`<button class="tab ${RV.rating===k?"on":""}" onclick="RV.rating='${k}';loadReviews()">${l}</button>`).join("")}</div></div>`; }
+function rvCard(r){
+  const held=r.status==="pending"?Math.max(0,14-Math.floor((Date.now()-new Date(r.created_at))/864e5)):null;
+  return `<div class="rvcard" id="rv-${esc(r.id)}"><div class="rvtop">${rvStars(r.rating)}<span class="opill ${r.status==="published"?"ok":r.status==="pending"?"warn":"mut"}">${esc(r.status)}</span>${r.source==="okendo"?'<span class="chip">from Okendo</span>':""}<span class="exc" style="margin-left:auto">${esc(r.store==="lbo"?"Outlet":"Larkspur")} · ${fmtDay(r.created_at)}</span></div>
+    ${r.title?`<div class="rvt">${esc(r.title)}</div>`:""}<div class="rvb">${esc(r.body||"")}</div>
+    ${(r.media||[]).length?`<div class="rvmedia">${r.media.map(m=>`<a href="${esc(m.large||m.url)}" target="_blank" rel="noopener"><img src="${esc(m.thumb||m.url)}" alt="" loading="lazy"></a>`).join("")}</div>`:""}
+    <div class="rvmeta">${r.product_image?`<img src="${esc(r.product_image)}" alt="">`:""}<div><b>${esc(r.product_title||"")}</b>${r.variant_title?` · ${esc(r.variant_title)}`:""}<div class="exc">${esc(r.reviewer_name||"")}${r.verified?' · <span style="color:#1d7a46">Verified buyer</span>':""}${r.email?` · ${esc(r.email)}`:""}${r.order_name?` · ${esc(r.order_name)}`:""}${r.recommended===false?" · doesn't recommend":""}</div></div></div>
+    ${r.answers?`<div class="exc" style="margin-top:6px">${Object.entries(r.answers).map(([k,v])=>`${esc(k)}: <b>${esc(v)}</b>`).join(" · ")}</div>`:""}
+    ${r.reply?`<div class="rvreply"><b>Your reply</b> <span class="exc">${esc(r.reply_by||"")}</span><div>${esc(r.reply)}</div></div>`:""}
+    <div class="rvacts">${r.status!=="published"?`<button class="btn xs" onclick="rvDo('${esc(r.id)}','publish',this)">Publish</button>`:""}${r.status!=="rejected"?`<button class="btn sec xs" onclick="rvDo('${esc(r.id)}','reject',this)">Reject</button>`:""}<button class="btn sec xs" onclick="rvReply('${esc(r.id)}')">${r.reply?"Edit reply":"Reply"}</button>${held!=null?`<span class="exc">Publishes on its own in ${held} day${held===1?"":"s"} unless you reject it.</span>`:""}${r.decided_by&&r.status!=="pending"?`<span class="exc">by ${esc(r.decided_by)}</span>`:""}</div></div>`;
+}
+async function rvDo(id,act,b,text){ if(b) b.disabled=true; try{ const r=await api(`/api/reviews/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text||""})}); if(r.error) throw new Error(r.error); toast(act==="publish"?"Published":act==="reject"?"Rejected — hidden from the site":"Reply saved"); loadReviews(); }catch(e){ toast(e.message,true); if(b) b.disabled=false; } }
+function rvReply(id){
+  const c=$("rv-"+id); if(!c||c.querySelector(".rvreplybox")) return; const r=RV.rows.find(x=>x.id===id)||{};
+  c.insertAdjacentHTML("beforeend",`<div class="rvreplybox"><textarea placeholder="Your public reply. Shown under the review on the site." style="width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit;background:var(--panel2);color:var(--ink)">${esc(r.reply||"")}</textarea><div style="display:flex;gap:8px;margin-top:6px"><button class="btn xs" onclick="rvDo('${esc(id)}','reply',this,this.closest('.rvreplybox').querySelector('textarea').value)">Save reply</button><button class="btn sec xs" onclick="this.closest('.rvreplybox').remove()">Cancel</button></div></div>`);
+}
+async function rvSetup(){
+  const w=$("stuckwrap"); let st={}; try{ st=await api("/api/reviews-settings"); }catch(e){}
+  const live=st.live||{};
+  w.innerHTML=`<div style="padding:22px;max-width:860px">
+  <h2 style="margin:0 0 6px">Reviews on the website</h2>
+  <p class="exc" style="font-size:14px">Buzzin shows the stars under the product title and the full review section, in the same spots Okendo uses now, so no theme change is needed to switch. Until a store is switched on, only preview links show Buzzin's version.</p>
+  ${[["lb","Larkspur Baby","https://larkspurbaby.com"],["lbo","Larkspur Baby Outlet","https://larkspurbabyoutlet.com"]].map(([k,n,u])=>`<div class="ocard"><div class="och">${n} ${live[k]?'<span class="opill ok">Buzzin reviews are live</span>':'<span class="opill warn">Okendo still showing</span>'}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><a class="btn sec" href="${u}/collections/all?bz_reviews=1" target="_blank" rel="noopener"><i class="ti ti-eye"></i> Preview on the site</a><span class="exc">Open any product page from there. The preview stays on for that browser tab; add ?bz_reviews=0 to turn it off.</span></div>
+    <div style="margin-top:12px">${live[k]?`<button class="btn sec" onclick="rvLive('${k}',false)">Switch back to Okendo</button>`:`<button class="btn" onclick="rvLive('${k}',true)">Go live: replace Okendo on ${n}</button>`}</div></div>`).join("")}
+  <div class="ocard"><div class="och">Publishing</div><div>Reviews with <select id="rvmin">${[5,4,3,2,1].map(v=>`<option value="${v}" ${Number(st.auto_publish_min||4)===v?"selected":""}>${v}★ or more</option>`).join("")}</select> publish right away. Lower ones wait in "Waiting for you" and publish on their own after 14 days unless you reject them (the FTC rule against hiding bad reviews).</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvSaveMin()">Save</button></div></div>
+  <div class="ocard"><div class="och">Okendo copy</div><div>All published Okendo reviews were copied into Buzzin, and new ones are picked up every 3 hours until a store goes live.</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvSync(this)">Check Okendo for new reviews now</button></div></div></div>`;
+}
+async function rvLive(k,on){ if(on&&!confirm("Show Buzzin's reviews instead of Okendo's on this store? You can switch back any time.")) return; try{ const r=await api("/api/reviews-settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({live:{...((await api("/api/reviews-settings")).live||{}),[k]:on}})}); if(r.error) throw new Error(r.error); toast(on?"Live. The site switches within 5 minutes":"Back to Okendo"); rvSetup(); }catch(e){ toast(e.message,true); } }
+async function rvSaveMin(){ try{ await api("/api/reviews-settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({auto_publish_min:Number($("rvmin").value)})}); toast("Saved"); }catch(e){ toast(e.message,true); } }
+async function rvSync(b){ b.disabled=true; b.textContent="Checking…"; try{ const r=await api("/api/reviews-sync",{method:"POST"}); if(r.error) throw new Error(r.error); toast(`Okendo checked: ${r.out.map(x=>`${x.added} new on ${x.store.toUpperCase()}`).join(", ")}`); }catch(e){ toast(e.message,true); } b.disabled=false; b.textContent="Check Okendo for new reviews now"; }
 /* ---- Orders: every Shopify order, live, filtered by store and status; open one to see everything and start a ticket ---- */
 const ORD={status:"all",q:"",rows:[],cursors:{},more:false,counts:null,open:null};
 const ORD_TABS=[["all","All"],["open","Open"],["unfulfilled","Unfulfilled"],["fulfilled","Fulfilled"],["unpaid","Unpaid"],["refunded","Refunded"],["cancelled","Cancelled"]];
@@ -933,12 +998,13 @@ let _listSig="";
 async function loadList(force,silent){
   const el=$("list"); if(force){el.innerHTML='<tr><td colspan="7" class="empty">Loading…</td></tr>';_listSig="";SEL.clear();syncBulk();}
   $("viewtitle").textContent=VIEW_TITLES[VIEW]||VIEW; document.querySelector(".lh1").style.display=VIEW==="home"?"none":"";
-  const isStuck=/^orders_/.test(VIEW)||VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="pickup"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
+  const isStuck=/^orders_/.test(VIEW)||/^rv_/.test(VIEW)||VIEW==="home"||VIEW==="stuck"||VIEW==="undelivered"||VIEW==="pickup"||VIEW==="activity"||VIEW==="emily_replies"||VIEW==="returns"||VIEW==="loop_returns"||VIEW==="returns_items"||VIEW==="returns_analytics"||VIEW==="claims";
   document.querySelector(".lh2").style.display=isStuck?"none":"";
   document.querySelector(".tablewrap:not(#stuckwrap)").style.display=isStuck?"none":"";
   document.querySelector(".pager").style.display=isStuck?"none":"";
   $("stuckwrap").style.display=isStuck?"":"none";
   if(/^orders_/.test(VIEW)){ if(!silent) loadOrders(); return; }
+  if(/^rv_/.test(VIEW)){ if(!silent) loadReviews(); return; }
   if(VIEW==="home") return loadHome(silent);
   if(VIEW==="activity") return loadActivity(silent);
   if(VIEW==="emily_replies") return loadReplies(silent);

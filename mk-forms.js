@@ -26,6 +26,8 @@ function cleanSiteProps(p) {
 }
 
 const RUNTIME = () => fs.readFileSync(path.join(__dirname, "public", "mk-forms-runtime.js"), "utf8");
+// Product reviews (Buzzin's replacement for Okendo): on product pages, or where a theme block asks for them, load the review widget.
+const REVIEWS_LOADER = (s) => `;(function(){try{if(!/\\/products\\//.test(location.pathname)&&!/bz_reviews=/.test(location.search)&&!document.querySelector('[data-bz-reviews],[data-bz-stars]'))return;var x=document.createElement('script');x.src=${JSON.stringify(PUBLIC_URL())}+'/rv/${s}/widget.js';x.async=true;(document.head||document.documentElement).appendChild(x);}catch(e){}})();`;
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
 // Consent is to Brusche Inc. as the company (Larkspur Baby is a Brusche brand), so it covers every Brusche brand.
 const SENDER = "Brusche Inc. and its brands, including Larkspur Baby";
@@ -298,7 +300,7 @@ function routes(app, { guard, admin, actorOf, fail, store }) {
   /* public: the store script */
   app.get("/mkf/:store/forms.js", async (req, res) => {
     const s = store(req.params.store); if (!s) return res.status(404).send("");
-    try { const live = await anyLive(s); res.setHeader("Cache-Control", "public, max-age=60"); res.type("application/javascript").send(`window.BZF_ORIGIN=${JSON.stringify(PUBLIC_URL())};window.BZF_STORE=${JSON.stringify(s)};window.BZF_LIVE=${live ? "true" : "false"};\n${RUNTIME()}`); }
+    try { const live = await anyLive(s); res.setHeader("Cache-Control", "public, max-age=60"); res.type("application/javascript").send(`window.BZF_ORIGIN=${JSON.stringify(PUBLIC_URL())};window.BZF_STORE=${JSON.stringify(s)};window.BZF_LIVE=${live ? "true" : "false"};\n${RUNTIME()}\n${REVIEWS_LOADER(s)}`); }
     catch (e) { res.type("application/javascript").send("/* forms unavailable */"); }
   });
   app.options("/api/mkf/:store/:what", (req, res) => { cors(res); res.status(204).end(); });

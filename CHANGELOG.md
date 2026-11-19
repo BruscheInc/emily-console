@@ -3,6 +3,13 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.38
+- Reviews (replacing Okendo), part 1:
+  - Every published Okendo review for both stores is copied into Buzzin (with photos, verified buyer, recommend), plus Okendo's review groups (the "Okendo …" collections), so a product page shows its group's reviews like today. New Okendo reviews are picked up every 3 hours until a store goes live.
+  - New Reviews section: Waiting for you / Published / Rejected / All, filter by store and stars, search, publish, reject, and public replies. Under 4 stars waits for you and publishes on its own after 14 days unless rejected (FTC rule, same as Okendo).
+  - Store display: stars under the product title and the full review section (average, star bars, % recommend, photo filter, sort, load more, photo zoom, Write a Review with photos), styled like the current Okendo one. It takes Okendo's place without a theme change. Only shows with a preview link until you switch a store live under Reviews → On the website.
+  - Once live, Buzzin keeps Shopify's product rating fields up to date (used by the theme and Google).
+
 ## 0.0.37
 - Replies: formatting toolbar (bold, italic, link, bullet list) on the reply box and when editing Emily's draft. Customers get real bold text, clickable links and lists; web addresses typed in a reply are clickable too.
 - Emily's draft: "Edit first" now edits the draft right inside her card, so the actions she proposed (store credit, return label, refund…) stay there and are applied when you click "Send edited reply". Edits are kept if you switch tabs.
