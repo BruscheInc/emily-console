@@ -24,7 +24,7 @@ window.BZR_DEFAULT_DESIGN = {
     avatar: true, name: true, verified: true, reviewing: true, recommend_row: true, attributes: true,
     date: true, review_title: true, review_photos: true, reply: true, helpful: true,
   },
-  behavior: { sort: "media", per_page: 10, date_format: "short", read_more_chars: 600, clip_lines: 0 },
+  behavior: { scope: "group", sort: "media", per_page: 10, date_format: "short", read_more_chars: 600, clip_lines: 0 },
   text: {
     heading: "Customer Reviews", based_on: "Based on {count} reviews", recommend: "would recommend this product",
     summary_title: "Reviews Summary", topics_title: "Customers Talked About", tab: "Reviews ({count})",

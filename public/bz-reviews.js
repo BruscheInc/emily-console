@@ -124,6 +124,8 @@
   var REDRAW = [];
 
   /* ---------- star rating under the product title ---------- */
+  // Which reviews to show: the theme block/section can set data-bz-scope, else the Customize setting.
+  function scopeOf(el) { var v = el && el.getAttribute && el.getAttribute("data-bz-scope"); return /^(group|product|all)$/.test(v || "") ? v : (D.behavior.scope || "group"); }
   function mountStars(host, pid) {
     var box = document.createElement("div"); box.className = "bzr-stars-host"; host.parentNode.insertBefore(box, host);
     var a = null;
@@ -133,7 +135,7 @@
       box.firstChild.onclick = function () { var w = document.querySelector(".bzr"); if (w) w.scrollIntoView({ behavior: "smooth", block: "start" }); };
     }
     REDRAW.push(draw);
-    get("/stars?ids=" + pid).then(function (j) { a = j[pid]; draw(); }).catch(function () {});
+    get("/stars?ids=" + pid + "&scope=" + scopeOf(host)).then(function (j) { a = j[pid]; draw(); }).catch(function () {});
   }
 
   /* ---------- the review section ---------- */
@@ -144,12 +146,12 @@
   function mountWidget(host, pid) {
     var root = document.createElement("div"); root.className = "bzr"; root.id = "bz-reviews"; host.parentNode.insertBefore(root, host);
     var S = { sort: D.behavior.sort || "media", rating: "", media: "", q: "", page: 1, list: [], summary: null, total: 0, more: false, photos: [], ai: null, filters: false, per: 0 };
-    get("/summary/" + pid).then(function (j) { if (j && j.summary) { S.ai = j; render(); } }).catch(function () {});
+    get("/summary/" + pid + "?scope=" + scopeOf(host)).then(function (j) { if (j && j.summary) { S.ai = j; render(); } }).catch(function () {});
     function perPage() { return Math.max(1, Math.min(30, Number(mobile() ? D.mobile.per_page : D.behavior.per_page) || 10)); }
     function load(reset) {
       if (reset) { S.page = 1; S.list = []; }
       S.per = perPage();
-      return get("/product/" + pid + "?sort=" + S.sort + "&rating=" + S.rating + "&media=" + S.media + "&q=" + encodeURIComponent(S.q) + "&page=" + S.page + "&per=" + S.per).then(function (j) {
+      return get("/product/" + pid + "?sort=" + S.sort + "&rating=" + S.rating + "&media=" + S.media + "&q=" + encodeURIComponent(S.q) + "&page=" + S.page + "&per=" + S.per + "&scope=" + scopeOf(host)).then(function (j) {
         S.summary = j.summary; S.total = j.total; S.more = j.more; if (j.photos) S.photos = j.photos; S.list = S.list.concat(j.reviews || []); render();
       }).catch(function () { if (!S.summary) root.innerHTML = ""; });
     }

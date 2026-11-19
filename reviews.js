@@ -124,7 +124,12 @@ async function syncGroups(store) {
 }
 const GROUP_CACHE = new Map();
 /** Product ids whose reviews show on this product's page: itself plus everything in its review group(s). */
-async function scopeFor(store, productId) {
+/** Which reviews a product page shows. mode: "group" = this style in every color (default), "product" = only this product,
+ *  "all" = every review in the store (returns null, meaning "no product filter"). */
+const SCOPES = ["group", "product", "all"];
+async function scopeFor(store, productId, mode = "group") {
+  if (mode === "all") return null;
+  if (mode === "product") return [String(productId)];
   let g = GROUP_CACHE.get(store);
   if (!g || Date.now() - g.at > 10 * 60e3) { g = { at: Date.now(), rows: (await db(`SELECT product_ids FROM rv_groups WHERE store=$1`, [store])).rows.map((r) => r.product_ids) }; GROUP_CACHE.set(store, g); }
   const out = new Set([String(productId)]);
@@ -150,19 +155,19 @@ function pubReview(r) {
     reply: r.reply || null, reply_at: r.reply_at || null, helpful: r.helpful || 0, unhelpful: r.unhelpful || 0, answers: r.answers || null };
 }
 async function aggregate(store, ids) {
-  const key = `${store}:${ids.slice().sort().join(",")}`;
+  const key = ids ? `${store}:${ids.slice().sort().join(",")}` : `${store}:ALL`;
   const c = AGG_CACHE.get(key); if (c && Date.now() - c.at < 5 * 60e3) return c.v;
   const a = (await db(`SELECT count(*)::int n, COALESCE(avg(rating),0)::float avg, count(*) FILTER (WHERE recommended)::int rec, count(*) FILTER (WHERE recommended IS NOT NULL)::int recn,
       count(*) FILTER (WHERE jsonb_array_length(media)>0)::int media,
       count(*) FILTER (WHERE rating=5)::int s5, count(*) FILTER (WHERE rating=4)::int s4, count(*) FILTER (WHERE rating=3)::int s3, count(*) FILTER (WHERE rating=2)::int s2, count(*) FILTER (WHERE rating=1)::int s1
-    FROM rv_reviews WHERE store=$1 AND status='published' AND product_id = ANY($2)`, [store, ids])).rows[0];
+    FROM rv_reviews WHERE store=$1 AND status='published' AND ($2::text[] IS NULL OR product_id = ANY($2))`, [store, ids])).rows[0];
   const v = { count: a.n, average: Math.round(a.avg * 10) / 10, recommend_pct: a.recn ? Math.round((100 * a.rec) / a.recn) : null, with_media: a.media, histogram: { 5: a.s5, 4: a.s4, 3: a.s3, 2: a.s2, 1: a.s1 } };
   AGG_CACHE.set(key, { at: Date.now(), v });
   return v;
 }
-async function productReviews(store, productId, { sort = "media", rating, media, q, page = 1, per = 10 } = {}) {
-  const ids = await scopeFor(store, productId);
-  const args = [store, ids]; const where = [`store=$1`, `status='published'`, `product_id = ANY($2)`];
+async function productReviews(store, productId, { sort = "media", rating, media, q, page = 1, per = 10, scope } = {}) {
+  const ids = await scopeFor(store, productId, SCOPES.includes(scope) ? scope : "group");
+  const args = [store, ids]; const where = [`store=$1`, `status='published'`, `($2::text[] IS NULL OR product_id = ANY($2))`];
   if (rating && Number(rating) >= 1 && Number(rating) <= 5) { args.push(Number(rating)); where.push(`rating=$${args.length}`); }
   if (media === "1" || media === true) where.push(`jsonb_array_length(media) > 0`);
   if (q && String(q).trim()) { args.push(`%${String(q).trim().slice(0, 80)}%`); where.push(`(title ILIKE $${args.length} OR body ILIKE $${args.length})`); }
@@ -171,22 +176,22 @@ async function productReviews(store, productId, { sort = "media", rating, media,
   const rows = (await db(`SELECT * FROM rv_reviews WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
   const filtered = (await db(`SELECT count(*)::int n FROM rv_reviews WHERE ${where.join(" AND ")}`, args)).rows[0].n;
   let photos;
-  if (page === 1) photos = (await db(`SELECT id, media FROM rv_reviews WHERE store=$1 AND status='published' AND product_id = ANY($2) AND jsonb_array_length(media) > 0 ORDER BY created_at DESC LIMIT 14`, [store, ids])).rows
+  if (page === 1) photos = (await db(`SELECT id, media FROM rv_reviews WHERE store=$1 AND status='published' AND ($2::text[] IS NULL OR product_id = ANY($2)) AND jsonb_array_length(media) > 0 ORDER BY created_at DESC LIMIT 14`, [store, ids])).rows
     .map((r) => { const m = (r.media || []).find((x) => x.type !== "video"); return m ? { review: r.id, thumb: m.thumb || m.url, url: m.large || m.url } : null; }).filter(Boolean).slice(0, 12);
   return { summary: await aggregate(store, ids), total: filtered, reviews: rows.slice(0, per).map(pubReview), more: rows.length > per, page, photos };
 }
-async function starsFor(store, productIds) {
-  const out = {};
-  for (const id of productIds.slice(0, 80)) { const a = await aggregate(store, await scopeFor(store, id)); out[id] = { average: a.average, count: a.count }; }
+async function starsFor(store, productIds, mode) {
+  const out = {}; mode = SCOPES.includes(mode) ? mode : "group";
+  for (const id of productIds.slice(0, 80)) { const a = await aggregate(store, await scopeFor(store, id, mode)); out[id] = { average: a.average, count: a.count }; }
   return out;
 }
 
 /* ---------------- "Reviews summary" + "Customers talked about" (written by Claude from the reviews) ----------------
    One summary per review group / product, refreshed when the review count grows 10% or after 30 days. */
 const SUMMARY_BUSY = new Set();
-async function summaryFor(store, productId) {
-  const ids = (await scopeFor(store, productId)).sort();
-  const scope = `${store}:` + crypto.createHash("md5").update(ids.join(",")).digest("hex");
+async function summaryFor(store, productId, mode) {
+  const ids0 = await scopeFor(store, productId, SCOPES.includes(mode) ? mode : "group"); const ids = ids0 ? ids0.sort() : null;
+  const scope = ids ? `${store}:` + crypto.createHash("md5").update(ids.join(",")).digest("hex") : `${store}:all`;
   const row = (await db(`SELECT * FROM rv_summaries WHERE scope=$1`, [scope])).rows[0];
   const n = (await aggregate(store, ids)).count;
   const stale = !row || (n >= 5 && (n > row.count * 1.1 || Date.now() - new Date(row.updated_at) > 30 * 864e5));
@@ -195,8 +200,8 @@ async function summaryFor(store, productId) {
 }
 async function makeSummary(store, ids, scope, n) {
   const kit = require("./emily").claimsKit(); if (!kit || !kit.anthropic) return;
-  const rows = (await db(`(SELECT rating, title, body FROM rv_reviews WHERE store=$1 AND status='published' AND product_id = ANY($2) ORDER BY created_at DESC LIMIT 140)
-    UNION ALL (SELECT rating, title, body FROM rv_reviews WHERE store=$1 AND status='published' AND product_id = ANY($2) AND rating <= 3 ORDER BY created_at DESC LIMIT 30)`, [store, ids])).rows;
+  const rows = (await db(`(SELECT rating, title, body FROM rv_reviews WHERE store=$1 AND status='published' AND ($2::text[] IS NULL OR product_id = ANY($2)) ORDER BY created_at DESC LIMIT 140)
+    UNION ALL (SELECT rating, title, body FROM rv_reviews WHERE store=$1 AND status='published' AND ($2::text[] IS NULL OR product_id = ANY($2)) AND rating <= 3 ORDER BY created_at DESC LIMIT 30)`, [store, ids])).rows;
   const text = rows.map((r) => `${r.rating}★ ${r.title || ""}: ${String(r.body || "").slice(0, 400)}`).join("\n");
   const resp = await kit.anthropic.messages.create({ model: kit.model, max_tokens: 500, messages: [{ role: "user", content:
     `These are customer reviews of a baby/kids clothing product line. Write a short, honest summary for shoppers (2-3 sentences, plain words, starts with "Customers say"), including the most common complaint if there is a real one. Then list 3 to 6 topics customers talk about most, each 1-2 words (e.g. Softness, Fit, Print, Quality, Zipper, Sizing).\nAnswer ONLY as JSON: {"summary": "...", "topics": ["..."]}\n\nReviews:\n${text}` }] });
@@ -601,7 +606,7 @@ function routes(app, { guard, actorOf, express }) {
   });
   app.get("/rv/:store/stars", async (req, res) => {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
-    try { res.setHeader("Cache-Control", "public, max-age=120"); res.json(await starsFor(s, String(req.query.ids || "").split(",").map((x) => x.replace(/\D/g, "")).filter(Boolean))); } catch (e) { res.status(500).json({ error: e.message }); }
+    try { res.setHeader("Cache-Control", "public, max-age=120"); res.json(await starsFor(s, String(req.query.ids || "").split(",").map((x) => x.replace(/\D/g, "")).filter(Boolean), req.query.scope)); } catch (e) { res.status(500).json({ error: e.message }); }
   });
   app.post("/rv/:store/submit", express.json({ limit: "200kb" }), async (req, res) => {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({ error: "unknown store" });
@@ -622,7 +627,7 @@ function routes(app, { guard, actorOf, express }) {
   app.post("/rv/:store/helpful/:id", async (req, res) => { cors(res); try { const col = req.query.no ? "unhelpful" : "helpful"; await db(`UPDATE rv_reviews SET ${col}=${col}+1 WHERE id=$1 AND status='published'`, [req.params.id]); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } });
   app.get("/rv/:store/summary/:pid", async (req, res) => {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
-    try { const j = await summaryFor(s, String(req.params.pid).replace(/\D/g, "")); res.setHeader("Cache-Control", j && j.summary ? "public, max-age=600" : "no-store"); res.json(j || {}); } catch (e) { res.setHeader("Cache-Control", "no-store"); res.json({}); }
+    try { const j = await summaryFor(s, String(req.params.pid).replace(/\D/g, ""), req.query.scope); res.setHeader("Cache-Control", j && j.summary ? "public, max-age=600" : "no-store"); res.json(j || {}); } catch (e) { res.setHeader("Cache-Control", "no-store"); res.json({}); }
   });
 
   // staff
