@@ -14,6 +14,7 @@ window.BZR_DEFAULT_DESIGN = {
   layout: {
     max_width: 0, margin_top: 28, margin_bottom: 28, row_style: "lines", card_radius: 6, row_gap: 20,
     aside_width: 262, aside_box: true, top_layout: "split", button_radius: 8, button_style: "filled", chip_radius: 8,
+    placement: "before_related", stars_placement: "under_title",
   },
   stars: { size_title: 17, size_summary: 15, size_review: 13, shape: "star", outline: true },
   photos: { strip_count: 12, strip_size: 100, review_size: 64, radius: 0 },

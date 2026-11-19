@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.55
+- Reviews → Customize → Layout → **Where it shows**: put the review section above "You might also like", right under the product details, or at the bottom of the page, and the stars under the product name, under the price, or off. A `<div data-bz-reviews></div>` (or `data-bz-stars`) Custom Liquid block in the theme places them anywhere else.
+
 ## 0.0.54
 - Reviews show on product pages even when the theme has no review block: the review section goes above "You might also like" and the stars go under the product title. (The old review app's blocks had been removed, so live reviews had nowhere to appear.)
 

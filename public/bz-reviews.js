@@ -285,16 +285,22 @@
       if (studio || !active || !/\/products\//.test(location.pathname)) return;
       var pid0 = productIdOf(null); if (!pid0) return;
       if (!document.getElementById("bz-reviews") && !document.querySelector("[data-bz-reviews],[data-oke-widget]")) {
-        var main = document.querySelector("main") || document.body;
+        var main = document.querySelector("main") || document.body, where = D.layout.placement || "before_related";
         var rel = main.querySelector("[id*='related'],[id*='recommend'],.recommended-products,product-recommendations");
         var sec = rel && rel.closest(".shopify-section") || rel;
+        var prod = main.querySelector(".shopify-section [id^='ProductInfo'], .product, product-info");
+        var prodSec = (prod && prod.closest(".shopify-section")) || main.querySelector(".shopify-section");
         var host = document.createElement("div"); host.className = "page-width bzr-auto"; host.style.cssText = "max-width:1200px;margin:0 auto;padding:0 20px";
         var anchor = document.createElement("div"); host.appendChild(anchor);
-        if (sec && sec.parentNode) sec.parentNode.insertBefore(host, sec); else main.appendChild(host);
+        if (where === "after_product" && prodSec) prodSec.insertAdjacentElement("afterend", host);
+        else if (where === "end") main.appendChild(host);
+        else if (sec && sec.parentNode) sec.parentNode.insertBefore(host, sec); else main.appendChild(host);
         done.add(anchor); mountWidget(anchor, pid0);
       }
       if (!document.querySelector(".bzr-stars-host") && !document.querySelector("[data-bz-stars],[data-oke-star-rating]")) {
-        var t = document.querySelector(".product__title, .product-title, .product__info-container h1, main h1");
+        var sp = D.layout.stars_placement || "under_title";
+        var t = sp === "off" ? null : sp === "under_price" ? document.querySelector("main .price, main .product__price, main [id^='price-'], main .product-price") : null;
+        t = t || (sp === "off" ? null : document.querySelector(".product__title, .product-title, .product__info-container h1, main h1"));
         if (t) { var a2 = document.createElement("div"); (t.closest(".product__title") || t).insertAdjacentElement("afterend", a2); done.add(a2); mountStars(a2, pid0); }
       }
     }
