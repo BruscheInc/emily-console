@@ -310,6 +310,7 @@
   .rvt{font-weight:700;font-size:15px;margin:8px 0 2px}.rvb{white-space:pre-wrap;line-height:1.55}
   .rvmedia{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.rvmedia img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
   .rvreply{margin-top:10px;background:var(--panel2);border-radius:8px;padding:8px 10px}.rvreplybox{margin-top:10px}.rvreplybox textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit;background:var(--panel2);color:var(--ink);box-sizing:border-box}
+  .rvtabs{display:flex;gap:4px;margin:2px 10px 10px;padding:3px;background:var(--panel2);border-radius:10px}.rvtabs button{flex:1;border:0;background:none;border-radius:8px;padding:7px 6px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}.rvtabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
   .rvclick{cursor:pointer}.rvclick:hover{border-color:var(--ink)}.rvhgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px}@media(max-width:1100px){.rvhgrid{grid-template-columns:1fr}}
   .rvtodo{display:flex;gap:12px;align-items:center;padding:10px 6px;border-top:1px solid var(--line);cursor:pointer}.rvtodo:first-of-type{border-top:0}.rvtodo:hover{background:var(--panel2)}.rvtodo img{width:34px;height:34px;object-fit:cover;border-radius:6px}.rvtodo .exc{margin-top:2px}.rvtodo>i{color:var(--muted)}
   .rvdot{width:10px;height:10px;border-radius:50%;flex:none;background:#A1A1AA}.rvtodo.high .rvdot{background:#DC2626}.rvtodo.mid .rvdot{background:#F59E0B}.rvtodo.low .rvdot{background:#60A5FA}.rvtodo.setup .rvdot{background:#E4E4E7;box-shadow:inset 0 0 0 2px #A1A1AA}
@@ -458,6 +459,7 @@ tr.row.sel{background:color-mix(in srgb,var(--accent) 7%,transparent)}
   </div></div>
   <div class="grp" data-g="reviews"><button class="nav gh" onclick="toggleGrp('reviews')"><i class="i ti ti-star"></i><span>Reviews</span><span class="n gt"></span><i class="chev ti ti-chevron-down"></i></button>
   <div class="gb">
+    <div class="rvtabs" role="tablist" aria-label="Store"><button type="button" data-rs="lb" title="Larkspur Baby" onclick="rvSetStore('lb')">LB</button><button type="button" data-rs="lbo" title="Larkspur Baby Outlet" onclick="rvSetStore('lbo')">LBO</button></div>
     <button class="nav view sub" data-view="rv_home" onclick="setView('rv_home')"><i class="si ti ti-layout-dashboard"></i><span>Overview</span><span class="n" id="v-rv_todo"></span></button>
     <button class="nav view sub" data-view="rv_mod" onclick="setView('rv_mod')"><i class="si ti ti-check"></i><span>Moderation</span><span class="n" id="v-rv_pending"></span></button>
     <button class="nav view sub" data-view="rv_products" onclick="setView('rv_products')"><i class="si ti ti-shopping-bag"></i><span>Products</span></button>
@@ -875,10 +877,17 @@ async function ntSend(){
 }
 
 /* ---- Reviews: moderation, products, insights, groups, settings ---- */
+// The two stores are kept apart: every Reviews page shows the store picked in the LB / LBO tabs.
+let RVS=(function(){ try{ return localStorage.getItem("bz_rv_store")==="lbo"?"lbo":"lb"; }catch(e){ return "lb"; } })();
+const RVSN={lb:"Larkspur Baby",lbo:"Larkspur Baby Outlet"};
+function rvTabs(){ document.querySelectorAll(".rvtabs [data-rs]").forEach(b=>b.classList.toggle("on",b.dataset.rs===RVS)); }
+function rvSetStore(s,quiet){ if(s!=="lb"&&s!=="lbo") return; RVS=s; try{ localStorage.setItem("bz_rv_store",s); }catch(e){} RV.product="";RV.product_title=""; rvTabs(); if(!quiet&&/^rv_/.test(VIEW)) loadReviews(); }
+document.addEventListener("DOMContentLoaded",rvTabs);
 const RV={replied:"",store:"",status:"pending",rating:"",sentiment:"",days:"",media:"",source:"",q:"",product:"",product_title:"",sort:"newest",page:1,rows:[],more:false,total:0,sel:new Set(),collapsed:false};
 function rvStars(n){ return `<span class="rvst" title="${n} stars">${"★".repeat(n)}<span class="off">${"★".repeat(5-n)}</span></span>`; }
 const rvSel=(k,label,opts)=>`<label class="rvf"><span>${label}</span><select onchange="RV.${k}=this.value;loadReviews()">${opts.map(([v,l])=>`<option value="${v}" ${String(RV[k])===String(v)?"selected":""}>${l}</option>`).join("")}</select></label>`;
 async function loadReviews(more){
+  rvTabs(); RV.store=RVP.store=RVI.store=RVH.store=RVS;
   if(VIEW==="rv_home") return rvHome();
   if(VIEW==="rv_design") return rvDesign();
   if(VIEW==="rv_setup") return rvSetup();
@@ -891,9 +900,9 @@ async function loadReviews(more){
     const qs=new URLSearchParams({replied:RV.replied,status:RV.status,store:RV.store,rating:RV.rating,sentiment:RV.sentiment,days:RV.days,media:RV.media,source:RV.source,q:RV.q,product:RV.product,sort:RV.sort,page:RV.page,per:25});
     const d=await api(`/api/reviews?${qs}`); if(d.error) throw new Error(d.error);
     RV.rows=RV.rows.concat(d.reviews); RV.more=d.more; RV.total=d.total;
-    const pend=d.counts.filter(c=>c.status==="pending").reduce((t,c)=>t+c.n,0); const b=$("v-rv_pending"); if(b) b.textContent=pend||"";
+    const pend=d.counts.filter(c=>c.status==="pending"&&c.store===RVS).reduce((t,c)=>t+c.n,0); const b=$("v-rv_pending"); if(b) b.textContent=pend||"";
     const pub=(st)=>{ const c=d.counts.find(x=>x.store===st&&x.status==="published"); return c?`${c.n.toLocaleString()} published · ${c.avg.toFixed(2)}★`:"none yet"; };
-    $("showing").textContent=`Larkspur Baby: ${pub("lb")} · Outlet: ${pub("lbo")}`;
+    $("showing").textContent=`${RVSN[RVS]}: ${pub(RVS)}`;
     w.innerHTML=rvModHead()+(RV.rows.length?`<div class="rvlist ${RV.collapsed?"collapsed":""}">${RV.rows.map(rvCard).join("")}</div>`:`<div class="empty">${RV.status==="pending"?"You've reached the end of your moderation queue. Reviews under your auto-publish rating wait here and publish on their own after 14 days unless you reject them.":"No reviews match these filters."}</div>`)+(RV.more?`<div style="text-align:center;padding:14px"><button class="btn sec" onclick="this.disabled=true;loadReviews(true)">Load more</button></div>`:"");
     rvBulkBar();
   }catch(e){ w.innerHTML=rvModHead()+`<div class="empty">Couldn't load reviews: ${esc(e.message)}</div>`; }
@@ -903,7 +912,6 @@ function rvModHead(){
     ${rvSel("status","Status",[["pending","Pending"],["published","Published"],["rejected","Rejected"],["all","All"]])}
     ${rvSel("rating","Rating",[["","Any"],["5","5 stars"],["4","4 stars"],["3","3 stars"],["2","2 stars"],["1","1 star"],["1,2","1–2 stars"]])}
     ${rvSel("sentiment","Sentiment",[["","Any"],["positive","Positive"],["neutral","Neutral"],["negative","Negative"]])}
-    ${rvSel("store","Store",[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]])}
     ${rvSel("days","Date submitted",[["","All time"],["1","Last 24 hours"],["7","Last 7 days"],["30","Last 30 days"],["90","Last 90 days"],["365","Last year"]])}
     ${rvSel("replied","Reply",[["","Any"],["no","No reply yet"],["yes","Replied"]])}
     ${rvSel("media","Media",[["","Any"],["1","With photos"],["0","No photos"]])}
@@ -952,9 +960,9 @@ async function rvProducts(more){
   const d=await api(`/api/reviews-products?store=${RVP.store}&q=${encodeURIComponent(RVP.q)}&sort=${RVP.sort}&page=${RVP.page}`); RVP.rows=RVP.rows.concat(d.products||[]); RVP.more=d.more;
   $("showing").textContent="";
   w.innerHTML=`<div class="rvbar"><div class="ordsearch rvsearch"><i class="ti ti-search"></i><input value="${esc(RVP.q)}" placeholder="Search products" onkeydown="if(event.key==='Enter'){RVP.q=this.value.trim();rvProducts();}"></div>
-   <label class="rvf"><span>Store</span><select onchange="RVP.store=this.value;rvProducts()">${[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]].map(([v,l])=>`<option value="${v}" ${RVP.store===v?"selected":""}>${l}</option>`).join("")}</select></label>
+   
    <label class="rvf"><span>Sort</span><select onchange="RVP.sort=this.value;rvProducts()">${[["count","Most reviews"],["rating","Highest rating"],["lowest","Lowest rating"],["recent","Latest review"]].map(([v,l])=>`<option value="${v}" ${RVP.sort===v?"selected":""}>${l}</option>`).join("")}</select></label></div>
-   <table class="tickets ordtbl"><thead><tr><th>Product</th><th>Store</th><th class="r">Average rating</th><th class="r">Published reviews</th><th class="r">With photos</th><th class="r">1–2★</th><th class="r">Waiting</th><th>Latest</th></tr></thead><tbody>${RVP.rows.map(p=>`<tr onclick="RV.product='${esc(p.product_id)}';RV.product_title=${esc(JSON.stringify(p.title||""))};RV.status='all';RV.store='${esc(p.store)}';setView('rv_mod')"><td><div style="display:flex;gap:10px;align-items:center">${p.image?`<img src="${esc(p.image)}" style="width:36px;height:36px;object-fit:cover;border-radius:6px" alt="">`:""}<b>${esc(p.title||"")}</b></div></td><td>${p.store==="lbo"?"Outlet":"Larkspur"}</td><td class="r">${rvStars(Math.round(p.avg))} ${p.avg.toFixed(2)}</td><td class="r">${p.n.toLocaleString()}</td><td class="r">${p.media}</td><td class="r">${p.low||""}</td><td class="r">${p.pending?`<span class="opill warn">${p.pending}</span>`:""}</td><td>${fmtDay(p.last)}</td></tr>`).join("")}</tbody></table>
+   <table class="tickets ordtbl"><thead><tr><th>Product</th><th>Store</th><th class="r">Average rating</th><th class="r">Published reviews</th><th class="r">With photos</th><th class="r">1–2★</th><th class="r">Waiting</th><th>Latest</th></tr></thead><tbody>${RVP.rows.map(p=>`<tr onclick="RV.product='${esc(p.product_id)}';RV.product_title=${esc(JSON.stringify(p.title||""))};RV.status='all';rvSetStore('${esc(p.store)}',true);setView('rv_mod')"><td><div style="display:flex;gap:10px;align-items:center">${p.image?`<img src="${esc(p.image)}" style="width:36px;height:36px;object-fit:cover;border-radius:6px" alt="">`:""}<b>${esc(p.title||"")}</b></div></td><td>${p.store==="lbo"?"Outlet":"Larkspur"}</td><td class="r">${rvStars(Math.round(p.avg))} ${p.avg.toFixed(2)}</td><td class="r">${p.n.toLocaleString()}</td><td class="r">${p.media}</td><td class="r">${p.low||""}</td><td class="r">${p.pending?`<span class="opill warn">${p.pending}</span>`:""}</td><td>${fmtDay(p.last)}</td></tr>`).join("")}</tbody></table>
    ${RVP.more?`<div style="text-align:center;padding:14px"><button class="btn sec" onclick="this.disabled=true;rvProducts(true)">Load more</button></div>`:""}`;
 }
 /* insights */
@@ -968,9 +976,9 @@ async function rvInsights(){
   const bars=d.months.map(m=>`<div class="rvbarc" title="${m.m}: ${m.n} reviews, ${m.avg}★"><div class="rvbarv" style="height:${Math.round(100*m.n/mx)}%"></div><span>${m.m.slice(5)}/${m.m.slice(2,4)}</span><em>${m.n}</em></div>`).join("");
   const tot=d.distribution.reduce((t,x)=>t+x.n,0)||1;
   const dist=[5,4,3,2,1].map(r=>{ const n=(d.distribution.find(x=>x.rating===r)||{}).n||0; return `<div class="rvdist"><span>${r}★</span><div class="bar"><i style="width:${(100*n/tot).toFixed(1)}%"></i></div><span>${n.toLocaleString()}</span></div>`; }).join("");
-  const plist=(rows,low)=>rows.length?rows.map(p=>`<div class="rvplist" onclick="RV.product='${esc(p.product_id)}';RV.product_title=${esc(JSON.stringify(p.title||""))};RV.status='all';RV.store='${esc(p.store)}';RV.sentiment='${low?"negative":""}';setView('rv_mod')">${p.image?`<img src="${esc(p.image)}" alt="">`:""}<span>${esc(p.title||"")}</span><b>${low?`${p.lown} low · `:""}${p.n} · ${p.avg}★</b></div>`).join(""):'<div class="exc">Nothing yet.</div>';
+  const plist=(rows,low)=>rows.length?rows.map(p=>`<div class="rvplist" onclick="RV.product='${esc(p.product_id)}';RV.product_title=${esc(JSON.stringify(p.title||""))};RV.status='all';rvSetStore('${esc(p.store)}',true);RV.sentiment='${low?"negative":""}';setView('rv_mod')">${p.image?`<img src="${esc(p.image)}" alt="">`:""}<span>${esc(p.title||"")}</span><b>${low?`${p.lown} low · `:""}${p.n} · ${p.avg}★</b></div>`).join(""):'<div class="exc">Nothing yet.</div>';
   const R=d.requests; const src=Object.fromEntries(d.sources.map(x=>[x.source,x.n]));
-  w.innerHTML=`<div class="rvbar"><label class="rvf"><span>Store</span><select onchange="RVI.store=this.value;rvInsights()">${[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]].map(([v,l])=>`<option value="${v}" ${RVI.store===v?"selected":""}>${l}</option>`).join("")}</select></label>
+  w.innerHTML=`<div class="rvbar">
    <label class="rvf"><span>Period</span><select onchange="RVI.days=this.value;rvInsights()">${[[30,"Last 30 days"],[90,"Last 90 days"],[180,"Last 6 months"],[365,"Last year"]].map(([v,l])=>`<option value="${v}" ${Number(RVI.days)===v?"selected":""}>${l}</option>`).join("")}</select></label></div>
   <div style="padding:6px 22px 30px">
    <div class="rvkpis">${tile("Published reviews",k.published.toLocaleString(),`${k.verified.toLocaleString()} verified buyers`)}${tile("Average rating",`${(k.avg||0).toFixed(2)}★`,k.recommend_pct!=null?`${k.recommend_pct}% would recommend`:"")}${tile(`New in last ${d.days} days`,k.recent.toLocaleString(),chg!=null?`${chg>=0?"▲":"▼"} ${Math.abs(chg)}% vs the period before · avg ${(k.recent_avg||0).toFixed(2)}★`:"")}${tile("With photos",k.media.toLocaleString(),k.published?`${Math.round(100*k.media/k.published)}% of reviews`:"")}${tile("Waiting for you",k.pending,`${k.rejected} rejected · ${k.replied} replied`)}</div>
@@ -985,8 +993,8 @@ async function rvInsights(){
 /* groups */
 async function rvGroups(){
   const w=$("stuckwrap"); w.innerHTML='<div class="empty">Loading groups…</div>'; $("showing").textContent="";
-  const d=await api("/api/reviews-groups");
-  w.innerHTML=`<div style="padding:18px 22px 4px"><div class="exc" style="font-size:14px">A product page shows the reviews of every product in its group, so a new color starts with the reviews of the others. Groups come from your Shopify collections named "Okendo …" (and "Sleep Bag Walkers"); add a product to one of those collections to put it in the group. Synced daily.</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvGroupSync(this)">Sync groups now</button></div></div>
+  const d=await api("/api/reviews-groups?store="+RVS);
+  w.innerHTML=`<div style="padding:18px 22px 4px"><div class="exc" style="font-size:14px">A product page shows the reviews of every product in its group, so a new color starts with the reviews of the others. Groups come from your Shopify collections that hold the colors of one product; add a product to one of those collections to put it in the group. Synced daily.</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvGroupSync(this)">Sync groups now</button></div></div>
   <table class="tickets ordtbl" style="margin-top:10px"><thead><tr><th>Group</th><th>Store</th><th class="r">Products</th><th class="r">Reviews</th><th class="r">Average</th><th>Synced</th></tr></thead><tbody>${(d.groups||[]).map(g=>`<tr><td><b>${esc(g.name)}</b></td><td>${g.store==="lbo"?"Outlet":"Larkspur"}</td><td class="r">${g.products}</td><td class="r">${(g.reviews||0).toLocaleString()}</td><td class="r">${g.avg?g.avg.toFixed(2)+"★":"—"}</td><td>${fmtDay(g.synced_at)}</td></tr>`).join("")}</tbody></table>`;
 }
 async function rvGroupSync(b){ b.disabled=true; b.textContent="Syncing…"; try{ const r=await api("/api/reviews-groups/sync",{method:"POST"}); if(r.error) throw new Error(r.error); toast("Groups synced"); rvGroups(); }catch(e){ toast(e.message,true); b.disabled=false; } }
@@ -997,7 +1005,8 @@ function rvGo(g){
   if(g.customize) return rvStudio.open(g.customize);
   if(g.href) return window.open(g.href,"_blank");
   if(g.flow) return rvFlow(g.flow);
-  if(g.f){ Object.assign(RV,{store:"",status:"pending",rating:"",sentiment:"",days:"",media:"",source:"",q:"",product:"",product_title:"",replied:"",sort:"newest"},g.f); }
+  if(g.f&&g.f.store&&g.f.store!==RVS) rvSetStore(g.f.store,true);
+  if(g.f){ Object.assign(RV,{store:RVS,status:"pending",rating:"",sentiment:"",days:"",media:"",source:"",q:"",product:"",product_title:"",replied:"",sort:"newest"},g.f); }
   setView(g.view);
 }
 async function rvHome(){
@@ -1014,8 +1023,8 @@ async function rvHome(){
      <div style="flex:1;min-width:0"><div class="rvrech">${rvStars(r.rating)} <b>${esc(r.reviewer_name||"Customer")}</b>${r.verified?' <span class="opill ok">Buyer</span>':""} <span class="exc">· ${esc(r.product_title||"")}</span><span class="exc" style="margin-left:auto;white-space:nowrap">${fmtDay(r.created_at)}</span></div>
      ${r.title?`<div style="font-weight:600;margin-top:2px">${esc(r.title)}</div>`:""}<div class="exc" style="color:var(--ink)">${esc(snip(r.body))}</div>
      <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">${r.status==="pending"?'<span class="opill warn">Waiting for you</span>':r.status==="rejected"?'<span class="opill bad">Rejected</span>':'<span class="opill ok">Published</span>'}${r.reply?'<span class="chip">replied</span>':""}${(r.media||[]).length?`<span class="chip">${r.media.length} photo${r.media.length>1?"s":""}</span>`:""}<span class="chip">${r.source==="request"?"from review email":r.source==="site"?"website":"imported"}</span><span class="chip">${r.store==="lbo"?"Outlet":"Larkspur"}</span></div></div></div>`).join("");
-  w.innerHTML=`<div class="rvhome"><div class="rvbar"><label class="rvf"><span>Store</span><select onchange="RVH.store=this.value;rvHome()">${[["","Both stores"],["lb","Larkspur Baby"],["lbo","Outlet"]].map(([v,l])=>`<option value="${v}" ${RVH.store===v?"selected":""}>${l}</option>`).join("")}</select></label>
-     <span style="flex:1"></span><button class="btn sec xs" onclick="setView('rv_insights')"><i class="ti ti-chart-pie"></i> Full insights</button><button class="btn sec xs" onclick="rvStudio.open(RVH.store||'lb')"><i class="ti ti-palette"></i> Customize</button></div>
+  w.innerHTML=`<div class="rvhome"><div class="rvbar"><b style="font-size:15px">${RVSN[RVS]}</b>
+     <span style="flex:1"></span><button class="btn sec xs" onclick="setView('rv_insights')"><i class="ti ti-chart-pie"></i> Full insights</button><button class="btn sec xs" onclick="rvStudio.open(RVS)"><i class="ti ti-palette"></i> Customize</button></div>
    <div style="padding:6px 22px 30px">
    <div class="rvkpis">${tile("Waiting for you",k.pending.toLocaleString(),k.pending_soon?`${k.pending_soon} auto-publish within 3 days`:"under your auto-publish rating",{view:"rv_mod",f:{status:"pending"}})}
      ${tile("New this week",k.week.toLocaleString(),chg!=null?`${chg>=0?"▲":"▼"} ${Math.abs(chg)}% vs last week`:"",{view:"rv_mod",f:{status:"all",days:"7"}})}
@@ -1033,7 +1042,7 @@ async function rvDesign(){
   const st=m=>!m.live?'<span class="opill mut">Original look</span>':m.draft_at&&m.published_at&&m.draft_at>m.published_at?'<span class="opill warn">Unpublished changes</span>':'<span class="opill ok">Custom look is live</span>';
   w.innerHTML=`<div style="padding:22px;max-width:860px"><h2 style="margin:0 0 6px">Customize how reviews look</h2>
    <p class="exc" style="font-size:14px">Change colors, fonts, sizes, words, layout and which parts show, with a live preview for desktop and mobile using real reviews. Changes save as you go and only reach the website when you click Publish.</p>
-   ${[["lb","Larkspur Baby",a],["lbo","Larkspur Baby Outlet",b]].map(([k,n,m])=>`<div class="ocard"><div class="och">${n} ${st(m||{})}</div><div class="exc">${m&&m.published_at?`Last published ${fmtDay(m.published_at)}`:"Never customized"}</div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="rvStudio.open('${k}')"><i class="ti ti-palette"></i> Open editor</button>${m&&m.sample&&m.sample.handle?`<a class="btn sec" target="_blank" rel="noopener" href="${esc(m.shop)}/products/${esc(m.sample.handle)}?bz_reviews=1&bz_design=draft"><i class="ti ti-eye"></i> Preview on the site</a>`:""}</div></div>`).join("")}</div>`;
+   ${[["lb","Larkspur Baby",a],["lbo","Larkspur Baby Outlet",b]].filter(([k])=>k===RVS).map(([k,n,m])=>`<div class="ocard"><div class="och">${n} ${st(m||{})}</div><div class="exc">${m&&m.published_at?`Last published ${fmtDay(m.published_at)}`:"Never customized"}</div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="rvStudio.open('${k}')"><i class="ti ti-palette"></i> Open editor</button>${m&&m.sample&&m.sample.handle?`<a class="btn sec" target="_blank" rel="noopener" href="${esc(m.shop)}/products/${esc(m.sample.handle)}?bz_reviews=1&bz_design=draft"><i class="ti ti-eye"></i> Preview on the site</a>`:""}</div></div>`).join("")}</div>`;
 }
 let RVF=[];
 async function rvSetup(){
@@ -1042,11 +1051,11 @@ async function rvSetup(){
   w.innerHTML=`<div style="padding:22px;max-width:860px">
   <h2 style="margin:0 0 6px">Reviews on the website</h2>
   <p class="exc" style="font-size:14px">Buzzin shows the stars under the product title and the full review section, in the same spots as the current reviews, so no theme change is needed. Until a store is switched on, only preview links show Buzzin's version.</p>
-  ${[["lb","Larkspur Baby","https://larkspurbaby.com"],["lbo","Larkspur Baby Outlet","https://larkspurbabyoutlet.com"]].map(([k,n,u])=>`<div class="ocard"><div class="och">${n} ${live[k]?'<span class="opill ok">Buzzin reviews are live</span>':'<span class="opill warn">Not live yet</span>'}</div>
+  ${[["lb","Larkspur Baby","https://larkspurbaby.com"],["lbo","Larkspur Baby Outlet","https://larkspurbabyoutlet.com"]].filter(([k])=>k===RVS).map(([k,n,u])=>`<div class="ocard"><div class="och">${n} ${live[k]?'<span class="opill ok">Buzzin reviews are live</span>':'<span class="opill warn">Not live yet</span>'}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><a class="btn sec" href="${u}/collections/all?bz_reviews=1" target="_blank" rel="noopener"><i class="ti ti-eye"></i> Preview on the site</a><span class="exc">Open any product page from there. The preview stays on for that browser tab; add ?bz_reviews=0 to turn it off.</span></div>
     <div style="margin-top:12px">${live[k]?`<button class="btn sec" onclick="rvLive('${k}',false)">Turn off</button>`:`<button class="btn" onclick="rvLive('${k}',true)">Go live</button>`}</div></div>`).join("")}
   <div class="ocard"><div class="och">Review request emails &amp; texts</div><div>These run as a flow in <b>Marketing → Flows</b>, so you can edit every email in the email builder, add texts, change the timing and see results like any other flow. The ready-made flow emails 14 days after an order ships, texts 5 days later (text subscribers only), then sends one reminder. Anyone who leaves a review stops getting them.</div>
-    ${[["lb","Larkspur Baby"],["lbo","Larkspur Baby Outlet"]].map(([k,n])=>{ const fl=(RVF||[]).filter(f=>f.store===k); return `<div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap"><b style="min-width:170px">${n}</b>${fl.length?fl.map(f=>`<a class="btn sec xs" href="/marketing#flows/${f.id}" target="_blank" rel="noopener">${esc(f.name)} <span class="opill ${f.status==="live"?"ok":f.status==="test"?"warn":"mut"}" style="margin-left:6px">${esc(f.status)}</span></a>`).join(""):`<button class="btn xs" onclick="rvFlow('${k}',this)">Create review flow</button>`}</div>`; }).join("")}
+    ${[["lb","Larkspur Baby"],["lbo","Larkspur Baby Outlet"]].filter(([k])=>k===RVS).map(([k,n])=>{ const fl=(RVF||[]).filter(f=>f.store===k); return `<div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap"><b style="min-width:170px">${n}</b>${fl.length?fl.map(f=>`<a class="btn sec xs" href="/marketing#flows/${f.id}" target="_blank" rel="noopener">${esc(f.name)} <span class="opill ${f.status==="live"?"ok":f.status==="test"?"warn":"mut"}" style="margin-left:6px">${esc(f.status)}</span></a>`).join(""):`<button class="btn xs" onclick="rvFlow('${k}',this)">Create review flow</button>`}</div>`; }).join("")}
     <div class="exc" style="margin-top:10px">In the email builder, the <b>Review request</b> block shows each product from the order with stars to tap. In texts and buttons use <code>{{ review_url }}</code>.</div></div>
   <div class="ocard"><div class="och">Publishing</div><div>Reviews with <select id="rvmin">${[5,4,3,2,1].map(v=>`<option value="${v}" ${Number(st.auto_publish_min||4)===v?"selected":""}>${v}★ or more</option>`).join("")}</select> publish right away. Lower ones wait in "Waiting for you" and publish on their own after 14 days unless you reject them (the FTC rule against hiding bad reviews).</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvSaveMin()">Save</button></div></div>
   <div class="ocard"><div class="och">Imported reviews</div><div>All existing published reviews were imported into Buzzin. New ones from the old system are picked up every 3 hours until a store goes live.</div><div style="margin-top:10px"><button class="btn sec xs" onclick="rvSync(this)">Check for new reviews now</button></div></div></div>`;

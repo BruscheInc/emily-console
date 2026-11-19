@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.47
+- Reviews has **LB** and **LBO** tabs at the top of its menu. Every Reviews page (Overview, Moderation, Products, Insights, Groups, Customize, Settings) shows only the selected store. Your choice is remembered, and clicking something from the other store switches the tab for you.
+
 ## 0.0.46
 - Reviews opens on a new **Overview** page: a to-do list (waiting reviews, low ratings with no reply, products slipping, setup steps), the latest reviews, and key numbers. Every item clicks through to the right filtered list.
 - New **Customize** editor for how reviews look on the website, with live desktop and mobile previews using real reviews. It covers colors, fonts, sizes, layout, buttons and chips, stars, photos, show/hide for every part, all wording, review list behavior, mobile-only settings and custom CSS. You can click any part of the preview to jump to its settings. It autosaves, has undo/redo, a "Preview on website" link for the draft, and a Publish button.
