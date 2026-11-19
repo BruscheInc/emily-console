@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.44
+- Reviews: tidier search box and product links.
+
 ## 0.0.43
 - Reviews on the site, redesigned to put the review first (photos small):
   - Top: average, star bars with counts, % recommend and a strip of customer photos.
