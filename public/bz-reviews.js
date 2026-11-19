@@ -279,7 +279,26 @@
       document.querySelectorAll("[data-bz-stars]" + (active ? ",[data-oke-star-rating]" : "")).forEach(function (el) { if (done.has(el)) return; done.add(el); var p = productIdOf(el) || pid0; if (p) mountStars(el, p); });
       document.querySelectorAll("[data-bz-reviews]" + (active ? ",[data-oke-widget]" : "")).forEach(function (el) { if (done.has(el)) return; done.add(el); var p = productIdOf(el) || pid0; if (p && !document.getElementById("bz-reviews")) mountWidget(el, p); });
     }
-    scan(); if (!studio) { setTimeout(scan, 1500); setTimeout(scan, 4000); }
+    // No review block in the theme (the old review app's blocks were removed)? Put the reviews in on their own:
+    // the section goes above "You might also like" (or at the end of the page), the stars go under the product title.
+    function fallback() {
+      if (studio || !active || !/\/products\//.test(location.pathname)) return;
+      var pid0 = productIdOf(null); if (!pid0) return;
+      if (!document.getElementById("bz-reviews") && !document.querySelector("[data-bz-reviews],[data-oke-widget]")) {
+        var main = document.querySelector("main") || document.body;
+        var rel = main.querySelector("[id*='related'],[id*='recommend'],.recommended-products,product-recommendations");
+        var sec = rel && rel.closest(".shopify-section") || rel;
+        var host = document.createElement("div"); host.className = "page-width bzr-auto"; host.style.cssText = "max-width:1200px;margin:0 auto;padding:0 20px";
+        var anchor = document.createElement("div"); host.appendChild(anchor);
+        if (sec && sec.parentNode) sec.parentNode.insertBefore(host, sec); else main.appendChild(host);
+        done.add(anchor); mountWidget(anchor, pid0);
+      }
+      if (!document.querySelector(".bzr-stars-host") && !document.querySelector("[data-bz-stars],[data-oke-star-rating]")) {
+        var t = document.querySelector(".product__title, .product-title, .product__info-container h1, main h1");
+        if (t) { var a2 = document.createElement("div"); (t.closest(".product__title") || t).insertAdjacentElement("afterend", a2); done.add(a2); mountStars(a2, pid0); }
+      }
+    }
+    scan(); if (!studio) { setTimeout(scan, 1500); setTimeout(function () { scan(); fallback(); }, 2500); }
   }
   // Customize editor: the design arrives by message and redraws in place.
   if (studio) window.addEventListener("message", function (e) {

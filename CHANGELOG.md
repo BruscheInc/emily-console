@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.54
+- Reviews show on product pages even when the theme has no review block: the review section goes above "You might also like" and the stars go under the product title. (The old review app's blocks had been removed, so live reviews had nowhere to appear.)
+
 ## 0.0.53
 - Review requests never ask about **Package Protection (PP)**, matched by name or product handle. Orders with only PP (or nothing else reviewable) now skip the review email and text entirely instead of sending an empty one. No review section shows on the PP product page.
 
