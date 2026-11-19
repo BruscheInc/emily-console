@@ -88,13 +88,13 @@ async function importOkendo(store, { full = true } = {}) {
 /* ---------------- review groups (Okendo used Shopify collections named "Okendo …") ---------------- */
 async function syncGroups(store) {
   const em = require("./emily"); const st = em.storeForPrefix(store === "lbo" ? "LBO" : "LB"); if (!st) return 0;
-  const cols = await em.storeGraphQL(st, `query { a: collections(first: 100, query: "title:Okendo*") { nodes { id title } } b: collections(first: 20, query: "title:'Sleep Bag Walkers'") { nodes { id title } } }`, {});
+  const cols = await require("./returns").gql(st, `query { a: collections(first: 100, query: "title:Okendo*") { nodes { id title } } b: collections(first: 20, query: "title:'Sleep Bag Walkers'") { nodes { id title } } }`, {});
   const list = [...((cols.a || {}).nodes || []), ...((cols.b || {}).nodes || []).filter((c) => c.title === "Sleep Bag Walkers")];
   let n = 0;
   for (const c of list) {
     const ids = []; let after = null;
     for (let i = 0; i < 20; i++) {
-      const d = await em.storeGraphQL(st, `query($id: ID!, $after: String) { collection(id: $id) { products(first: 250, after: $after) { pageInfo { hasNextPage endCursor } nodes { legacyResourceId } } } }`, { id: c.id, after });
+      const d = await require("./returns").gql(st, `query($id: ID!, $after: String) { collection(id: $id) { products(first: 250, after: $after) { pageInfo { hasNextPage endCursor } nodes { legacyResourceId } } } }`, { id: c.id, after });
       const p = d.collection && d.collection.products; if (!p) break;
       for (const x of p.nodes) ids.push(String(x.legacyResourceId));
       if (!p.pageInfo.hasNextPage) break; after = p.pageInfo.endCursor;
@@ -175,7 +175,7 @@ async function flushMetafields() {
     try {
       const st = em.storeForPrefix(store === "lbo" ? "LBO" : "LB"); if (!st) continue;
       const a = await aggregate(store, await scopeFor(store, id)); if (!a.count) continue;
-      await em.storeGraphQL(st, `mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`, { m: [
+      await require("./returns").gql(st, `mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`, { m: [
         { ownerId: `gid://shopify/Product/${id}`, namespace: "reviews", key: "rating", type: "rating", value: JSON.stringify({ value: String(a.average), scale_min: "1.0", scale_max: "5.0" }) },
         { ownerId: `gid://shopify/Product/${id}`, namespace: "reviews", key: "rating_count", type: "number_integer", value: String(a.count) }] });
     } catch (e) { console.error("review metafield:", e.message); }
@@ -229,7 +229,7 @@ async function collectOrders(store, s) {
   const from = new Date(Date.now() - (s.wait_days + 25) * 864e5).toISOString().slice(0, 10), to = new Date(Date.now() - (s.wait_days - 1) * 864e5).toISOString().slice(0, 10);
   const out = []; let after = null;
   for (let i = 0; i < 40; i++) {
-    const d = await em.storeGraphQL(st, `query($q: String!, $after: String) { orders(first: 100, after: $after, query: $q, sortKey: CREATED_AT) { pageInfo { hasNextPage endCursor }
+    const d = await require("./returns").gql(st, `query($q: String!, $after: String) { orders(first: 100, after: $after, query: $q, sortKey: CREATED_AT) { pageInfo { hasNextPage endCursor }
       nodes { id legacyResourceId name email cancelledAt displayFinancialStatus customer { firstName lastName } shippingAddress { firstName lastName }
         fulfillments(first: 5) { createdAt deliveredAt status }
         lineItems(first: 30) { nodes { title variantTitle quantity product { legacyResourceId handle featuredMedia { preview { image { url(transform: { maxWidth: 240 }) } } } } } } } } }`,
@@ -422,6 +422,10 @@ async function startJobs(syncGet, syncSet) {
     const c = (await db(`SELECT store, count(*)::int n, round(avg(rating)::numeric, 2) avg, count(*) FILTER (WHERE jsonb_array_length(media)>0)::int media FROM rv_reviews GROUP BY store`)).rows;
     console.log(`⭐ REVIEWS in Buzzin: ${c.map((x) => `${x.store} ${x.n} (avg ${x.avg}, ${x.media} with media)`).join(" · ")}`);
     await syncSet("reviews_okendo_v1", "1", {});
+  }
+  if (!(await syncGet("reviews_groups_v2"))) {
+    for (const s of Object.keys(STORES)) { try { const g = await syncGroups(s); console.log(`⭐ REVIEWS ${s}: ${g} review groups copied from the "Okendo …" collections`); } catch (e) { console.error(`⭐ review groups ${s}:`, e.message); } }
+    await syncSet("reviews_groups_v2", "1", {});
   }
   // Until Okendo is off: pick up its new reviews every 3 hours. Groups daily. Held reviews and metafields every 15 min.
   setInterval(async () => { const s = await settings(); for (const k of Object.keys(STORES)) if (!s.live[k]) await importOkendo(k, { full: false }).catch(() => {}); AGG_CACHE.clear(); }, 3 * 3600e3);

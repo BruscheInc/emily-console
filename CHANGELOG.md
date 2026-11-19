@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.40
+- Reviews: fix copying Okendo's review groups (product pages showing reviews from the whole group). All 8,483 published Okendo reviews are already in Buzzin.
+
 ## 0.0.39
 - Reviews, part 2: review request emails, same as Okendo's sequence. 14 days after an order ships, "How did your little one like it?" with each item and a row of stars; reminders 7 and 14 days later if nothing was reviewed. Tapping a star opens a review page on the store's own domain with that rating already picked (title, review, recommend yes/no, photos). Reviews from these emails are marked Verified Buyer. Goes to every buyer except people who unsubscribed or bounced. Off per store until turned on under Reviews → On the website (pause Okendo's sequence first). "Send me a test" sends a real one using a recent order.
 
