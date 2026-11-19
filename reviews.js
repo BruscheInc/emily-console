@@ -20,11 +20,11 @@ const STORES = { lb: { name: "Larkspur Baby", okendo: "ac2ed04b-f605-4570-9c56-9
                  lbo: { name: "Larkspur Baby Outlet", okendo: "b6b28336-b4e9-4c3e-9fc6-c70ab41914ee", shop: "https://larkspurbabyoutlet.com" } };
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
 const HOLD_DAYS = 14;
-const DEFAULTS = { auto_publish_min: 4, live: { lb: false, lbo: false } };
+const DEFAULTS = { auto_publish_min: 4, live: { lb: false, lbo: false }, requests: { lb: false, lbo: false }, wait_days: 14, reminder_days: 7, reminders: 2 };
 
-async function settings() { const s = await core.setting("reviews_settings", null); return { ...DEFAULTS, ...(s || {}), live: { ...DEFAULTS.live, ...((s && s.live) || {}) } }; }
+async function settings() { const s = await core.setting("reviews_settings", null); return { ...DEFAULTS, ...(s || {}), live: { ...DEFAULTS.live, ...((s && s.live) || {}) }, requests: { ...DEFAULTS.requests, ...((s && s.requests) || {}) } }; }
 async function saveSettings(patch) {
-  const cur = await settings(); const next = { ...cur, ...patch, live: { ...cur.live, ...((patch && patch.live) || {}) } };
+  const cur = await settings(); const next = { ...cur, ...patch, live: { ...cur.live, ...((patch && patch.live) || {}) }, requests: { ...cur.requests, ...((patch && patch.requests) || {}) } };
   await db(`INSERT INTO emily_settings (key, value) VALUES ('reviews_settings', $1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify(next)]);
   return next;
 }
@@ -42,6 +42,8 @@ async function migrate() {
   await db(`CREATE INDEX IF NOT EXISTS rv_reviews_list ON rv_reviews (store, status, created_at DESC)`);
   await db(`CREATE TABLE IF NOT EXISTS rv_groups (id TEXT PRIMARY KEY, store TEXT NOT NULL, name TEXT, collection_id TEXT, product_ids TEXT[] NOT NULL DEFAULT '{}', synced_at TIMESTAMPTZ)`);
   await db(`CREATE TABLE IF NOT EXISTS rv_requests (token TEXT PRIMARY KEY, store TEXT, order_name TEXT, email TEXT, name TEXT, items JSONB, created_at TIMESTAMPTZ DEFAULT now(), used_at TIMESTAMPTZ)`);
+  await db(`ALTER TABLE rv_requests ADD COLUMN IF NOT EXISTS order_id TEXT, ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS sent INT NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS last_sent_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS test BOOLEAN DEFAULT false`);
+  await db(`CREATE UNIQUE INDEX IF NOT EXISTS rv_requests_order ON rv_requests (store, order_id) WHERE NOT test`);
 }
 
 /* ---------------- Okendo copy ---------------- */
@@ -181,6 +183,7 @@ async function flushMetafields() {
 }
 
 /* ---------------- new reviews ---------------- */
+const escH = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const clean = (s, n) => String(s == null ? "" : s).replace(/\s+\n/g, "\n").trim().slice(0, n);
 async function submit(store, b, { via = "site" } = {}) {
   if (!STORES[store]) throw Object.assign(new Error("unknown store"), { status: 404 });
@@ -212,6 +215,123 @@ async function submit(store, b, { via = "site" } = {}) {
   if (email) { try { await require("./mk-core").track(store, "left_review", { email, props: { rating, product_id: String(b.product_id || ""), product: clean(b.product_title, 200) }, source: "reviews" }); } catch (_) {} }
   if (rating <= 2) core.slackPost && core.slackPost(`⭐ ${rating}-star review on ${STORES[store].name}: ${clean(b.product_title, 120)} — “${title || body.slice(0, 120)}” (${name}). Open Buzzin → Reviews.`).catch(() => {});
   return { ok: true, id, status };
+}
+
+/* ---------------- review request emails (Okendo's "Review Request With Two Reminders") ----------------
+   14 days after an order ships, email "How did your little one like it?" with each item and a row of stars. Tapping a
+   star opens the review page with that rating picked. Reminders 7 and 14 days later if nothing was reviewed.
+   Goes to every buyer except people who unsubscribed or bounced. Off per store until Okendo's sequence is paused. */
+const STAR_PATH = "M12 2.6l2.9 6.2 6.7.7-5 4.6 1.4 6.7L12 17.4l-6 3.4 1.4-6.7-5-4.6 6.7-.7z";
+const writeBase = (store) => { try { const d = require("./returns").STORE_DEFS[store]; if (d && d.host) return `https://${d.host}`; } catch (_) {} return PUBLIC_URL(); };
+const SKIP_ITEM = /package protection|shipping protection|gift card|route|insurance/i;
+async function collectOrders(store, s) {
+  const em = require("./emily"); const st = em.storeForPrefix(store === "lbo" ? "LBO" : "LB"); if (!st) return [];
+  const from = new Date(Date.now() - (s.wait_days + 25) * 864e5).toISOString().slice(0, 10), to = new Date(Date.now() - (s.wait_days - 1) * 864e5).toISOString().slice(0, 10);
+  const out = []; let after = null;
+  for (let i = 0; i < 40; i++) {
+    const d = await em.storeGraphQL(st, `query($q: String!, $after: String) { orders(first: 100, after: $after, query: $q, sortKey: CREATED_AT) { pageInfo { hasNextPage endCursor }
+      nodes { id legacyResourceId name email cancelledAt displayFinancialStatus customer { firstName lastName } shippingAddress { firstName lastName }
+        fulfillments(first: 5) { createdAt deliveredAt status }
+        lineItems(first: 30) { nodes { title variantTitle quantity product { legacyResourceId handle featuredMedia { preview { image { url(transform: { maxWidth: 240 }) } } } } } } } } }`,
+      { q: `fulfillment_status:shipped created_at:>=${from} created_at:<=${to}`, after });
+    for (const o of d.orders.nodes) out.push(o);
+    if (!d.orders.pageInfo.hasNextPage) break; after = d.orders.pageInfo.endCursor;
+  }
+  return out;
+}
+function requestEmail(store, b, req, round, unsub, prefs) {
+  const S = STORES[store]; const base = writeBase(store);
+  const first = String(req.name || "").split(" ")[0] || "there";
+  const starRow = (it) => [1, 2, 3, 4, 5].map((n) => `<a href="${base}/rv/${store}/write?t=${req.token}&amp;p=${it.product_id}&amp;r=${n}" style="text-decoration:none;display:inline-block;padding:0 3px"><img src="${PUBLIC_URL()}/rv-star.png" width="30" height="30" alt="${n} star${n > 1 ? "s" : ""}" style="display:block;border:0"></a>`).join("");
+  const items = req.items.map((it) => `<tr><td style="padding:18px 0;border-top:1px solid #ECEAE5"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td width="96" valign="top">${it.image ? `<img src="${it.image}" width="84" height="84" alt="" style="display:block;border-radius:8px;object-fit:cover">` : ""}</td>
+      <td valign="top" style="font-family:${b.fonts.body};color:${b.colors.text}"><div style="font-size:16px;font-weight:bold;line-height:1.3">${escH(it.title)}</div>${it.variant ? `<div style="font-size:13px;color:${b.colors.muted}">${escH(it.variant)}</div>` : ""}
+        <div style="font-size:13px;color:${b.colors.muted};margin:10px 0 6px">How many stars?</div><div>${starRow(it)}</div></td></tr></table></td></tr>`).join("");
+  const lead = round === 1 ? "We wanted to check in and see how you're enjoying your latest purchase." : "Just a quick reminder: we'd love to hear what you think of your order.";
+  const html = `<!doctype html><html><body style="margin:0;background:${b.colors.ground}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${b.colors.ground}"><tr><td align="center" style="padding:28px 12px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:12px">
+    <tr><td align="center" style="padding:28px 32px 6px"><img src="${b.logo && b.logo.startsWith("/") ? PUBLIC_URL() + b.logo : b.logo}" width="${b.logo_width || 64}" alt="${escH(S.name)}" style="display:block"></td></tr>
+    <tr><td style="padding:10px 32px 4px;font-family:${b.fonts.heading};font-size:24px;color:${b.colors.text}">Hi ${escH(first)}!</td></tr>
+    <tr><td style="padding:6px 32px 0;font-family:${b.fonts.body};font-size:15px;line-height:1.55;color:${b.colors.text}">${lead} If you have a moment, it would be great if you could share your thoughts with us and fellow parents.<br><br><b>Get started below by giving your products a star rating.</b></td></tr>
+    <tr><td style="padding:14px 32px 26px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${items}</table></td></tr></table>
+    <table role="presentation" width="100%" style="max-width:560px"><tr><td style="padding:18px 12px;text-align:center;font-family:${b.fonts.body};font-size:12px;line-height:1.6;color:${b.colors.muted}">${escH(b.name)}${b.address ? " · " + escH(b.address) : ""}<br>
+    <a href="${unsub}" style="color:${b.colors.muted}">Unsubscribe</a> · <a href="${prefs}" style="color:${b.colors.muted}">Email preferences</a></td></tr></table></td></tr></table></body></html>`;
+  const text = `Hi ${first}!\n\n${lead}\n\n` + req.items.map((it) => `${it.title}${it.variant ? ` (${it.variant})` : ""}: ${base}/rv/${store}/write?t=${req.token}&p=${it.product_id}`).join("\n") + `\n\nUnsubscribe: ${unsub}`;
+  return { subject: round === 1 ? "How did your little one like it?" : "Quick favor: how's your order?", html, text };
+}
+async function sendRequest(store, req, round, { test = false, to } = {}) {
+  const MK = require("./mk-core"), E = require("./mk-email");
+  const profile = await MK.upsertProfile(store, { email: to || req.email, first_name: String(req.name || "").split(" ")[0] || null }, "reviews");
+  if (!profile) return { status: "skipped", reason: "no email" };
+  if (!test && ["unsubscribed", "stopped"].includes(profile.email_consent)) return { status: "skipped", reason: `email ${profile.email_consent}` };
+  const b = await E.brand(store); const tok = E.tokenFor(profile.id, store); const base = writeBase(store);
+  const msg = requestEmail(store, b, req, round, `${base}/mk/u/${tok}`, `${base}/mk/p/${tok}`);
+  msg.unsubscribe_url = `${base}/mk/u/${tok}`; msg.campaign_name = "Review request";
+  return require("./mk-send").send({ store, channel: "email", profile, msg, idem: `rvreq:${req.token}:${round}${test ? ":" + Date.now() : ""}`, messageId: "review_request", test, transactional: true });
+}
+async function runRequests() {
+  const s = await settings(); const out = {};
+  for (const store of Object.keys(STORES)) {
+    if (!s.requests[store]) continue;
+    let made = 0, sent = 0, reminded = 0;
+    // 1) new orders that shipped wait_days ago
+    for (const o of await collectOrders(store, s)) {
+      if (o.cancelledAt || !o.email || /REFUNDED|VOIDED/.test(o.displayFinancialStatus || "")) continue;
+      const shipped = (o.fulfillments || []).map((f) => f.createdAt).filter(Boolean).sort()[0]; if (!shipped) continue;
+      if (Date.now() - new Date(shipped) < s.wait_days * 864e5) continue;
+      const seen = new Set(); const items = [];
+      for (const li of o.lineItems.nodes) { if (!li.product || SKIP_ITEM.test(li.title) || seen.has(li.product.legacyResourceId)) continue; seen.add(li.product.legacyResourceId);
+        items.push({ product_id: String(li.product.legacyResourceId), handle: li.product.handle, title: li.title, variant: li.variantTitle, image: li.product.featuredMedia && li.product.featuredMedia.preview && li.product.featuredMedia.preview.image ? li.product.featuredMedia.preview.image.url : null }); }
+      if (!items.length) continue;
+      const name = [o.customer && o.customer.firstName || (o.shippingAddress && o.shippingAddress.firstName), (o.customer && o.customer.lastName || (o.shippingAddress && o.shippingAddress.lastName) || "").slice(0, 1)].filter(Boolean).join(" ") + ((o.customer && o.customer.lastName) ? "." : "");
+      const r = await db(`INSERT INTO rv_requests (token, store, order_id, order_name, email, name, items, fulfilled_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING token`,
+        [crypto.randomBytes(12).toString("hex"), store, String(o.legacyResourceId), o.name, String(o.email).toLowerCase(), name, JSON.stringify(items.slice(0, 8)), shipped]);
+      if (r.rowCount) made++;
+    }
+    // 2) send what's due: first email, then reminders every reminder_days while nothing was reviewed
+    const due = (await db(`SELECT * FROM rv_requests WHERE store=$1 AND NOT test AND used_at IS NULL AND sent <= $2
+        AND (last_sent_at IS NULL OR last_sent_at < now() - ($3 || ' days')::interval) AND created_at > now() - interval '60 days' ORDER BY created_at LIMIT 400`, [store, s.reminders, String(s.reminder_days)])).rows;
+    for (const q of due) {
+      const reviewed = (await db(`SELECT 1 FROM rv_reviews WHERE lower(email)=$1 AND product_id = ANY($2) AND created_at > $3 LIMIT 1`, [q.email, q.items.map((i) => i.product_id), q.created_at])).rows[0];
+      if (reviewed) { await db(`UPDATE rv_requests SET used_at=now() WHERE token=$1`, [q.token]); continue; }
+      const r = await sendRequest(store, q, q.sent + 1);
+      if (r && r.status === "deferred") break;   // sending limit: try the rest next run
+      await db(`UPDATE rv_requests SET sent=sent+1, last_sent_at=now() WHERE token=$1`, [q.token]);
+      if (r && r.status === "sent") { if (q.sent === 0) sent++; else reminded++; }
+    }
+    out[store] = { new_orders: made, first_emails: sent, reminders: reminded };
+  }
+  if (Object.keys(out).length) console.log(`⭐ REVIEW REQUESTS ${JSON.stringify(out)}`);
+  return out;
+}
+/** Staff test: a real request for the newest shipped order, sent to the person clicking. */
+async function testRequest(store, to) {
+  const s = await settings(); const orders = await collectOrders(store, { ...s, wait_days: 1 });
+  const o = orders.reverse().find((x) => x.email && !x.cancelledAt && x.lineItems.nodes.some((li) => li.product && !SKIP_ITEM.test(li.title)));
+  if (!o) throw new Error("no recent shipped order found to use as the example");
+  const items = []; const seen = new Set();
+  for (const li of o.lineItems.nodes) { if (!li.product || SKIP_ITEM.test(li.title) || seen.has(li.product.legacyResourceId)) continue; seen.add(li.product.legacyResourceId); items.push({ product_id: String(li.product.legacyResourceId), handle: li.product.handle, title: li.title, variant: li.variantTitle, image: li.product.featuredMedia && li.product.featuredMedia.preview && li.product.featuredMedia.preview.image ? li.product.featuredMedia.preview.image.url : null }); }
+  const token = crypto.randomBytes(12).toString("hex");
+  await db(`INSERT INTO rv_requests (token, store, order_id, order_name, email, name, items, test) VALUES ($1,$2,$3,$4,$5,$6,$7,true)`, [token, store, `test-${Date.now()}`, o.name, to, "Test", JSON.stringify(items.slice(0, 8))]);
+  const r = await sendRequest(store, { token, items: items.slice(0, 8), name: "Test", email: to }, 1, { test: true, to });
+  return { ok: r && r.status === "sent", status: r && r.status, reason: r && r.reason, order: o.name };
+}
+/** The review page a request email opens (on the store's own domain). */
+async function writePage(store, token, focus, rating) {
+  const q = (await db(`SELECT * FROM rv_requests WHERE token=$1 AND store=$2`, [token, store])).rows[0];
+  if (!q) return null;
+  const b = await require("./mk-email").brand(store);
+  const done = (await db(`SELECT product_id FROM rv_reviews WHERE lower(email)=$1 AND product_id = ANY($2)`, [q.email, q.items.map((i) => i.product_id)])).rows.map((r) => r.product_id);
+  const cfg = { store, token, origin: PUBLIC_URL(), name: q.name || "", email: q.email, focus: String(focus || ""), rating: Number(rating) || 0, done, items: q.items, brand: STORES[store].name, shop: STORES[store].shop };
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Review your order · ${escH(STORES[store].name)}</title>
+<style>body{margin:0;background:${b.colors.ground};font-family:${b.fonts.body};color:#2C3E50}main{max-width:620px;margin:0 auto;padding:24px 16px 60px}h1{font-family:${b.fonts.heading};font-weight:normal;font-size:26px;margin:14px 0 4px}
+.it{background:#fff;border-radius:12px;padding:18px;margin-top:16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}.hd{display:flex;gap:14px;align-items:center}.hd img{width:72px;height:72px;object-fit:cover;border-radius:8px}.hd b{font-size:16px;display:block}
+.pick{display:flex;gap:6px;margin:14px 0 4px}.pick button{border:0;background:none;padding:0;cursor:pointer}label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
+input[type=text],textarea{width:100%;box-sizing:border-box;border:1px solid #DBDDE4;border-radius:8px;padding:10px 12px;font:inherit;font-size:15px}textarea{min-height:110px}
+.btn{background:#242F3F;color:#fff;border:0;border-radius:22px;padding:11px 22px;font:inherit;font-weight:600;cursor:pointer;margin-top:14px}.btn[disabled]{opacity:.6}.err{color:#b42318;font-size:13px;margin-top:8px}.ok{color:#1d7a46;font-weight:600;margin-top:10px}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.thumbs img{width:56px;height:56px;object-fit:cover;border-radius:6px}.form{display:none}.it.open .form{display:block}.yn{display:flex;gap:8px}.yn button{border:1px solid #DBDDE4;background:#fff;border-radius:18px;padding:6px 14px;font:inherit;cursor:pointer}.yn button.on{background:#242F3F;color:#fff;border-color:#242F3F}</style></head>
+<body><main><img src="${b.logo && b.logo.startsWith("/") ? PUBLIC_URL() + b.logo : b.logo}" width="${b.logo_width || 56}" alt="${escH(STORES[store].name)}"><h1>How did your little one like it?</h1><div style="color:#676986">Order ${escH(q.order_name || "")}. Tap the stars for each item.</div><div id="items"></div></main>
+<script>window.RVW=${JSON.stringify(cfg).replace(/</g, "\\u003c")};</script><script src="${PUBLIC_URL()}/rv-write.js"></script></body></html>`;
 }
 
 /* ---------------- staff ---------------- */
@@ -270,13 +390,21 @@ function routes(app, { guard, actorOf, express }) {
       res.json({ url: core.fileUrl(PUBLIC_URL(), f.file_id) });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+  app.get("/rv/:store/write", async (req, res) => {
+    const s = storeOk(req.params.store); if (!s) return res.status(404).send("Not found");
+    try { const h = await writePage(s, String(req.query.t || ""), req.query.p, req.query.r); if (!h) return res.redirect(302, STORES[s].shop); res.setHeader("Cache-Control", "no-store"); res.type("html").send(h); } catch (e) { res.status(500).send("Something went wrong."); }
+  });
   app.post("/rv/:store/helpful/:id", async (req, res) => { cors(res); try { await db(`UPDATE rv_reviews SET helpful=helpful+1 WHERE id=$1 AND status='published'`, [req.params.id]); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } });
 
   // staff
   app.get("/api/reviews", async (req, res) => { if (!guard(req, res)) return; try { res.json(await list(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews/:id/:action", async (req, res) => { if (!guard(req, res)) return; try { res.json(await decide(req.params.id, req.params.action, actorOf(req), (req.body || {}).text)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
   app.get("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; res.json(await settings()); });
-  app.post("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const patch = {}; if (b.auto_publish_min) patch.auto_publish_min = Math.max(1, Math.min(5, Number(b.auto_publish_min))); if (b.live) patch.live = { lb: !!b.live.lb, lbo: !!b.live.lbo }; res.json(await saveSettings(patch)); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post("/api/reviews-settings", async (req, res) => { if (!guard(req, res)) return; try { const b = req.body || {}; const patch = {}; if (b.auto_publish_min) patch.auto_publish_min = Math.max(1, Math.min(5, Number(b.auto_publish_min))); if (b.live) patch.live = { lb: !!b.live.lb, lbo: !!b.live.lbo }; if (b.requests) patch.requests = { lb: !!b.requests.lb, lbo: !!b.requests.lbo }; res.json(await saveSettings(patch)); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post("/api/reviews-test-request", async (req, res) => {
+    if (!guard(req, res)) return;
+    try { const to = String((req.body || {}).to || "").trim(); if (!/@/.test(to)) return res.status(400).json({ error: "Which email should the test go to?" }); res.json(await testRequest(storeOk((req.body || {}).store) || "lb", to)); } catch (e) { res.status(500).json({ error: e.message }); }
+  });
   app.post("/api/reviews-sync", async (req, res) => {
     if (!guard(req, res)) return;
     try { const out = []; for (const s of Object.keys(STORES)) { out.push(await importOkendo(s, { full: false })); } AGG_CACHE.clear(); res.json({ ok: true, out }); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -299,6 +427,7 @@ async function startJobs(syncGet, syncSet) {
   setInterval(async () => { const s = await settings(); for (const k of Object.keys(STORES)) if (!s.live[k]) await importOkendo(k, { full: false }).catch(() => {}); AGG_CACHE.clear(); }, 3 * 3600e3);
   setInterval(() => { for (const k of Object.keys(STORES)) syncGroups(k).catch(() => {}); }, 24 * 3600e3);
   setInterval(() => { publishHeld().catch(() => {}); flushMetafields().catch(() => {}); }, 15 * 60e3);
+  setInterval(() => runRequests().catch((e) => console.error("review requests:", e.message)), 6 * 3600e3); setTimeout(() => runRequests().catch((e) => console.error("review requests:", e.message)), 5 * 60e3);
 }
 
-module.exports = { migrate, routes, startJobs, importOkendo, syncGroups, productReviews, starsFor, submit, list, decide, settings, saveSettings, STORES };
+module.exports = { runRequests, testRequest, writePage, migrate, routes, startJobs, importOkendo, syncGroups, productReviews, starsFor, submit, list, decide, settings, saveSettings, STORES };
