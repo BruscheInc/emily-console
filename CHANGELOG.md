@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.66
+- Review emails: the header is now a slim band (Larkspur logo, a one-line "How's the snuggle?" or "Got a minute for a review?", small stars) and the intro is one line, so the products and stars show right away without scrolling.
+
 ## 0.0.65
 - **New review request emails (LB and LBO), built around the products they bought.**
   - A small, cute Larkspur header made in Ad Studio: the Larkspur logo (Outlet logo for LBO), a hand-written line, a big headline and a row of stars. First email: sky blue "How's the snuggle?". Reminder: blush gingham "Got a minute for a review?".

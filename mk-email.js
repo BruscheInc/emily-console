@@ -552,17 +552,17 @@ const STARTERS = {
    one line about adding a photo, and the footer. Nothing promotional.
    Request = sky blue "How's the snuggle?"; reminder = blush gingham "Got a minute for a review?". */
 const RV_HEROES = {
-  lb: { request: "https://ad-studio-production-5b6e.up.railway.app/img/tcEgAOoS.jpg", reminder: "https://ad-studio-production-5b6e.up.railway.app/img/4Tk_JyI-.jpg" },
-  lbo: { request: "https://ad-studio-production-5b6e.up.railway.app/img/gQwAIui3.jpg", reminder: "https://ad-studio-production-5b6e.up.railway.app/img/c5-CcBcZ.jpg" },
+  lb: { request: "https://ad-studio-production-5b6e.up.railway.app/img/T5l9VuyD.jpg", reminder: "https://ad-studio-production-5b6e.up.railway.app/img/-aeOVNK-.jpg" },
+  lbo: { request: "https://ad-studio-production-5b6e.up.railway.app/img/VeW-i8wt.jpg", reminder: "https://ad-studio-production-5b6e.up.railway.app/img/zuW1dZwS.jpg" },
 };
 const RV_EMAILS = {
   request: { bg: "#DCEEFA", accent: "#F0718A", ink: "#242F3F", star: "#FFC93C", name: "Review request",
     subject: "{{ first_name|default:\"Hey\" }}, how's the snuggle? ⭐", preview: "Rate your Larkspur in one tap 💛",
-    hello: "Hi {{ first_name|default:\"there\" }}! 👋", lead: "Your Larkspur order has had a little time to get cozy. How's the fit and the softness? Tap a star below to rate each piece. It takes about a minute.",
+    hello: "Hi {{ first_name|default:\"there\" }}! Tap a star to rate your Larkspur 👇",
     prompt: "Tap a star to rate" },
   reminder: { bg: "#FBE4E1", accent: "#E0675A", ink: "#242F3F", star: "#F7A152", name: "Review request reminder",
     subject: "{{ first_name|default:\"Hey\" }}, got a minute? ⭐ How's your Larkspur?", preview: "One tap is all it takes 💛",
-    hello: "Still loving it, {{ first_name|default:\"friend\" }}? 💛", lead: "We'd love to know how your Larkspur is holding up. One tap on the stars is all it takes, and a few words about the fit really help other parents.",
+    hello: "Still loving it, {{ first_name|default:\"friend\" }}? One tap is all it takes 👇",
     prompt: "How many stars?" },
 };
 function reviewEmailDoc(bb, store, kind) {
@@ -574,7 +574,7 @@ function reviewEmailDoc(bb, store, kind) {
   const hero = MKDoc.newBlock("image", bb); hero.data.properties = { src: (RV_HEROES[store] || RV_HEROES.lb)[kind], alt_text: `${b.name || "Larkspur"}: ${kind === "request" ? "How's the snuggle?" : "Got a minute for a review?"}`, href: "" };
   hero.data.styles = { align: "center", fill_column: true, block_padding_top: 0, block_padding_bottom: 0, block_padding_left: 0, block_padding_right: 0 };
   sec([hero]);
-  sec([text(`<h2 style="text-align:center;margin:0 0 6px;color:${E.ink};font-size:24px">${E.hello}</h2><p style="text-align:center;margin:0;color:${E.ink};font-size:16px;line-height:1.55">${E.lead}</p>`, { block_padding_top: 8, block_padding_bottom: 18, block_padding_left: 36, block_padding_right: 36 })]);
+  sec([text(`<p style="text-align:center;margin:0;color:${E.ink};font-size:17px;font-weight:700;line-height:1.4">${E.hello}</p>`, { block_padding_top: 4, block_padding_bottom: 14, block_padding_left: 28, block_padding_right: 28 })]);
   const rr = MKDoc.newBlock("review_request", bb);
   rr.data.properties = Object.assign(rr.data.properties, { prompt: E.prompt, show_button: true, button_text: "Write my review", dividers: true });
   Object.assign(rr.data.styles, { block_background_color: "#FFFFFF", block_border_radius: 24, block_padding_top: 8, block_padding_bottom: 8, block_padding_left: 22, block_padding_right: 22,
