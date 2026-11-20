@@ -89,7 +89,7 @@
       case "photos": return `${H("Photo strip (top)")}${chk("show.photo_strip", "Show the customer photo strip")}${G(num("photos.strip_count", "How many", 0, 20), num("photos.strip_size", "Size (px)", 40, 200))}
         ${H("Photos on each review")}${chk("show.review_photos", "Show photos on reviews")}${num("photos.review_size", "Size (px)", 32, 200)}${H("All photos")}${num("photos.image_radius", "Photo corners (px)", 0, 40)}`;
       case "sections": return `${H("Top")}${chk("show.heading", "Section heading")}${chk("show.average", "Average rating line")}${chk("show.histogram", "Star breakdown bars")}${chk("show.recommend", "\u201cWould recommend\u201d percent")}${chk("show.photo_strip", "Customer photo strip")}
-        ${H("AI summary")}${chk("show.summary", "Reviews summary paragraph")}${chk("show.topics", "\u201cCustomers talked about\u201d topics")}
+        
         ${H("Toolbar")}${chk("show.tab", "Reviews tab label")}${chk("show.filters", "Filters button")}${chk("show.write", "Write a review button")}${chk("show.count", "Review count")}${chk("show.sort", "Sort menu")}
         ${H("Reviewer column")}${chk("show.avatar", "Initials circle")}${chk("show.name", "Name")}${chk("show.verified", "Verified buyer")}${chk("show.reviewing", "Product they reviewed")}${chk("show.recommend_row", "\u201cI recommend this product\u201d")}${chk("show.attributes", "Size purchased & answers")}
         ${H("Each review")}${chk("show.date", "Date")}${chk("show.review_title", "Title")}${chk("show.review_photos", "Photos")}${chk("show.reply", "Your store's reply")}${chk("show.helpful", "\u201cWas this helpful?\u201d")}`;

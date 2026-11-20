@@ -20,7 +20,7 @@ window.BZR_DEFAULT_DESIGN = {
   photos: { strip_count: 12, strip_size: 100, image_radius: 12, review_size: 64 },
   show: {
     title_stars: true, title_count: true, heading: false, average: true, histogram: true, recommend: true, photo_strip: true,
-    summary: true, topics: true, tab: true, filters: true, write: true, sort: true, count: true,
+    summary: false, topics: false, tab: true, filters: true, write: true, sort: true, count: true,
     avatar: true, name: true, verified: true, reviewing: true, recommend_row: true, attributes: true,
     date: true, review_title: true, review_photos: true, reply: true, helpful: true,
   },

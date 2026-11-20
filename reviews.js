@@ -662,6 +662,7 @@ function routes(app, { guard, actorOf, express }) {
   app.post("/rv/:store/helpful/:id", async (req, res) => { cors(res); try { const col = req.query.no ? "unhelpful" : "helpful"; await db(`UPDATE rv_reviews SET ${col}=${col}+1 WHERE id=$1 AND status='published'`, [req.params.id]); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } });
   app.get("/rv/:store/summary/:pid", async (req, res) => {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
+    res.setHeader("Cache-Control", "no-store"); return res.json({});   // AI summary is off for shoppers: it can repeat complaints
     try { const j = await summaryFor(s, String(req.params.pid).replace(/\D/g, ""), req.query.scope); res.setHeader("Cache-Control", j && j.summary ? "public, max-age=600" : "no-store"); res.json(j || {}); } catch (e) { res.setHeader("Cache-Control", "no-store"); res.json({}); }
   });
 

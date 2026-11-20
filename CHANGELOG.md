@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.64
+- **AI review summary turned off everywhere on the store.** Product pages no longer show the summary paragraph or the "Customers talked about" topics, since the summary could repeat complaints. The option was removed from Customize, and the store can't fetch a summary at all. The reviews page keeps its fixed, friendly text.
+
 ## 0.0.63
 - Reviews page: the "What parents are saying" box now uses fixed, friendly words and topics (Soft, Zipper, Fit, Print, Wash, Sleep) instead of the AI summary, which also listed complaints.
 

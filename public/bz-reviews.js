@@ -146,7 +146,7 @@
   function mountWidget(host, pid) {
     var root = document.createElement("div"); root.className = "bzr"; root.id = "bz-reviews"; host.parentNode.insertBefore(root, host);
     var S = { sort: D.behavior.sort || "media", rating: "", media: "", q: "", page: 1, list: [], summary: null, total: 0, more: false, photos: [], ai: null, filters: false, per: 0 };
-    get("/summary/" + pid + "?scope=" + scopeOf(host)).then(function (j) { if (j && j.summary) { S.ai = j; render(); } }).catch(function () {});
+    // AI summary is turned off on the store: it can repeat complaints. (S.ai stays empty, so nothing is shown.)
     function perPage() { return Math.max(1, Math.min(30, Number(mobile() ? D.mobile.per_page : D.behavior.per_page) || 10)); }
     function load(reset) {
       if (reset) { S.page = 1; S.list = []; }
