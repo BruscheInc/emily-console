@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.67
+- **Footer sets in the email builder.** In Add content → Universal, "Make a footer from sections" lets you tap your saved universal sections in the order they should stack, name the set (e.g. "Footer") and save it. Click or drag the set to add all of its sections to an email at once. Each section stays linked to its universal version, so editing one updates every email. Sets can be changed (pencil) or deleted without touching the sections in them.
+
 ## 0.0.66
 - Review emails: the header is now a slim band (Larkspur logo, a one-line "How's the snuggle?" or "Got a minute for a review?", small stars) and the intro is one line, so the products and stars show right away without scrolling.
 
