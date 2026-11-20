@@ -151,6 +151,8 @@
   function say(m) {
     var a = m.summary || {}, h = a.histogram || {}, max = Math.max(1, h[5] || 0, h[4] || 0, h[3] || 0, h[2] || 0, h[1] || 0), rows = "";
     for (var i = 5; i >= 1; i--) rows += '<button type="button" class="bzp-hr' + (S.rating === String(i) ? " on" : "") + '" data-r="' + i + '" aria-label="Show ' + i + '-star reviews">' + stars(i, 13) + '<span class="bar"><i style="width:' + Math.max(1.5, ((h[i] || 0) / max) * 100) + '%"></i></span><span class="num">' + n(h[i]) + "</span></button>";
+    // Fixed, friendly words here (not the AI summary): this page is for shoppers, and the AI summary also lists complaints.
+    AI = { summary: "Parents keep coming back for how buttery soft our bamboo feels, prints they can’t resist, and zippers that make 3 AM changes a breeze. Tap a topic to see what families say about it.", topics: ["Soft", "Zipper", "Fit", "Print", "Wash", "Sleep"] };
     var bubble = AI && AI.summary ? '<div class="bzp-bubble"><div class="bzp-ai">✧ What parents are saying</div><p>' + esc(AI.summary) + "</p>" +
       (AI.topics && AI.topics.length ? '<div class="bzp-topics">' + AI.topics.slice(0, 8).map(function (t) { return '<button type="button" class="bzp-chip' + (S.q.toLowerCase() === String(t).toLowerCase() ? " on" : "") + '" data-topic="' + esc(t) + '">' + esc(t) + "</button>"; }).join("") + "</div>" : "") + "</div>"
       : '<div class="bzp-bubble"><div class="bzp-ai">✧ What parents are saying</div><p>Soft, cozy and made to last wash after wash. Read what families love most below.</p></div>';
@@ -244,7 +246,6 @@
     paintAll(); root.querySelector(".bzp-list").innerHTML = '<div class="bzp-grid"><div class="bzp-skel"></div><div class="bzp-skel"></div><div class="bzp-skel"></div></div>';
     wire();
     get("/page").then(function (m) { META = m; var keep = S.list.length; paintAll(); if (keep) paintList(); }).catch(function () {});
-    get("/summary/0?scope=all").then(function (j) { if (j && j.summary) { AI = j; var el = root.querySelector(".bzp-say"); if (el && META) el.outerHTML = say(META); } }).catch(function () {});
     load(true);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount); else mount();

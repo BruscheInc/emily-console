@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.63
+- Reviews page: the "What parents are saying" box now uses fixed, friendly words and topics (Soft, Zipper, Fit, Print, Wash, Sleep) instead of the AI summary, which also listed complaints.
+
 ## 0.0.62
 - **New reviews page for Larkspur Baby** at larkspurbaby.com/pages/reviews, showing every review in the store:
   - A soft cream welcome banner with the overall rating, review count, % who'd recommend, five-star count and how many families shared photos.
