@@ -62,6 +62,8 @@ async function migrate() {
   await db(`ALTER TABLE rv_requests ADD COLUMN IF NOT EXISTS via_flow BOOLEAN NOT NULL DEFAULT false`);
   // Photo check: per photo (by position) "ok" | "hidden" (no person) | "unsure" (needs a look) | "pending" (not checked yet, new upload)
   // | "shown" / "hidden_manual" (your decision) | "err1".."err2" (check failed, retried). media_ok = photos customers can see.
+  // Moderation queue: Done takes a review off the to-do list; Later hides it until a time, then it comes back.
+  await db(`ALTER TABLE rv_reviews ADD COLUMN IF NOT EXISTS mod_done_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS mod_later_until TIMESTAMPTZ`);
   await db(`ALTER TABLE rv_reviews ADD COLUMN IF NOT EXISTS media_check JSONB NOT NULL DEFAULT '{}', ADD COLUMN IF NOT EXISTS media_why JSONB NOT NULL DEFAULT '{}'`);
   await db(`ALTER TABLE rv_reviews ADD COLUMN IF NOT EXISTS media_ok INT GENERATED ALWAYS AS (jsonb_array_length(media) - jsonb_array_length(jsonb_path_query_array(media_check, '$.* ? (@ == "hidden" || @ == "unsure" || @ == "pending" || @ == "hidden_manual")'))) STORED`);
 }
@@ -539,8 +541,11 @@ async function writePage(store, token, focus, rating, embed) {
 }
 
 /* ---------------- staff ---------------- */
-function listWhere({ store, status, rating, q, source, sentiment, product, days, media, replied }) {
+function listWhere({ store, status, rating, q, source, sentiment, product, days, media, replied, queue }) {
   const args = [], where = [];
+  if (queue === "todo") where.push(`mod_done_at IS NULL AND (mod_later_until IS NULL OR mod_later_until <= now())`);
+  else if (queue === "later") where.push(`mod_done_at IS NULL AND mod_later_until > now()`);
+  else if (queue === "done") where.push(`mod_done_at IS NOT NULL`);
   if (store) { args.push(store); where.push(`store=$${args.length}`); }
   if (status && status !== "all") { args.push(status); where.push(`status=$${args.length}`); }
   if (rating) { const rs = String(rating).split(",").map(Number).filter((x) => x >= 1 && x <= 5); if (rs.length) { args.push(rs); where.push(`rating = ANY($${args.length})`); } }
@@ -559,7 +564,7 @@ async function list(f) {
   const { args, w } = listWhere(f);
   const per = Math.min(100, Number(f.per) || 25), page = Math.max(1, Number(f.page) || 1);
   const order = { oldest: "created_at ASC", highest: "rating DESC, created_at DESC", lowest: "rating ASC, created_at DESC", helpful: "helpful DESC, created_at DESC" }[f.sort] || "created_at DESC";
-  const rows = (await db(`SELECT id, store, source, product_id, product_handle, product_title, product_image, variant_title, rating, title, body, reviewer_name, verified, recommended, email, order_name, media, media_check, media_why, answers, status, reply, reply_by, reply_at, helpful, unhelpful, created_at, published_at, decided_by , (SELECT p.id FROM mk_profiles p WHERE p.store=rv_reviews.store AND lower(p.email)=lower(rv_reviews.email) LIMIT 1) profile_id FROM rv_reviews ${w} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
+  const rows = (await db(`SELECT id, store, source, product_id, product_handle, product_title, product_image, variant_title, rating, title, body, reviewer_name, verified, recommended, email, order_name, media, media_check, media_why, mod_done_at, mod_later_until, answers, status, reply, reply_by, reply_at, helpful, unhelpful, created_at, published_at, decided_by , (SELECT p.id FROM mk_profiles p WHERE p.store=rv_reviews.store AND lower(p.email)=lower(rv_reviews.email) LIMIT 1) profile_id FROM rv_reviews ${w} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
   const total = (await db(`SELECT count(*)::int n FROM rv_reviews ${w}`, args)).rows[0].n;
   const counts = (await db(`SELECT store, status, count(*)::int n, avg(rating)::float avg FROM rv_reviews GROUP BY store, status`)).rows;
   return { reviews: rows.slice(0, per), more: rows.length > per, page, total, counts };
@@ -750,6 +755,14 @@ function routes(app, { guard, actorOf, express }) {
 
   // staff
   app.get("/api/reviews", async (req, res) => { if (!guard(req, res)) return; try { res.json(await list(req.query)); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post("/api/reviews/:id/queue", async (req, res) => { if (!guard(req, res)) return;
+    try { const a = (req.body || {}).action, id = String(req.params.id);
+      const sql = a === "done" ? `mod_done_at=now(), mod_later_until=NULL` : a === "later" ? `mod_later_until=$2, mod_done_at=NULL` : a === "undo" ? `mod_done_at=NULL, mod_later_until=NULL` : null;
+      if (!sql) return res.status(400).json({ error: "Unknown action." });
+      // Later = tomorrow at 9 AM (account time zone), unless a number of hours is given.
+      const until = a === "later" ? ((req.body || {}).hours ? new Date(Date.now() + Number(req.body.hours) * 3600e3) : require("./mk-flows").delayUntil({ amount: 1, unit: "days", until_time: "09:00" }, bzTZ())) : null;
+      const r = (await db(`UPDATE rv_reviews SET ${sql} WHERE id=$1 RETURNING mod_done_at, mod_later_until`, a === "later" ? [id, until] : [id])).rows[0];
+      if (!r) return res.status(404).json({ error: "Review not found." }); res.json({ ok: true, ...r }); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post("/api/reviews/:id/photo", async (req, res) => { if (!guard(req, res)) return; try { res.json(await photoDecide(req.params.id, (req.body || {}).i, (req.body || {}).action)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
   app.get("/api/reviews-email-sample", async (req, res) => { if (!guard(req, res)) return; try { const s = storeOk(String(req.query.store || "lb")) || "lb"; const c = await reviewContext(s, null, null, { preview: true }); res.json({ items: (c.review_items || []).slice(0, 3) }); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get("/api/reviews-photo-check", async (req, res) => { if (!guard(req, res)) return; try { res.json(await photoCheckStatus()); } catch (e) { res.status(500).json({ error: e.message }); } });

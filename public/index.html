@@ -910,7 +910,7 @@ const RVSN={lb:"Larkspur Baby",lbo:"Larkspur Baby Outlet"};
 function rvTabs(){ document.querySelectorAll(".rvtabs [data-rs]").forEach(b=>b.classList.toggle("on",b.dataset.rs===RVS)); }
 function rvSetStore(s,quiet){ if(s!=="lb"&&s!=="lbo") return; RVS=s; try{ localStorage.setItem("bz_rv_store",s); }catch(e){} RV.product="";RV.product_title=""; rvTabs(); if(!quiet&&/^rv_/.test(VIEW)) loadReviews(); }
 document.addEventListener("DOMContentLoaded",rvTabs);
-const RV={replied:"",store:"",status:"pending",rating:"",sentiment:"",days:"",media:"",source:"",q:"",product:"",product_title:"",sort:"newest",page:1,rows:[],more:false,total:0,sel:new Set(),collapsed:false};
+const RV={queue:"todo",replied:"",store:"",status:"pending",rating:"",sentiment:"",days:"",media:"",source:"",q:"",product:"",product_title:"",sort:"newest",page:1,rows:[],more:false,total:0,sel:new Set(),collapsed:false};
 function rvStars(n){ return `<span class="rvst" title="${n} stars">${"★".repeat(n)}<span class="off">${"★".repeat(5-n)}</span></span>`; }
 const rvSel=(k,label,opts)=>`<label class="rvf"><span>${label}</span><select onchange="RV.${k}=this.value;loadReviews()">${opts.map(([v,l])=>`<option value="${v}" ${String(RV[k])===String(v)?"selected":""}>${l}</option>`).join("")}</select></label>`;
 async function loadReviews(more){
@@ -925,7 +925,7 @@ async function loadReviews(more){
   const w=$("stuckwrap");
   if(!more){ RV.page=1; RV.rows=[]; RV.sel.clear(); w.innerHTML=rvModHead()+'<div class="empty">Loading reviews…</div>'; } else RV.page++;
   try{
-    const qs=new URLSearchParams({replied:RV.replied,status:RV.status,store:RV.store,rating:RV.rating,sentiment:RV.sentiment,days:RV.days,media:RV.media,source:RV.source,q:RV.q,product:RV.product,sort:RV.sort,page:RV.page,per:25});
+    const qs=new URLSearchParams({queue:RV.queue,replied:RV.replied,status:RV.status,store:RV.store,rating:RV.rating,sentiment:RV.sentiment,days:RV.days,media:RV.media,source:RV.source,q:RV.q,product:RV.product,sort:RV.sort,page:RV.page,per:25});
     const d=await api(`/api/reviews?${qs}`); if(d.error) throw new Error(d.error);
     RV.rows=RV.rows.concat(d.reviews); RV.more=d.more; RV.total=d.total;
     const pend=d.counts.filter(c=>c.status==="pending"&&c.store===RVS).reduce((t,c)=>t+c.n,0); const b=$("v-rv_pending"); if(b) b.textContent=pend||"";
@@ -942,6 +942,7 @@ function rvModHead(){
     ${rvSel("sentiment","Sentiment",[["","Any"],["positive","Positive"],["neutral","Neutral"],["negative","Negative"]])}
     ${rvSel("days","Date submitted",[["","All time"],["1","Last 24 hours"],["7","Last 7 days"],["30","Last 30 days"],["90","Last 90 days"],["365","Last year"]])}
     ${rvSel("replied","Reply",[["","Any"],["no","No reply yet"],["yes","Replied"]])}
+    ${rvSel("queue","Queue",[["todo","To do"],["later","Later"],["done","Done"],["all","Everything"]])}
     ${rvSel("media","Media",[["","Any"],["1","With photos"],["0","No photos"],["check","Photos to look at"],["hidden","Hidden photos"]])}
     ${rvSel("source","Source",[["","Any"],["request","Review request email"],["site","Website"],["imported","Imported"]])}
     ${rvSel("sort","Sort",[["newest","Newest"],["oldest","Oldest"],["highest","Highest rating"],["lowest","Lowest rating"],["helpful","Most helpful"]])}
@@ -972,7 +973,7 @@ function rvCard(r){
     ${(r.media||[]).length?`<div class="rvmedia">${r.media.map((m,i)=>rvPhoto(r,m,i)).join("")}</div>`:""}
     ${r.reply?`<div class="rvreply"><b>Your public reply</b> <span class="exc">${esc(r.reply_by||"")}</span><div>${esc(r.reply)}</div></div>`:""}
     <div class="exc" style="margin-top:8px">${r.helpful||r.unhelpful?`👍 ${r.helpful||0} · 👎 ${r.unhelpful||0} · `:""}${r.decided_by&&r.status!=="pending"?`${esc(r.status)} by ${esc(r.decided_by)}`:esc(r.status)}</div></div>
-   <div class="rvrail">${r.status!=="published"?`<button class="rvact ok" title="Publish" onclick="rvDo('${esc(r.id)}','publish',this)"><i class="ti ti-check"></i><span>Publish</span></button>`:""}${r.status!=="rejected"?`<button class="rvact bad" title="Reject" onclick="rvDo('${esc(r.id)}','reject',this)"><i class="ti ti-x"></i><span>Reject</span></button>`:""}<button class="rvact" title="Reply" onclick="rvReply('${esc(r.id)}')"><i class="ti ti-message"></i><span>Reply</span></button>${r.product_handle?`<a class="rvact" title="View on site" href="${r.store==="lbo"?"https://larkspurbabyoutlet.com":"https://larkspurbaby.com"}/products/${esc(r.product_handle)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i><span>Product</span></a>`:""}</div></div>`;
+   <div class="rvrail">${r.status!=="published"?`<button class="rvact ok" title="Publish" onclick="rvDo('${esc(r.id)}','publish',this)"><i class="ti ti-check"></i><span>Publish</span></button>`:""}${r.status!=="rejected"?`<button class="rvact bad" title="Reject" onclick="rvDo('${esc(r.id)}','reject',this)"><i class="ti ti-x"></i><span>Reject</span></button>`:""}<button class="rvact" title="Reply" onclick="rvReply('${esc(r.id)}')"><i class="ti ti-message"></i><span>Reply</span></button>${r.mod_done_at||(r.mod_later_until&&new Date(r.mod_later_until)>new Date())?`<button class="rvact" title="Put it back on the to-do list" onclick="rvQueue('${esc(r.id)}','undo',this)"><i class="ti ti-arrow-back-up"></i><span>To do</span></button>`:`<button class="rvact ok" title="Done: take it off the to-do list" onclick="rvQueue('${esc(r.id)}','done',this)"><i class="ti ti-circle-check"></i><span>Done</span></button><button class="rvact" title="Skip: move it to the bottom for now" onclick="rvSkip('${esc(r.id)}')"><i class="ti ti-arrow-bar-to-down"></i><span>Skip</span></button><button class="rvact" title="Later: hide it until tomorrow 9 AM" onclick="rvQueue('${esc(r.id)}','later',this)"><i class="ti ti-clock"></i><span>Later</span></button>`}${r.product_handle?`<a class="rvact" title="View on site" href="${r.store==="lbo"?"https://larkspurbabyoutlet.com":"https://larkspurbaby.com"}/products/${esc(r.product_handle)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i><span>Product</span></a>`:""}</div></div>`;
 }
 // Photo check: each photo shows whether customers can see it, with Show / Hide.
 const RVPH={ok:["ok","Person in photo"],shown:["ok","Shown by you"],hidden:["bad","Hidden: no person"],hidden_manual:["bad","Hidden by you"],unsure:["warn","Look at this"],pending:["","Checking…"],err1:["","Checking…"],err2:["","Checking…"]};
@@ -991,6 +992,14 @@ async function rvPhotoCard(){ const el=$("rvphotocard"); if(!el) return; let st=
   el.innerHTML=`<div class="och">Photo check</div><label class="rvck" style="font-weight:600"><input type="checkbox" ${on?"checked":""} onchange="rvSavePhotoFilter(this.checked)"> Hide review photos with no baby, kid or adult in them</label>
    <div class="exc" style="margin-top:6px">The review still shows; only the photo is hidden. Photos Buzzin isn't sure about stay hidden and wait in Moderation (Media → Photos to look at). New photos are checked before they show.</div>
    ${pc.total?`<div style="margin-top:8px">${(pc.ok||0).toLocaleString()} showing · ${(pc.hidden||0).toLocaleString()} hidden · <a href="javascript:void 0" onclick="rvGo({view:'rv_mod',f:{status:'all',media:'check'}})">${(pc.unsure||0).toLocaleString()} to look at</a>${pc.waiting?` · ${pc.waiting.toLocaleString()} still being checked`:""}</div>`:""}`; }
+// Moderation queue: Done / Later go to the server; Skip just moves the card to the bottom of this list.
+async function rvQueue(id,action,b){ if(b) b.disabled=true; try{ const j=await api(`/api/reviews/${id}/queue`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})}); if(j.error) throw new Error(j.error);
+  const r=RV.rows.find(x=>x.id===id); if(r){ r.mod_done_at=j.mod_done_at; r.mod_later_until=j.mod_later_until; }
+  toast(action==="done"?"Done. Off your to-do list":action==="later"?"Back on your list tomorrow at 9 AM":"Back on your to-do list");
+  const c=$("rv-"+id); const leaves=(RV.queue==="todo"&&action!=="undo")||(RV.queue!=="todo"&&RV.queue!=="all"&&action==="undo")||(RV.queue==="later"&&action==="done")||(RV.queue==="done"&&action==="later");
+  if(c&&leaves){ c.style.transition="opacity .3s"; c.style.opacity=".3"; setTimeout(()=>{ c.remove(); RV.rows=RV.rows.filter(x=>x.id!==id); },300); } else if(c&&r) c.outerHTML=rvCard(r);
+}catch(e){ toast(e.message,true); if(b) b.disabled=false; } }
+function rvSkip(id){ const c=$("rv-"+id); if(!c) return; const i=RV.rows.findIndex(x=>x.id===id); if(i>=0) RV.rows.push(RV.rows.splice(i,1)[0]); const list=c.parentNode; const more=list.querySelector(".rvmore,.loadmore,[data-more]"); c.style.opacity=".3"; setTimeout(()=>{ c.style.opacity=""; if(more&&more.parentNode===list) list.insertBefore(c,more); else list.appendChild(c); toast("Skipped. Moved to the bottom"); },200); }
 async function rvDo(id,act,b,text){ if(b) b.disabled=true; try{ const r=await api(`/api/reviews/${id}/${act}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text||""})}); if(r.error) throw new Error(r.error); toast(act==="publish"?"Published":act==="reject"?"Rejected. Hidden from the site":"Reply saved");
     const c=$("rv-"+id); if(c&&(act==="publish"||act==="reject")&&RV.status!=="all"&&RV.status!==(act==="publish"?"published":"rejected")){ c.style.opacity=".35"; setTimeout(()=>c.remove(),350); } else loadReviews(); }catch(e){ toast(e.message,true); if(b) b.disabled=false; } }
 function rvReply(id){

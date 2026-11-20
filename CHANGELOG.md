@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.77
+- **Done, Skip and Later in Moderation.** Each review has three new buttons on the right: **Done** takes it off your to-do list, **Skip** moves it to the bottom of the list for now, **Later** hides it until tomorrow at 9 AM, then it comes back. A new **Queue** filter shows To do (the default), Later, Done or Everything, and "To do" on a Done or Later review puts it back on the list. These only affect your list: a review stays published or waiting exactly as it was.
+
 ## 0.0.76
 - **Every review video waits for you in Moderation.** Videos are hidden on the site until you click Show (the review itself stays live). This covers the videos already imported and every new one. In Moderation → Media → "Photos to look at", videos play right in the card with Show / Hide underneath. The to-do count on Overview includes them.
 
