@@ -977,11 +977,11 @@ function rvCard(r){
 // Photo check: each photo shows whether customers can see it, with Show / Hide.
 const RVPH={ok:["ok","Person in photo"],shown:["ok","Shown by you"],hidden:["bad","Hidden: no person"],hidden_manual:["bad","Hidden by you"],unsure:["warn","Look at this"],pending:["","Checking…"],err1:["","Checking…"],err2:["","Checking…"]};
 function rvPhoto(r,m,i){
-  const v=(r.media_check||{})[i], why=(r.media_why||{})[i]||"", st=RVPH[v]||(m.type==="video"?null:["","Not checked yet"]);
+  const vid=m.type==="video", v=(r.media_check||{})[i], why=(r.media_why||{})[i]||"", st=vid&&v==="unsure"?["warn","Video: look at this"]:(RVPH[v]||["","Not checked yet"]);
   const off=["hidden","hidden_manual","unsure","pending"].includes(v);
-  return `<div class="rvph ${off?"off":""}"><a href="${esc(m.large||m.url)}" target="_blank" rel="noopener"><img src="${esc(m.thumb||m.url)}" alt="" loading="lazy"></a>
+  return `<div class="rvph ${off?"off":""}">${vid?`<video src="${esc(m.url)}" ${m.thumb?`poster="${esc(m.thumb)}"`:""} controls muted playsinline preload="metadata" style="width:96px;height:96px;object-fit:cover;border-radius:10px;background:#000"></video>`:`<a href="${esc(m.large||m.url)}" target="_blank" rel="noopener"><img src="${esc(m.thumb||m.url)}" alt="" loading="lazy"></a>`}
     ${st?`<div class="rvphs ${st[0]}" title="${esc(why)}">${esc(st[1])}</div>`:""}
-    ${m.type==="video"?"":`<div class="rvphb">${off?`<button class="btn xs" onclick="rvPhotoDo('${esc(r.id)}',${i},'show')">Show</button>`:`<button class="btn sec xs" onclick="rvPhotoDo('${esc(r.id)}',${i},'hide')">Hide</button>`}</div>`}</div>`;
+    ${`<div class="rvphb">${off?`<button class="btn xs" onclick="rvPhotoDo('${esc(r.id)}',${i},'show')">Show</button>`:`<button class="btn sec xs" onclick="rvPhotoDo('${esc(r.id)}',${i},'hide')">Hide</button>`}</div>`}</div>`;
 }
 async function rvPhotoDo(id,i,action){ try{ const j=await api(`/api/reviews/${id}/photo`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({i,action})}); if(j.error) throw new Error(j.error);
   const r=RV.rows.find(x=>x.id===id); if(r){ r.media_check=j.media_check; const c=$("rv-"+id); if(c) c.outerHTML=rvCard(r); } toast(action==="show"?"Photo shown on the site":"Photo hidden"); }catch(e){ toast(e.message,true); } }

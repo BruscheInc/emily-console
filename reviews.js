@@ -851,7 +851,7 @@ async function photoDecide(id, i, action) {
 async function photoCheckStatus(store) {
   return (await db(`SELECT count(*) FILTER (WHERE v IN ('ok','shown'))::int ok, count(*) FILTER (WHERE v IN ('hidden','hidden_manual'))::int hidden, count(*) FILTER (WHERE v='unsure')::int unsure,
       count(*) FILTER (WHERE v IS NULL OR v IN ('pending','err1','err2'))::int waiting, count(*)::int total
-    FROM (SELECT r.media_check->>(i - 1)::text v FROM rv_reviews r, jsonb_array_elements(r.media) WITH ORDINALITY e(m, i) WHERE COALESCE(e.m->>'type','image') <> 'video' AND ($1::text IS NULL OR r.store=$1)) x`, [store || null])).rows[0];
+    FROM (SELECT r.media_check->>(i - 1)::text v FROM rv_reviews r, jsonb_array_elements(r.media) WITH ORDINALITY e(m, i) WHERE ($1::text IS NULL OR r.store=$1)) x`, [store || null])).rows[0];
 }
 const PHOTO_PROMPT = `This photo was uploaded with a customer review of baby and kids clothing. Is a real person (a baby, a child, or an adult) visible in it?
 Answer "yes" if a real person is clearly in the photo, even partly (for example a baby wearing the clothes, a face, a body in the outfit).
@@ -867,14 +867,15 @@ async function checkPhotos({ batch = 6 } = {}) {
     if (!PHOTO_FILTER) return { off: true, rows: 0 };
     const kit = require("./emily").claimsKit(); if (!kit || !kit.anthropic) return { rows: 0, nokey: true };
     const rows = (await db(`SELECT r.id, r.media, r.media_check FROM rv_reviews r WHERE jsonb_array_length(r.media) > 0 AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.media) WITH ORDINALITY e(m, i)
-        WHERE COALESCE(e.m->>'type','image') <> 'video' AND COALESCE(r.media_check->>(i - 1)::text, 'new') IN ('new','pending','err1','err2'))
+        WHERE COALESCE(r.media_check->>(i - 1)::text, 'new') IN ('new','pending','err1','err2'))
       ORDER BY (r.media_check::text LIKE '%pending%') DESC, r.created_at DESC LIMIT $1`, [batch])).rows;
     await Promise.all(rows.map(async (row) => {
       for (let i = 0; i < row.media.length; i++) {
         const m = row.media[i]; const cur = (row.media_check || {})[String(i)];
-        if (m.type === "video" || (cur && !["pending", "err1", "err2"].includes(cur))) continue;
+        if (cur && !["pending", "err1", "err2"].includes(cur)) continue;
         let v, why = null;
-        try {
+        if (m.type === "video") { v = "unsure"; why = "Video: every video waits for you"; }   // all videos go to Moderation
+        else try {
           const resp = await kit.anthropic.messages.create({ model: kit.model, max_tokens: 80, messages: [{ role: "user", content: [
             { type: "image", source: { type: "url", url: m.thumb || m.large || m.url } }, { type: "text", text: PHOTO_PROMPT }] }] });
           const out = (resp.content || []).map((c) => c.text || "").join("");

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.76
+- **Every review video waits for you in Moderation.** Videos are hidden on the site until you click Show (the review itself stays live). This covers the videos already imported and every new one. In Moderation → Media → "Photos to look at", videos play right in the card with Show / Hide underneath. The to-do count on Overview includes them.
+
 ## 0.0.75
 - Review backlog, part 2: the old review app stopped on Nov 18, so orders shipped from Nov 4 onward were never asked for a review. Customers from Nov 4 to Nov 6 (past their 14-day date) are added to the LB review flow and get their first email at the next 10 AM. Same skips as before (already in the flow, already reviewed, nothing to review). Runs once.
 
