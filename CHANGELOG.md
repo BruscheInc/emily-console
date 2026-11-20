@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.78
+- **Out-of-stock picks.** When Emily suggests a replacement for an out-of-stock item, she now names real in-stock picks: the same style in other prints in the same size, plus the next size up. "Ship the rest of the order now" is gone from the out-of-stock quick email.
+- **Address replies go back to Stockroom.** When a customer answers Stockroom's "please confirm your address" email, Emily reads the reply. If they confirm, or send a corrected address, Stockroom updates the order in Shopify and moves it from Address issues back to the shipping queue. A note on the ticket says what was sent.
+
 ## 0.0.77
 - **Done, Skip and Later in Moderation.** Each review has three new buttons on the right: **Done** takes it off your to-do list, **Skip** moves it to the bottom of the list for now, **Later** hides it until tomorrow at 9 AM, then it comes back. A new **Queue** filter shows To do (the default), Later, Done or Everything, and "To do" on a Done or Later review puts it back on the list. These only affect your list: a review stays published or waiting exactly as it was.
 

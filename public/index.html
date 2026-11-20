@@ -808,7 +808,7 @@ async function ntQuick(kind){
     NT_TAG="out-of-stock";
     const items=ntItems(o);
     P.innerHTML=`<div class="qpanel"><label>Which items are out of stock?</label><div class="qopts">${items.map((it,i)=>`<label class="qopt"><input type="checkbox" class="qitem" value="${i}" ${items.length===1?"checked":""}> ${esc(it.title)}${it.variant?` – ${esc(it.variant)}`:""} <span class="exc">× ${it.current_quantity!=null?it.current_quantity:it.quantity}</span></label>`).join("")||'<div class="exc">No items found on this order.</div>'}</div>
-      <label>What can we offer?</label><div class="qopts">${[["refund","Refund the item(s)",true],["swap","Swap for another size or color",true],["wait","Wait for it to come back in stock",false],["credit","Store credit instead of a refund",false],["shiprest","Ship the rest of the order now",true]].map(([v,l,c])=>`<label class="qopt"><input type="checkbox" class="qoffer" value="${v}" ${c?"checked":""}> ${l}</label>`).join("")}</div>
+      <label>What can we offer?</label><div class="qopts">${[["refund","Refund the item(s)",true],["swap","Swap for another size or color",true],["wait","Wait for it to come back in stock",false],["credit","Store credit instead of a refund",false]].map(([v,l,c])=>`<label class="qopt"><input type="checkbox" class="qoffer" value="${v}" ${c?"checked":""}> ${l}</label>`).join("")}</div>
       <input type="text" id="qrestock" placeholder="Back in stock date, if known (optional)">
       <button class="btn" onclick="ntQuickGo()">Draft out-of-stock email</button></div>`;
   } else if(kind==="delay"){
@@ -832,9 +832,9 @@ function ntQuickGo(){
     const items=ntItems(o), pick=[...document.querySelectorAll(".qitem:checked")].map(x=>items[+x.value]);
     if(!pick.length){ toast("Pick the out-of-stock item",true); return; }
     const offers=[...document.querySelectorAll(".qoffer:checked")].map(x=>x.value);
-    const L={refund:"a refund for the out-of-stock item(s)",swap:"swapping for another size or color (they can tell us which)",wait:"waiting until it's back in stock",credit:"store credit instead of a refund",shiprest:"we'll ship the rest of the order right away"};
+    const L={refund:"a refund for the out-of-stock item(s)",swap:"swapping for another size or color (they can tell us which)",wait:"waiting until it's back in stock",credit:"store credit instead of a refund"};
     const rs=$("qrestock").value.trim();
-    notes=`Apologize: these items on order ${o.name} are out of stock: ${pick.map(it=>`${it.title}${it.variant?` (${it.variant})`:""} x${it.current_quantity!=null?it.current_quantity:it.quantity}`).join("; ")}.${rs?` Expected back in stock: ${rs}.`:""} Options to offer: ${offers.map(x=>L[x]).join("; ")||"ask what they'd like to do"}. Ask them to reply with what they'd prefer. Don't promise a refund has been issued yet.`;
+    notes=`Apologize: these items on order ${o.name} are out of stock: ${pick.map(it=>`${it.title}${it.variant?` (${it.variant})`:""} x${it.current_quantity!=null?it.current_quantity:it.quantity}`).join("; ")}.${rs?` Expected back in stock: ${rs}.`:""} Options to offer: ${offers.map(x=>L[x]).join("; ")||"ask what they'd like to do"}.${offers.includes("swap")?" For the swap, check stock (shopify_check_stock) and suggest specific in-stock picks: the same style in other prints/colors in the SAME size, plus the next size up (same print first). Name each with its size.":""} Ask them to reply with what they'd prefer. Don't promise a refund has been issued yet.`;
   } else if(k==="delay"){
     const why=(document.querySelector('input[name="qdelay"]:checked')||{}).value||"", d=$("qship").value.trim();
     notes=`Let the customer know order ${o.name} is delayed. Reason: ${why}.${d?` New expected ship date: ${d}.`:" We'll email tracking as soon as it ships."} Apologize briefly and thank them for their patience.`;
