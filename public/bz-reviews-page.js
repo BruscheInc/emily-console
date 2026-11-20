@@ -118,7 +118,7 @@
     ".bzp-lbx img{display:block;width:100%;max-height:70vh;object-fit:contain;background:var(--bzp-cream)}",
     ".bzp-lbx .cap{padding:12px 16px 16px;font-size:14px}.bzp-lbx .cap a{color:var(--bzp-ink);font-weight:700}",
     ".bzp-lbx .x{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:50%;border:0;background:#fff;font-size:22px;line-height:1;box-shadow:0 2px 10px rgba(0,0,0,.15)}",
-    ".bzp-write{background:#fff;border:2px solid var(--bzp-ink);border-radius:28px;padding:18px 18px 6px;margin:10px 0 30px;box-shadow:0 12px 30px rgba(36,47,63,.08);scroll-margin-top:90px}",
+    ".bzp-write{background:#fff;border:2px solid var(--bzp-ink);border-radius:28px;padding:18px 18px 10px;margin:10px 0 30px;box-shadow:0 12px 30px rgba(36,47,63,.08);scroll-margin-top:90px}",
     ".bzp-wh{font-weight:700;font-size:15px;color:var(--bzp-ink);margin:0 0 4px 4px}",
     /* phones */
     "@media(max-width:760px){.bzp{padding:0 14px}.bzp-hero{border-radius:24px;padding:40px 18px 60px;margin-top:4px}.bzp-badge{padding:10px 18px 10px 10px}.bzp-badge b{width:50px;height:50px;font-size:19px}",
@@ -237,17 +237,19 @@
   // The review form from the email, right here on the store's own site (Buzzin's form in a frame that grows to fit).
   var WB = null;
   function writeBox() {
-    if (!WRITE) return;
-    if (!WB) {
-      WB = document.createElement("section"); WB.className = "bzp-write"; WB.id = "bzp-write";
-      var src = (C.origin || "") + "/rv/" + C.store + "/write?embed=1&t=" + encodeURIComponent(WRITE) + (WQ.get("p") ? "&p=" + encodeURIComponent(WQ.get("p")) : "") + (WQ.get("r") ? "&r=" + encodeURIComponent(WQ.get("r")) : "");
-      WB.innerHTML = '<div class="bzp-wh"><span aria-hidden="true">💛</span> Thanks for taking a minute!</div><iframe title="Write your review" src="' + esc(src) + '" style="width:100%;border:0;height:620px;display:block;background:transparent" loading="eager"></iframe>';
-      var fr = WB.querySelector("iframe");
-      window.addEventListener("message", function (e) { var d = e.data || {}; if (d && d.bzWriteH && e.source === fr.contentWindow) fr.style.height = Math.max(300, Number(d.bzWriteH) + 8) + "px"; });
-      setTimeout(function () { try { WB.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} }, 300);
-    }
-    // A wrapper with the page's width, placed just above the reviews (outside them, so redraws never reload the form).
-    if (!WB.parentNode) { var wrap = document.createElement("div"); wrap.className = "bzp"; wrap.style.marginBottom = "0"; wrap.appendChild(WB); root.parentNode.insertBefore(wrap, root); }
+    if (!WRITE || WB) return;
+    WB = document.createElement("section"); WB.className = "bzp-write"; WB.id = "bzp-write";
+    WB.innerHTML = '<div class="bzp-wh"><span aria-hidden="true">💛</span> Thanks for taking a minute!</div><div id="bzw"><div class="bzw-in"><div class="bzp-skel" style="height:220px"></div></div></div>';
+    var wrap = document.createElement("div"); wrap.className = "bzp"; wrap.style.marginBottom = "0"; wrap.appendChild(WB); root.parentNode.insertBefore(wrap, root);
+    setTimeout(function () { try { WB.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} }, 300);
+    get("/write-data?t=" + encodeURIComponent(WRITE) + (WQ.get("p") ? "&p=" + encodeURIComponent(WQ.get("p")) : "") + (WQ.get("r") ? "&r=" + encodeURIComponent(WQ.get("r")) : "")).then(function (d) {
+      var inn = WB.querySelector(".bzw-in");
+      if (!d || d.expired || !d.cfg) { inn.innerHTML = '<p style="margin:8px 4px 14px">This review link has expired or was already used. Thank you for being part of our Larkspur family!</p>'; return; }
+      var st = document.createElement("style"); st.textContent = d.css + "#bzw{background:transparent!important}#bzw .bzw-in{padding:0 0 8px!important;max-width:620px}#bzw h1{margin-top:4px!important}"; document.head.appendChild(st);
+      inn.innerHTML = '<h1>How did your little one like it?</h1><div style="color:#676986">' + (d.order ? "Order " + esc(d.order) + ". " : "") + 'Tap the stars for each item.</div><div id="items"></div>';
+      window.RVW = d.cfg;
+      var sc = document.createElement("script"); sc.src = (C.origin || "") + "/rv-write.js?v=" + Date.now().toString(36).slice(0, 5); document.body.appendChild(sc);
+    }).catch(function () { var inn = WB.querySelector(".bzw-in"); if (inn) inn.innerHTML = '<p style="margin:8px 4px 14px">We couldn’t load the review form. Please try the link again in a moment.</p>'; });
   }
   function mount() {
     var st = document.createElement("style"); st.textContent = CSS; document.head.appendChild(st);

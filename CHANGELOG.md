@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.74
+- **Review form right on larkspurbaby.com/pages/reviews.** Links from Larkspur Baby review emails open the reviews page with the review form at the top, drawn by the page itself (no embedded frame): product photos, the tapped star already picked, title, review, photos, recommend and name. Submitting saves and publishes the review as before.
+- **Backlog for the LB review flow (now live).** Everyone whose order shipped in the last 14 days joins the flow as if it had been on when their order shipped, so their first review email still goes out 14 days after shipping, at 10 AM. It skips people already in the flow, people who already reviewed, and orders with nothing to review (Package Protection only). Runs once.
+
 ## 0.0.73
 - **Review links now go to larkspurbaby.com/pages/reviews**, not returns.larkspurbaby.com. Tapping a star in a Larkspur Baby review email opens the reviews page on the store's own site, with the review form at the top (the tapped star already picked). Below it is the rest of the reviews page. Older emails' links keep working. The Outlet still uses Buzzin's own review page.
 - The review form now shows each product's photo (filled in from Shopify, or from the product's reviews, when the order didn't include one).

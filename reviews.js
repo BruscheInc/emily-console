@@ -382,6 +382,33 @@ async function reviewContext(store, profile, order, { test = false, preview = fa
     review_first_product: items[0].title,
   };
 }
+/** Backlog for a review flow that was just turned on: everyone whose order shipped in the last `days` days joins the flow
+ *  as if it had been on when their order shipped, so their first email still goes out 14 days after shipping. */
+async function backlogReviewFlow(store, { days = 14, dry = false } = {}) {
+  const F = require("./mk-flows");
+  const flow = (await db(`SELECT * FROM mk_flows WHERE store=$1 AND status='live' AND NOT archived AND trigger->>'event'='fulfilled_order' AND name ILIKE 'Review request%' ORDER BY id LIMIT 1`, [store])).rows[0];
+  if (!flow) return { flow: null, added: 0, note: "no live review flow" };
+  const start = flow.graph.nodes[flow.graph.start];
+  const evs = (await db(`SELECT DISTINCT ON (profile_id) id, profile_id, at, props FROM mk_events WHERE store=$1 AND type='fulfilled_order' AND profile_id IS NOT NULL AND at > now() - ($2 || ' days')::interval ORDER BY profile_id, at DESC`, [store, String(days)])).rows;
+  let added = 0, skipped = { in_flow: 0, reviewed: 0, nothing: 0, past: 0 };
+  for (const e of evs) {
+    const props = e.props || {};
+    if (!reviewItems(props.items).length) { skipped.nothing++; continue; }
+    if ((await db(`SELECT 1 FROM mk_flow_runs WHERE flow_id=$1 AND profile_id=$2 AND (status IN ('active','working','paused') OR entered_at > now() - interval '30 days')`, [flow.id, e.profile_id])).rows[0]) { skipped.in_flow++; continue; }
+    if ((await db(`SELECT 1 FROM mk_events WHERE profile_id=$1 AND type='left_review' AND at >= $2`, [e.profile_id, e.at])).rows[0]) { skipped.reviewed++; continue; }
+    const p = (await db(`SELECT timezone FROM mk_profiles WHERE id=$1`, [e.profile_id])).rows[0] || {};
+    // Skip the first wait and count it from the ship date instead.
+    let node = flow.graph.start, due = new Date();
+    if (start && start.type === "delay") { node = start.next; due = F.delayUntil(start.config || {}, p.timezone || bzTZ(), new Date(e.at)); }
+    if (due < new Date()) { skipped.past++; continue; }
+    if (dry) { added++; continue; }
+    const run = (await db(`INSERT INTO mk_flow_runs (flow_id, version, store, profile_id, node_id, due_at, ctx, test) VALUES ($1,$2,$3,$4,$5,$6,$7,false) RETURNING id`,
+      [flow.id, flow.version, store, e.profile_id, node, due, JSON.stringify({ trigger: "fulfilled_order", trigger_props: props, reason: `backlog: shipped ${new Date(e.at).toISOString().slice(0, 10)}`, since: new Date(e.at).toISOString() })])).rows[0];
+    await db(`INSERT INTO mk_flow_log (run_id, flow_id, profile_id, node_id, action, detail) VALUES ($1,$2,$3,$4,'entered',$5)`, [run.id, flow.id, e.profile_id, node, `backlog: shipped ${props.name || ""} on ${new Date(e.at).toISOString().slice(0, 10)}, first email ${due.toISOString()}`]);
+    added++;
+  }
+  return { flow: flow.id, added, skipped, considered: evs.length };
+}
 async function collectOrders(store, s) {
   const em = require("./emily"); const st = em.storeForPrefix(store === "lbo" ? "LBO" : "LB"); if (!st) return [];
   const from = new Date(Date.now() - (s.wait_days + 25) * 864e5).toISOString().slice(0, 10), to = new Date(Date.now() - (s.wait_days - 1) * 864e5).toISOString().slice(0, 10);
@@ -479,6 +506,24 @@ async function testRequest(store, to) {
 // Inside larkspurbaby.com/pages/reviews: no logo or page background, and the frame grows to fit the form.
 const EMBED_CSS = `<style>body{background:transparent!important}main{padding:0 0 10px!important}main>img:first-child{display:none}main>h1{margin-top:0!important}</style>`;
 const EMBED_JS = `<script>(function(){function h(){try{parent.postMessage({bzWriteH:document.documentElement.scrollHeight},"*")}catch(e){}}window.addEventListener("load",h);new MutationObserver(h).observe(document.body,{subtree:true,childList:true,attributes:true});setInterval(h,1500);h();})();</script>`;
+function writeCss(b) { return `body{margin:0;background:${b.colors.ground};font-family:${b.fonts.body};color:#2C3E50}main{max-width:620px;margin:0 auto;padding:24px 16px 60px}h1{font-family:${b.fonts.heading};font-weight:normal;font-size:26px;margin:14px 0 4px}
+.it{background:#fff;border-radius:12px;padding:18px;margin-top:16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}.hd{display:flex;gap:14px;align-items:center}.hd img{width:72px;height:72px;object-fit:cover;border-radius:8px}.hd b{font-size:16px;display:block}
+.pick{display:flex;gap:6px;margin:14px 0 4px}.pick button{border:0;background:none;padding:0;cursor:pointer}label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
+input[type=text],textarea{width:100%;box-sizing:border-box;border:1px solid #DBDDE4;border-radius:8px;padding:10px 12px;font:inherit;font-size:15px}textarea{min-height:110px}
+.btn{background:#242F3F;color:#fff;border:0;border-radius:22px;padding:11px 22px;font:inherit;font-weight:600;cursor:pointer;margin-top:14px}.btn[disabled]{opacity:.6}.err{color:#b42318;font-size:13px;margin-top:8px}.ok{color:#1d7a46;font-weight:600;margin-top:10px}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.thumbs img{width:56px;height:56px;object-fit:cover;border-radius:6px}.form{display:none}.it.open .form{display:block}.yn{display:flex;gap:8px}.yn button{border:1px solid #DBDDE4;background:#fff;border-radius:18px;padding:6px 14px;font:inherit;cursor:pointer}.yn button.on{background:#242F3F;color:#fff;border-color:#242F3F}`; }
+/** The review form's data for a token (used by Buzzin's page and by the store's reviews page). */
+async function writeData(store, token, focus, rating) {
+  const q = (await db(`SELECT * FROM rv_requests WHERE token=$1 AND store=$2`, [token, store])).rows[0];
+  if (!q) return null;
+  const done = (await db(`SELECT product_id FROM rv_reviews WHERE lower(email)=$1 AND product_id = ANY($2)`, [q.email, q.items.map((i) => i.product_id)])).rows.map((r) => r.product_id);
+  const items = await fillProductInfo(store, (q.items || []).map((it) => ({ ...it, product_id: String(it.product_id || "") }))).catch(() => q.items);
+  return { q, cfg: { store, token, origin: PUBLIC_URL(), name: q.name || "", email: q.email, focus: String(focus || ""), rating: Number(rating) || 0, done, items, brand: STORES[store].name, shop: STORES[store].shop } };
+}
+// The same CSS, scoped under #bzw so it can sit inside the store's own page without touching the theme.
+function scopedWriteCss(b) {
+  return writeCss(b).split("}").map((r) => { const k = r.indexOf("{"); if (k < 0) return r; const sel = r.slice(0, k).split(",").map((x) => { x = x.trim(); if (!x) return x; if (x === "body") return "#bzw"; if (x === "main") return "#bzw .bzw-in"; return "#bzw " + x.replace(/^main\b/, ".bzw-in"); }).join(","); return sel + r.slice(k); }).join("}");
+}
 async function writePage(store, token, focus, rating, embed) {
   const q = (await db(`SELECT * FROM rv_requests WHERE token=$1 AND store=$2`, [token, store])).rows[0];
   if (!q) return null;
@@ -487,12 +532,7 @@ async function writePage(store, token, focus, rating, embed) {
   const items = await fillProductInfo(store, (q.items || []).map((it) => ({ ...it, product_id: String(it.product_id || "") }))).catch(() => q.items);
   const cfg = { store, token, origin: PUBLIC_URL(), name: q.name || "", email: q.email, focus: String(focus || ""), rating: Number(rating) || 0, done, items, brand: STORES[store].name, shop: STORES[store].shop };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Review your order · ${escH(STORES[store].name)}</title>
-<style>body{margin:0;background:${b.colors.ground};font-family:${b.fonts.body};color:#2C3E50}main{max-width:620px;margin:0 auto;padding:24px 16px 60px}h1{font-family:${b.fonts.heading};font-weight:normal;font-size:26px;margin:14px 0 4px}
-.it{background:#fff;border-radius:12px;padding:18px;margin-top:16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}.hd{display:flex;gap:14px;align-items:center}.hd img{width:72px;height:72px;object-fit:cover;border-radius:8px}.hd b{font-size:16px;display:block}
-.pick{display:flex;gap:6px;margin:14px 0 4px}.pick button{border:0;background:none;padding:0;cursor:pointer}label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
-input[type=text],textarea{width:100%;box-sizing:border-box;border:1px solid #DBDDE4;border-radius:8px;padding:10px 12px;font:inherit;font-size:15px}textarea{min-height:110px}
-.btn{background:#242F3F;color:#fff;border:0;border-radius:22px;padding:11px 22px;font:inherit;font-weight:600;cursor:pointer;margin-top:14px}.btn[disabled]{opacity:.6}.err{color:#b42318;font-size:13px;margin-top:8px}.ok{color:#1d7a46;font-weight:600;margin-top:10px}
-.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.thumbs img{width:56px;height:56px;object-fit:cover;border-radius:6px}.form{display:none}.it.open .form{display:block}.yn{display:flex;gap:8px}.yn button{border:1px solid #DBDDE4;background:#fff;border-radius:18px;padding:6px 14px;font:inherit;cursor:pointer}.yn button.on{background:#242F3F;color:#fff;border-color:#242F3F}</style>${embed ? EMBED_CSS : ""}</head>
+<style>${writeCss(b)}</style>${embed ? EMBED_CSS : ""}</head>
 <body><main><img src="${b.logo && b.logo.startsWith("/") ? PUBLIC_URL() + b.logo : b.logo}" width="${b.logo_width || 56}" alt="${escH(STORES[store].name)}"><h1>How did your little one like it?</h1><div style="color:#676986">Order ${escH(q.order_name || "")}. Tap the stars for each item.</div><div id="items"></div></main>
 <script>window.RVW=${JSON.stringify(cfg).replace(/</g, "\\u003c")};</script><script src="${PUBLIC_URL()}/rv-write.js"></script>${embed ? EMBED_JS : ""}</body></html>`;
 }
@@ -686,6 +726,11 @@ function routes(app, { guard, actorOf, express }) {
       const f = await core.saveFile({ name: `review-${Date.now()}`, contentType: ct, buffer: req.body, by: "review" });
       res.json({ url: core.fileUrl(PUBLIC_URL(), f.file_id) });
     } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.get("/rv/:store/write-data", async (req, res) => {
+    cors(res); res.setHeader("Cache-Control", "no-store"); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
+    try { const d = await writeData(s, String(req.query.t || ""), req.query.p, req.query.r); if (!d) return res.json({ expired: true });
+      const b = await require("./mk-email").brand(s); res.json({ cfg: d.cfg, order: d.q.order_name || "", css: scopedWriteCss(b) }); } catch (e) { res.status(500).json({ error: e.message }); }
   });
   app.get("/rv/:store/write", async (req, res) => {
     const s = storeOk(req.params.store); if (!s) return res.status(404).send("Not found");
@@ -932,6 +977,10 @@ async function startJobs(syncGet, syncSet) {
     for (const s of Object.keys(STORES)) { try { const ids = await require("./mk-email").refreshReviewEmails(s); console.log(`⭐ REVIEW EMAILS ${s}: new design on #${ids.join(", #") || "none"}`); } catch (e) { console.error(`⭐ review emails ${s}:`, e.message); } }
     await syncSet("review_emails_v3", new Date().toISOString());
   }
+  // The LB review flow went live 2026-11-19: add everyone shipped in the last 14 days (once).
+  if (!(await syncGet("review_backlog_lb_v1"))) {
+    try { const r = await backlogReviewFlow("lb", { days: 14 }); console.log(`⭐ REVIEW BACKLOG lb: ${JSON.stringify(r)}`); if (r.flow) await syncSet("review_backlog_lb_v1", new Date().toISOString()); } catch (e) { console.error("⭐ review backlog:", e.message); }
+  }
   // First full copy of Okendo (both stores) + review groups, once.
   if (!(await syncGet("reviews_okendo_v1"))) {
     for (const s of Object.keys(STORES)) {
@@ -953,4 +1002,4 @@ async function startJobs(syncGet, syncSet) {
   setInterval(() => runRequests().catch((e) => console.error("review requests:", e.message)), 6 * 3600e3); setTimeout(() => runRequests().catch((e) => console.error("review requests:", e.message)), 5 * 60e3);
 }
 
-module.exports = { reviewItems, skipItem, reviewContext, tokenForOrder, runRequests, testRequest, writePage, migrate, routes, startJobs, importOkendo, syncGroups, productReviews, starsFor, submit, list, decide, settings, saveSettings, STORES };
+module.exports = { backlogReviewFlow, reviewItems, skipItem, reviewContext, tokenForOrder, runRequests, testRequest, writePage, migrate, routes, startJobs, importOkendo, syncGroups, productReviews, starsFor, submit, list, decide, settings, saveSettings, STORES };

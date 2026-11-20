@@ -45,5 +45,5 @@
     };
     if (String(it.product_id) === C.focus && C.rating) { rating = C.rating; paint(); el.classList.add("open"); if (rating <= 3) { rec = false; el.querySelector('[data-rec="0"]').classList.add("on"); el.querySelector('[data-rec="1"]').classList.remove("on"); } setTimeout(function () { el.scrollIntoView({ block: "start" }); el.querySelector(".b").focus(); }, 50); }
   });
-  var foot = document.createElement("p"); foot.style.cssText = "text-align:center;margin-top:28px;font-size:13px"; foot.innerHTML = window.parent !== window ? '' : '<a href="' + esc(C.shop) + '" style="color:#676986">Back to ' + esc(C.brand) + "</a>"; box.appendChild(foot);
+  var foot = document.createElement("p"); foot.style.cssText = "text-align:center;margin-top:28px;font-size:13px"; foot.innerHTML = (window.parent !== window || document.getElementById('bzw')) ? '' : '<a href="' + esc(C.shop) + '" style="color:#676986">Back to ' + esc(C.brand) + "</a>"; box.appendChild(foot);
 })();
