@@ -300,6 +300,14 @@ async function submit(store, b, { via = "site" } = {}) {
    star opens the review page with that rating picked. Reminders 7 and 14 days later if nothing was reviewed.
    Goes to every buyer except people who unsubscribed or bounced. Off per store until Okendo's sequence is paused. */
 const STAR_PATH = "M12 2.6l2.9 6.2 6.7.7-5 4.6 1.4 6.7L12 17.4l-6 3.4 1.4-6.7-5-4.6 6.7-.7z";
+/** Where a review link goes. Larkspur Baby: the reviews page on larkspurbaby.com, which opens the review form right there
+ *  (so shoppers stay on the store's own site). Other stores: Buzzin's own review page. */
+const ONSITE_WRITE = { lb: true };
+function writeLink(store, token, p, r, amp) {
+  const a = amp ? "&amp;" : "&", t = encodeURIComponent(token || "preview");
+  if (ONSITE_WRITE[store]) return `${STORES[store].shop}/pages/reviews?bz_write=${t}${p ? `${a}p=${p}` : ""}${r ? `${a}r=${r}` : ""}`;
+  return `${writeBase(store)}/rv/${store}/write?t=${t}${p ? `${a}p=${p}` : ""}${r ? `${a}r=${r}` : ""}`;
+}
 const writeBase = (store) => { try { const d = require("./returns").STORE_DEFS[store]; if (d && d.host) return `https://${d.host}`; } catch (_) {} return PUBLIC_URL(); };
 // Never asked for reviews: Package Protection (PP) and other non-products. Matched on the name and on the product's handle.
 const SKIP_ITEM = /package protection|shipping protection|order protection|\bPP\b|gift card|route|insurance/i;
@@ -364,12 +372,12 @@ async function reviewContext(store, profile, order, { test = false, preview = fa
   const items = await fillProductInfo(store, reviewItems(o.items)); if (!items.length) return { review_items: [], review_url: STORES[store].shop };
   let token = null;
   if (!preview && profile && profile.email) token = await tokenForOrder(store, { order_id: o.order_id, order_name: o.name, email: profile.email, name: [profile.first_name, profile.last_name].filter(Boolean).join(" "), items: o.items, test }).catch(() => null);
-  const base = `${writeBase(store)}/rv/${store}/write?t=${token || "preview"}`;
+  const base = writeLink(store, token);
   return {
     review_url: base,
     review_items: items.map((it) => {
-      const u = `${base}&p=${it.product_id}`;
-      return { ...it, url: u, review_url: u, product_url: it.handle ? `${STORES[store].shop}/products/${it.handle}` : STORES[store].shop, star_urls: [1, 2, 3, 4, 5].map((n) => `${u}&r=${n}`), rate_1: `${u}&r=1`, rate_2: `${u}&r=2`, rate_3: `${u}&r=3`, rate_4: `${u}&r=4`, rate_5: `${u}&r=5` };
+      const u = writeLink(store, token, it.product_id);
+      return { ...it, url: u, review_url: u, product_url: it.handle ? `${STORES[store].shop}/products/${it.handle}` : STORES[store].shop, star_urls: [1, 2, 3, 4, 5].map((n) => writeLink(store, token, it.product_id, n)), rate_1: writeLink(store, token, it.product_id, 1), rate_2: writeLink(store, token, it.product_id, 2), rate_3: writeLink(store, token, it.product_id, 3), rate_4: writeLink(store, token, it.product_id, 4), rate_5: writeLink(store, token, it.product_id, 5) };
     }),
     review_first_product: items[0].title,
   };
@@ -392,7 +400,7 @@ async function collectOrders(store, s) {
 function requestEmail(store, b, req, round, unsub, prefs) {
   const S = STORES[store]; const base = writeBase(store);
   const first = String(req.name || "").split(" ")[0] || "there";
-  const starRow = (it) => [1, 2, 3, 4, 5].map((n) => `<a href="${base}/rv/${store}/write?t=${req.token}&amp;p=${it.product_id}&amp;r=${n}" style="text-decoration:none;display:inline-block;padding:0 3px"><img src="${PUBLIC_URL()}/rv-star.png" width="30" height="30" alt="${n} star${n > 1 ? "s" : ""}" style="display:block;border:0"></a>`).join("");
+  const starRow = (it) => [1, 2, 3, 4, 5].map((n) => `<a href="${writeLink(store, req.token, it.product_id, n, true)}" style="text-decoration:none;display:inline-block;padding:0 3px"><img src="${PUBLIC_URL()}/rv-star.png" width="30" height="30" alt="${n} star${n > 1 ? "s" : ""}" style="display:block;border:0"></a>`).join("");
   const items = req.items.map((it) => `<tr><td style="padding:18px 0;border-top:1px solid #ECEAE5"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
       <td width="96" valign="top">${it.image ? `<img src="${it.image}" width="84" height="84" alt="" style="display:block;border-radius:8px;object-fit:cover">` : ""}</td>
       <td valign="top" style="font-family:${b.fonts.body};color:${b.colors.text}"><div style="font-size:16px;font-weight:bold;line-height:1.3">${escH(it.title)}</div>${it.variant ? `<div style="font-size:13px;color:${b.colors.muted}">${escH(it.variant)}</div>` : ""}
@@ -406,7 +414,7 @@ function requestEmail(store, b, req, round, unsub, prefs) {
     <tr><td style="padding:14px 32px 26px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${items}</table></td></tr></table>
     <table role="presentation" width="100%" style="max-width:560px"><tr><td style="padding:18px 12px;text-align:center;font-family:${b.fonts.body};font-size:12px;line-height:1.6;color:${b.colors.muted}">${escH(b.name)}${b.address ? " · " + escH(b.address) : ""}<br>
     <a href="${unsub}" style="color:${b.colors.muted}">Unsubscribe</a> · <a href="${prefs}" style="color:${b.colors.muted}">Email preferences</a></td></tr></table></td></tr></table></body></html>`;
-  const text = `Hi ${first}!\n\n${lead}\n\n` + req.items.map((it) => `${it.title}${it.variant ? ` (${it.variant})` : ""}: ${base}/rv/${store}/write?t=${req.token}&p=${it.product_id}`).join("\n") + `\n\nUnsubscribe: ${unsub}`;
+  const text = `Hi ${first}!\n\n${lead}\n\n` + req.items.map((it) => `${it.title}${it.variant ? ` (${it.variant})` : ""}: ${writeLink(store, req.token, it.product_id)}`).join("\n") + `\n\nUnsubscribe: ${unsub}`;
   return { subject: round === 1 ? "How did your little one like it?" : "Quick favor: how's your order?", html, text };
 }
 async function sendRequest(store, req, round, { test = false, to } = {}) {
@@ -468,21 +476,25 @@ async function testRequest(store, to) {
   return { ok: r && r.status === "sent", status: r && r.status, reason: r && r.reason, order: o.name };
 }
 /** The review page a request email opens (on the store's own domain). */
-async function writePage(store, token, focus, rating) {
+// Inside larkspurbaby.com/pages/reviews: no logo or page background, and the frame grows to fit the form.
+const EMBED_CSS = `<style>body{background:transparent!important}main{padding:0 0 10px!important}main>img:first-child{display:none}main>h1{margin-top:0!important}</style>`;
+const EMBED_JS = `<script>(function(){function h(){try{parent.postMessage({bzWriteH:document.documentElement.scrollHeight},"*")}catch(e){}}window.addEventListener("load",h);new MutationObserver(h).observe(document.body,{subtree:true,childList:true,attributes:true});setInterval(h,1500);h();})();</script>`;
+async function writePage(store, token, focus, rating, embed) {
   const q = (await db(`SELECT * FROM rv_requests WHERE token=$1 AND store=$2`, [token, store])).rows[0];
   if (!q) return null;
   const b = await require("./mk-email").brand(store);
   const done = (await db(`SELECT product_id FROM rv_reviews WHERE lower(email)=$1 AND product_id = ANY($2)`, [q.email, q.items.map((i) => i.product_id)])).rows.map((r) => r.product_id);
-  const cfg = { store, token, origin: PUBLIC_URL(), name: q.name || "", email: q.email, focus: String(focus || ""), rating: Number(rating) || 0, done, items: q.items, brand: STORES[store].name, shop: STORES[store].shop };
+  const items = await fillProductInfo(store, (q.items || []).map((it) => ({ ...it, product_id: String(it.product_id || "") }))).catch(() => q.items);
+  const cfg = { store, token, origin: PUBLIC_URL(), name: q.name || "", email: q.email, focus: String(focus || ""), rating: Number(rating) || 0, done, items, brand: STORES[store].name, shop: STORES[store].shop };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Review your order · ${escH(STORES[store].name)}</title>
 <style>body{margin:0;background:${b.colors.ground};font-family:${b.fonts.body};color:#2C3E50}main{max-width:620px;margin:0 auto;padding:24px 16px 60px}h1{font-family:${b.fonts.heading};font-weight:normal;font-size:26px;margin:14px 0 4px}
 .it{background:#fff;border-radius:12px;padding:18px;margin-top:16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}.hd{display:flex;gap:14px;align-items:center}.hd img{width:72px;height:72px;object-fit:cover;border-radius:8px}.hd b{font-size:16px;display:block}
 .pick{display:flex;gap:6px;margin:14px 0 4px}.pick button{border:0;background:none;padding:0;cursor:pointer}label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
 input[type=text],textarea{width:100%;box-sizing:border-box;border:1px solid #DBDDE4;border-radius:8px;padding:10px 12px;font:inherit;font-size:15px}textarea{min-height:110px}
 .btn{background:#242F3F;color:#fff;border:0;border-radius:22px;padding:11px 22px;font:inherit;font-weight:600;cursor:pointer;margin-top:14px}.btn[disabled]{opacity:.6}.err{color:#b42318;font-size:13px;margin-top:8px}.ok{color:#1d7a46;font-weight:600;margin-top:10px}
-.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.thumbs img{width:56px;height:56px;object-fit:cover;border-radius:6px}.form{display:none}.it.open .form{display:block}.yn{display:flex;gap:8px}.yn button{border:1px solid #DBDDE4;background:#fff;border-radius:18px;padding:6px 14px;font:inherit;cursor:pointer}.yn button.on{background:#242F3F;color:#fff;border-color:#242F3F}</style></head>
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.thumbs img{width:56px;height:56px;object-fit:cover;border-radius:6px}.form{display:none}.it.open .form{display:block}.yn{display:flex;gap:8px}.yn button{border:1px solid #DBDDE4;background:#fff;border-radius:18px;padding:6px 14px;font:inherit;cursor:pointer}.yn button.on{background:#242F3F;color:#fff;border-color:#242F3F}</style>${embed ? EMBED_CSS : ""}</head>
 <body><main><img src="${b.logo && b.logo.startsWith("/") ? PUBLIC_URL() + b.logo : b.logo}" width="${b.logo_width || 56}" alt="${escH(STORES[store].name)}"><h1>How did your little one like it?</h1><div style="color:#676986">Order ${escH(q.order_name || "")}. Tap the stars for each item.</div><div id="items"></div></main>
-<script>window.RVW=${JSON.stringify(cfg).replace(/</g, "\\u003c")};</script><script src="${PUBLIC_URL()}/rv-write.js"></script></body></html>`;
+<script>window.RVW=${JSON.stringify(cfg).replace(/</g, "\\u003c")};</script><script src="${PUBLIC_URL()}/rv-write.js"></script>${embed ? EMBED_JS : ""}</body></html>`;
 }
 
 /* ---------------- staff ---------------- */
@@ -677,7 +689,11 @@ function routes(app, { guard, actorOf, express }) {
   });
   app.get("/rv/:store/write", async (req, res) => {
     const s = storeOk(req.params.store); if (!s) return res.status(404).send("Not found");
-    try { const h = await writePage(s, String(req.query.t || ""), req.query.p, req.query.r); if (!h) return res.redirect(302, STORES[s].shop); res.setHeader("Cache-Control", "no-store"); res.type("html").send(h); } catch (e) { res.status(500).send("Something went wrong."); }
+    const embed = req.query.embed === "1";
+    if (embed) res.setHeader("Content-Security-Policy", `frame-ancestors 'self' ${Object.values(STORES).map((x) => { const h = new URL(x.shop).host; return `https://${h} https://www.${h.replace(/^www\./, "")}`; }).join(" ")} https://*.myshopify.com ${process.env.EXTRA_FRAME_ANCESTORS || ""}`.trim());
+    try { const h = await writePage(s, String(req.query.t || ""), req.query.p, req.query.r, embed);
+      if (!h && embed) { res.setHeader("Cache-Control", "no-store"); return res.type("html").send(`<!doctype html><meta charset="utf-8"><body style="margin:0;font-family:Helvetica,Arial,sans-serif;color:#242F3F;text-align:center;padding:24px">This review link has expired or was already used. Thank you for being part of our family!${EMBED_JS}</body>`); }
+      if (!h) return res.redirect(302, STORES[s].shop); res.setHeader("Cache-Control", "no-store"); res.type("html").send(h); } catch (e) { res.status(500).send("Something went wrong."); }
   });
   app.post("/rv/:store/helpful/:id", async (req, res) => { cors(res); try { const col = req.query.no ? "unhelpful" : "helpful"; await db(`UPDATE rv_reviews SET ${col}=${col}+1 WHERE id=$1 AND status='published'`, [req.params.id]); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } });
   app.get("/rv/:store/summary/:pid", async (req, res) => {

@@ -8,7 +8,8 @@
   var host0 = document.querySelector("[data-bz-reviews-page]");
   if (!host0 && !/^\/pages\/reviews\/?$/.test(location.pathname)) return;
   var preview = false; try { preview = sessionStorage.getItem("bz_reviews") === "1" || /bz_reviews=1/.test(location.search); } catch (e) {}
-  if (!C.live && !preview && !C.studio) return;
+  var WQ = new URLSearchParams(location.search), WRITE = WQ.get("bz_write");   // came from a review request email
+  if (!C.live && !preview && !C.studio && !WRITE) return;
   window.__bzReviewsPage = 1;
   var API = (C.origin || "") + "/rv/" + C.store;
   function get(p) { return fetch(API + p, { credentials: "omit" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
@@ -117,6 +118,8 @@
     ".bzp-lbx img{display:block;width:100%;max-height:70vh;object-fit:contain;background:var(--bzp-cream)}",
     ".bzp-lbx .cap{padding:12px 16px 16px;font-size:14px}.bzp-lbx .cap a{color:var(--bzp-ink);font-weight:700}",
     ".bzp-lbx .x{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:50%;border:0;background:#fff;font-size:22px;line-height:1;box-shadow:0 2px 10px rgba(0,0,0,.15)}",
+    ".bzp-write{background:#fff;border:2px solid var(--bzp-ink);border-radius:28px;padding:18px 18px 6px;margin:10px 0 30px;box-shadow:0 12px 30px rgba(36,47,63,.08);scroll-margin-top:90px}",
+    ".bzp-wh{font-weight:700;font-size:15px;color:var(--bzp-ink);margin:0 0 4px 4px}",
     /* phones */
     "@media(max-width:760px){.bzp{padding:0 14px}.bzp-hero{border-radius:24px;padding:40px 18px 60px;margin-top:4px}.bzp-badge{padding:10px 18px 10px 10px}.bzp-badge b{width:50px;height:50px;font-size:19px}",
     ".bzp-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.bzp-stat{flex-direction:column;text-align:center;gap:6px;padding:12px 6px;font-size:12px;line-height:1.3}.bzp-stat i{width:34px;height:34px}.bzp-stat b{font-size:17px;margin-bottom:2px}",
@@ -231,6 +234,21 @@
     root.addEventListener("keydown", function (e) { if (e.target.id === "bzp-q" && e.key === "Enter") { e.preventDefault(); S.q = e.target.value.trim(); refilter(); } });
     root.addEventListener("search", function (e) { if (e.target.id === "bzp-q" && !e.target.value && S.q) { S.q = ""; refilter(); } }, true);
   }
+  // The review form from the email, right here on the store's own site (Buzzin's form in a frame that grows to fit).
+  var WB = null;
+  function writeBox() {
+    if (!WRITE) return;
+    if (!WB) {
+      WB = document.createElement("section"); WB.className = "bzp-write"; WB.id = "bzp-write";
+      var src = (C.origin || "") + "/rv/" + C.store + "/write?embed=1&t=" + encodeURIComponent(WRITE) + (WQ.get("p") ? "&p=" + encodeURIComponent(WQ.get("p")) : "") + (WQ.get("r") ? "&r=" + encodeURIComponent(WQ.get("r")) : "");
+      WB.innerHTML = '<div class="bzp-wh"><span aria-hidden="true">💛</span> Thanks for taking a minute!</div><iframe title="Write your review" src="' + esc(src) + '" style="width:100%;border:0;height:620px;display:block;background:transparent" loading="eager"></iframe>';
+      var fr = WB.querySelector("iframe");
+      window.addEventListener("message", function (e) { var d = e.data || {}; if (d && d.bzWriteH && e.source === fr.contentWindow) fr.style.height = Math.max(300, Number(d.bzWriteH) + 8) + "px"; });
+      setTimeout(function () { try { WB.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} }, 300);
+    }
+    // A wrapper with the page's width, placed just above the reviews (outside them, so redraws never reload the form).
+    if (!WB.parentNode) { var wrap = document.createElement("div"); wrap.className = "bzp"; wrap.style.marginBottom = "0"; wrap.appendChild(WB); root.parentNode.insertBefore(wrap, root); }
+  }
   function mount() {
     var st = document.createElement("style"); st.textContent = CSS; document.head.appendChild(st);
     root = document.createElement("div"); root.className = "bzp"; root.id = "bz-reviews-page";
@@ -243,7 +261,7 @@
       var sec = title && title.closest(".shopify-section") || title;
       if (sec && sec.parentNode) sec.parentNode.insertBefore(root, sec.nextSibling); else main.insertBefore(root, main.firstChild);
     }
-    paintAll(); root.querySelector(".bzp-list").innerHTML = '<div class="bzp-grid"><div class="bzp-skel"></div><div class="bzp-skel"></div><div class="bzp-skel"></div></div>';
+    paintAll(); writeBox(); root.querySelector(".bzp-list").innerHTML = '<div class="bzp-grid"><div class="bzp-skel"></div><div class="bzp-skel"></div><div class="bzp-skel"></div></div>';
     wire();
     get("/page").then(function (m) { META = m; var keep = S.list.length; paintAll(); if (keep) paintList(); }).catch(function () {});
     load(true);

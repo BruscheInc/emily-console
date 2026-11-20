@@ -3,6 +3,10 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.73
+- **Review links now go to larkspurbaby.com/pages/reviews**, not returns.larkspurbaby.com. Tapping a star in a Larkspur Baby review email opens the reviews page on the store's own site, with the review form at the top (the tapped star already picked). Below it is the rest of the reviews page. Older emails' links keep working. The Outlet still uses Buzzin's own review page.
+- The review form now shows each product's photo (filled in from Shopify, or from the product's reviews, when the order didn't include one).
+
 ## 0.0.72
 - Email builder: the Review request block now shows real products from a recent order, with their photos, instead of two made-up items without pictures, so the design you see matches what customers get.
 
