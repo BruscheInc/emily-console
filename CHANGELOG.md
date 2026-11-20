@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.71
+- Review emails: every product now shows its photo. Order records often come without one, so Buzzin fills it in from the product in Shopify (its main image), or from that product's reviews. Fixes blank product images in previews and test sends, and in real sends too. The link to the product is filled in the same way.
+
 ## 0.0.70
 - Universal content and your pre-built sections are now shared by Larkspur Baby and the Outlet: anything saved in one store's email shows in both. Editing a universal piece updates it in every email of both stores.
 

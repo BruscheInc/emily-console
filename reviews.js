@@ -316,6 +316,26 @@ function reviewItems(items) {
   }
   return out.slice(0, 8);
 }
+/** Order items often come without a photo or handle: fill them from Shopify (featured image), else from the product's reviews. */
+const PRODUCT_INFO = new Map();
+async function fillProductInfo(store, items) {
+  const need = items.filter((it) => !it.image || !it.handle);
+  if (!need.length) return items;
+  const ids = [...new Set(need.map((it) => it.product_id))].filter((id) => !PRODUCT_INFO.has(`${store}:${id}`));
+  if (ids.length) {
+    try {
+      const st = require("./emily").storeForPrefix(store === "lbo" ? "LBO" : "LB");
+      if (st) {
+        const d = await require("./returns").gql(st, `query($ids: [ID!]!) { nodes(ids: $ids) { ... on Product { legacyResourceId handle title featuredImage { url } } } }`, { ids: ids.map((id) => `gid://shopify/Product/${id}`) });
+        for (const n of ((d && (d.nodes || (d.data && d.data.nodes))) || [])) if (n && n.legacyResourceId) PRODUCT_INFO.set(`${store}:${n.legacyResourceId}`, { image: n.featuredImage && n.featuredImage.url ? n.featuredImage.url + (n.featuredImage.url.includes("?") ? "&" : "?") + "width=400" : null, handle: n.handle || null });
+      }
+    } catch (e) { console.error("review email product info:", e.message); }
+    const miss = ids.filter((id) => !PRODUCT_INFO.has(`${store}:${id}`));
+    if (miss.length) for (const r of (await db(`SELECT product_id, max(product_image) image, max(product_handle) handle FROM rv_reviews WHERE store=$1 AND product_id = ANY($2) GROUP BY product_id`, [store, miss]).catch(() => ({ rows: [] }))).rows)
+      PRODUCT_INFO.set(`${store}:${r.product_id}`, { image: r.image || null, handle: r.handle || null });
+  }
+  return items.map((it) => { const x = PRODUCT_INFO.get(`${store}:${it.product_id}`) || {}; return { ...it, image: it.image || x.image || null, handle: it.handle || x.handle || null }; });
+}
 /** One review page per order: reuse its token, or make one. `test` rows never count as real requests. */
 async function tokenForOrder(store, { order_id, order_name, email, name, items, test }) {
   const key = String(order_id || order_name || "").slice(0, 80); if (!key || !email) return null;
@@ -341,7 +361,7 @@ async function reviewContext(store, profile, order, { test = false, preview = fa
     if (!r) { const x = (await db(`SELECT product_id, max(product_title) title, max(product_image) image, max(product_handle) handle FROM rv_reviews WHERE store=$1 AND status='published' GROUP BY product_id ORDER BY count(*) DESC LIMIT 6`, [store])).rows.filter((y) => !skipItem(y)).slice(0, 2); r = { props: { name: "#1001", items: x.map((y) => ({ product_id: y.product_id, title: y.title, image: y.image })) } }; }
     if (!o) { o = { ...(r.props || {}), sample: true }; test = true; }
   }
-  const items = reviewItems(o.items); if (!items.length) return { review_items: [], review_url: STORES[store].shop };
+  const items = await fillProductInfo(store, reviewItems(o.items)); if (!items.length) return { review_items: [], review_url: STORES[store].shop };
   let token = null;
   if (!preview && profile && profile.email) token = await tokenForOrder(store, { order_id: o.order_id, order_name: o.name, email: profile.email, name: [profile.first_name, profile.last_name].filter(Boolean).join(" "), items: o.items, test }).catch(() => null);
   const base = `${writeBase(store)}/rv/${store}/write?t=${token || "preview"}`;
