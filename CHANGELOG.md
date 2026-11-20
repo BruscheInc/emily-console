@@ -3,6 +3,14 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.62
+- **New reviews page for Larkspur Baby** at larkspurbaby.com/pages/reviews, showing every review in the store:
+  - A soft cream welcome banner with the overall rating, review count, % who'd recommend, five-star count and how many families shared photos.
+  - "Snuggle snapshots": a scrolling row of customer photos (only ones that passed the photo check). Tap one to see it bigger with a link to the product.
+  - "What parents are saying": the AI summary of all reviews with tappable topics, next to the star breakdown (tap a row to filter).
+  - Every review in cards, filterable by item (Zipper Romper, Pajamas, Sleep Sack and so on), rating, photos, search and sort. Each card links to the product it's about. "Show more reviews" loads the next batch.
+  - Works on phones. No theme change needed: the Buzzin script builds the page under the existing page title.
+
 ## 0.0.61
 - **Buzzin works on phones.** On a phone-sized screen:
   - The dark side bar becomes a tab bar along the bottom: Home, Tickets, Orders, Reviews and More. More opens every other part of Buzzin (Rewards, Shipping, Returns, Marketing, Content, Reports, Settings) and Sign out.

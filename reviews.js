@@ -174,12 +174,13 @@ async function aggregate(store, ids) {
   AGG_CACHE.set(key, { at: Date.now(), v });
   return v;
 }
-async function productReviews(store, productId, { sort = "media", rating, media, q, page = 1, per = 10, scope } = {}) {
+async function productReviews(store, productId, { sort = "media", rating, media, q, kind, page = 1, per = 10, scope } = {}) {
   const ids = await scopeFor(store, productId, SCOPES.includes(scope) ? scope : "group");
   const args = [store, ids]; const where = [`store=$1`, `status='published'`, `($2::text[] IS NULL OR product_id = ANY($2))`];
   if (rating && Number(rating) >= 1 && Number(rating) <= 5) { args.push(Number(rating)); where.push(`rating=$${args.length}`); }
   if (media === "1" || media === true) where.push(`${MEDIA_N()} > 0`);
   if (q && String(q).trim()) { args.push(`%${String(q).trim().slice(0, 80)}%`); where.push(`(title ILIKE $${args.length} OR body ILIKE $${args.length})`); }
+  if (kind && String(kind).trim()) { args.push(String(kind).trim().slice(0, 80)); where.push(`${KIND_SQL} = $${args.length}`); }
   const order = { newest: "created_at DESC", oldest: "created_at ASC", highest: "rating DESC, created_at DESC", lowest: "rating ASC, created_at DESC", helpful: "helpful DESC, created_at DESC", media: `(${MEDIA_N()} > 0) DESC, rating DESC, created_at DESC` }[sort] || `(${MEDIA_N()} > 0) DESC, rating DESC, created_at DESC`;
   per = Math.max(1, Math.min(30, Number(per) || 10)); page = Math.max(1, Number(page) || 1);
   const rows = (await db(`SELECT * FROM rv_reviews WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${per + 1} OFFSET ${(page - 1) * per}`, args)).rows;
@@ -188,6 +189,22 @@ async function productReviews(store, productId, { sort = "media", rating, media,
   if (page === 1) photos = (await db(`SELECT id, media, media_check FROM rv_reviews WHERE store=$1 AND status='published' AND ($2::text[] IS NULL OR product_id = ANY($2)) AND ${MEDIA_N()} > 0 ORDER BY created_at DESC LIMIT 14`, [store, ids])).rows
     .map((r) => { const m = (r.media || []).find((x, i) => x.type !== "video" && photoVisible(r, i)); return m ? { review: r.id, thumb: m.thumb || m.url, url: m.large || m.url } : null; }).filter(Boolean).slice(0, 12);
   return { summary: await aggregate(store, ids), total: filtered, reviews: rows.slice(0, per).map(pubReview), more: rows.length > per, page, photos };
+}
+/* ---------------- the store-wide reviews page (/pages/reviews) ---------------- */
+// "Zipper Romper in Where Hedgehogs Wander" → "Zipper Romper": the kind of item, so shoppers can filter by it.
+const KIND_SQL = `trim(split_part(regexp_replace(COALESCE(product_title,''), '\\s+-\\s+.*$', ''), ' in ', 1))`;
+const PAGE_CACHE = new Map();
+async function pageMeta(store) {
+  const c = PAGE_CACHE.get(store); if (c && Date.now() - c.at < 10 * 60e3) return c.v;
+  const summary = await aggregate(store, null);
+  const kinds = (await db(`SELECT ${KIND_SQL} k, count(*)::int n, round(avg(rating)::numeric, 1)::float a FROM rv_reviews WHERE store=$1 AND status='published' AND product_title IS NOT NULL
+      AND product_title !~* '(package|shipping|order) protection|gift card' GROUP BY 1 HAVING count(*) >= 15 ORDER BY 2 DESC LIMIT 10`, [store])).rows.filter((r) => r.k).map((r) => ({ name: r.k, count: r.n, average: r.a }));
+  const rows = (await db(`SELECT id, rating, reviewer_name, product_title, product_handle, media, media_check FROM rv_reviews WHERE store=$1 AND status='published' AND ${MEDIA_N()} > 0 AND rating >= 4
+      ORDER BY created_at DESC LIMIT 60`, [store])).rows;
+  const photos = rows.map((r) => { const m = (r.media || []).find((x, i) => x.type !== "video" && photoVisible(r, i)); return m ? { review: r.id, thumb: m.thumb || m.url, url: m.large || m.url, name: r.reviewer_name || "Customer", product: r.product_title, handle: r.product_handle } : null; }).filter(Boolean).slice(0, 24);
+  const families = (await db(`SELECT count(DISTINCT lower(COALESCE(email, reviewer_name)))::int n FROM rv_reviews WHERE store=$1 AND status='published'`, [store])).rows[0].n;
+  const v = { summary, kinds, photos, families, brand: STORES[store].name };
+  PAGE_CACHE.set(store, { at: Date.now(), v }); return v;
 }
 async function starsFor(store, productIds, mode) {
   const out = {}; mode = SCOPES.includes(mode) ? mode : "group";
@@ -608,7 +625,7 @@ function routes(app, { guard, actorOf, express }) {
     const set = await settings();
     res.setHeader("Cache-Control", "public, max-age=300");
     const ds = (await designs())[s] || {};
-    res.type("application/javascript").send(fs.readFileSync(path.join(__dirname, "public", "bz-reviews-design.js"), "utf8") + `\nwindow.BZR=${JSON.stringify({ store: s, origin: PUBLIC_URL(), live: !!set.live[s], brand: STORES[s].name, design: ds.live || null })};\n` + fs.readFileSync(path.join(__dirname, "public", "bz-reviews.js"), "utf8"));
+    res.type("application/javascript").send(fs.readFileSync(path.join(__dirname, "public", "bz-reviews-design.js"), "utf8") + `\nwindow.BZR=${JSON.stringify({ store: s, origin: PUBLIC_URL(), live: !!set.live[s], brand: STORES[s].name, design: ds.live || null })};\n` + fs.readFileSync(path.join(__dirname, "public", "bz-reviews.js"), "utf8") + "\n" + fs.readFileSync(path.join(__dirname, "public", "bz-reviews-page.js"), "utf8"));
   });
   app.get("/rv/:store/design", async (req, res) => {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
@@ -617,6 +634,10 @@ function routes(app, { guard, actorOf, express }) {
   app.get("/rv/:store/product/:pid", async (req, res) => {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({ error: "unknown store" });
     try { res.setHeader("Cache-Control", "public, max-age=60"); res.json(await productReviews(s, String(req.params.pid).replace(/\D/g, ""), req.query)); } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.get("/rv/:store/page", async (req, res) => {
+    cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
+    try { res.setHeader("Cache-Control", "public, max-age=300"); res.json(await pageMeta(s)); } catch (e) { res.status(500).json({ error: e.message }); }
   });
   app.get("/rv/:store/stars", async (req, res) => {
     cors(res); const s = storeOk(req.params.store); if (!s) return res.status(404).json({});
