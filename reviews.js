@@ -890,6 +890,11 @@ async function startJobs(syncGet, syncSet) {
     }
     await syncSet("reviews_flows_v1", new Date().toISOString());
   }
+  // The cute review emails (Ad Studio headers, star card, perks): swap them into the existing review emails, once.
+  if (!(await syncGet("review_emails_v2"))) {
+    for (const s of Object.keys(STORES)) { try { const ids = await require("./mk-email").refreshReviewEmails(s); console.log(`⭐ REVIEW EMAILS ${s}: new design on #${ids.join(", #") || "none"}`); } catch (e) { console.error(`⭐ review emails ${s}:`, e.message); } }
+    await syncSet("review_emails_v2", new Date().toISOString());
+  }
   // First full copy of Okendo (both stores) + review groups, once.
   if (!(await syncGet("reviews_okendo_v1"))) {
     for (const s of Object.keys(STORES)) {

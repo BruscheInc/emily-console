@@ -290,7 +290,8 @@ ${sections}${empty}
       const bbw = blk.type === 'text' ? bord(st, 'block_') : '';
       const bgc = col(st.block_background_color) || (blk.type === 'spacer' ? col(st.background_color) : '');
       const padC = blk.type === 'spacer' ? '0' : `${bp.t}px ${bp.r}px ${bp.b}px ${bp.l}px`;
-      return `${T(`width="100%" class="bz-blk"${R.ed ? ` data-bid="${esc(blk.id)}" data-type="${esc(blk.type)}"` : ''}`)}<tr><td class="bz-bp ${k}" style="padding:${padC};${bgc ? `background-color:${bgc};` : ''}${bbw ? `border:${bbw};` : ''}${bb}">${inner}</td></tr></table>`;
+      const brad = num(st.block_border_radius, 0);
+      return `${T(`width="100%" class="bz-blk"${R.ed ? ` data-bid="${esc(blk.id)}" data-type="${esc(blk.type)}"` : ''}`)}<tr><td class="bz-bp ${k}" style="padding:${padC};${bgc ? `background-color:${bgc};` : ''}${bbw ? `border:${bbw};` : ''}${brad ? `border-radius:${brad}px;` : ''}${bb}">${inner}</td></tr></table>`;
     }), d, R);
   }
   function placeholder(blk) {

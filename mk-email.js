@@ -547,24 +547,61 @@ const STARTERS = {
 };
 
 /** The two emails of the "Review request" flow starter: built in the email editor's format so every part can be changed. */
+/* Review request emails, all about the products they bought: a small cute Larkspur header made in Ad Studio (logo, headline,
+   stars; no lifestyle photos), then each item from the order as a card with a big product photo and tap-a-star rating,
+   one line about adding a photo, and the footer. Nothing promotional.
+   Request = sky blue "How's the snuggle?"; reminder = blush gingham "Got a minute for a review?". */
+const RV_HEROES = {
+  lb: { request: "https://ad-studio-production-5b6e.up.railway.app/img/tcEgAOoS.jpg", reminder: "https://ad-studio-production-5b6e.up.railway.app/img/4Tk_JyI-.jpg" },
+  lbo: { request: "https://ad-studio-production-5b6e.up.railway.app/img/gQwAIui3.jpg", reminder: "https://ad-studio-production-5b6e.up.railway.app/img/c5-CcBcZ.jpg" },
+};
+const RV_EMAILS = {
+  request: { bg: "#DCEEFA", accent: "#F0718A", ink: "#242F3F", star: "#FFC93C", name: "Review request",
+    subject: "{{ first_name|default:\"Hey\" }}, how's the snuggle? ⭐", preview: "Rate your Larkspur in one tap 💛",
+    hello: "Hi {{ first_name|default:\"there\" }}! 👋", lead: "Your Larkspur order has had a little time to get cozy. How's the fit and the softness? Tap a star below to rate each piece. It takes about a minute.",
+    prompt: "Tap a star to rate" },
+  reminder: { bg: "#FBE4E1", accent: "#E0675A", ink: "#242F3F", star: "#F7A152", name: "Review request reminder",
+    subject: "{{ first_name|default:\"Hey\" }}, got a minute? ⭐ How's your Larkspur?", preview: "One tap is all it takes 💛",
+    hello: "Still loving it, {{ first_name|default:\"friend\" }}? 💛", lead: "We'd love to know how your Larkspur is holding up. One tap on the stars is all it takes, and a few words about the fit really help other parents.",
+    prompt: "How many stars?" },
+};
+function reviewEmailDoc(bb, store, kind) {
+  const E = RV_EMAILS[kind], b = bb, c = b.colors || {};
+  const doc = MKDoc.newDoc(bb);
+  const sec = (blocks, st) => { const x = MKDoc.newSection(1); x.rows[0].columns[0].blocks = blocks; x.data.styles = Object.assign({ background_color: E.bg }, st || {}); doc.body.sections.push(x); };
+  const text = (html, st) => { const x = MKDoc.newBlock("text", bb); x.data.content = html; Object.assign(x.data.styles, st || {}); return x; };
+  const shop = b.shop_url || "";
+  const hero = MKDoc.newBlock("image", bb); hero.data.properties = { src: (RV_HEROES[store] || RV_HEROES.lb)[kind], alt_text: `${b.name || "Larkspur"}: ${kind === "request" ? "How's the snuggle?" : "Got a minute for a review?"}`, href: "" };
+  hero.data.styles = { align: "center", fill_column: true, block_padding_top: 0, block_padding_bottom: 0, block_padding_left: 0, block_padding_right: 0 };
+  sec([hero]);
+  sec([text(`<h2 style="text-align:center;margin:0 0 6px;color:${E.ink};font-size:24px">${E.hello}</h2><p style="text-align:center;margin:0;color:${E.ink};font-size:16px;line-height:1.55">${E.lead}</p>`, { block_padding_top: 8, block_padding_bottom: 18, block_padding_left: 36, block_padding_right: 36 })]);
+  const rr = MKDoc.newBlock("review_request", bb);
+  rr.data.properties = Object.assign(rr.data.properties, { prompt: E.prompt, show_button: true, button_text: "Write my review", dividers: true });
+  Object.assign(rr.data.styles, { block_background_color: "#FFFFFF", block_border_radius: 24, block_padding_top: 8, block_padding_bottom: 8, block_padding_left: 22, block_padding_right: 22,
+    layout: "stacked", star_color: E.star, star_size: 38, star_spacing: 6, image_size: 180, image_radius: 18, title_color: E.ink, button_background_color: E.ink, button_color: "#FFFFFF", button_radius: 999, divider_color: "#F0EDE6" });
+  sec([rr], { inner_padding_left: 24, inner_padding_right: 24 });
+  sec([text(`<p style="text-align:center;margin:0;color:${E.ink};font-size:14px;line-height:1.5">📸 Got a photo of your little one wearing it? Add it to your review.<br>Other parents love seeing the real fit.</p>`, { block_padding_top: 22, block_padding_bottom: 30, block_padding_left: 36, block_padding_right: 36 })]);
+  const logo = MKDoc.newBlock("image", bb); logo.data.properties = { src: bb.logo_abs || "", alt_text: b.name || "Larkspur", href: shop };
+  logo.data.styles = { align: "center", width: Number(b.logo_width) || 130, block_padding_top: 26, block_padding_bottom: 6 };
+  sec([logo, text(`<p style="text-align:center;margin:0;font-size:14px;color:${E.ink}">Made with love for little ones · <a href="${shop}" style="color:${E.ink}">${(shop || "").replace(/^https?:\/\//, "")}</a></p>`, { block_padding_bottom: 10 }),
+    text(`<p style="text-align:center;font-size:12px;margin:0">{{ store_name }} · {{ store_address }}<br><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>`, { color: c.muted || "#77737F", block_padding_top: 6, block_padding_bottom: 26 })], { background_color: "#FFFFFF" });
+  return doc;
+}
 async function reviewRequestTemplates(store, who) {
-  const b = await brand(store); const bb = { ...b, logo_abs: absUrl(b.logo) }; const c = b.colors || {};
-  const make = (heading, lead) => {
-    const doc = MKDoc.newDoc(bb);
-    const sec = (blocks, styles) => { const x = MKDoc.newSection(1); x.rows[0].columns[0].blocks = blocks; if (styles) x.data.styles = styles; doc.body.sections.push(x); };
-    const text = (html, st) => { const x = MKDoc.newBlock("text", bb); x.data.content = html; Object.assign(x.data.styles, st || {}); return x; };
-    const logo = MKDoc.newBlock("image", bb); logo.data.properties = { src: bb.logo_abs || "", alt_text: b.name || "", href: b.shop_url || "" }; logo.data.styles = { align: "center", width: Number(b.logo_width) || 120, block_padding_top: 24, block_padding_bottom: 8 };
-    sec([logo]);
-    sec([text(`<h2 style="text-align:left">${heading}</h2><p>${lead}</p><p><strong>Get started below by giving your products a star rating.</strong></p>`, { block_padding_left: 32, block_padding_right: 32 })]);
-    const rr = MKDoc.newBlock("review_request", bb); Object.assign(rr.data.styles, { block_padding_left: 32, block_padding_right: 32 }); sec([rr]);
-    sec([text(`<p style="text-align:center;font-size:12px">{{ store_name }} · {{ store_address }}<br><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>`, { color: c.muted || "#77737F", block_padding_top: 18, block_padding_bottom: 24 })]);
-    return doc;
-  };
-  const t1 = await saveTemplate({ store, name: "Review request", subject: "{{ first_name|default:\"Hi\" }}, how did your little one like it?", preview: "Tap a star to rate your order",
-    doc: make("Hi {{ first_name|default:\"there\" }}!", "We wanted to check in and see how you're enjoying your latest purchase. If you have a moment, it would be great if you could share your thoughts with us and fellow parents.") }, who);
-  const t2 = await saveTemplate({ store, name: "Review request reminder", subject: "A quick reminder from {{ store_name }}", preview: "We'd love to hear what you think",
-    doc: make("Hi {{ first_name|default:\"there\" }}!", "Just a quick reminder: we'd love to hear what you think of your order. Your review helps other parents pick the right size and fabric.") }, who);
+  const b = await brand(store); const bb = { ...b, logo_abs: absUrl(b.logo) };
+  const t1 = await saveTemplate({ store, name: RV_EMAILS.request.name, subject: RV_EMAILS.request.subject, preview: RV_EMAILS.request.preview, doc: reviewEmailDoc(bb, store, "request") }, who);
+  const t2 = await saveTemplate({ store, name: RV_EMAILS.reminder.name, subject: RV_EMAILS.reminder.subject, preview: RV_EMAILS.reminder.preview, doc: reviewEmailDoc(bb, store, "reminder") }, who);
   return [t1.id, t2.id];
+}
+/** Swap the new design into the review emails the review flows already send (once). */
+async function refreshReviewEmails(store, who = "buzzin") {
+  const b = await brand(store); const bb = { ...b, logo_abs: absUrl(b.logo) }; const out = [];
+  for (const kind of ["request", "reminder"]) {
+    const E = RV_EMAILS[kind];
+    const rows = (await db(`SELECT id FROM mk_templates WHERE store=$1 AND name=$2 AND COALESCE(source,'buzzin')='buzzin'`, [store, E.name])).rows;
+    for (const r of rows) { await saveTemplate({ id: r.id, store, name: E.name, subject: E.subject, preview: E.preview, doc: reviewEmailDoc(bb, store, kind) }, who); out.push(r.id); }
+  }
+  return out;
 }
 
 /** Klaviyo templates → editable HTML templates (once; re-runnable). */
@@ -878,4 +915,4 @@ async function init() {
   }
 }
 
-module.exports = { reviewRequestTemplates, usesReview, syncFlowNames, visibleItems, hiddenWords, usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };
+module.exports = { reviewRequestTemplates, refreshReviewEmails, reviewEmailDoc, usesReview, syncFlowNames, visibleItems, hiddenWords, usesCart, cartEvent, cartItem, sampleCart, renderDocument, evalCheck, visibleFor, cleanDoc, htmlToBlocks, init, migrate, routes, brand, saveBrand, render, personalize, fromKlaviyo, getTemplate, saveTemplate, listTemplates, tokenFor, readToken, contextFor, cleanBlocks, STARTERS, importKlaviyoTemplates, aiCopy };

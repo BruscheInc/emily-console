@@ -3,6 +3,16 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.65
+- **New review request emails (LB and LBO), built around the products they bought.**
+  - A small, cute Larkspur header made in Ad Studio: the Larkspur logo (Outlet logo for LBO), a hand-written line, a big headline and a row of stars. First email: sky blue "How's the snuggle?". Reminder: blush gingham "Got a minute for a review?".
+  - Each item from the order gets its own card: a big product photo with rounded corners, the name and size, large tap-a-star rating and a "Write my review" button, all inside a rounded white card.
+  - One short line asking for a photo ("Other parents love seeing the real fit"). No lifestyle photos, no shopping buttons.
+  - New subject lines with emojis: "{first name}, how's the snuggle? ⭐" and "{first name}, got a minute? ⭐ How's your Larkspur?".
+  - The new design replaces the old one in the review emails the review flows already use.
+- Product pages: the product photo next to "Reviewing" now has the same rounded corners as the other review photos.
+- Email builder: blocks can have rounded corners.
+
 ## 0.0.64
 - **AI review summary turned off everywhere on the store.** Product pages no longer show the summary paragraph or the "Customers talked about" topics, since the summary could repeat complaints. The option was removed from Customize, and the store can't fetch a summary at all. The reviews page keeps its fixed, friendly text.
 
