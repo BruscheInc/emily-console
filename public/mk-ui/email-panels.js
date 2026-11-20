@@ -140,12 +140,13 @@ async function loadUniversal(P, S) {
     const r = await api('/api/mk/saved-blocks?' + qs({ store: S.t.store }));
     const all = r.blocks.filter((x) => x.block && (x.block.data || x.block.rows || Array.isArray(x.block.group)));
     const byId = Object.fromEntries(all.map((x) => [String(x.id), x]));
-    const secs = all.filter((x) => x.block.rows);
+    const secs = all.filter((x) => !x.block.group);   // anything saved (sections and blocks) can go in a footer set
     if (!all.length) { box.innerHTML = `<div class="kp-hint" style="font-size:13px">Nothing saved yet. Select a block or section on the email and click the ☆ star to save it here. Edits to universal content update every email that uses it.</div>`; return; }
     // A footer set = several universal sections added together, in order. Each one stays linked to its universal section.
-    const groupMake = (it) => () => (it.block.group || []).map((id) => byId[String(id)]).filter((u) => u && u.block.rows)
-      .map((u) => { const c = D.reId(u.block); c.universal_id = String(u.id); c.universal_name = u.name; return c; });
-    const kindOf = (x) => x.block.group ? `Footer set · ${(x.block.group || []).filter((id) => byId[String(id)]).length} sections` : x.block.rows ? 'Section' : esc((D.BLOCK_INFO[x.block.type] || {}).name || x.block.type);
+    // Blocks are put in their own full-width section; the block (or section) keeps its universal link.
+    const groupMake = (it) => () => (it.block.group || []).map((id) => byId[String(id)]).filter((u) => u && !u.block.group)
+      .map((u) => { const c = D.reId(u.block); c.universal_id = String(u.id); c.universal_name = u.name; if (c.rows) return c; const sec = D.newSection(1); sec.rows[0].columns[0].blocks = [c]; return sec; });
+    const kindOf = (x) => x.block.group ? `Footer set · ${(x.block.group || []).filter((id) => byId[String(id)]).length} pieces` : x.block.rows ? 'Section' : esc((D.BLOCK_INFO[x.block.type] || {}).name || x.block.type);
     const sets = all.filter((x) => x.block.group), rest = all.filter((x) => !x.block.group);
     box.innerHTML = (secs.length >= 2 ? `<button type="button" class="btn sec xs" id="kpMkSet" style="width:100%;margin-bottom:10px">${I('plus')} Make a footer from sections</button><div id="kpSetForm" hidden></div>` : '') +
       [...sets, ...rest].map((x) => `<div class="kp-pb" draggable="true" data-u="${x.id}"><div style="display:flex;align-items:center;gap:6px"><b style="flex:1">${x.block.group ? I('layout-bottombar') + ' ' : ''}${esc(x.name)}</b>${x.block.group ? `<button class="kp-plus" data-uedit="${x.id}" title="Change">${I('pencil')}</button>` : ''}<button class="kp-plus" data-udel="${x.id}" title="Delete">${I('trash')}</button></div><span>${kindOf(x)}</span></div>`).join('');
@@ -155,22 +156,26 @@ async function loadUniversal(P, S) {
       const make = it.block.group ? groupMake(it) : () => { const c = D.reId(it.block); c.universal_id = String(it.id); c.universal_name = it.name; return isSec ? [c] : c; };
       el.addEventListener('dragstart', (e) => { E().setDrag({ kind: isSec ? 'sections' : 'block', make }); e.dataTransfer.setData('text/plain', 'bz'); });
       el.addEventListener('dragend', () => setTimeout(() => E().clearDrag(), 30));
-      el.addEventListener('click', (e) => { if (e.target.closest('[data-udel],[data-uedit]')) return; if (it.block.group && !make().length) return toast('This footer set has no sections left', 1); E().addByClick(make, isSec ? 'sections' : 'block'); });
+      el.addEventListener('click', (e) => { if (e.target.closest('[data-udel],[data-uedit]')) return; if (it.block.group && !make().length) return toast('This footer set has nothing left in it', 1); E().addByClick(make, isSec ? 'sections' : 'block'); });
     });
-    box.querySelectorAll('[data-udel]').forEach((b) => b.onclick = async (e) => { e.stopPropagation(); const it = byId[b.dataset.udel]; if (!confirm(it && it.block.group ? 'Delete this footer set? The sections in it stay saved, and emails that use it keep their sections.' : 'Delete this universal content? Emails that use it keep their current copy.')) return; await api('/api/mk/saved-blocks/' + b.dataset.udel, { method: 'DELETE' }); loadUniversal(P, S); });
+    box.querySelectorAll('[data-udel]').forEach((b) => b.onclick = async (e) => { e.stopPropagation(); const it = byId[b.dataset.udel]; if (!confirm(it && it.block.group ? 'Delete this footer set? The pieces in it stay saved, and emails that use it keep them.' : 'Delete this universal content? Emails that use it keep their current copy.')) return; await api('/api/mk/saved-blocks/' + b.dataset.udel, { method: 'DELETE' }); loadUniversal(P, S); });
     const form = box.querySelector('#kpSetForm');
     const openForm = (edit) => {
       let pick = edit ? (edit.block.group || []).map(String).filter((id) => byId[id]) : [];
       const draw = () => {
-        form.innerHTML = `<div class="kp-hint" style="font-size:13px;margin-bottom:8px">Tap the sections in the order they should stack, top to bottom.</div>` +
-          secs.map((x) => { const n = pick.indexOf(String(x.id)); return `<label class="kp-pb" style="display:flex;align-items:center;gap:8px;cursor:pointer" data-pk="${x.id}"><span style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;flex:none;font-size:12px;font-weight:700;${n >= 0 ? 'background:var(--ink,#242F3F);color:#fff' : 'border:1.5px solid #ccc'}">${n >= 0 ? n + 1 : ''}</span><b style="flex:1;font-weight:600">${esc(x.name)}</b></label>`; }).join('') +
+        const qv = (form.querySelector('#kpSetQ') || {}).value || '';
+        const shown = secs.filter((x) => pick.includes(String(x.id)) || !qv || x.name.toLowerCase().includes(qv.toLowerCase()));
+        form.innerHTML = `<div class="kp-hint" style="font-size:13px;margin-bottom:8px">Tap the pieces in the order they should stack, top to bottom. Picked: ${pick.length}</div>
+          <input id="kpSetQ" type="search" placeholder="Find, e.g. footer, address, social" value="${esc(qv)}" style="width:100%;margin-bottom:8px">` +
+          shown.map((x) => { const n = pick.indexOf(String(x.id)); return `<label class="kp-pb" style="display:flex;align-items:center;gap:8px;cursor:pointer" data-pk="${x.id}"><span style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;flex:none;font-size:12px;font-weight:700;${n >= 0 ? 'background:var(--ink,#242F3F);color:#fff' : 'border:1.5px solid #ccc'}">${n >= 0 ? n + 1 : ''}</span><b style="flex:1;font-weight:600">${esc(x.name)}</b><span style="font-size:12px;color:#888">${kindOf(x)}</span></label>`; }).join('') +
           `<input id="kpSetName" type="text" placeholder="Name, e.g. Footer" value="${esc(edit ? edit.name : 'Footer')}" style="width:100%;margin:8px 0">
            <div style="display:flex;gap:8px"><button type="button" class="btn xs" id="kpSetSave" style="flex:1">${edit ? 'Save changes' : 'Save footer set'}</button><button type="button" class="btn sec xs" id="kpSetCancel">Cancel</button></div>`;
+        const q = form.querySelector('#kpSetQ'); q.oninput = () => { const pos = q.selectionStart; draw(); const q2 = form.querySelector('#kpSetQ'); q2.focus(); try { q2.setSelectionRange(pos, pos); } catch (e) {} };
         form.querySelectorAll('[data-pk]').forEach((el) => el.onclick = (e) => { e.preventDefault(); const id = el.dataset.pk, k = pick.indexOf(id); if (k >= 0) pick.splice(k, 1); else pick.push(id); draw(); });
         form.querySelector('#kpSetCancel').onclick = () => { form.hidden = true; form.innerHTML = ''; };
         form.querySelector('#kpSetSave').onclick = async () => {
           const name = form.querySelector('#kpSetName').value.trim() || 'Footer';
-          if (pick.length < 1) return toast('Pick at least one section', 1);
+          if (pick.length < 1) return toast('Pick at least one piece', 1);
           try {
             const body = { store: S.t.store, name, block: { group: pick.map(Number) } };
             if (edit) await api('/api/mk/saved-blocks/' + edit.id, { method: 'PUT', body: JSON.stringify(body) });
@@ -182,7 +187,7 @@ async function loadUniversal(P, S) {
       form.hidden = false; draw();
     };
     const mk = box.querySelector('#kpMkSet'); if (mk) mk.onclick = () => openForm(null);
-    box.querySelectorAll('[data-uedit]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); if (!form) return toast('Save at least two sections first', 1); openForm(byId[b.dataset.uedit]); });
+    box.querySelectorAll('[data-uedit]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); if (!form) return toast('Save at least two pieces as universal first', 1); openForm(byId[b.dataset.uedit]); });
   } catch (e) { box.innerHTML = `<div class="note">${esc(e.message)}</div>`; }
 }
 
