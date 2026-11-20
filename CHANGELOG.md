@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.75
+- Review backlog, part 2: the old review app stopped on Nov 18, so orders shipped from Nov 4 onward were never asked for a review. Customers from Nov 4 to Nov 6 (past their 14-day date) are added to the LB review flow and get their first email at the next 10 AM. Same skips as before (already in the flow, already reviewed, nothing to review). Runs once.
+
 ## 0.0.74
 - **Review form right on larkspurbaby.com/pages/reviews.** Links from Larkspur Baby review emails open the reviews page with the review form at the top, drawn by the page itself (no embedded frame): product photos, the tapped star already picked, title, review, photos, recommend and name. Submitting saves and publishes the review as before.
 - **Backlog for the LB review flow (now live).** Everyone whose order shipped in the last 14 days joins the flow as if it had been on when their order shipped, so their first review email still goes out 14 days after shipping, at 10 AM. It skips people already in the flow, people who already reviewed, and orders with nothing to review (Package Protection only). Runs once.

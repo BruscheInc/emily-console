@@ -384,12 +384,12 @@ async function reviewContext(store, profile, order, { test = false, preview = fa
 }
 /** Backlog for a review flow that was just turned on: everyone whose order shipped in the last `days` days joins the flow
  *  as if it had been on when their order shipped, so their first email still goes out 14 days after shipping. */
-async function backlogReviewFlow(store, { days = 14, dry = false } = {}) {
+async function backlogReviewFlow(store, { days = 14, dry = false, from = null, sendPastDue = false } = {}) {
   const F = require("./mk-flows");
   const flow = (await db(`SELECT * FROM mk_flows WHERE store=$1 AND status='live' AND NOT archived AND trigger->>'event'='fulfilled_order' AND name ILIKE 'Review request%' ORDER BY id LIMIT 1`, [store])).rows[0];
   if (!flow) return { flow: null, added: 0, note: "no live review flow" };
   const start = flow.graph.nodes[flow.graph.start];
-  const evs = (await db(`SELECT DISTINCT ON (profile_id) id, profile_id, at, props FROM mk_events WHERE store=$1 AND type='fulfilled_order' AND profile_id IS NOT NULL AND at > now() - ($2 || ' days')::interval ORDER BY profile_id, at DESC`, [store, String(days)])).rows;
+  const evs = (await db(`SELECT DISTINCT ON (profile_id) id, profile_id, at, props FROM mk_events WHERE store=$1 AND type='fulfilled_order' AND profile_id IS NOT NULL AND at > ${from ? "$2::timestamptz" : "now() - ($2 || ' days')::interval"} ORDER BY profile_id, at DESC`, [store, from ? new Date(from).toISOString() : String(days)])).rows;
   let added = 0, skipped = { in_flow: 0, reviewed: 0, nothing: 0, past: 0 };
   for (const e of evs) {
     const props = e.props || {};
@@ -400,7 +400,8 @@ async function backlogReviewFlow(store, { days = 14, dry = false } = {}) {
     // Skip the first wait and count it from the ship date instead.
     let node = flow.graph.start, due = new Date();
     if (start && start.type === "delay") { node = start.next; due = F.delayUntil(start.config || {}, p.timezone || bzTZ(), new Date(e.at)); }
-    if (due < new Date()) { skipped.past++; continue; }
+    // Already past their date (missed while the old app was switched off): send at the next 10 AM instead.
+    if (due < new Date()) { if (!sendPastDue) { skipped.past++; continue; } due = F.delayUntil({ amount: 0, unit: "days", until_time: (start && start.config && start.config.until_time) || "10:00" }, p.timezone || bzTZ(), new Date()); if (due < new Date()) due = F.delayUntil({ amount: 1, unit: "days", until_time: "10:00" }, p.timezone || bzTZ(), new Date()); }
     if (dry) { added++; continue; }
     const run = (await db(`INSERT INTO mk_flow_runs (flow_id, version, store, profile_id, node_id, due_at, ctx, test) VALUES ($1,$2,$3,$4,$5,$6,$7,false) RETURNING id`,
       [flow.id, flow.version, store, e.profile_id, node, due, JSON.stringify({ trigger: "fulfilled_order", trigger_props: props, reason: `backlog: shipped ${new Date(e.at).toISOString().slice(0, 10)}`, since: new Date(e.at).toISOString() })])).rows[0];
@@ -980,6 +981,10 @@ async function startJobs(syncGet, syncSet) {
   // The LB review flow went live 2026-11-19: add everyone shipped in the last 14 days (once).
   if (!(await syncGet("review_backlog_lb_v1"))) {
     try { const r = await backlogReviewFlow("lb", { days: 14 }); console.log(`⭐ REVIEW BACKLOG lb: ${JSON.stringify(r)}`); if (r.flow) await syncSet("review_backlog_lb_v1", new Date().toISOString()); } catch (e) { console.error("⭐ review backlog:", e.message); }
+  }
+  // The old review app stopped on 2026-11-18: orders shipped from Nov 4 (14 days before) were never asked. Add them; anyone past due gets it at the next 10 AM.
+  if (!(await syncGet("review_backlog_lb_v2"))) {
+    try { const r = await backlogReviewFlow("lb", { from: "2026-11-04T00:00:00-06:00", sendPastDue: true }); console.log(`⭐ REVIEW BACKLOG lb (since Nov 4): ${JSON.stringify(r)}`); if (r.flow) await syncSet("review_backlog_lb_v2", new Date().toISOString()); } catch (e) { console.error("⭐ review backlog v2:", e.message); }
   }
   // First full copy of Okendo (both stores) + review groups, once.
   if (!(await syncGet("reviews_okendo_v1"))) {
