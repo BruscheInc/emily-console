@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.70
+- Universal content and your pre-built sections are now shared by Larkspur Baby and the Outlet: anything saved in one store's email shows in both. Editing a universal piece updates it in every email of both stores.
+
 ## 0.0.69
 - **Your own pre-built sections, like Klaviyo.** Build a footer (or any part) in an email exactly how you want it, desktop-only and mobile-only sections included. Then in Add content → Pre-built, click "Save sections from this email", tick its sections, name it and save. It shows under "Your pre-built sections" in every email of that store. Click or drag it to add all its sections at once, with every setting kept (show on desktop/mobile, colors, padding). Universal pieces inside stay linked. Rename or delete from the list.
 - The "Make a footer from sections" button in Universal was removed (pre-built sections replace it).
