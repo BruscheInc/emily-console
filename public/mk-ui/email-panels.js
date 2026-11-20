@@ -114,7 +114,9 @@ function addPanel(S) {
       <div class="kp-sec"><h4>Layout</h4><div class="kp-grid"><div class="kp-tile" draggable="true" data-lay="2">${I('columns')}<span>Columns</span></div><div class="kp-tile" draggable="true" data-lay="1">${I('square')}<span>Section</span></div></div>
       <div class="kp-hint" style="margin-top:8px">Drag onto the email, or click to add below what's selected.</div></div>`;
   } else if (tab === 'prebuilt') {
-    body = `<div class="kp-sec">${prebuilt(S).map(([n, d], i) => `<div class="kp-pb" draggable="true" data-pb="${i}"><b>${esc(n)}</b><span>${esc(d)}</span></div>`).join('')}</div>`;
+    body = `<div class="kp-sec" id="kpMine"><h4>Your pre-built sections</h4><div class="empty">Loading…</div></div>
+      <div class="kp-sec"><h4>Starters</h4>${prebuilt(S).map(([n, d], i) => `<div class="kp-pb" draggable="true" data-pb="${i}"><b>${esc(n)}</b><span>${esc(d)}</span></div>`).join('')}</div>`;
+    document.getElementById('kxPanel')._after = (P) => loadMine(P, S);
   } else {
     body = `<div class="kp-sec" id="kpUniv"><div class="empty">Loading…</div></div>`;
     document.getElementById('kxPanel')._after = (P) => loadUniversal(P, S);
@@ -134,6 +136,58 @@ function addPanel(S) {
   };
   return html;
 }
+/* Your own pre-built sections (like Klaviyo's saved sections): build them in any email (desktop-only and mobile-only
+   sections included), then save the sections you pick, exactly as they are. Adding one drops in fresh copies of all of them.
+   Universal pieces inside stay linked to their universal version. */
+function secLabel(sec, i) {
+  const bl = []; (sec.rows || []).forEach((r) => (r.columns || []).forEach((c) => (c.blocks || []).forEach((b) => bl.push(b))));
+  const txt = bl.map((b) => (b.type === 'text' ? String(b.data && b.data.content || '').replace(/<[^>]+>/g, ' ').replace(/\{\{[^}]*\}\}/g, '').replace(/\s+/g, ' ').trim() : '')).find((t) => t) || '';
+  const kinds = [...new Set(bl.map((b) => (D.BLOCK_INFO[b.type] || {}).name || b.type))].join(', ');
+  const on = ((sec.data && sec.data.display_options) || {}).show_on;
+  const dev = on === 'desktop' ? 'Desktop only' : on === 'mobile' ? 'Mobile only' : '';
+  return { title: sec.universal_name || (txt ? txt.slice(0, 48) + (txt.length > 48 ? '…' : '') : kinds || `Section ${i + 1}`), sub: [dev, kinds].filter(Boolean).join(' · ') };
+}
+async function loadMine(P, S) {
+  const box = P.querySelector('#kpMine'); if (!box) return;
+  const ST = E().ST, secs = ((ST.doc && ST.doc.body && ST.doc.body.sections) || []);
+  let items = [];
+  try { items = (await api('/api/mk/saved-blocks?' + qs({ store: S.t.store }))).blocks.filter((x) => x.block && Array.isArray(x.block.prebuilt)); } catch (e) { box.innerHTML = `<h4>Your pre-built sections</h4><div class="note">${esc(e.message)}</div>`; return; }
+  const make = (it) => () => it.block.prebuilt.map((sec) => D.reId(sec));
+  box.innerHTML = `<h4>Your pre-built sections</h4>
+    <button type="button" class="btn sec xs" id="kpPbNew" style="width:100%;margin-bottom:10px"${secs.length ? '' : ' disabled'}>${I('plus')} Save sections from this email</button><div id="kpPbForm" hidden></div>
+    ${items.length ? items.map((x) => `<div class="kp-pb" draggable="true" data-mine="${x.id}"><div style="display:flex;align-items:center;gap:6px"><b style="flex:1">${esc(x.name)}</b><button class="kp-plus" data-mren="${x.id}" title="Rename">${I('pencil')}</button><button class="kp-plus" data-mdel="${x.id}" title="Delete">${I('trash')}</button></div><span>${x.block.prebuilt.length} section${x.block.prebuilt.length === 1 ? '' : 's'}${x.block.prebuilt.some((q) => ((q.data || {}).display_options || {}).show_on === 'mobile') ? ' · has mobile-only' : ''}</span></div>`).join('')
+      : `<div class="kp-hint" style="font-size:13px">Build a footer (or any part) in this email the way you like it, desktop and mobile sections included. Then click “Save sections from this email”, pick its sections and name it. It shows up here for every email.</div>`}`;
+  box.querySelectorAll('[data-mine]').forEach((el) => {
+    const it = items.find((x) => String(x.id) === el.dataset.mine);
+    el.addEventListener('dragstart', (e) => { E().setDrag({ kind: 'sections', make: make(it) }); e.dataTransfer.setData('text/plain', 'bz'); });
+    el.addEventListener('dragend', () => setTimeout(() => E().clearDrag(), 30));
+    el.addEventListener('click', (e) => { if (e.target.closest('[data-mdel],[data-mren]')) return; E().addByClick(make(it), 'sections'); toast(`Added “${it.name}”`); });
+  });
+  box.querySelectorAll('[data-mdel]').forEach((b) => b.onclick = async (e) => { e.stopPropagation(); if (!confirm('Delete this pre-built section? Emails that already use it keep their copy.')) return; await api('/api/mk/saved-blocks/' + b.dataset.mdel, { method: 'DELETE' }); loadMine(P, S); });
+  box.querySelectorAll('[data-mren]').forEach((b) => b.onclick = async (e) => { e.stopPropagation(); const it = items.find((x) => String(x.id) === b.dataset.mren); const name = prompt('New name', it.name); if (!name) return; await api('/api/mk/saved-blocks/' + it.id, { method: 'PUT', body: JSON.stringify({ name }) }); loadMine(P, S); });
+  const form = box.querySelector('#kpPbForm'), btn = box.querySelector('#kpPbNew');
+  if (btn) btn.onclick = () => {
+    // Start with the selected section (and everything below it) ticked: a footer is usually the last few sections.
+    const selSec = ST.sel && D.find(ST.doc, ST.sel.id); let start = -1;
+    if (selSec) secs.forEach((x, i) => { if (start < 0 && (x.id === ST.sel.id || JSON.stringify(x).includes(`"id":"${ST.sel.id}"`))) start = i; });
+    const pick = new Set(start >= 0 ? secs.slice(start).map((x) => x.id) : []);
+    const draw = () => {
+      form.innerHTML = `<div class="kp-hint" style="font-size:13px;margin-bottom:8px">Tick the sections to save, top to bottom as they are in this email. Desktop-only and mobile-only sections keep their setting.</div>` +
+        secs.map((x, i) => { const L = secLabel(x, i), on = pick.has(x.id); return `<label class="kp-pb" style="display:flex;align-items:center;gap:8px;cursor:pointer;${on ? 'border-color:var(--ink,#242F3F)' : ''}" data-ps="${esc(x.id)}"><input type="checkbox" ${on ? 'checked' : ''} style="pointer-events:none"><span style="flex:1;min-width:0"><b style="display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(L.title)}</b><span style="font-size:12px;color:#888">${esc(L.sub)}</span></span></label>`; }).join('') +
+        `<input id="kpPbName" type="text" placeholder="Name, e.g. Footer" value="Footer" style="width:100%;margin:8px 0">
+         <div style="display:flex;gap:8px"><button type="button" class="btn xs" id="kpPbSave" style="flex:1">Save pre-built (${pick.size})</button><button type="button" class="btn sec xs" id="kpPbCancel">Cancel</button></div>`;
+      form.querySelectorAll('[data-ps]').forEach((el) => el.onclick = (e) => { e.preventDefault(); const id = el.dataset.ps; if (pick.has(id)) pick.delete(id); else pick.add(id); draw(); });
+      form.querySelector('#kpPbCancel').onclick = () => { form.hidden = true; form.innerHTML = ''; btn.style.display = ''; };
+      form.querySelector('#kpPbSave').onclick = async () => {
+        const chosen = secs.filter((x) => pick.has(x.id)); if (!chosen.length) return toast('Tick at least one section', 1);
+        const name = form.querySelector('#kpPbName').value.trim() || 'Footer';
+        try { await api('/api/mk/saved-blocks', { method: 'POST', body: JSON.stringify({ store: S.t.store, name, block: { prebuilt: chosen.map((x) => { const c = D.clone(x); delete c.note; return c; }) } }) });
+          toast(`Saved “${name}”. Find it under Pre-built in any email`); loadMine(P, S); } catch (e) { toast(e.message, 1); }
+      };
+    };
+    btn.style.display = 'none'; form.hidden = false; draw();
+  };
+}
 async function loadUniversal(P, S) {
   const box = P.querySelector('#kpUniv'); if (!box) return;
   try {
@@ -148,7 +202,7 @@ async function loadUniversal(P, S) {
       .map((u) => { const c = D.reId(u.block); c.universal_id = String(u.id); c.universal_name = u.name; if (c.rows) return c; const sec = D.newSection(1); sec.rows[0].columns[0].blocks = [c]; return sec; });
     const kindOf = (x) => x.block.group ? `Footer set · ${(x.block.group || []).filter((id) => byId[String(id)]).length} pieces` : x.block.rows ? 'Section' : esc((D.BLOCK_INFO[x.block.type] || {}).name || x.block.type);
     const sets = all.filter((x) => x.block.group), rest = all.filter((x) => !x.block.group);
-    box.innerHTML = (secs.length >= 2 ? `<button type="button" class="btn sec xs" id="kpMkSet" style="width:100%;margin-bottom:10px">${I('plus')} Make a footer from sections</button><div id="kpSetForm" hidden></div>` : '') +
+    box.innerHTML = (sets.length ? `<div id="kpSetForm" hidden></div>` : '') +
       [...sets, ...rest].map((x) => `<div class="kp-pb" draggable="true" data-u="${x.id}"><div style="display:flex;align-items:center;gap:6px"><b style="flex:1">${x.block.group ? I('layout-bottombar') + ' ' : ''}${esc(x.name)}</b>${x.block.group ? `<button class="kp-plus" data-uedit="${x.id}" title="Change">${I('pencil')}</button>` : ''}<button class="kp-plus" data-udel="${x.id}" title="Delete">${I('trash')}</button></div><span>${kindOf(x)}</span></div>`).join('');
     box.querySelectorAll('[data-u]').forEach((el) => {
       const it = byId[el.dataset.u];
