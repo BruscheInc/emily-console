@@ -87,6 +87,7 @@ function setupFrame() {
 function env() {
   return {
     brand: ST.brand, editor: true, assetBase: location.origin,
+    repeat: (key) => (key === 'review_items' ? (ST.reviewSample || []) : []),   // Review request block: real products (with photos) from a recent order
     products: (blk) => { const p = (blk.data && blk.data.properties) || {}; const st = (blk.data && blk.data.styles) || {}; const want = Math.max(1, (Number(st.num_columns) || 3) * (Number(st.num_rows) || 1));
       if (!p.dynamic) return (p.items || []).map((it) => (it.handle ? ST.pcache[it.handle] && { ...ST.pcache[it.handle], button_text: it.button_text } : it)).filter(Boolean);
       return (ST.feed || []).slice(0, want); },
@@ -416,6 +417,8 @@ async function loadProducts() {
     const [a, f] = await Promise.all([hs.size ? api('/api/mk/products?' + qs({ store: ST.t.store, handles: [...hs].join(',') })) : { products: [] }, api('/api/mk/products?' + qs({ store: ST.t.store, feed: 1 }))]);
     a.products.forEach((p) => { ST.pcache[p.handle] = p; }); ST.feed = f.products; draw();
   } catch (_) {}
+  let hasRR = false; D.walk(ST.doc, (n, k) => { if (k === 'block' && n.type === 'review_request') hasRR = true; });
+  if (hasRR || /review_/.test(JSON.stringify(ST.doc || {}))) try { ST.reviewSample = (await api('/api/reviews-email-sample?' + qs({ store: ST.t.store }))).items || []; draw(); } catch (_) {}
 }
 
 /* ---------- Emily on a block ---------- */
