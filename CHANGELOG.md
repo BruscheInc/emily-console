@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.79
+- **Fix: skipping one of Emily's drafts no longer hides the ticket.** Skip used to tag the ticket like spam, so it dropped out of "Larkspur · tickets" (and "Outlet · tickets") and only showed under "all mail", and Emily stopped drafting on later replies from that customer. Now Skip only throws away that one draft: the ticket stays in the tickets view, and Emily drafts again when the customer writes back. Tickets that were hidden this way show up again.
+
 ## 0.0.78
 - **Out-of-stock picks.** When Emily suggests a replacement for an out-of-stock item, she now names real in-stock picks: the same style in other prints in the same size, plus the next size up. "Ship the rest of the order now" is gone from the out-of-stock quick email.
 - **Address replies go back to Stockroom.** When a customer answers Stockroom's "please confirm your address" email, Emily reads the reply. If they confirm, or send a corrected address, Stockroom updates the order in Shopify and moves it from Address issues back to the shipping queue. A note on the ticket says what was sent.

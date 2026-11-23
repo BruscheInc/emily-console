@@ -637,7 +637,7 @@ async function dedupeTickets() {
 /* ---- Inbound classification: is this a person who needs an answer, or machinery / marketing / a platform notice?
  * Runs on every email as it arrives (with headers) and once over the backlog (sender + subject + body only).
  * A reply from a personal mailbox is never junked, whatever its subject says. ---- */
-const JUNK_TAG_SET = ["automated", "newsletter", "social", "vendor", "automated-notification", "solicitation", "press-pitch", "tiktok-notification", "okendo", "spam", "not-cs", "emily-skip", "emily-skip-manual"];
+const JUNK_TAG_SET = ["automated", "newsletter", "social", "vendor", "automated-notification", "solicitation", "press-pitch", "tiktok-notification", "okendo", "spam", "not-cs", "emily-skip"];   // "emily-skip-manual" (someone skipped one of Emily's drafts) is NOT junk: the customer is real
 const PERSONAL_DOMAIN_RE = /(^|\.)(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|mac|aol|comcast|att|verizon|sbcglobal|cox|charter|spectrum|earthlink|protonmail|proton|pm|zoho|gmx|mail|fastmail|hey)\.(com|net|me|ch|de|co\.uk|ca)$/i;
 const ROLE_LOCAL_RE = /^(no-?reply|donotreply|do-not-reply|noreply[-.]|notifications?|notify|newsletters?|news|marketing|alerts?|updates?|digest|mailer|bounces?|postmaster|mailer-daemon|receipts?|billing|invoices?|promo(tions)?|offers?|deals|service|customerservice|community|feedback|surveys?|reviews?|friendsuggestions?|friend-?updates?|notification)(\+.*)?$/i;
 const SOCIAL_DOMAIN_RE = /(facebook|facebookmail|instagram|tiktok|linkedin|pinterest|twitter|x|youtube|snapchat|threads|reddit|nextdoor)\.(com|net)$/i;

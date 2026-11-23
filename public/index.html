@@ -2661,7 +2661,7 @@ async function openTicket(id){
         <div class="sp"></div>
         <span class="pill ${d.status==="closed"?"closed":"open"}">${esc(d.status)}</span>
         ${d.emily?`<span class="chip ${d.emily}">Emily: ${d.emily}</span>`:""}
-        ${(()=>{const JT=["automated","newsletter","social","vendor","automated-notification","solicitation","press-pitch","tiktok-notification","okendo","spam","not-cs","emily-skip","emily-skip-manual"]; const isJunk=(d.tags||[]).some(t=>JT.includes(t))&&!(d.tags||[]).includes("human");
+        ${(()=>{const JT=["automated","newsletter","social","vendor","automated-notification","solicitation","press-pitch","tiktok-notification","okendo","spam","not-cs","emily-skip"]; const isJunk=(d.tags||[]).some(t=>JT.includes(t))&&!(d.tags||[]).includes("human");
           return isJunk?`<span class="chip skip" title="Filtered out of Tickets as ${esc((d.tags||[]).filter(t=>JT.includes(t)).join(", "))}">not a customer</span><button class="btn sec" onclick="markHuman(${id},true)" title="Move this into the Tickets view and let Emily handle it">This is a customer</button>`:`<button class="btn sec" onclick="markHuman(${id},false)" title="Hide from Tickets — it's a notification, newsletter or vendor email">Not a customer</button>`;})()}
         <button class="btn sec m-only" onclick="document.body.classList.add('rail-open')"><i class="ti ti-user"></i> Customer &amp; orders</button>
         <button class="btn ghost" onclick="askEmily(${id})">Ask Emily</button>
