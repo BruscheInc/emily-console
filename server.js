@@ -20,6 +20,29 @@ const KEY = process.env.CONSOLE_KEY || "";
 /* ---------------- app ---------------- */
 const app = express();
 app.set("trust proxy", true);
+// Shipping-address confirmation pages from Stockroom, served on the store's own domain
+// (returns.larkspurbaby.com/addr/…) so customers never see a Railway address. Buzzin just passes them through.
+app.use((req, res, next) => {
+  if (!/^\/addr\/[A-Za-z0-9_-]{8,64}\/?$/.test(req.path) || !["GET", "POST"].includes(req.method)) return next();
+  const h = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().split(":")[0].toLowerCase();
+  if (!require("./returns").storeForHost(h)) return next();
+  let base = String(process.env.STOCKROOM_URL || process.env.RAILWAY_SERVICE_STOCKROOM_URL || "").replace(/\/+$/, "");
+  if (!base) return res.status(503).send("Not available right now.");
+  if (!/^https?:\/\//.test(base)) base = "https://" + base;
+  const chunks = [];
+  req.on("data", (c) => chunks.push(c));
+  req.on("end", async () => {
+    try {
+      const r = await fetch(base + req.originalUrl, { method: req.method, redirect: "manual", signal: AbortSignal.timeout(30000),
+        headers: { "Content-Type": req.headers["content-type"] || "application/x-www-form-urlencoded", "X-Forwarded-Host": h },
+        body: req.method === "POST" ? Buffer.concat(chunks) : undefined });
+      const loc = r.headers.get("location");
+      if (loc) return res.redirect(r.status, loc.replace(/^https?:\/\/[^/]+/, ""));
+      res.status(r.status).type(r.headers.get("content-type") || "html").setHeader("Cache-Control", "no-store");
+      res.send(Buffer.from(await r.arrayBuffer()));
+    } catch (e) { res.status(502).send("Please try again in a minute."); }
+  });
+});
 app.use(express.json({ limit: "2mb" }));
 const keyFrom = (req) => (req.query.key || (req.body && req.body.key) || (req.headers.authorization || "").replace(/^Bearer /i, "") || "").toString();
 const actorOf = (req) => userFromKey(keyFrom(req)) || "unknown";
