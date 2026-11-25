@@ -168,6 +168,25 @@ module.exports = function mountMcp(app, deps = {}) {
       annotations: { readOnlyHint: false, destructiveHint: false },
       run: addNote,
     },
+    {
+      name: "buzzin_redraft",
+      description: "Ask Emily to write a new draft on a Buzzin ticket, with guidance (same as 'Ask her to draft again' in the app). The old draft is retired. Nothing is sent to the customer: the new draft and any action she stages (discount code, credit, refund…) wait for approval in Buzzin.",
+      inputSchema: { type: "object", properties: { id: { type: "number" }, guidance: { type: "string", description: "What Emily should do differently" } }, required: ["id"] },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      run: async (a) => {
+        const id = ticketId(a.id);
+        const t = (await db(`SELECT id FROM hd_tickets WHERE id=$1`, [id])).rows[0];
+        if (!t) throw new Error(`Ticket ${id} not found in Buzzin.`);
+        const guidance = String(a.guidance || "").trim();
+        if (guidance) await core.addNote({ ticketId: id, text: `Redraft requested from Claude: ${guidance}`, who: "Claude" }).catch(() => {});
+        const job = emily().decide({ ticketId: String(id), action: "redraft", text: guidance, who: "Claude" });
+        const r = await Promise.race([job.then(() => "done"), new Promise((res) => setTimeout(() => res("running"), 50e3))]);
+        if (r === "running") return { ok: true, ticket: id, note: "Emily is still drafting — check the ticket in a minute." };
+        const d = (await db(`SELECT draft, escalate_reason FROM emily_drafts WHERE ticket_id=$1 ORDER BY id DESC LIMIT 1`, [String(id)])).rows[0];
+        const acts = (await db(`SELECT title, summary, status FROM emily_actions WHERE ticket_id=$1 AND status='staged' ORDER BY created_at DESC`, [String(id)])).rows;
+        return { ok: true, ticket: id, new_draft: d ? d.draft : null, escalate_reason: d ? d.escalate_reason : null, staged_actions: acts };
+      },
+    },
   ];
 
   /* ---------------- JSON-RPC ---------------- */

@@ -3,6 +3,9 @@
 Every upload to the emily-console repo is one version. The number shows in the app next to the "Buzzin" name
 (top-left) and in the Railway boot log ("📨 Buzzin v3.0.0 on :8080"), so you can always tell which build is live.
 
+## 0.0.80
+- Claude connector: new "redraft" action — asks Emily for a new draft on a ticket with guidance (same as "Ask her to draft again"). Nothing is sent; the draft and anything she stages still wait for approval.
+
 ## 0.0.79
 - **Fix: skipping one of Emily's drafts no longer hides the ticket.** Skip used to tag the ticket like spam, so it dropped out of "Larkspur · tickets" (and "Outlet · tickets") and only showed under "all mail", and Emily stopped drafting on later replies from that customer. Now Skip only throws away that one draft: the ticket stays in the tickets view, and Emily drafts again when the customer writes back. Tickets that were hidden this way show up again.
 
