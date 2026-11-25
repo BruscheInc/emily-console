@@ -22,10 +22,14 @@ const app = express();
 app.set("trust proxy", true);
 // Shipping-address confirmation pages from Stockroom, served on the store's own domain
 // (returns.larkspurbaby.com/addr/…) so customers never see a Railway address. Buzzin just passes them through.
+// shipping.larkspurbaby.com / shipping.larkspurbabyoutlet.com serve only these pages; anything else goes to the store.
+const SHIP_HOSTS = { "shipping.larkspurbaby.com": "https://larkspurbaby.com/", "shipping.larkspurbabyoutlet.com": "https://larkspurbabyoutlet.com/" };
 app.use((req, res, next) => {
-  if (!/^\/addr\/[A-Za-z0-9_-]{8,64}\/?$/.test(req.path) || !["GET", "POST"].includes(req.method)) return next();
   const h = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().split(":")[0].toLowerCase();
-  if (!require("./returns").storeForHost(h)) return next();
+  const isAddr = /^\/addr\/[A-Za-z0-9_-]{8,64}\/?$/.test(req.path) && ["GET", "POST"].includes(req.method);
+  if (SHIP_HOSTS[h] && !isAddr) return req.path === "/robots.txt" ? res.type("text").send("User-agent: *\nDisallow: /\n") : res.redirect(302, SHIP_HOSTS[h]);
+  if (!isAddr) return next();
+  if (!SHIP_HOSTS[h] && !require("./returns").storeForHost(h)) return next();
   let base = String(process.env.STOCKROOM_URL || process.env.RAILWAY_SERVICE_STOCKROOM_URL || "").replace(/\/+$/, "");
   if (!base) return res.status(503).send("Not available right now.");
   if (!/^https?:\/\//.test(base)) base = "https://" + base;
