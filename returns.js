@@ -18,7 +18,12 @@ const { db, pool } = core;
 const EX = () => require("./exceptions");
 
 const SHOP_VER = process.env.RETURNS_SHOPIFY_VERSION || "2026-07";
-const SS_KEY = process.env.SHIPSTATION_V2_KEY || "";
+// Return labels are bought on the ShipStation API account Stockroom ships with (RETURNS_SS_KEY = Stockroom's SS_API_KEY),
+// not the ShipStation app. Labels bought before the switch live in the app account (SHIPSTATION_V2_KEY) — tracking,
+// voiding and label downloads fall back to that key for those.
+const SS_KEY = process.env.RETURNS_SS_KEY || process.env.SHIPSTATION_V2_KEY || "";
+const SS_OLD_KEY = process.env.RETURNS_SS_KEY && process.env.SHIPSTATION_V2_KEY && process.env.SHIPSTATION_V2_KEY !== process.env.RETURNS_SS_KEY ? process.env.SHIPSTATION_V2_KEY : "";
+const SS_APP = !process.env.RETURNS_SS_KEY;   // still on the ShipStation app account (its stores exist only there)
 const SS_BASE = "https://api.shipstation.com";
 const SECRET = process.env.RETURNS_SECRET || process.env.CONSOLE_KEY || process.env.ATTACHMENT_SECRET || crypto.randomBytes(32).toString("hex");
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://emily-console-production.up.railway.app").replace(/\/$/, "");
@@ -127,9 +132,9 @@ function isTestEmail(email, s) {
 }
 function setupProblems(s) {
   const p = [];
-  if (!SS_KEY) p.push("SHIPSTATION_V2_KEY is not set on the emily-console service");
+  if (!SS_KEY) p.push("RETURNS_SS_KEY is not set on the emily-console service");
   if (!s.return_address.phone) p.push("Return address needs a phone number (Returns → Settings)");
-  if (!s.carrier_id) p.push("Pick a ShipStation carrier (Returns → Settings)");
+
   for (const k of Object.keys(STORE_DEFS)) { try { shopFor(k); } catch (e) { p.push(e.message); } }
   return p;
 }
@@ -281,12 +286,17 @@ function eligibility(item, s, key, deliveredAt, ex) {
 }
 
 /* ---------------- ShipStation v2 ---------------- */
-async function ss(method, p, body) {
-  if (!SS_KEY) throw new Error("SHIPSTATION_V2_KEY not set");
-  const r = await fetch(SS_BASE + p, { method, headers: { "API-Key": SS_KEY, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+async function ss(method, p, body, key) {
+  if (!SS_KEY) throw new Error("RETURNS_SS_KEY not set");
+  const r = await fetch(SS_BASE + p, { method, headers: { "API-Key": key || SS_KEY, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const t = await r.text(); let j = {}; try { j = t ? JSON.parse(t) : {}; } catch { j = { raw: t }; }
   if (!r.ok) throw new Error(`ShipStation ${r.status}: ${(j.errors && j.errors.map((e) => e.message).join("; ")) || t.slice(0, 300)}`);
   return j;
+}
+// A label from before the switch: try the current account, then the old ShipStation app account.
+async function ssAny(method, p, body) {
+  try { return await ss(method, p, body); }
+  catch (e) { if (SS_OLD_KEY && /ShipStation (400|404)/.test(e.message)) return ss(method, p, body, SS_OLD_KEY); throw e; }
 }
 const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ""));
 // ShipStation stores (v1 API — the only one that lists them). Used to file each return under its brand (LB / LBO).
@@ -347,7 +357,7 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
     internal_notes: `Return ${rma} for ${meta.orderName || ""}${meta.reasons ? " — " + meta.reasons : ""}`.slice(0, 500),
     items: (meta.items || []).map((i) => clean({ name: [i.title, i.variant].filter(Boolean).join(" — ").slice(0, 200), quantity: i.quantity, sku: i.sku || undefined, external_order_id: orderNo || undefined, order_source_code: "shopify", unit_price: i.unitPrice != null ? Number(i.unitPrice) : undefined, weight: { value: Math.max(1, Math.round(i.weightOz || Number(s.default_item_oz) || 8)), unit: "ounce" } })),
   };
-  if (s.carrier_id) shipment.carrier_id = s.carrier_id;
+  { const cid = await carrierFor(s); if (cid) shipment.carrier_id = cid; }
   // TEST MODE: buy nothing. ShipStation has no test return labels and some carriers won't void right away,
   // so we only get the price and hand back a sample label.
   if (meta.test) return { labelId: null, trackingNumber: `TEST-${rma}`, labelUrl: null, cost: await quoteLabel(s, shipment), carrier: "", test: true };
@@ -355,8 +365,10 @@ async function buyLabel(s, from, weightOz, rma, meta = {}) {
   // number, then copy that shipment's store and order number and link the two labels (outbound_label_id).
   // This is what makes the return show under the order in ShipStation instead of "store not active".
   const out = await findOutbound(meta.tracking || [], meta.notes || []);
-  if (out && out.store_id) shipment.store_id = out.store_id;
-  else { const storeId = meta.key ? await storeIdFor(s, meta.key) : null; if (storeId) shipment.store_id = storeId; }
+  if (SS_APP) {   // ShipStation app stores exist only on the app account
+    if (out && out.store_id) shipment.store_id = out.store_id;
+    else { const storeId = meta.key ? await storeIdFor(s, meta.key) : null; if (storeId) shipment.store_id = storeId; }
+  }
   if (out && out.shipment_number) shipment.shipment_number = out.shipment_number;
   if (out && out.external_order_id) shipment.external_order_id = out.external_order_id;
   const body = { is_return_label: true, rma_number: rma, charge_event: "carrier_default", label_format: "pdf", label_layout: "4x6", label_download_type: "url", shipment };
@@ -386,7 +398,7 @@ const PRESHIP = /label created|awaiting item|pre-?shipment|shipment information 
 function isMoving(code, text) { return ["AC", "IT", "AT", "EX"].includes(code) && !PRESHIP.test(String(text || "")); }
 function canCancel(r) { return r.status === "label_created" && !isMoving(r.tracking_code, r.tracking_text) && !r.accepted_at; }
 async function track(labelId) {
-  const t = await ss("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`);
+  const t = await ssAny("GET", `/v2/labels/${encodeURIComponent(labelId)}/track`);
   // ShipStation says "AC / Accepted" the moment a label exists, so its top-level status can't be trusted. Only real carrier
   // scans count: events that aren't "label created / pre-shipment". No real scan yet = USPS doesn't have the package.
   const evs = (t.events || []).map((e) => ({ code: e.status_code || "", desc: String(e.description || e.event_description || e.carrier_status_description || ""), at: e.occurred_at ? new Date(e.occurred_at) : null, city: [e.city_locality, e.state_province].filter(Boolean).join(", ") }));
@@ -449,7 +461,7 @@ async function trackNumber(number, carrier) {
 }
 // Returns { ok, message } — ShipStation answers 200 with approved:false and a reason when it refuses a void.
 async function voidLabel(labelId) {
-  const r = await ss("PUT", `/v2/labels/${encodeURIComponent(labelId)}/void`);
+  const r = await ssAny("PUT", `/v2/labels/${encodeURIComponent(labelId)}/void`);
   const ok = r.approved !== false;
   if (!ok) console.error(`void refused for ${labelId}:`, r.message || JSON.stringify(r).slice(0, 200));
   return { ok, message: r.message || "" };
@@ -457,9 +469,10 @@ async function voidLabel(labelId) {
 // Price of a label without buying it (used by test mode).
 let carrierCache = null;
 async function carrierFor(s) {
-  if (s.carrier_id) return s.carrier_id;
   try {
     if (!carrierCache || carrierCache.at < Date.now() - 6 * 3600e3) carrierCache = { at: Date.now(), list: await carriers() };
+    // The saved carrier only if it belongs to the account we're buying on; otherwise the one that offers the service.
+    if (s.carrier_id && carrierCache.list.some((x) => x.id === s.carrier_id)) return s.carrier_id;
     const c = carrierCache.list.find((x) => x.services.some((v) => v.code === s.service_code));
     return c ? c.id : null;
   } catch (e) { console.error("carrier lookup:", e.message); return null; }

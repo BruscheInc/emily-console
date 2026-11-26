@@ -861,7 +861,8 @@ app.get("/returns/label/:id/:tok", async (req, res) => {
     const rec = await R.getRec(req.params.id);
     if (rec && rec.test_label && !rec.label_src) return res.type("html").send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Test label ${escH(rec.rma)}</title><body style="font:16px system-ui;display:grid;place-items:center;min-height:90vh;margin:0;background:#f6f5f2"><div style="border:3px dashed #b42318;padding:28px;max-width:420px;background:#fff;text-align:center"><h2 style="color:#b42318;margin:0 0 8px">TEST — NOT A REAL LABEL</h2><p>Return ${escH(rec.rma)} · ${escH(rec.order_name)}<br>From ${escH(rec.customer_name)} to Returns Dept</p><p>${rec.label_cost != null ? `This label would cost about <b>$${Number(rec.label_cost).toFixed(2)}</b>.` : "No price quote available."}</p><p style="color:#666;font-size:13px">Test mode is on in Buzzin → Returns → Settings. Nothing was bought or charged.</p></div>`);
     if (!rec || rec.status === "cancelled" || !rec.label_src) return res.status(404).send("This label is no longer available.");
-    const r = await fetch(rec.label_src, { headers: { "API-Key": process.env.SHIPSTATION_V2_KEY || "" } });
+    let r = await fetch(rec.label_src, { headers: { "API-Key": process.env.RETURNS_SS_KEY || process.env.SHIPSTATION_V2_KEY || "" } });
+    if (!r.ok && process.env.RETURNS_SS_KEY && process.env.SHIPSTATION_V2_KEY) r = await fetch(rec.label_src, { headers: { "API-Key": process.env.SHIPSTATION_V2_KEY } });
     if (!r.ok) return res.redirect(rec.label_src);
     res.setHeader("Content-Type", "application/pdf"); res.setHeader("Content-Disposition", `inline; filename="Return label ${rec.rma}.pdf"`);
     res.send(Buffer.from(await r.arrayBuffer()));
@@ -985,7 +986,8 @@ async function labelRestage() {
     const rec = (await db(`SELECT data, status FROM hd_returns WHERE rma=$1 ORDER BY created_at DESC LIMIT 1`, [rma])).rows[0];
     const src = rec && rec.status !== "cancelled" && rec.data && rec.data.label_src; if (!src) continue;
     try {
-      const r = await fetch(src, { headers: { "API-Key": process.env.SHIPSTATION_V2_KEY || "" } });
+      let r = await fetch(src, { headers: { "API-Key": process.env.RETURNS_SS_KEY || process.env.SHIPSTATION_V2_KEY || "" } });
+      if (!r.ok && process.env.RETURNS_SS_KEY && process.env.SHIPSTATION_V2_KEY) r = await fetch(src, { headers: { "API-Key": process.env.SHIPSTATION_V2_KEY } });
       if (!r.ok) { console.error(`label restage ${rma}: HTTP ${r.status}`); continue; }
       const f = await core.saveFile({ ticketId: String(a.ticket_id), name, contentType: "application/pdf", buffer: Buffer.from(await r.arrayBuffer()), by: "Buzzin" });
       await db(`UPDATE hd_files SET staged=true WHERE id=$1`, [f.file_id]);
